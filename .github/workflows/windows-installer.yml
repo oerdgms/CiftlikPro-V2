@@ -1,4 +1,4 @@
-name: CiftlikPro V2.1 Beta1 Windows Kurulum
+name: CiftlikPro V2.1 Beta1 Edit Hotfix Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -21,10 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-<<<<<<< HEAD
-=======
-          
->>>>>>> 175eaee50e80c942d0925b2674a5baaaeb34862c
 
       - name: Derleme aracını kur
         shell: pwsh
@@ -62,7 +58,7 @@ jobs:
               Start-Sleep -Milliseconds 500
               try {
                 $response = Invoke-WebRequest `
-                  -Uri "http://127.0.0.1:8951/login" `
+                  -Uri "http://127.0.0.1:8953/login" `
                   -UseBasicParsing `
                   -TimeoutSec 2
                 if ($response.StatusCode -eq 200 -and
@@ -88,7 +84,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -96,17 +92,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-V2.1-Beta1-Windows-Setup
+          name: CiftlikPro-V2.1-Beta1-EditHotfix-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe
+            release/CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30

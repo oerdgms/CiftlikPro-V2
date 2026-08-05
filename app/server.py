@@ -13,7 +13,7 @@ DATA_ROOT.mkdir(parents=True,exist_ok=True)
 DB=DATA_ROOT/'ciftlik.db'
 BACKUPS=DATA_ROOT/'backups'
 UPLOADS=DATA_ROOT/'uploads'
-PORT=8951
+PORT=8953
 SESSIONS={}
 
 CSS='''
@@ -191,7 +191,7 @@ def page(title,body,path='/',user='admin',flash=''):
     menu=NAV+(ADMIN_NAV if role=='admin' else [])
     nav=''.join(f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>' for name,url in menu)
     fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
-    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">ENTERPRISE V2.1.0</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
+    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">ENTERPRISE V2.1.0 EDIT HOTFIX</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
 function toggleAnimalFields(){{
  var type=document.getElementById('recordType');if(!type)return;
  var calf=type.value==='Buzağı';
@@ -441,6 +441,24 @@ class App(BaseHTTPRequestHandler):
             recent_animal_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">{h(r["gender"])} · {age_text(r["birth_date"])}</span></div>' for r in recent_animals) or '<p class="mut">Henüz hayvan kaydı yok.</p>'
             body += f'''<div class="two" style="margin-top:14px"><div class="card"><h2>Son Eklenen Hayvanlar</h2><div class="alertlist">{recent_animal_html}</div></div><div class="card"><h2>Üretim Özeti</h2><div class="grid" style="grid-template-columns:repeat(2,1fr)"><div class="card stat metric blue">Bugünkü Süt<b>{today_milk:.1f} L</b></div><div class="card stat metric orange">30 Günlük Kilo Kaydı<b>{recent_weights}</b></div></div><div class="actions"><a class="btn" href="/animal-add">+ Hayvan Ekle</a><a class="btn alt" href="/reports">Raporları Aç</a></div></div></div>'''
             return self.send_html(page('Profesyonel Dashboard',body,'/',u,msg))
+
+        if path=='/animal-edit':
+            aid=q.get('id',[''])[0]
+            with db() as c:
+                rec=c.execute('select * from animals where id=?',(aid,)).fetchone()
+            if not rec:return self.send_html('Hayvan bulunamadı',404)
+            cancel='/animals' if rec['gender']=='Dişi' else '/males'
+            body=f'''<h1>Hayvan Düzenle</h1><div class="card"><form method="post" action="/animal-edit" enctype="multipart/form-data" class="form"><input type="hidden" name="id" value="{rec["id"]}"><label>Küpe No<input name="tag" required value="{h(rec["tag"])}"></label><label>Takma Ad<input name="nickname" value="{h(rec["nickname"])}"></label><label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label><label>Irk<input name="breed" value="{h(rec["breed"])}"></label><label>Doğum Tarihi<input type="date" name="birth_date" value="{h(rec["birth_date"])}"></label><label>Padok / Ahır<input name="paddock" value="{h(rec["paddock"])}"></label><label>Fotoğrafı Değiştir<input type="file" name="photo_file" accept="image/*" capture="environment"></label><input type="hidden" name="photo_url" value="{h(rec["photo_url"])}"><label>Durum<select name="status"><option value="Aktif" {'selected' if rec["status"]=='Aktif' else ''}>Aktif</option><option value="Satıldı" {'selected' if rec["status"]=='Satıldı' else ''}>Satıldı</option><option value="Kesildi" {'selected' if rec["status"]=='Kesildi' else ''}>Kesildi</option></select></label><label>Satış Fiyatı<input type="number" step="0.01" name="sold_price" value="{h(rec["sold_price"])}"></label><label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="{cancel}">İptal</a></div></form></div>'''
+            return self.send_html(page('Hayvan Düzenle',body,cancel,u,msg))
+        if path=='/calf-edit':
+            cid=q.get('id',[''])[0]
+            with db() as c:
+                rec=c.execute('select * from calves where id=?',(cid,)).fetchone()
+                mothers=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+            if not rec:return self.send_html('Buzağı bulunamadı',404)
+            opts=''.join(f'<option value="{m["id"]}" {"selected" if rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
+            body=f'''<h1>Buzağı Düzenle</h1><div class="card"><form method="post" action="/calf-edit" class="form"><input type="hidden" name="id" value="{rec["id"]}"><label>Buzağı Küpesi<input name="tag" required value="{h(rec["tag"])}"></label><label>Anne<select name="mother_id" required>{opts}</select></label><label>Baba Küpesi<input name="father_tag" value="{h(rec["father_tag"])}"></label><label>Doğum Tarihi<input type="date" name="birth_date" required value="{h(rec["birth_date"])}"></label><label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label><label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label><div class="full"><button class="btn">Buzağıyı Güncelle</button> <a class="btn alt" href="/calves">İptal</a></div></form></div>'''
+            return self.send_html(page('Buzağı Düzenle',body,'/calves',u,msg))
         if path=='/animal-add':
             with db() as c:
                 mothers=c.execute("select tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
@@ -465,7 +483,7 @@ class App(BaseHTTPRequestHandler):
                 else:
                     rows=c.execute("select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 rec=c.execute('select * from animals where id=?',(edit,)).fetchone() if edit else None
-            trs=''.join('<tr><td><a class="taglink" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><a class="btn alt" href="/animals?edit={0}">Düzenle</a>{7}</td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['gender']),h(r['breed']),h(r['paddock']),age_text(r['birth_date']),(' <a class="btn" href="/inseminations?animal='+str(r['id'])+'">Tohumlama</a>' if r['gender']=='Dişi' else '')) for r in rows)
+            trs=''.join('<tr><td><a class="taglink" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><a class="btn alt" href="/animal-edit?id={0}">Düzenle</a>{7}</td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['gender']),h(r['breed']),h(r['paddock']),age_text(r['birth_date']),(' <a class="btn" href="/inseminations?animal='+str(r['id'])+'">Tohumlama</a>' if r['gender']=='Dişi' else '')) for r in rows)
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
             body=f'''<h1>Dişi Hayvanlar</h1><div class="livebox"><input id="femaleLiveSearch" type="search" placeholder="Küpe, takma ad, ırk veya padok yazın..." autocomplete="off"><button type="button" class="btn alt" onclick="document.getElementById('femaleLiveSearch').value='';document.getElementById('femaleLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="femaleEmpty" class="empty-state">Eşleşen dişi hayvan bulunamadı.</div><div class="card"><table id="femaleLiveTable"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Padok</th><th>Yaş</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('femaleLiveSearch','femaleLiveTable','femaleEmpty');}});</script>'''
@@ -483,7 +501,7 @@ class App(BaseHTTPRequestHandler):
                 else:
                     rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 rec=c.execute("select * from animals where id=? and gender='Erkek'",(edit,)).fetchone() if edit else None
-            trs=''.join('<tr><td><a class="taglink" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td><a class="btn alt" href="/males?edit={0}">Düzenle</a></td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['breed']),h(r['paddock']),age_text(r['birth_date'])) for r in rows) or '<tr><td colspan=6>Erkek hayvan kaydı yok</td></tr>'
+            trs=''.join('<tr><td><a class="taglink" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td><a class="btn alt" href="/animal-edit?id={0}">Düzenle</a></td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['breed']),h(r['paddock']),age_text(r['birth_date'])) for r in rows) or '<tr><td colspan=6>Erkek hayvan kaydı yok</td></tr>'
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
             body=f'''<h1>Erkek Hayvanlar</h1><div class="livebox"><input id="maleLiveSearch" type="search" placeholder="Küpe, takma ad, ırk veya padok yazın..." autocomplete="off"><button type="button" class="btn alt" onclick="document.getElementById('maleLiveSearch').value='';document.getElementById('maleLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="maleEmpty" class="empty-state">Eşleşen erkek hayvan bulunamadı.</div><div class="card"><p class="mut">10 ayını dolduran erkek buzağılar otomatik olarak bu listeye geçer.</p><table id="maleLiveTable"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Irk</th><th>Padok</th><th>Yaş</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('maleLiveSearch','maleLiveTable','maleEmpty');}});</script>'''
@@ -558,7 +576,7 @@ class App(BaseHTTPRequestHandler):
                     ).fetchall()
                 rec=c.execute('select * from calves where id=?',(edit,)).fetchone() if edit else None
             opts=''.join(f'<option value="{m["id"]}" {"selected" if rec and rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
-            trs=''.join(f'<tr><td><a class="taglink" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["mother_tag"])} {h(r["mother_name"])}</td><td>{h(r["father_tag"])}</td><td>{h(r["birth_date"])}</td><td>{age_text(r["birth_date"])}</td><td>{h(r["gender"])}</td><td><a class="btn alt" href="/calves?edit={r["id"]}">Düzenle</a></td></tr>' for r in rows)
+            trs=''.join(f'<tr><td><a class="taglink" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["mother_tag"])} {h(r["mother_name"])}</td><td>{h(r["father_tag"])}</td><td>{h(r["birth_date"])}</td><td>{age_text(r["birth_date"])}</td><td>{h(r["gender"])}</td><td><a class="btn alt" href="/calf-edit?id={r["id"]}">Düzenle</a></td></tr>' for r in rows)
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["mother_tag"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
             body=f'''<h1>Buzağılar</h1><div class="livebox"><input id="calfLiveSearch" type="search" placeholder="Buzağı küpesi, anne küpesi veya anne adı yazın..." autocomplete="off"><button type="button" class="btn alt" onclick="document.getElementById('calfLiveSearch').value='';document.getElementById('calfLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="calfEmpty" class="empty-state">Eşleşen buzağı bulunamadı.</div><div class="card"><table id="calfLiveTable"><thead><tr><th>Küpe</th><th>Anne</th><th>Baba</th><th>Doğum</th><th>Yaş</th><th>Cinsiyet</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('calfLiveSearch','calfLiveTable','calfEmpty');}});</script>'''
@@ -749,6 +767,55 @@ class App(BaseHTTPRequestHandler):
             except Exception as exc:return self.redirect('/backups','Geri yükleme başarısız: '+str(exc))
             finally:
                 if temp_path.exists():temp_path.unlink()
+
+        if path=='/animal-edit':
+            aid=(f.get('id') or '').strip()
+            try:
+                with db() as c:
+                    rec=c.execute('select * from animals where id=?',(aid,)).fetchone()
+                    if not rec:return self.redirect('/','Hayvan kaydı bulunamadı.')
+                    tag=(f.get('tag') or '').strip()
+                    duplicate=c.execute('select id from animals where tag=? and id<>?',(tag,aid)).fetchone()
+                    calf_duplicate=c.execute('select id from calves where tag=?',(tag,)).fetchone()
+                    if duplicate or calf_duplicate:return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
+                    photo_url=f.get('photo_url','')
+                    upload=f.get('photo_file')
+                    if upload and isinstance(upload,dict) and upload.get('content'):
+                        ext=Path(upload['filename']).suffix.lower()
+                        if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/animal-edit?id='+aid,'Desteklenmeyen fotoğraf biçimi.')
+                        if len(upload['content'])>10*1024*1024:return self.redirect('/animal-edit?id='+aid,'Fotoğraf 10 MB sınırını aşıyor.')
+                        name=f"animal_edit_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
+                        (UPLOADS/name).write_bytes(upload['content'])
+                        photo_url='/uploads/'+name
+                    gender=f.get('gender') if f.get('gender') in ('Dişi','Erkek') else rec['gender']
+                    c.execute('update animals set tag=?,nickname=?,gender=?,breed=?,birth_date=?,notes=?,paddock=?,photo_url=?,sold_price=?,status=? where id=?',
+                              (tag,f.get('nickname',''),gender,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,float(f.get('sold_price') or 0),f.get('status') or 'Aktif',aid))
+                audit(username,'Hayvan düzenledi',tag,self.client_ip())
+                return self.redirect('/animals' if gender=='Dişi' else '/males','Hayvan başarıyla güncellendi.')
+            except sqlite3.IntegrityError:
+                return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası zaten kullanılıyor.')
+            except Exception as exc:
+                return self.redirect('/animal-edit?id='+aid,'Güncelleme hatası: '+str(exc))
+        if path=='/calf-edit':
+            cid=(f.get('id') or '').strip()
+            try:
+                with db() as c:
+                    rec=c.execute('select * from calves where id=?',(cid,)).fetchone()
+                    if not rec:return self.redirect('/calves','Buzağı kaydı bulunamadı.')
+                    mother=c.execute("select id from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(f.get('mother_id'),)).fetchone()
+                    if not mother:return self.redirect('/calf-edit?id='+cid,'Anne olarak aktif bir dişi hayvan seçilmelidir.')
+                    tag=(f.get('tag') or '').strip()
+                    duplicate=c.execute('select id from calves where tag=? and id<>?',(tag,cid)).fetchone()
+                    animal_duplicate=c.execute('select id from animals where tag=?',(tag,)).fetchone()
+                    if duplicate or animal_duplicate:return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
+                    c.execute('update calves set tag=?,mother_id=?,father_tag=?,birth_date=?,gender=?,notes=? where id=?',
+                              (tag,f.get('mother_id'),f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('notes',''),cid))
+                audit(username,'Buzağı düzenledi',tag,self.client_ip())
+                return self.redirect('/calves','Buzağı başarıyla güncellendi.')
+            except sqlite3.IntegrityError:
+                return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası zaten kullanılıyor.')
+            except Exception as exc:
+                return self.redirect('/calf-edit?id='+cid,'Güncelleme hatası: '+str(exc))
         if path=='/animal-add':
             kind=(f.get('record_type') or '').strip();tag=(f.get('tag') or '').strip()
             if not tag:return self.redirect('/animal-add','Küpe numarası zorunludur.')
