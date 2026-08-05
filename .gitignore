@@ -1,0 +1,8 @@
+build/
+dist/
+release/
+__pycache__/
+*.pyc
+app/ciftlik.db
+app/uploads/
+app/backups/

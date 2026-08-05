@@ -1,0 +1,13 @@
+ÇiftlikPro V2 Windows Dağıtım Mimarisi
+======================================
+
+- Kaynak: ÇiftlikPro Enterprise V1.3.1
+- Python derlemesi: PyInstaller onedir / windowed
+- Kurulum: Inno Setup 6
+- Yerel veri klasörü: %LOCALAPPDATA%\CiftlikPro
+- Kurulum klasörü: %LOCALAPPDATA%\Programs\CiftlikPro
+- Web adresi: http://127.0.0.1:8948/login
+- Masaüstü ve Başlat menüsü kısayolu oluşturulur.
+- Kurulum kaldırıldığında kullanıcı verileri silinmez.
+- UPX kullanılmaz; antivirüs yanlış alarm riskini azaltır.
+- Nihai kurulum GitHub Actions üzerindeki Windows ortamında test edilir.
