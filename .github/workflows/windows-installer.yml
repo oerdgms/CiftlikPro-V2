@@ -21,10 +21,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-<<<<<<< HEAD
-=======
 
->>>>>>> 34c299d30e607bce822b7c56dd29ddcc6f4a1554
 
       - name: Derleme aracını kur
         shell: pwsh
