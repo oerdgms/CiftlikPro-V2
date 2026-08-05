@@ -18,7 +18,7 @@ def port_is_open() -> bool:
 
 
 def open_browser_when_ready() -> None:
-    for _ in range(80):
+    for _ in range(100):
         if port_is_open():
             webbrowser.open(URL)
             return
@@ -34,7 +34,7 @@ def run() -> None:
     server.ensure_archive_schema()
     server.promote_mature_calves()
 
-    httpd = ThreadingHTTPServer(("0.0.0.0", server.PORT), server.App)
+    httpd = ThreadingHTTPServer(("127.0.0.1", server.PORT), server.App)
     threading.Thread(target=open_browser_when_ready, daemon=True).start()
 
     def background_backup() -> None:

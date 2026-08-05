@@ -1,0 +1,21 @@
+ÇiftlikPro Enterprise V2.1 Beta 1
+
+Yeni:
+- Kullanıcı Yönetimi
+- Yönetici ve Personel rolleri
+- Kullanıcı aktif/pasif yönetimi
+- Kendi şifresini değiştirme
+- Yönetici şifre sıfırlama
+- Güvenli PBKDF2-SHA256 şifreleme
+- Temel işlem günlüğü
+
+Korunan:
+- Merkezi Hayvan Ekle
+- Canlı arama
+- Gelişmiş hayvan kartı
+- Zengin Dashboard
+- Finans, sağlık, tohumlama, süt ve kilo takibi
+
+Not:
+- Bu paket GitHub Actions ile Windows kurulum EXE'si üretir.
+- Kurulum güncellemesi mevcut %LOCALAPPDATA%\CiftlikPro verilerini silmez.

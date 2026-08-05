@@ -1,4 +1,4 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac
 from email.parser import BytesParser
 from email.policy import default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -13,7 +13,7 @@ DATA_ROOT.mkdir(parents=True,exist_ok=True)
 DB=DATA_ROOT/'ciftlik.db'
 BACKUPS=DATA_ROOT/'backups'
 UPLOADS=DATA_ROOT/'uploads'
-PORT=8948
+PORT=8951
 SESSIONS={}
 
 CSS='''
@@ -84,6 +84,30 @@ def ensure_archive_schema():
         c.execute("update animals set status='Aktif' where status is null or trim(status)=''")
 
 
+
+def password_hash(password):
+    salt=secrets.token_bytes(16); rounds=240000
+    digest=hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),salt,rounds)
+    return f'pbkdf2_sha256${rounds}${salt.hex()}${digest.hex()}'
+
+def password_verify(password,stored):
+    stored=str(stored or '')
+    if stored.startswith('pbkdf2_sha256$'):
+        try:
+            _,rounds,salt_hex,digest_hex=stored.split('$',3)
+            candidate=hashlib.pbkdf2_hmac('sha256',password.encode('utf-8'),bytes.fromhex(salt_hex),int(rounds)).hex()
+            return hmac.compare_digest(candidate,digest_hex)
+        except Exception:return False
+    return hmac.compare_digest(hashlib.sha256(('farm-v05'+password).encode()).hexdigest(),stored)
+
+def audit(username,action,detail='',ip_address=''):
+    try:
+        with db() as c:c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username or 'sistem',action,detail,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),ip_address or ''))
+    except Exception:pass
+
+def active_admin_count():
+    with db() as c:return c.execute("select count(*) from users where role='admin' and active=1").fetchone()[0]
+
 def init_db():
     BACKUPS.mkdir(exist_ok=True)
     UPLOADS.mkdir(exist_ok=True)
@@ -99,7 +123,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS weights(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL, weight REAL NOT NULL, notes TEXT);
         CREATE TABLE IF NOT EXISTS milk(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL, liters REAL NOT NULL, notes TEXT);
         CREATE TABLE IF NOT EXISTS animal_photos(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, filename TEXT NOT NULL, created_at TEXT NOT NULL, caption TEXT);
+        CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY, username TEXT, action TEXT, detail TEXT, created_at TEXT, ip_address TEXT);
+        CREATE TABLE IF NOT EXISTS settings(setting_key TEXT PRIMARY KEY, setting_value TEXT);
         ''')
+        user_cols={r[1] for r in c.execute('pragma table_info(users)').fetchall()}
+        for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT')]:
+            if col not in user_cols:c.execute(f'ALTER TABLE users ADD COLUMN {col} {typ}')
+        c.execute("update users set active=1 where active is null")
+        c.execute("update users set full_name=username where full_name is null or trim(full_name)=''")
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
@@ -110,9 +141,7 @@ def init_db():
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         n=c.execute('select count(*) from users').fetchone()[0]
         if not n:
-            salt='farm-v05'
-            pw=hashlib.sha256((salt+'admin123').encode()).hexdigest()
-            c.execute('insert into users(username,password,role) values(?,?,?)',('admin',pw,'admin'))
+            c.execute('insert into users(username,password,role,full_name,active,password_changed_at) values(?,?,?,?,?,?)',('admin',password_hash('admin123'),'admin','Yönetici',1,datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
 def h(s):
     return str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
@@ -151,12 +180,18 @@ def promote_mature_calves():
                 aid=cur.lastrowid
             c.execute('update calves set promoted_animal_id=?, promoted_at=? where id=?',(aid,datetime.now().isoformat(timespec='seconds'),calf['id']))
 
-NAV=[('Dashboard','/'),('➕ Hayvan Ekle','/animal-add'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Satılan Hayvanlar','/archive/sold'),('Kesilen Hayvanlar','/archive/slaughtered'),('Buzağılar','/calves'),('Tohumlama','/inseminations'),('Sağlık','/health'),('Finans','/finance'),('Raporlar','/reports'),('Veri Aktarımı','/data'),('Yedekleme','/backups')]
+NAV=[('Dashboard','/'),('➕ Hayvan Ekle','/animal-add'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Satılan Hayvanlar','/archive/sold'),('Kesilen Hayvanlar','/archive/slaughtered'),('Buzağılar','/calves'),('Tohumlama','/inseminations'),('Sağlık','/health'),('Finans','/finance'),('Raporlar','/reports'),('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('🔐 Şifremi Değiştir','/password-change')]
+ADMIN_NAV=[('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')]
 
 def page(title,body,path='/',user='admin',flash=''):
-    nav=''.join(f'<a class="{"on" if path==u else ""}" href="{u}">{n}</a>' for n,u in NAV)
+    try:
+        with db() as c:account=c.execute('select role,full_name from users where username=?',(user,)).fetchone()
+        role=account['role'] if account else 'personel';display=account['full_name'] if account and account['full_name'] else user
+    except Exception:role='personel';display=user
+    menu=NAV+(ADMIN_NAV if role=='admin' else [])
+    nav=''.join(f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>' for name,url in menu)
     fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
-    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">ENTERPRISE V1.3.1</span> &nbsp; {h(user)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
+    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">ENTERPRISE V2.1.0</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
 function toggleAnimalFields(){{
  var type=document.getElementById('recordType');if(!type)return;
  var calf=type.value==='Buzağı';
@@ -185,22 +220,62 @@ def clean_text(v):
     return '' if t.lower() in ('undefined','null','none') else t
 
 def create_backup(label='manuel'):
-    BACKUPS.mkdir(exist_ok=True)
-    ts=datetime.now().strftime('%Y%m%d_%H%M%S')
-    name=f'ciftlik_yedek_{label}_{ts}.db'; dst=BACKUPS/name
-    with db() as src, sqlite3.connect(dst) as out: src.backup(out)
+    BACKUPS.mkdir(exist_ok=True);ts=datetime.now().strftime('%Y%m%d_%H%M%S')
+    name=f'CiftlikPro_Backup_{label}_{ts}.zip';dst=BACKUPS/name;temp_db=BACKUPS/f'.snapshot_{ts}.db'
+    with db() as src, sqlite3.connect(temp_db) as out:src.backup(out)
+    manifest={'product':'ÇiftlikPro Enterprise','version':'2.1.0','created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label}
+    try:
+        with zipfile.ZipFile(dst,'w',zipfile.ZIP_DEFLATED) as z:
+            z.write(temp_db,'ciftlik.db');z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+            if UPLOADS.exists():
+                for fp in UPLOADS.rglob('*'):
+                    if fp.is_file():z.write(fp,'uploads/'+str(fp.relative_to(UPLOADS)).replace('\\','/'))
+    finally:
+        if temp_db.exists():temp_db.unlink()
     with db() as c:c.execute('insert into backups(filename,created_at,size_bytes) values(?,?,?)',(name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),dst.stat().st_size))
     return name
 
+def validate_backup_zip(zip_path):
+    with zipfile.ZipFile(zip_path,'r') as z:
+        names=set(z.namelist())
+        if 'ciftlik.db' not in names:return False,'Yedekte ciftlik.db bulunamadı.',None
+        for name in names:
+            p=Path(name)
+            if name.startswith('/') or '..' in p.parts:return False,'Güvensiz ZIP yolu tespit edildi.',None
+        manifest={}
+        if 'manifest.json' in names:
+            try:manifest=json.loads(z.read('manifest.json').decode('utf-8'))
+            except Exception:return False,'manifest.json okunamadı.',None
+        with tempfile.TemporaryDirectory() as td:
+            db_copy=Path(td)/'ciftlik.db';db_copy.write_bytes(z.read('ciftlik.db'))
+            try:
+                with sqlite3.connect(db_copy) as c:
+                    if c.execute('pragma quick_check').fetchone()[0]!='ok':return False,'Yedek veritabanı bozuk.',None
+            except Exception as exc:return False,'Yedek veritabanı açılamadı: '+str(exc),None
+    return True,'Yedek geçerli.',manifest
+
+def restore_backup_zip(zip_path):
+    ok,message,manifest=validate_backup_zip(zip_path)
+    if not ok:raise ValueError(message)
+    emergency=create_backup('EmergencyBeforeRestore')
+    with tempfile.TemporaryDirectory() as td:
+        target=Path(td)
+        with zipfile.ZipFile(zip_path,'r') as z:z.extractall(target)
+        staged=DB.with_suffix('.restore.tmp');shutil.copy2(target/'ciftlik.db',staged);os.replace(staged,DB)
+        restored=target/'uploads'
+        if restored.exists():
+            shutil.rmtree(UPLOADS,ignore_errors=True);shutil.copytree(restored,UPLOADS)
+        else:UPLOADS.mkdir(exist_ok=True)
+    init_db();return emergency,manifest
+
 def daily_backup():
-    BACKUPS.mkdir(exist_ok=True)
-    today=date.today().strftime('%Y%m%d')
-    if not any(BACKUPS.glob(f'ciftlik_yedek_otomatik_{today}_*.db')):
-        create_backup('otomatik')
-    files=sorted(BACKUPS.glob('ciftlik_yedek_otomatik_*.db'),key=lambda x:x.stat().st_mtime,reverse=True)
+    BACKUPS.mkdir(exist_ok=True);today=date.today().strftime('%Y%m%d')
+    if not any(BACKUPS.glob(f'CiftlikPro_Backup_otomatik_{today}_*.zip')):create_backup('otomatik')
+    files=sorted(BACKUPS.glob('CiftlikPro_Backup_otomatik_*.zip'),key=lambda x:x.stat().st_mtime,reverse=True)
     for fp in files[30:]:
         try:fp.unlink()
         except:pass
+
 
 def export_payload():
     with db() as c:
@@ -293,11 +368,17 @@ class App(BaseHTTPRequestHandler):
     def require(self):
         if not self.user(): self.redirect('/login'); return False
         return True
+    def is_admin(self):return bool(self.user() and self.user().get('role')=='admin')
+    def require_admin(self):
+        if not self.require():return False
+        if not self.is_admin():self.redirect('/','Bu bölüm yalnızca yöneticilere açıktır.');return False
+        return True
+    def client_ip(self):return self.client_address[0] if self.client_address else ''
     def do_GET(self):
         ensure_archive_schema()
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
         if path=='/login':
-            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">Enterprise V1.0 • Birleşik Ana Sürüm</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
+            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">Enterprise V2.1 • Backup & User Management</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
         if path.startswith('/uploads/'):
             name=os.path.basename(path.split('/uploads/',1)[1]); fp=UPLOADS/name
             if not fp.exists(): return self.send_html('Fotoğraf bulunamadı',404)
@@ -307,6 +388,28 @@ class App(BaseHTTPRequestHandler):
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        if path=='/password-change':
+            body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
+            return self.send_html(page('Şifremi Değiştir',body,'/password-change',u,msg))
+        if path=='/users':
+            if not self.require_admin():return
+            with db() as c:rows=c.execute('select id,username,full_name,role,active,last_login from users order by username').fetchall()
+            trs=''.join(f'''<tr><td>{h(r["full_name"])}</td><td>{h(r["username"])}</td><td>{'Yönetici' if r["role"]=='admin' else 'Personel'}</td><td>{'Aktif' if r["active"] else 'Pasif'}</td><td>{h(r["last_login"]) or '-'}</td><td><a class="btn alt" href="/users/edit?id={r["id"]}">Düzenle</a></td></tr>''' for r in rows)
+            body=f'''<h1>Kullanıcı Yönetimi</h1><div class="two"><div class="card"><h2>Yeni Kullanıcı</h2><form method="post" action="/users/create" class="form"><label>Ad Soyad<input name="full_name" required></label><label>Kullanıcı Adı<input name="username" required></label><label>Şifre<input type="password" name="password" minlength="8" required></label><label>Rol<select name="role"><option value="personel">Personel</option><option value="admin">Yönetici</option></select></label><div class="full"><button class="btn">Kullanıcı Oluştur</button></div></form></div><div class="card"><h2>Güvenlik</h2><p class="mut">Şifreler PBKDF2-SHA256 ile saklanır. Son aktif yönetici pasifleştirilemez.</p></div></div><div class="card" style="margin-top:14px"><table><tr><th>Ad Soyad</th><th>Kullanıcı</th><th>Rol</th><th>Durum</th><th>Son Giriş</th><th>İşlem</th></tr>{trs}</table></div>'''
+            return self.send_html(page('Kullanıcı Yönetimi',body,'/users',u,msg))
+        if path=='/users/edit':
+            if not self.require_admin():return
+            uid=q.get('id',[''])[0]
+            with db() as c:r=c.execute('select * from users where id=?',(uid,)).fetchone()
+            if not r:return self.send_html('Kullanıcı bulunamadı',404)
+            body=f'''<h1>Kullanıcı Düzenle</h1><div class="card"><form method="post" action="/users/update" class="form"><input type="hidden" name="id" value="{r["id"]}"><label>Ad Soyad<input name="full_name" value="{h(r["full_name"])}" required></label><label>Rol<select name="role"><option value="personel" {'selected' if r["role"]=='personel' else ''}>Personel</option><option value="admin" {'selected' if r["role"]=='admin' else ''}>Yönetici</option></select></label><label>Durum<select name="active"><option value="1" {'selected' if r["active"] else ''}>Aktif</option><option value="0" {'selected' if not r["active"] else ''}>Pasif</option></select></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8"></label><div class="full"><button class="btn">Kaydet</button> <a class="btn alt" href="/users">İptal</a></div></form></div>'''
+            return self.send_html(page('Kullanıcı Düzenle',body,'/users',u,msg))
+        if path=='/audit-log':
+            if not self.require_admin():return
+            with db() as c:rows=c.execute('select * from audit_log order by id desc limit 300').fetchall()
+            trs=''.join(f'<tr><td>{h(r["created_at"])}</td><td>{h(r["username"])}</td><td>{h(r["action"])}</td><td>{h(r["detail"])}</td><td>{h(r["ip_address"])}</td></tr>' for r in rows) or '<tr><td colspan=5>Kayıt yok.</td></tr>'
+            body=f'''<h1>İşlem Günlüğü</h1><div class="card"><table><tr><th>Tarih</th><th>Kullanıcı</th><th>İşlem</th><th>Detay</th><th>IP</th></tr>{trs}</table></div>'''
+            return self.send_html(page('İşlem Günlüğü',body,'/audit-log',u,msg))
         promote_mature_calves()
         if path=='/':
             with db() as c:
@@ -560,18 +663,25 @@ class App(BaseHTTPRequestHandler):
             b=json.dumps(export_payload(),ensure_ascii=False,indent=2).encode('utf-8');name=f'ciftlik_json_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
             self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/backups':
-            with db() as c: rows=c.execute('select * from backups order by created_at desc').fetchall()
-            trs=''.join(f'<tr><td>{h(r["created_at"])}</td><td>{h(r["filename"])}</td><td>{r["size_bytes"]//1024} KB</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(r["filename"])}">İndir</a></td></tr>' for r in rows)
-            body=f'''<h1>Yedekleme</h1><div class="card"><h2>Verilerinizi Koruyun</h2><p>Yedek dosyası; hayvan, tohumlama, buzağı, sağlık ve finans kayıtlarının tamamını içerir.</p><div class="actions"><a class="btn orange" href="/backup/create">Şimdi Yedek Al</a><a class="btn alt" href="/backup/restore-info">Geri Yükleme Bilgisi</a></div></div><div class="card" style="margin-top:14px"><h2>Yedek Geçmişi</h2><table><tr><th>Tarih</th><th>Dosya</th><th>Boyut</th><th>İşlem</th></tr>{trs}</table></div>'''
-            return self.send_html(page('Yedekleme',body,'/backups',u,msg))
+            if not self.require_admin():return
+            with db() as c:rows=c.execute('select * from backups order by created_at desc limit 100').fetchall()
+            trs=''.join(f'<tr><td>{h(r["created_at"])}</td><td>{h(r["filename"])}</td><td>{(r["size_bytes"] or 0)//1024} KB</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(r["filename"])}">İndir</a> <a class="btn red" href="/backup/delete?file={urllib.parse.quote(r["filename"])}">Sil</a></td></tr>' for r in rows) or '<tr><td colspan=4>Henüz yedek yok.</td></tr>'
+            body=f'''<h1>Yedekleme Merkezi</h1><div class="two"><div class="card"><h2>Tam Yedek Al</h2><p>Veritabanı, fotoğraflar ve sürüm bilgisi tek ZIP dosyasında saklanır.</p><a class="btn orange" href="/backup/create">Şimdi Yedek Al</a></div><div class="card"><h2>Yedeği Geri Yükle</h2><form method="post" action="/backup/restore" enctype="multipart/form-data"><input type="file" name="backup_file" accept=".zip" required><label style="display:block;margin:12px 0"><input type="checkbox" name="confirm_restore" value="yes" required> Mevcut verilerin değiştirileceğini kabul ediyorum.</label><button class="btn red">Yedeği Geri Yükle</button></form></div></div><div class="card" style="margin-top:14px"><h2>Yedek Geçmişi</h2><table><tr><th>Tarih</th><th>Dosya</th><th>Boyut</th><th>İşlem</th></tr>{trs}</table></div>'''
+            return self.send_html(page('Yedekleme Merkezi',body,'/backups',u,msg))
         if path=='/backup/create':
-            create_backup('manuel'); return self.redirect('/backups','Yedek başarıyla oluşturuldu.')
+            if not self.require_admin():return
+            name=create_backup('manuel');audit(u,'Yedek oluşturdu',name,self.client_ip());return self.redirect('/backups','Tam yedek oluşturuldu.')
         if path=='/backup/download':
-            name=os.path.basename(q.get('file',[''])[0]); fp=BACKUPS/name
+            if not self.require_admin():return
+            name=os.path.basename(q.get('file',[''])[0]);fp=BACKUPS/name
             if not fp.exists():return self.send_html('Dosya bulunamadı',404)
-            b=fp.read_bytes();self.send_response(200);self.send_header('Content-Type','application/octet-stream');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
-        if path=='/backup/restore-info':
-            return self.send_html(page('Geri Yükleme','<h1>Yedekten Geri Yükleme</h1><div class="card"><p>Güvenlik için otomatik geri yükleme kapalıdır.</p><ol><li>Uygulamayı durdurun.</li><li>Mevcut <b>ciftlik.db</b> dosyasını ayrıca saklayın.</li><li>Seçtiğiniz yedek dosyasını uygulama klasörüne kopyalayın.</li><li>Adını <b>ciftlik.db</b> yapın ve uygulamayı yeniden başlatın.</li></ol></div>','/backups',u,msg))
+            b=fp.read_bytes();self.send_response(200);self.send_header('Content-Type','application/zip');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
+        if path=='/backup/delete':
+            if not self.require_admin():return
+            name=os.path.basename(q.get('file',[''])[0]);fp=BACKUPS/name
+            if fp.exists():fp.unlink()
+            with db() as c:c.execute('delete from backups where filename=?',(name,))
+            audit(u,'Yedek sildi',name,self.client_ip());return self.redirect('/backups','Yedek silindi.')
         if path in ('/finance/export','/reports/export'):
             start=q.get('start',['0000-01-01'])[0];end=q.get('end',['9999-12-31'])[0];typ=q.get('type',[''])[0]
             sql='select tx_date,tx_type,category,amount,description,payment_method from finance where tx_date between ? and ?';args=[start,end]
@@ -589,11 +699,56 @@ class App(BaseHTTPRequestHandler):
         except Exception as exc:
             return self.redirect('/','Form verisi okunamadı: '+str(exc))
         if path=='/login':
-            pw=hashlib.sha256(('farm-v05'+f.get('password','')).encode()).hexdigest()
-            with db() as c:r=c.execute('select * from users where username=? and password=?',(f.get('username'),pw)).fetchone()
-            if not r:return self.redirect('/login','Kullanıcı adı veya şifre hatalı.')
-            sid=secrets.token_urlsafe(24);SESSIONS[sid]={'username':r['username'],'role':r['role']};self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
+            username=(f.get('username') or '').strip()
+            with db() as c:r=c.execute('select * from users where username=?',(username,)).fetchone()
+            if not r or not r['active'] or not password_verify(f.get('password',''),r['password']):audit(username or 'bilinmeyen','Başarısız giriş','',self.client_ip());return self.redirect('/login','Kullanıcı adı veya şifre hatalı ya da hesap pasif.')
+            if not str(r['password']).startswith('pbkdf2_sha256$'):
+                with db() as c:c.execute('update users set password=?,password_changed_at=? where id=?',(password_hash(f.get('password','')),datetime.now().strftime('%Y-%m-%d %H:%M:%S'),r['id']))
+            now=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with db() as c:c.execute('update users set last_login=? where id=?',(now,r['id']))
+            sid=secrets.token_urlsafe(24);SESSIONS[sid]={'id':r['id'],'username':r['username'],'role':r['role'],'full_name':r['full_name']};audit(r['username'],'Oturum açtı','',self.client_ip())
+            self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
+        current=self.user();username=current['username']
+        if path=='/password-change':
+            np=f.get('new_password','')
+            if len(np)<8:return self.redirect('/password-change','Yeni şifre en az 8 karakter olmalıdır.')
+            if np!=f.get('new_password_confirm',''):return self.redirect('/password-change','Yeni şifreler eşleşmiyor.')
+            with db() as c:r=c.execute('select * from users where username=?',(username,)).fetchone()
+            if not r or not password_verify(f.get('current_password',''),r['password']):return self.redirect('/password-change','Mevcut şifre hatalı.')
+            with db() as c:c.execute('update users set password=?,password_changed_at=? where id=?',(password_hash(np),datetime.now().strftime('%Y-%m-%d %H:%M:%S'),r['id']))
+            audit(username,'Şifresini değiştirdi','',self.client_ip());return self.redirect('/password-change','Şifreniz başarıyla değiştirildi.')
+        if path=='/users/create':
+            if not self.require_admin():return
+            uname=(f.get('username') or '').strip();password=f.get('password','');role=f.get('role','personel')
+            if len(password)<8:return self.redirect('/users','Şifre en az 8 karakter olmalıdır.')
+            try:
+                with db() as c:c.execute('insert into users(username,password,role,full_name,active,password_changed_at) values(?,?,?,?,1,?)',(uname,password_hash(password),role,f.get('full_name',''),datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            except sqlite3.IntegrityError:return self.redirect('/users','Bu kullanıcı adı zaten kullanılıyor.')
+            audit(username,'Kullanıcı oluşturdu',uname+' · '+role,self.client_ip());return self.redirect('/users','Kullanıcı oluşturuldu.')
+        if path=='/users/update':
+            if not self.require_admin():return
+            uid=int(f.get('id') or 0);role=f.get('role','personel');active=1 if f.get('active')=='1' else 0
+            with db() as c:r=c.execute('select * from users where id=?',(uid,)).fetchone()
+            if not r:return self.redirect('/users','Kullanıcı bulunamadı.')
+            if r['role']=='admin' and r['active'] and (role!='admin' or not active) and active_admin_count()<=1:return self.redirect('/users/edit?id='+str(uid),'Son aktif yönetici değiştirilemez.')
+            with db() as c:
+                c.execute('update users set full_name=?,role=?,active=? where id=?',(f.get('full_name',''),role,active,uid))
+                if f.get('new_password'):
+                    if len(f['new_password'])<8:return self.redirect('/users/edit?id='+str(uid),'Yeni şifre en az 8 karakter olmalıdır.')
+                    c.execute('update users set password=?,password_changed_at=? where id=?',(password_hash(f['new_password']),datetime.now().strftime('%Y-%m-%d %H:%M:%S'),uid))
+            audit(username,'Kullanıcı güncelledi',r['username'],self.client_ip());return self.redirect('/users','Kullanıcı güncellendi.')
+        if path=='/backup/restore':
+            if not self.require_admin():return
+            upload=f.get('backup_file')
+            if f.get('confirm_restore')!='yes':return self.redirect('/backups','Geri yükleme onayı verilmedi.')
+            if not upload or not isinstance(upload,dict):return self.redirect('/backups','ZIP dosyası seçilmedi.')
+            temp_path=BACKUPS/('.incoming_'+secrets.token_hex(8)+'.zip');temp_path.write_bytes(upload.get('content',b''))
+            try:
+                emergency,manifest=restore_backup_zip(temp_path);audit(username,'Yedek geri yükledi',upload.get('filename','')+' · '+emergency,self.client_ip());SESSIONS.clear();return self.redirect('/login','Yedek geri yüklendi. Yeniden giriş yapın.')
+            except Exception as exc:return self.redirect('/backups','Geri yükleme başarısız: '+str(exc))
+            finally:
+                if temp_path.exists():temp_path.unlink()
         if path=='/animal-add':
             kind=(f.get('record_type') or '').strip();tag=(f.get('tag') or '').strip()
             if not tag:return self.redirect('/animal-add','Küpe numarası zorunludur.')

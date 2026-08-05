@@ -1,0 +1,42 @@
+ÇİFTLİKPRO ENTERPRISE V2.1 BETA 1
+WINDOWS KURULUM DOSYASI OLUŞTURMA
+
+1. Bu ZIP'i bilgisayarda bir klasöre çıkarın.
+2. GitHub Desktop'ta CiftlikPro-V2 deponuzu açın.
+3. Repository > Show in Explorer ile depo klasörünü açın.
+4. Bu paketin içindeki bütün dosya ve klasörleri depo klasörüne kopyalayın.
+5. Dosya değiştirme sorularında 'Hedefteki dosyaları değiştir' seçin.
+6. GitHub Desktop'a dönün.
+7. Summary alanına:
+      V2.1 Beta1 kullanıcı yönetimi
+   yazın.
+8. Commit to main düğmesine basın.
+9. Push origin düğmesine basın.
+10. GitHub sitesinde Actions bölümünü açın.
+11. CiftlikPro V2.1 Beta1 Windows Kurulum iş akışını çalıştırın.
+12. Yeşil tik oluşunca Artifacts bölümünden:
+      CiftlikPro-V2.1-Beta1-Windows-Setup
+    paketini indirin.
+13. ZIP içindeki:
+      CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe
+    dosyasını çalıştırın.
+
+BETA 1 ÖZELLİKLERİ
+- Kullanıcı oluşturma
+- Yönetici / Personel rolü
+- Kullanıcı aktif veya pasif durumu
+- Yönetici tarafından şifre sıfırlama
+- Kullanıcının kendi şifresini değiştirmesi
+- PBKDF2-SHA256 güvenli şifre saklama
+- Başarılı ve başarısız giriş işlem kayıtları
+- Kullanıcı yönetim işlem günlüğü
+- Mevcut V1.3.1 hayvan, finans, arama ve Dashboard özellikleri
+
+VERİLERİN KONUMU
+%LOCALAPPDATA%\CiftlikPro
+
+İLK GİRİŞ
+Kullanıcı: admin
+Şifre: admin123
+
+İlk girişten sonra şifrenizi değiştirin.

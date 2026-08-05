@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V2.1.0
+
+İlk giriş: admin / admin123
+İlk girişten sonra şifrenizi değiştirin.
+Yedekleme Merkezi ZIP içinde ciftlik.db, uploads ve manifest.json saklar.
+Geri yükleme öncesinde EmergencyBeforeRestore yedeği alınır.
+Adres: http://127.0.0.1:8951/login

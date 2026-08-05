@@ -4,15 +4,18 @@ from pathlib import Path
 project_root = Path(SPECPATH)
 app_root = project_root / "app"
 
+datas = []
+for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md",
+                      "TEST_REPORT.txt", "V2_1_KULLANIM_KILAVUZU.txt"):
+    optional_file = app_root / optional_name
+    if optional_file.exists():
+        datas.append((str(optional_file), "."))
+
 a = Analysis(
     [str(app_root / "desktop_launcher.py")],
     pathex=[str(app_root)],
     binaries=[],
-    datas=[
-        (str(app_root / "README.txt"), "."),
-        (str(app_root / "KURULUM.txt"), "."),
-        (str(app_root / "FEATURES.md"), "."),
-    ],
+    datas=datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

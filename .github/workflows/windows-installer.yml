@@ -1,4 +1,4 @@
-name: CiftlikPro Windows Kurulum
+name: CiftlikPro V2.1 Beta1 Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -21,15 +21,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Derleme araçlarını kur
+      - name: Derleme aracını kur
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller==6.11.1
 
-      - name: Python kaynak kontrolü
+      - name: Kaynak kod kontrolü
         shell: pwsh
         run: |
           python -m py_compile app/server.py
@@ -43,22 +42,27 @@ jobs:
             throw "CiftlikPro.exe oluşturulamadı."
           }
 
-      - name: Uygulamayı çalıştır ve giriş sayfasını test et
+      - name: Uygulamayı başlat ve giriş sayfasını test et
         shell: pwsh
         run: |
+          $testData = Join-Path $env:RUNNER_TEMP "CiftlikProTestData"
+          New-Item -ItemType Directory -Force -Path $testData | Out-Null
+          $env:CIFTLIKPRO_DATA_DIR = $testData
+
           $process = Start-Process `
             -FilePath "$pwd\dist\CiftlikPro\CiftlikPro.exe" `
             -PassThru
           try {
             $ready = $false
-            for ($i = 0; $i -lt 60; $i++) {
+            for ($i = 0; $i -lt 80; $i++) {
               Start-Sleep -Milliseconds 500
               try {
                 $response = Invoke-WebRequest `
-                  -Uri "http://127.0.0.1:8948/login" `
+                  -Uri "http://127.0.0.1:8951/login" `
                   -UseBasicParsing `
                   -TimeoutSec 2
-                if ($response.StatusCode -eq 200 -and $response.Content -match "ÇiftlikPro") {
+                if ($response.StatusCode -eq 200 -and
+                    $response.Content -match "ÇiftlikPro") {
                   $ready = $true
                   break
                 }
@@ -71,7 +75,7 @@ jobs:
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Inno Setup ile kurulum EXE'si oluştur
+      - name: Inno Setup kurulum dosyasını oluştur
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
@@ -79,23 +83,26 @@ jobs:
             choco install innosetup --yes --no-progress
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
-          if (!(Test-Path "release\CiftlikPro_Setup.exe")) {
-            throw "CiftlikPro_Setup.exe oluşturulamadı."
+
+          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe"
+          if (!(Test-Path $setup)) {
+            throw "Kurulum EXE dosyası oluşturulamadı."
           }
 
-      - name: SHA-256 oluştur
+      - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $hash = (Get-FileHash "release\CiftlikPro_Setup.exe" -Algorithm SHA256).Hash
-          "CiftlikPro_Setup.exe  SHA256: $hash" | Out-File `
-            "release\SHA256.txt" -Encoding utf8
+          $setup = "release\CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe"
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
+          "CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe  SHA256: $hash" |
+            Out-File "release\SHA256.txt" -Encoding utf8
 
-      - name: Kurulum dosyasını yükle
+      - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Windows-Setup
+          name: CiftlikPro-V2.1-Beta1-Windows-Setup
           path: |
-            release/CiftlikPro_Setup.exe
+            release/CiftlikPro_Enterprise_V2_1_Beta1_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
