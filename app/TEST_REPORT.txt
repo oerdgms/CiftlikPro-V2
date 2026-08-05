@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V1.3.1 Test Raporu
+
+PASS: Sunucu açıldı
+PASS: Dişi, erkek ve buzağı canlı arama yükleniyor
+PASS: Hayvan Ekle POST formu çalışıyor
+PASS: Kayıt veritabanına doğru yazıldı
+PASS: Zengin Dashboard korunuyor
