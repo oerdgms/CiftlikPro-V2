@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V3.0 Stable Hotfix 1
+
+Düzeltmeler:
+1. Hayvan kartındaki "Bilgileri Düzenle" butonu artık doğrudan doğru hayvanın düzenleme formunu açar.
+2. Dashboard "Hedeflenen Erkek Kârı" hesabında hedef satış fiyatı girilmemiş erkek hayvanlar 0 TL satış kabul edilmez.
+3. Hedef satış fiyatı girilmiş erkek hayvan yoksa kartta "-" gösterilir.
+4. Hedef kâr yalnızca hedef satış fiyatı bulunan erkeklerin hedef satış toplamı eksi aynı hayvanların anlık maliyet toplamı olarak hesaplanır.
