@@ -22,7 +22,6 @@ jobs:
         with:
           python-version: "3.12"
 
-
       - name: Derleme aracını kur
         shell: pwsh
         run: |
