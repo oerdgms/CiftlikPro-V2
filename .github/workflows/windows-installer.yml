@@ -12,6 +12,9 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 35
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
 
     steps:
       - name: Kaynak kodu al
@@ -33,7 +36,7 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.0'; print('Sürüm:', server.APP_LABEL)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.0'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Kaynak sunucuyu başlat ve sayfaları test et
         shell: pwsh

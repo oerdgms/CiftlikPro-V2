@@ -1,0 +1,11 @@
+CiftlikPro Enterprise V3.1 UTF-8 Build Hotfix
+
+Duzeltilen hata:
+- GitHub Actions Windows calistiricisinda Turkce buyuk I karakteri yazdirilirken
+  UnicodeEncodeError / cp1252 hatasi olusuyordu.
+
+Yapilanlar:
+- Tum build isi icin PYTHONUTF8=1 etkinlestirildi.
+- PYTHONIOENCODING=utf-8 tanimlandi.
+- Surum kontrol ciktisi ASCII-guvenli VERSION_OK metnine cevrildi.
+- Uygulama ve kurulum iceriginde Turkce karakterler korunur.
