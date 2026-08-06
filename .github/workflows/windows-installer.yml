@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Kaynak kodu al
@@ -33,6 +33,59 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.0'; print('Sürüm:', server.APP_LABEL)"
+
+      - name: Kaynak sunucuyu başlat ve sayfaları test et
+        shell: pwsh
+        run: |
+          $testData = Join-Path $env:RUNNER_TEMP "CiftlikProSourceTestData"
+          $stdout = Join-Path $env:RUNNER_TEMP "ciftlikpro-source-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "ciftlikpro-source-stderr.log"
+          New-Item -ItemType Directory -Force -Path $testData | Out-Null
+          $env:CIFTLIKPRO_DATA_DIR = $testData
+          $env:PYTHONUNBUFFERED = "1"
+
+          $process = Start-Process python `
+            -ArgumentList "-u", "app/server.py" `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+
+          try {
+            $ready = $false
+            $lastError = ""
+            for ($i = 0; $i -lt 60; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) {
+                $lastError = "Kaynak sunucu erken kapandı. Çıkış kodu: $($process.ExitCode)"
+                break
+              }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8953/login" -UseBasicParsing -TimeoutSec 3
+                if ($response.StatusCode -eq 200 -and
+                    $response.Content -match "ÇiftlikPro" -and
+                    $response.Content -match "V3.1") {
+                  $ready = $true
+                  break
+                }
+                $lastError = "HTTP yanıtı geldi fakat beklenen V3.1 metni bulunamadı. Durum: $($response.StatusCode)"
+              } catch {
+                $lastError = $_.Exception.Message
+              }
+            }
+
+            if (-not $ready) {
+              Write-Host "===== KAYNAK SUNUCU STDOUT ====="
+              if (Test-Path $stdout) { Get-Content $stdout -ErrorAction SilentlyContinue }
+              Write-Host "===== KAYNAK SUNUCU STDERR ====="
+              if (Test-Path $stderr) { Get-Content $stderr -ErrorAction SilentlyContinue }
+              throw "Kaynak sunucu testi başarısız: $lastError"
+            }
+
+            Write-Host "Kaynak sunucu ve V3.1 giriş sayfası testi başarılı."
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Windows uygulamasını oluştur
         shell: pwsh
@@ -42,36 +95,44 @@ jobs:
             throw "CiftlikPro.exe oluşturulamadı."
           }
 
-      - name: Uygulamayı başlat ve giriş sayfasını test et
+      - name: Paketlenmiş uygulamayı başlat ve giriş sayfasını test et
         shell: pwsh
         run: |
-          $testData = Join-Path $env:RUNNER_TEMP "CiftlikProTestData"
+          $testData = Join-Path $env:RUNNER_TEMP "CiftlikProExeTestData"
           New-Item -ItemType Directory -Force -Path $testData | Out-Null
           $env:CIFTLIKPRO_DATA_DIR = $testData
 
-          $process = Start-Process `
-            -FilePath "$pwd\dist\CiftlikPro\CiftlikPro.exe" `
-            -PassThru
+          $process = Start-Process -FilePath "$pwd\dist\CiftlikPro\CiftlikPro.exe" -PassThru
           try {
             $ready = $false
-            for ($i = 0; $i -lt 80; $i++) {
-              Start-Sleep -Milliseconds 500
+            $lastError = ""
+            for ($i = 0; $i -lt 90; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) {
+                $lastError = "Paketlenmiş uygulama erken kapandı. Çıkış kodu: $($process.ExitCode)"
+                break
+              }
               try {
-                $response = Invoke-WebRequest `
-                  -Uri "http://127.0.0.1:8953/login" `
-                  -UseBasicParsing `
-                  -TimeoutSec 2
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8953/login" -UseBasicParsing -TimeoutSec 3
                 if ($response.StatusCode -eq 200 -and
                     $response.Content -match "ÇiftlikPro" -and
                     $response.Content -match "V3.1") {
                   $ready = $true
                   break
                 }
-              } catch {}
+                $lastError = "HTTP yanıtı geldi fakat beklenen V3.1 metni bulunamadı. Durum: $($response.StatusCode)"
+              } catch {
+                $lastError = $_.Exception.Message
+              }
             }
+
             if (-not $ready) {
-              throw "ÇiftlikPro giriş sayfası açılamadı."
+              Write-Host "Test veri klasörü: $testData"
+              Get-ChildItem -Recurse $testData -ErrorAction SilentlyContinue | Format-Table FullName,Length,LastWriteTime
+              throw "Paketlenmiş uygulama testi başarısız: $lastError"
             }
+
+            Write-Host "Paketlenmiş V3.1 uygulama testi başarılı."
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           }

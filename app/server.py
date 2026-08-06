@@ -455,7 +455,7 @@ class App(BaseHTTPRequestHandler):
         ensure_archive_schema()
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
         if path=='/login':
-            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">Enterprise V3.0.1 Stable • Güvenli Yedekleme ve Kullanıcı Yönetimi</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
+            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">{h(APP_LABEL)} • Güvenli Yedekleme ve Kullanıcı Yönetimi</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
         if path.startswith('/uploads/'):
             name=os.path.basename(path.split('/uploads/',1)[1]); fp=UPLOADS/name
             if not fp.exists(): return self.send_html('Fotoğraf bulunamadı',404)

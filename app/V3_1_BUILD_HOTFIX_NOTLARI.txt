@@ -1,0 +1,12 @@
+ÇİFTLİKPRO ENTERPRISE V3.1 - BUILD HOTFIX
+
+Düzeltmeler:
+- Giriş ekranında kalan eski "V3.0.1" sürüm yazısı dinamik V3.1 etiketiyle değiştirildi.
+- GitHub Actions kaynak sunucuyu EXE oluşturmadan önce test eder.
+- Kaynak sunucu açılmazsa stdout/stderr ve gerçek Python hatası build logunda gösterilir.
+- Paketlenmiş EXE için 90 saniyeye kadar güvenli başlatma beklemesi eklendi.
+- Uygulama erken kapanırsa çıkış kodu ve test veri klasörü bilgileri gösterilir.
+- Giriş sayfasında V3.1 sürüm doğrulaması korunmuştur.
+
+Önceki build neden başarısız oldu?
+Giriş sayfasında eski "V3.0.1" metni kaldığı için uygulama çalışmasına rağmen workflow V3.1 metnini bulamadı ve testi başarısız saydı.
