@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.0.2 Stable Hotfix Windows Kurulum
+name: CiftlikPro Enterprise V3.1 Besi Performans Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -63,7 +63,7 @@ jobs:
                   -TimeoutSec 2
                 if ($response.StatusCode -eq 200 -and
                     $response.Content -match "ÇiftlikPro" -and
-                    $response.Content -match "V3.0") {
+                    $response.Content -match "V3.1") {
                   $ready = $true
                   break
                 }
@@ -85,7 +85,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_0_1_Stable_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_1_Besi_Performans_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -93,17 +93,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_0_1_Stable_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_1_Besi_Performans_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_0_1_Stable_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_1_Besi_Performans_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.0.2-Stable-Hotfix-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.1-Besi-Performans-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_0_1_Stable_Setup.exe
+            release/CiftlikPro_Enterprise_V3_1_Besi_Performans_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
