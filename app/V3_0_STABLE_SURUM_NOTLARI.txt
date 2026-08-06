@@ -1,0 +1,11 @@
+ÇİFTLİKPRO ENTERPRISE V3.0 STABLE
+
+Kararlı sürüm kapsamı
+- Beta 3 erkek hayvan alış, tartım, günlük gider ve anlık maliyet özellikleri korundu.
+- Hedef satış, hedef kâr, satış tamamlama ve satış arşivi korundu.
+- Dişi, erkek ve buzağı kayıtlarında güvenli silme onayı korundu.
+- Ana panele toplam aktif hayvan, erkek hayvanların anlık toplam maliyeti ve hedeflenen toplam kâr eklendi.
+- Uygulama, kurulum, GitHub Actions artifact ve yedek manifest sürümleri V3.0.0 Stable olarak eşitlendi.
+- Eski veritabanları açılışta otomatik şema yükseltmesiyle kullanılmaya devam eder.
+
+Kurulumdan önce Yedekleme Merkezi üzerinden tam yedek alınması önerilir.

@@ -16,6 +16,11 @@ UPLOADS=DATA_ROOT/'uploads'
 PORT=8953
 SESSIONS={}
 
+APP_NAME='ÇiftlikPro Enterprise'
+APP_VERSION='3.0.0'
+APP_CHANNEL='Stable'
+APP_LABEL='ENTERPRISE V3.0 STABLE'
+
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
 *{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--txt)}
@@ -203,7 +208,7 @@ def page(title,body,path='/',user='admin',flash=''):
     menu=NAV+(ADMIN_NAV if role=='admin' else [])
     nav=''.join(f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>' for name,url in menu)
     fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
-    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">ENTERPRISE V2.1 BETA 3</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
+    return f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="brand">🐄 ÇiftlikPro</div><div><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side">{nav}</aside><main class="main">{fl}{body}</main></div><script>(function(){{const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning");if(!c||!a||!w)return;function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r;}}c.addEventListener("change",x);x();}})();</script><script>
 function toggleAnimalFields(){{
  var type=document.getElementById('recordType');if(!type)return;
  var calf=type.value==='Buzağı';
@@ -235,7 +240,7 @@ def create_backup(label='manuel'):
     BACKUPS.mkdir(exist_ok=True);ts=datetime.now().strftime('%Y%m%d_%H%M%S')
     name=f'CiftlikPro_Backup_{label}_{ts}.zip';dst=BACKUPS/name;temp_db=BACKUPS/f'.snapshot_{ts}.db'
     with db() as src, sqlite3.connect(temp_db) as out:src.backup(out)
-    manifest={'product':'ÇiftlikPro Enterprise','version':'2.1-beta3','created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label}
+    manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label}
     try:
         with zipfile.ZipFile(dst,'w',zipfile.ZIP_DEFLATED) as z:
             z.write(temp_db,'ciftlik.db');z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
@@ -390,7 +395,7 @@ class App(BaseHTTPRequestHandler):
         ensure_archive_schema()
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
         if path=='/login':
-            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">Enterprise V2.1 • Backup & User Management</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
+            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">Enterprise V3.0 Stable • Güvenli Yedekleme ve Kullanıcı Yönetimi</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
         if path.startswith('/uploads/'):
             name=os.path.basename(path.split('/uploads/',1)[1]); fp=UPLOADS/name
             if not fp.exists(): return self.send_html('Fotoğraf bulunamadı',404)
@@ -431,6 +436,11 @@ class App(BaseHTTPRequestHandler):
                 total_inc=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gelir'").fetchone()[0]
                 total_exp=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gider'").fetchone()[0]
                 pregnant=c.execute("select count(distinct animal_id) from inseminations where pregnancy_result='Pozitif'").fetchone()[0]
+                active_total=animals+males+calves
+                male_records=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif'").fetchall()
+                male_current_cost=sum(animal_cost_values(r)[3] for r in male_records)
+                male_target_sales=sum(float(r['target_sale_price'] or 0) for r in male_records)
+                male_target_profit=male_target_sales-male_current_cost if male_target_sales else 0
                 due_rows=c.execute("select i.due_date,a.id,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id where i.pregnancy_result='Pozitif' and i.due_date between ? and ? order by i.due_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=45)).isoformat())).fetchall()
                 health_rows=c.execute("select h.next_date,a.id,a.tag,h.kind,h.product from health h left join animals a on a.id=h.animal_id where h.next_date between ? and ? order by h.next_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=30)).isoformat())).fetchall()
                 recent=c.execute('select * from finance order by tx_date desc,id desc limit 6').fetchall()
@@ -445,7 +455,7 @@ class App(BaseHTTPRequestHandler):
             due_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">Tahmini doğum: {h(r["due_date"])}</span></div>' for r in due_rows) or '<p class="mut">45 gün içinde beklenen doğum yok.</p>'
             health_html=''.join(f'<div class="alertitem">💉 {h(r["tag"] or "Genel")} · {h(r["kind"])}<br><span class="mut">{h(r["product"])} — {h(r["next_date"])}</span></div>' for r in health_rows) or '<p class="mut">30 gün içinde planlanan sağlık işlemi yok.</p>'
             rows=''.join(f'<tr><td>{h(r["tx_date"])}</td><td>{h(r["tx_type"])}</td><td>{h(r["category"])}</td><td>{money(r["amount"])}</td></tr>' for r in recent) or '<tr><td colspan=4>Kayıt yok</td></tr>'
-            body=f'''<div class="hero"><div><h1>ÇiftlikPro Yönetim Merkezi</h1><div>Bugünün sürü, sağlık ve finans görünümü</div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div><div class="grid"><div class="card stat metric">Dişi Hayvan<b>{animals}</b></div><div class="card stat metric blue">Erkek Hayvan<b>{males}</b></div><div class="card stat metric orange">Gebe Hayvan<b>{pregnant}</b></div><div class="card stat metric">Buzağı<b>{calves}</b></div><div class="card stat metric">Toplam Gelir<b style="color:#176b3a">{money(total_inc)}</b></div><div class="card stat metric red">Toplam Gider<b style="color:#c8392b">{money(total_exp)}</b></div><div class="card stat metric {'red' if net<0 else ''}">Net Durum<b style="color:{'#c8392b' if net<0 else '#176b3a'}">{money(net)}</b></div><div class="card stat metric blue">Yaklaşan Doğum<b>{len(due_rows)}</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a></div><h3>Son Finans İşlemleri</h3><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Tutar</th></tr>{rows}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
+            body=f'''<div class="hero"><div><h1>ÇiftlikPro Yönetim Merkezi</h1><div>Bugünün sürü, sağlık ve finans görünümü</div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div><div class="grid"><div class="card stat metric">Toplam Aktif Hayvan<b>{active_total}</b></div><div class="card stat metric">Dişi Hayvan<b>{animals}</b></div><div class="card stat metric blue">Erkek Hayvan<b>{males}</b></div><div class="card stat metric orange">Gebe Hayvan<b>{pregnant}</b></div><div class="card stat metric">Buzağı<b>{calves}</b></div><div class="card stat metric blue">Erkekler Anlık Maliyet<b>{money(male_current_cost)}</b></div><div class="card stat metric {'red' if male_target_profit<0 else ''}">Hedeflenen Erkek Kârı<b style="color:{'#c8392b' if male_target_profit<0 else '#176b3a'}">{money(male_target_profit)}</b></div><div class="card stat metric">Toplam Gelir<b style="color:#176b3a">{money(total_inc)}</b></div><div class="card stat metric red">Toplam Gider<b style="color:#c8392b">{money(total_exp)}</b></div><div class="card stat metric {'red' if net<0 else ''}">Net Durum<b style="color:{'#c8392b' if net<0 else '#176b3a'}">{money(net)}</b></div><div class="card stat metric blue">Yaklaşan Doğum<b>{len(due_rows)}</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a></div><h3>Son Finans İşlemleri</h3><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Tutar</th></tr>{rows}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
             with db() as c:
                 recent_animals=c.execute("select id,tag,nickname,gender,birth_date from animals where coalesce(status,'Aktif')='Aktif' order by id desc limit 6").fetchall()
                 today_milk=c.execute("select coalesce(sum(liters),0) from milk where measure_date=?",(date.today().isoformat(),)).fetchone()[0]
