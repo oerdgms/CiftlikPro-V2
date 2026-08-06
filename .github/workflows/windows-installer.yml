@@ -1,4 +1,4 @@
-name: CiftlikPro V2.1 Beta1 Edit Hotfix Windows Kurulum
+name: CiftlikPro V2.1 Beta2 Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -21,10 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-<<<<<<< HEAD
-=======
-
->>>>>>> 34c299d30e607bce822b7c56dd29ddcc6f4a1554
 
       - name: Derleme aracını kur
         shell: pwsh
@@ -104,7 +100,7 @@ jobs:
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-V2.1-Beta1-EditHotfix-Windows-Setup
+          name: CiftlikPro-V2.1-Beta2-Windows-Setup
           path: |
             release/CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe
             release/SHA256.txt
