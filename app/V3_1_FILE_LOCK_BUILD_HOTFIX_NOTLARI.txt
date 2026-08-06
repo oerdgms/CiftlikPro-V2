@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V3.1 File Lock Build Hotfix
+
+- Windows GitHub Actions testinde SQLite snapshot dosyası kilitlenmesi düzeltildi.
+- Geçici yedek snapshot dosyası silinemediğinde uygulama artık kapanmıyor.
+- Snapshot temizliği tekrar denemeli ve hata toleranslı hale getirildi.
+- Kaynak ve paketlenmiş uygulama testleri sonrasında süreç kapanışı bekleniyor.
+- Geçici test klasörü temizliği tekrar denemeli yapılıyor.

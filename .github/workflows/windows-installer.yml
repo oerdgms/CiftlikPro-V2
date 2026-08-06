@@ -88,6 +88,17 @@ jobs:
             Write-Host "Kaynak sunucu ve V3.1 giriş sayfası testi başarılı."
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            try { Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue } catch {}
+            Start-Sleep -Seconds 2
+            for ($attempt = 1; $attempt -le 8; $attempt++) {
+              try {
+                if (Test-Path $testData) { Remove-Item -Recurse -Force $testData -ErrorAction Stop }
+                break
+              } catch {
+                if ($attempt -eq 8) { Write-Warning "Geçici kaynak test klasörü temizlenemedi: $($_.Exception.Message)" }
+                else { Start-Sleep -Seconds 1 }
+              }
+            }
           }
 
       - name: Windows uygulamasını oluştur
@@ -138,6 +149,17 @@ jobs:
             Write-Host "Paketlenmiş V3.1 uygulama testi başarılı."
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            try { Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue } catch {}
+            Start-Sleep -Seconds 2
+            for ($attempt = 1; $attempt -le 8; $attempt++) {
+              try {
+                if (Test-Path $testData) { Remove-Item -Recurse -Force $testData -ErrorAction Stop }
+                break
+              } catch {
+                if ($attempt -eq 8) { Write-Warning "Geçici EXE test klasörü temizlenemedi: $($_.Exception.Message)" }
+                else { Start-Sleep -Seconds 1 }
+              }
+            }
           }
 
       - name: Inno Setup kurulum dosyasını oluştur

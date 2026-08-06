@@ -1,4 +1,4 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc
 from email.parser import BytesParser
 from email.policy import default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -308,7 +308,26 @@ def create_backup(label='manuel'):
                 for fp in UPLOADS.rglob('*'):
                     if fp.is_file():z.write(fp,'uploads/'+str(fp.relative_to(UPLOADS)).replace('\\','/'))
     finally:
-        if temp_db.exists():temp_db.unlink()
+        # Windows'ta SQLite/antivirüs dosya tanıtıcısını kısa süre açık tutabilir.
+        # Yedek başarıyla oluştuysa geçici snapshot temizleme hatası uygulamayı durdurmamalı.
+        gc.collect()
+        for attempt in range(12):
+            try:
+                if temp_db.exists():
+                    temp_db.unlink()
+                break
+            except PermissionError:
+                if attempt == 11:
+                    try:
+                        stale = temp_db.with_name(temp_db.name + '.delete-later')
+                        if stale.exists(): stale.unlink()
+                        temp_db.replace(stale)
+                    except Exception:
+                        pass
+                else:
+                    time.sleep(0.25)
+            except FileNotFoundError:
+                break
     with db() as c:c.execute('insert into backups(filename,created_at,size_bytes) values(?,?,?)',(name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),dst.stat().st_size))
     return name
 
