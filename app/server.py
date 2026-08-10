@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.1.0'
+APP_VERSION='3.1.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.1 BESİ PERFORMANS'
+APP_LABEL='ENTERPRISE V3.1.1 BESİ + GEBELİK AŞI'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -180,12 +180,59 @@ def animal_cost_values(a):
     feed=float(a['daily_feed_cost'] or 0) if 'daily_feed_cost' in a.keys() else 0.0
     care=float(a['daily_care_cost'] or 0) if 'daily_care_cost' in a.keys() else 0.0
     start=(a['purchase_date'] if 'purchase_date' in a.keys() else '') or (a['birth_date'] if 'birth_date' in a.keys() else '')
-    try: days=max(0,(date.today()-date.fromisoformat(start)).days)
-    except Exception: days=0
+    # Hayvan sürüden çıktıysa maliyet o tarihte donar; aktifse bugüne kadar yürür.
+    status=str(a['status'] or 'Aktif') if 'status' in a.keys() else 'Aktif'
+    exit_date=(a['exit_date'] if 'exit_date' in a.keys() else '') or ''
+    try:
+        start_date=date.fromisoformat(start)
+        end_date=date.today()
+        if status!='Aktif' and exit_date:
+            end_date=min(date.today(),date.fromisoformat(exit_date))
+        days=max(0,(end_date-start_date).days)
+    except Exception:
+        days=0
     daily=feed+care
     accumulated=days*daily
     return days,daily,accumulated,purchase+accumulated
 
+
+def pregnancy_vaccine_tasks(con, animal_id=None, horizon_days=7):
+    # Aktif gebelikler için 7. ve 8. ay aşı görevlerini üretir.
+    params=[]
+    where="a.gender='Dişi' and coalesce(a.status,'Aktif')='Aktif'"
+    if animal_id is not None:
+        where+=' and a.id=?'; params.append(animal_id)
+    rows=con.execute(f'''select i.*,a.tag,a.nickname,a.status
+        from inseminations i join animals a on a.id=i.animal_id
+        where {where}
+        order by i.animal_id,i.insemination_date desc,i.id desc''',params).fetchall()
+    latest_by_animal={}
+    for r in rows:
+        if r['animal_id'] not in latest_by_animal:
+            latest_by_animal[r['animal_id']]=r
+    today=date.today(); horizon=today+timedelta(days=horizon_days)
+    tasks=[]
+    for r in latest_by_animal.values():
+        if not is_pregnant_value(r['pregnancy_result']):
+            continue
+        try:
+            insemination_day=date.fromisoformat(r['insemination_date'])
+            due_day=date.fromisoformat(r['due_date']) if r['due_date'] else insemination_day+timedelta(days=280)
+        except Exception:
+            continue
+        if due_day < today:
+            continue
+        for month,offset in ((7,210),(8,240)):
+            task_day=insemination_day+timedelta(days=offset)
+            if task_day>horizon:
+                continue
+            token=f'GEBELIK_ASI|{r["id"]}|{month}'
+            done=con.execute("select 1 from health where animal_id=? and notes like ? limit 1",(r['animal_id'],token+'%')).fetchone()
+            if done:
+                continue
+            days_left=(task_day-today).days
+            tasks.append({'animal_id':r['animal_id'],'insemination_id':r['id'],'tag':r['tag'],'nickname':r['nickname'],'month':month,'task_date':task_day.isoformat(),'days_left':days_left,'token':token,'overdue':days_left<0,'today':days_left==0})
+    return sorted(tasks,key=lambda x:(x['task_date'],x['tag']))
 
 
 def setting_float(key, default):
@@ -516,23 +563,26 @@ class App(BaseHTTPRequestHandler):
                 total_exp=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gider'").fetchone()[0]
                 pregnant=c.execute("select count(distinct animal_id) from inseminations where pregnancy_result='Pozitif'").fetchone()[0]
                 active_total=animals+males+calves
-                male_records=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif'").fetchall()
-                male_purchase_total=sum(float(r['purchase_price'] or 0) for r in male_records)
-                male_operating_cost=sum(animal_cost_values(r)[2] for r in male_records)
+                active_male_records=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif'").fetchall()
+                # Gerçekleşmiş besi maliyetinde kesilen hayvanlar kaybolmaz; maliyetleri kesim tarihinde donar.
+                male_cost_records=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif') in ('Aktif','Kesildi')").fetchall()
+                male_purchase_total=sum(float(r['purchase_price'] or 0) for r in male_cost_records)
+                male_operating_cost=sum(animal_cost_values(r)[2] for r in male_cost_records)
                 male_current_cost=male_purchase_total+male_operating_cost
-                targeted_males=[r for r in male_records if float(r['target_sale_price'] or 0)>0]
+                targeted_males=[r for r in active_male_records if float(r['target_sale_price'] or 0)>0]
                 male_target_sales=sum(float(r['target_sale_price'] or 0) for r in targeted_males)
                 male_target_cost=sum(animal_cost_values(r)[3] for r in targeted_males)
                 male_target_profit=male_target_sales-male_target_cost if targeted_males else None
                 min_daily_gain=setting_float('male_min_daily_gain',1.0)
                 male_performance=[]
-                for mr in male_records:
+                for mr in active_male_records:
                     perf=male_weight_performance(mr['id'],c)
                     if perf['daily'] is not None: male_performance.append((mr,perf))
                 low_performance=[x for x in male_performance if x[1]['status']=='low']
                 watch_performance=[x for x in male_performance if x[1]['status']=='watch']
                 due_rows=c.execute("select i.due_date,a.id,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id where i.pregnancy_result='Pozitif' and i.due_date between ? and ? order by i.due_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=45)).isoformat())).fetchall()
                 health_rows=c.execute("select h.next_date,a.id,a.tag,h.kind,h.product from health h left join animals a on a.id=h.animal_id where h.next_date between ? and ? order by h.next_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=30)).isoformat())).fetchall()
+                pregnancy_vaccines=pregnancy_vaccine_tasks(c,horizon_days=7)
                 recent=c.execute('select * from finance order by tx_date desc,id desc limit 6').fetchall()
                 months=[]
                 for n in range(5,-1,-1):
@@ -544,11 +594,20 @@ class App(BaseHTTPRequestHandler):
             bars=''.join(f'<div class="mini-col"><b title="Gelir {money(i)}" style="height:{max(2,int(i/maxv*100))}%"></b><i title="Gider {money(e)}" style="height:{max(2,int(e/maxv*100))}%"></i><span>{h(m)}</span></div>' for m,i,e in months)
             due_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">Tahmini doğum: {h(r["due_date"])}</span></div>' for r in due_rows) or '<p class="mut">45 gün içinde beklenen doğum yok.</p>'
             health_html=''.join(f'<div class="alertitem">💉 {h(r["tag"] or "Genel")} · {h(r["kind"])}<br><span class="mut">{h(r["product"])} — {h(r["next_date"])}</span></div>' for r in health_rows) or '<p class="mut">30 gün içinde planlanan sağlık işlemi yok.</p>'
+            def vaccine_task_html(t):
+                if t['overdue']:
+                    label=f"GECİKTİ · {abs(t['days_left'])} gün"; style='border-left-color:#c8392b;background:#fff1f0'
+                elif t['today']:
+                    label='BUGÜN YAPILMALI'; style='border-left-color:#e27b1f;background:#fff6e8'
+                else:
+                    label=f"{t['days_left']} gün kaldı"; style='border-left-color:#e2a21f;background:#fff9e8'
+                return f'<div class="alertitem" style="{style}"><b>💉 {h(t["tag"])} · {t["month"]}. Ay Gebelik Aşısı</b><br><span class="mut">Planlanan: {h(t["task_date"])} · {label}</span><form method="post" action="/pregnancy-vaccine/done" class="actions" style="margin-top:8px"><input type="hidden" name="animal_id" value="{t["animal_id"]}"><input type="hidden" name="insemination_id" value="{t["insemination_id"]}"><input type="hidden" name="month" value="{t["month"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ Aşı Yapıldı</button><a class="btn alt" href="/animal?id={t["animal_id"]}">Hayvanı Aç</a></form></div>'
+            pregnancy_vaccine_html=''.join(vaccine_task_html(t) for t in pregnancy_vaccines) or '<p class="mut">7 gün içinde 7./8. ay gebelik aşısı görevi yok.</p>'
             rows=''.join(f'<tr><td>{h(r["tx_date"])}</td><td>{h(r["tx_type"])}</td><td>{h(r["category"])}</td><td>{money(r["amount"])}</td></tr>' for r in recent) or '<tr><td colspan=4>Kayıt yok</td></tr>'
             purchase_pct=round((male_purchase_total/male_current_cost)*100,1) if male_current_cost else 0
             operating_pct=round(100-purchase_pct,1) if male_current_cost else 0
-            max_male_cost=max([animal_cost_values(r)[3] for r in male_records]+[1])
-            male_cost_rows=''.join(f'<div class="progress-item"><div class="progress-head"><span>🐂 {h(r["tag"])} {h(r["nickname"])}</span><b>{money(animal_cost_values(r)[3])}</b></div><div class="progress-track"><div class="progress-fill" style="width:{max(3,int(animal_cost_values(r)[3]/max_male_cost*100))}%"></div></div></div>' for r in sorted(male_records,key=lambda x:animal_cost_values(x)[3],reverse=True)[:8]) or '<p class="mut">Aktif erkek hayvan kaydı yok.</p>'
+            max_male_cost=max([animal_cost_values(r)[3] for r in male_cost_records]+[1])
+            male_cost_rows=''.join(f'<div class="progress-item"><div class="progress-head"><span>🐂 {h(r["tag"])} {h(r["nickname"])} {"· Kesildi" if r["status"]=="Kesildi" else ""}</span><b>{money(animal_cost_values(r)[3])}</b></div><div class="progress-track"><div class="progress-fill" style="width:{max(3,int(animal_cost_values(r)[3]/max_male_cost*100))}%"></div></div></div>' for r in sorted(male_cost_records,key=lambda x:animal_cost_values(x)[3],reverse=True)[:8]) or '<p class="mut">Erkek hayvan maliyet kaydı yok.</p>'
             target_profit_text=money(male_target_profit) if male_target_profit is not None else '—'
             target_profit_class='red' if male_target_profit is not None and male_target_profit<0 else 'green'
             target_profit_color='#c8392b' if male_target_profit is not None and male_target_profit<0 else '#176b3a'
@@ -558,8 +617,9 @@ class App(BaseHTTPRequestHandler):
             <div class="grid"><div class="card stat metric green"><span class="metric-icon">🐄</span>Toplam Aktif Hayvan<b>{active_total}</b></div><div class="card stat metric green"><span class="metric-icon">🐮</span>Dişi Hayvan<b>{animals}</b></div><div class="card stat metric blue"><span class="metric-icon">🐂</span>Erkek Hayvan<b>{males}</b></div><div class="card stat metric orange"><span class="metric-icon">🤰</span>Gebe Hayvan<b>{pregnant}</b></div><div class="card stat metric teal"><span class="metric-icon">🐮</span>Buzağı<b>{calves}</b></div><div class="card stat metric purple"><span class="metric-icon">📅</span>Yaklaşan Doğum<b>{len(due_rows)}</b></div></div>
             <div class="dashboard-section-title"><h2>Besi Performans Merkezi</h2><span>Son iki tartıma göre günlük canlı ağırlık artışı</span></div><div class="grid"><div class="card stat metric red"><span class="metric-icon">⚠️</span>Düşük Performans<b>{len(low_performance)}</b><small>Hedefin %90'ından düşük</small></div><div class="card stat metric orange"><span class="metric-icon">🟡</span>Takip Edilecek<b>{len(watch_performance)}</b><small>Hedefe yakın fakat altında</small></div><div class="card stat metric green"><span class="metric-icon">✅</span>Hedefte / Üstünde<b>{sum(1 for _,p in male_performance if p['status']=='good')}</b><small>Minimum {min_daily_gain:.2f} kg/gün</small></div><div class="card stat metric blue"><span class="metric-icon">⚙️</span>Performans Ayarı<b>{min_daily_gain:.2f} kg/gün</b><small><a class="taglink" href="/performance-settings">Eşiği değiştir</a></small></div></div><div class="two" style="margin-top:14px"><div class="card warning-panel"><h2>Kontrol Gerektiren Erkekler</h2><div class="alertlist">{performance_warning_html}</div><div class="actions"><a class="btn red" href="/performance?status=low">Tümünü Gör</a></div></div><div class="card"><h2>Performans Açıklaması</h2><p><span class="perf-badge status-good">Yeşil</span> hedefte veya hedefin üzerinde.</p><p><span class="perf-badge status-watch">Sarı</span> hedefin altında fakat yakın.</p><p><span class="perf-badge status-low">Kırmızı</span> hedefin %90'ından düşük; rasyon, sağlık ve bakım kontrol edilmeli.</p></div></div>
             <div class="dashboard-section-title"><h2>Erkek Hayvan Maliyet Merkezi</h2><span>Alış bedeli ve çiftlikte oluşan giderler ayrı gösterilir</span></div>
-            <div class="grid"><div class="card stat metric blue"><span class="metric-icon">💵</span>Erkek Hayvan Alış Değeri<b>{money(male_purchase_total)}</b><small>Aktif erkeklerin toplam alış fiyatı</small></div><div class="card stat metric orange"><span class="metric-icon">🌾</span>Birikmiş Yem ve Bakım Gideri<b>{money(male_operating_cost)}</b><small>Çiftlikte kaldıkları sürede oluşan gider</small></div><div class="card stat metric green"><span class="metric-icon">💰</span>Erkekler Toplam Anlık Maliyeti<b>{money(male_current_cost)}</b><small>Alış değeri + birikmiş gider</small></div><div class="card stat metric {target_profit_class}"><span class="metric-icon">📈</span>Hedeflenen Erkek Kârı<b style="color:{target_profit_color}">{target_profit_text}</b><small>{len(targeted_males)} hayvan için hedef fiyat girildi</small></div></div>
-            <div class="two" style="margin-top:14px"><div class="card"><h2>Maliyet Dağılımı</h2><div class="cost-visual"><div class="donut" style="--purchase-pct:{purchase_pct}%"><div class="donut-center"><span class="mut">Toplam</span><b>{money(male_current_cost)}</b></div></div><div><div class="legend-row"><span class="legend-dot dot-blue"></span><span>Alış değeri</span><b>{money(male_purchase_total)} · %{purchase_pct}</b></div><div class="legend-row"><span class="legend-dot dot-orange"></span><span>Yem ve bakım</span><b>{money(male_operating_cost)} · %{operating_pct}</b></div><p class="mut">Grafik yalnızca aktif erkek hayvanların toplam maliyetini gösterir.</p></div></div></div><div class="card"><h2>Hayvan Bazında Anlık Maliyet</h2><div class="progress-list">{male_cost_rows}</div></div></div>
+            <div class="grid"><div class="card stat metric blue"><span class="metric-icon">💵</span>Erkek Hayvan Alış Değeri<b>{money(male_purchase_total)}</b><small>Aktif + kesilen erkeklerin alış fiyatı</small></div><div class="card stat metric orange"><span class="metric-icon">🌾</span>Birikmiş Yem ve Bakım Gideri<b>{money(male_operating_cost)}</b><small>Kesilenlerde kesim gününe kadar hesaplanır</small></div><div class="card stat metric green"><span class="metric-icon">💰</span>Erkekler Toplam Anlık Maliyeti<b>{money(male_current_cost)}</b><small>Aktif + kesilen erkeklerin gerçekleşmiş maliyeti</small></div><div class="card stat metric {target_profit_class}"><span class="metric-icon">📈</span>Hedeflenen Erkek Kârı<b style="color:{target_profit_color}">{target_profit_text}</b><small>{len(targeted_males)} hayvan için hedef fiyat girildi</small></div></div>
+            <div class="two" style="margin-top:14px"><div class="card"><h2>Maliyet Dağılımı</h2><div class="cost-visual"><div class="donut" style="--purchase-pct:{purchase_pct}%"><div class="donut-center"><span class="mut">Toplam</span><b>{money(male_current_cost)}</b></div></div><div><div class="legend-row"><span class="legend-dot dot-blue"></span><span>Alış değeri</span><b>{money(male_purchase_total)} · %{purchase_pct}</b></div><div class="legend-row"><span class="legend-dot dot-orange"></span><span>Yem ve bakım</span><b>{money(male_operating_cost)} · %{operating_pct}</b></div><p class="mut">Grafik aktif erkeklerle birlikte kesilen erkeklerin kesim gününe kadar oluşan maliyetini gösterir.</p></div></div></div><div class="card"><h2>Hayvan Bazında Anlık Maliyet</h2><div class="progress-list">{male_cost_rows}</div></div></div>
+            <div class="dashboard-section-title"><h2>🚨 Gebelik Aşı Alarmı</h2><span>7. ve 8. ay aşıları yapılana kadar uyarı devam eder</span></div><div class="card"><div class="alertlist">{pregnancy_vaccine_html}</div></div>
             <div class="dashboard-section-title"><h2>Finans Özeti</h2><span>Gelir ve giderlerin genel görünümü</span></div><div class="grid"><div class="card stat metric green"><span class="metric-icon">📥</span>Toplam Gelir<b style="color:#176b3a">{money(total_inc)}</b></div><div class="card stat metric red"><span class="metric-icon">📤</span>Toplam Gider<b style="color:#c8392b">{money(total_exp)}</b></div><div class="card stat metric {'red' if net<0 else 'green'}"><span class="metric-icon">⚖️</span>Net Durum<b style="color:{'#c8392b' if net<0 else '#176b3a'}">{money(net)}</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a></div><h3>Son Finans İşlemleri</h3><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Tutar</th></tr>{rows}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
             with db() as c:
                 recent_animals=c.execute("select id,tag,nickname,gender,birth_date from animals where coalesce(status,'Aktif')='Aktif' order by id desc limit 6").fetchall()
@@ -1144,6 +1204,20 @@ class App(BaseHTTPRequestHandler):
                     if not a:return self.redirect('/inseminations','Tohumlama yalnızca dişi hayvanlara uygulanabilir.')
                     due=(date.fromisoformat(f['insemination_date'])+timedelta(days=280)).isoformat() if f['pregnancy_result']=='Pozitif' else ''
                     c.execute('insert or replace into inseminations(animal_id,attempt,insemination_date,pregnancy_result,due_date) values(?,?,?,?,?)',(f['animal_id'],f['attempt'],f['insemination_date'],f['pregnancy_result'],due));return self.redirect('/inseminations','Tohumlama kaydedildi.')
+                if path=='/pregnancy-vaccine/done':
+                    aid=int(f['animal_id']); ins_id=int(f['insemination_id']); month=int(f['month'])
+                    if month not in (7,8):return self.redirect('/','Geçersiz gebelik aşı görevi.')
+                    ins=c.execute("select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=? and i.animal_id=?",(ins_id,aid)).fetchone()
+                    if not ins or not is_pregnant_value(ins['pregnancy_result']):return self.redirect('/','Gebelik kaydı bulunamadı veya aktif değil.')
+                    token=f'GEBELIK_ASI|{ins_id}|{month}'
+                    existing=c.execute("select id from health where animal_id=? and notes like ? limit 1",(aid,token+'%')).fetchone()
+                    if not existing:
+                        product=f'{month}. Ay Gebelik Aşısı'
+                        notes=token+' | Dashboard gebelik aşı alarmından tamamlandı.'
+                        c.execute('insert into health(animal_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?)',(aid,'Aşı',product,date.today().isoformat(),'',0,notes))
+                        audit(username,'Gebelik aşısı yapıldı',f'{ins["tag"]} · {month}. ay',self.client_ip())
+                    target=f.get('return_to') or ('/animal?id='+str(aid))
+                    return self.redirect(target,f'{ins["tag"]} · {month}. ay gebelik aşısı sağlık geçmişine kaydedildi.')
                 if path=='/health':
                     c.execute('insert into health(animal_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?)',(f.get('animal_id'),f['kind'],f['product'],f['applied_date'],f.get('next_date'),float(f.get('cost') or 0),f.get('notes')))
                     if float(f.get('cost') or 0)>0:c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(f['applied_date'],'Gider',f['kind'],float(f['cost']),f['product'],'Nakit',f.get('animal_id'),datetime.now().isoformat()))

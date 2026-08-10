@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.1 Besi Performans Windows Kurulum
+name: CiftlikPro Enterprise V3.1.1 Besi + Gebelik Asi Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.0'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.1'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Kaynak sunucuyu başlat ve sayfaları test et
         shell: pwsh
@@ -187,7 +187,7 @@ jobs:
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.1-Besi-Performans-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.1.1-Besi-Gebelik-Asi-Windows-Setup
           path: |
             release/CiftlikPro_Enterprise_V3_1_Besi_Performans_Setup.exe
             release/SHA256.txt
