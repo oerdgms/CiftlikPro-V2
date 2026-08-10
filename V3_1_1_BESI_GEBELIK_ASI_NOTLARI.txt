@@ -1,0 +1,25 @@
+ÇİFTLİKPRO V3.1.1 — BESİ MALİYETİ + GEBELİK AŞI UYARISI
+============================================================
+
+1) BESİ MALİYETİ DÜZELTMESİ
+- Kesilen erkek hayvanlar aktif sürüden çıkmaya devam eder.
+- Ancak alış fiyatları toplam besi maliyetinden silinmez.
+- Yem + bakım gideri kesim tarihine kadar hesaplanır ve o tarihte donar.
+- Kesimden sonraki günler için maliyet artmaz.
+- Dashboard maliyet toplamına aktif + kesilen erkekler birlikte girer.
+- Hayvan bazlı maliyet listesinde kesilen hayvanlar "Kesildi" rozetiyle görünür.
+
+2) GEBELİK 7. VE 8. AY AŞI UYARILARI
+- Pozitif gebelik kaydından otomatik görev üretilir.
+- 7. ay: tohumlama tarihinden 210 gün sonra.
+- 8. ay: tohumlama tarihinden 240 gün sonra.
+- 7 gün kala uyarı ana ekranda görünür.
+- Aşı günü ve geciken aşılar yapılana kadar ana ekranda kalır.
+- Geciken görevler kırmızı vurgulanır.
+- "Aşı Yapıldı" düğmesine basınca kayıt Sağlık geçmişine otomatik eklenir.
+- Aynı gebelik/aşama ikinci kez tamamlanamaz; benzersiz işaretle korunur.
+- Sağlık ekranında da bekleyen gebelik aşı görevleri görünür.
+
+NOT
+Bu yama mevcut veritabanına yeni tablo eklemez; mevcut health tablosunu kullanır.
+Çalıştırmadan önce server.py otomatik olarak .bak dosyasına yedeklenir.
