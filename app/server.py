@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.1.1'
+APP_VERSION='3.1.2'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.1.1 BESİ + GEBELİK AŞI'
+APP_LABEL='ENTERPRISE V3.1.2 MALİYET DETAY'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -569,6 +569,15 @@ class App(BaseHTTPRequestHandler):
                 male_purchase_total=sum(float(r['purchase_price'] or 0) for r in male_cost_records)
                 male_operating_cost=sum(animal_cost_values(r)[2] for r in male_cost_records)
                 male_current_cost=male_purchase_total+male_operating_cost
+                slaughtered_male_records=[r for r in male_cost_records if str(r['status'] or '')=='Kesildi']
+                active_male_count=len(active_male_records)
+                slaughtered_male_count=len(slaughtered_male_records)
+                active_male_cost=sum(animal_cost_values(r)[3] for r in active_male_records)
+                slaughtered_male_cost=sum(animal_cost_values(r)[3] for r in slaughtered_male_records)
+                active_male_purchase=sum(float(r['purchase_price'] or 0) for r in active_male_records)
+                slaughtered_male_purchase=sum(float(r['purchase_price'] or 0) for r in slaughtered_male_records)
+                active_male_operating=sum(animal_cost_values(r)[2] for r in active_male_records)
+                slaughtered_male_operating=sum(animal_cost_values(r)[2] for r in slaughtered_male_records)
                 targeted_males=[r for r in active_male_records if float(r['target_sale_price'] or 0)>0]
                 male_target_sales=sum(float(r['target_sale_price'] or 0) for r in targeted_males)
                 male_target_cost=sum(animal_cost_values(r)[3] for r in targeted_males)
@@ -608,6 +617,16 @@ class App(BaseHTTPRequestHandler):
             operating_pct=round(100-purchase_pct,1) if male_current_cost else 0
             max_male_cost=max([animal_cost_values(r)[3] for r in male_cost_records]+[1])
             male_cost_rows=''.join(f'<div class="progress-item"><div class="progress-head"><span>🐂 {h(r["tag"])} {h(r["nickname"])} {"· Kesildi" if r["status"]=="Kesildi" else ""}</span><b>{money(animal_cost_values(r)[3])}</b></div><div class="progress-track"><div class="progress-fill" style="width:{max(3,int(animal_cost_values(r)[3]/max_male_cost*100))}%"></div></div></div>' for r in sorted(male_cost_records,key=lambda x:animal_cost_values(x)[3],reverse=True)[:8]) or '<p class="mut">Erkek hayvan maliyet kaydı yok.</p>'
+            def male_cost_detail_row(r):
+                days,daily,operating,total=animal_cost_values(r)
+                purchase=float(r['purchase_price'] or 0)
+                start=(r['purchase_date'] or r['birth_date'] or '-')
+                is_cut=str(r['status'] or '')=='Kesildi'
+                end=(r['exit_date'] or '-') if is_cut else 'Bugün'
+                status_badge='<span class="perf-badge status-low">Kesildi</span>' if is_cut else '<span class="perf-badge status-good">Aktif</span>'
+                freeze_note='<br><span class="mut">Kesim tarihinde donduruldu</span>' if is_cut else ''
+                return f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a><br><span class="mut">{h(r["nickname"])}</span></td><td>{status_badge}</td><td>{h(start)}</td><td>{h(end)}</td><td><b>{days} gün</b>{freeze_note}</td><td>{money(purchase)}</td><td>{money(operating)}</td><td><b>{money(total)}</b></td></tr>'
+            male_cost_detail_rows=''.join(male_cost_detail_row(r) for r in sorted(male_cost_records,key=lambda x:(0 if str(x['status'] or '')=='Kesildi' else 1, x['exit_date'] or '', x['tag'] or ''))) or '<tr><td colspan="8">Erkek hayvan maliyet kaydı yok.</td></tr>'
             target_profit_text=money(male_target_profit) if male_target_profit is not None else '—'
             target_profit_class='red' if male_target_profit is not None and male_target_profit<0 else 'green'
             target_profit_color='#c8392b' if male_target_profit is not None and male_target_profit<0 else '#176b3a'
@@ -619,6 +638,9 @@ class App(BaseHTTPRequestHandler):
             <div class="dashboard-section-title"><h2>Erkek Hayvan Maliyet Merkezi</h2><span>Alış bedeli ve çiftlikte oluşan giderler ayrı gösterilir</span></div>
             <div class="grid"><div class="card stat metric blue"><span class="metric-icon">💵</span>Erkek Hayvan Alış Değeri<b>{money(male_purchase_total)}</b><small>Aktif + kesilen erkeklerin alış fiyatı</small></div><div class="card stat metric orange"><span class="metric-icon">🌾</span>Birikmiş Yem ve Bakım Gideri<b>{money(male_operating_cost)}</b><small>Kesilenlerde kesim gününe kadar hesaplanır</small></div><div class="card stat metric green"><span class="metric-icon">💰</span>Erkekler Toplam Anlık Maliyeti<b>{money(male_current_cost)}</b><small>Aktif + kesilen erkeklerin gerçekleşmiş maliyeti</small></div><div class="card stat metric {target_profit_class}"><span class="metric-icon">📈</span>Hedeflenen Erkek Kârı<b style="color:{target_profit_color}">{target_profit_text}</b><small>{len(targeted_males)} hayvan için hedef fiyat girildi</small></div></div>
             <div class="two" style="margin-top:14px"><div class="card"><h2>Maliyet Dağılımı</h2><div class="cost-visual"><div class="donut" style="--purchase-pct:{purchase_pct}%"><div class="donut-center"><span class="mut">Toplam</span><b>{money(male_current_cost)}</b></div></div><div><div class="legend-row"><span class="legend-dot dot-blue"></span><span>Alış değeri</span><b>{money(male_purchase_total)} · %{purchase_pct}</b></div><div class="legend-row"><span class="legend-dot dot-orange"></span><span>Yem ve bakım</span><b>{money(male_operating_cost)} · %{operating_pct}</b></div><p class="mut">Grafik aktif erkeklerle birlikte kesilen erkeklerin kesim gününe kadar oluşan maliyetini gösterir.</p></div></div></div><div class="card"><h2>Hayvan Bazında Anlık Maliyet</h2><div class="progress-list">{male_cost_rows}</div></div></div>
+            <div class="dashboard-section-title"><h2>Maliyet Kaynağı Özeti</h2><span>Toplam rakamın aktif ve kesilen hayvanlara dağılımı</span></div>
+            <div class="grid"><div class="card stat metric blue"><span class="metric-icon">🐂</span>Bizdeki Erkek<b>{active_male_count}</b><small>Alış {money(active_male_purchase)} · Yem/Bakım {money(active_male_operating)}</small></div><div class="card stat metric red"><span class="metric-icon">🥩</span>Kesilen Erkek<b>{slaughtered_male_count}</b><small>Alış {money(slaughtered_male_purchase)} · Yem/Bakım {money(slaughtered_male_operating)}</small></div><div class="card stat metric green"><span class="metric-icon">🏠</span>Aktiflerin Maliyeti<b>{money(active_male_cost)}</b><small>Bugüne kadar artmaya devam eder</small></div><div class="card stat metric orange"><span class="metric-icon">🔒</span>Kesimde Donmuş Maliyet<b>{money(slaughtered_male_cost)}</b><small>Kesim tarihinden sonra artmaz</small></div></div>
+            <div class="card" style="margin-top:14px"><h2>Erkek Hayvan Maliyet Detayı</h2><p class="mut">Her hayvanın toplam maliyeti; alış bedeli ile çiftlikte kaldığı gün boyunca biriken yem ve bakım giderinden oluşur. Kesilen hayvanlarda gün sayısı kesim tarihinde durur.</p><div style="overflow-x:auto"><table><tr><th>Küpe</th><th>Durum</th><th>Başlangıç</th><th>Maliyet Bitişi</th><th>Maliyet Günü</th><th>Alış</th><th>Yem + Bakım</th><th>Toplam</th></tr>{male_cost_detail_rows}<tr><th colspan="5">GENEL TOPLAM · {active_male_count} aktif + {slaughtered_male_count} kesilen</th><th>{money(male_purchase_total)}</th><th>{money(male_operating_cost)}</th><th>{money(male_current_cost)}</th></tr></table></div></div>
             <div class="dashboard-section-title"><h2>🚨 Gebelik Aşı Alarmı</h2><span>7. ve 8. ay aşıları yapılana kadar uyarı devam eder</span></div><div class="card"><div class="alertlist">{pregnancy_vaccine_html}</div></div>
             <div class="dashboard-section-title"><h2>Finans Özeti</h2><span>Gelir ve giderlerin genel görünümü</span></div><div class="grid"><div class="card stat metric green"><span class="metric-icon">📥</span>Toplam Gelir<b style="color:#176b3a">{money(total_inc)}</b></div><div class="card stat metric red"><span class="metric-icon">📤</span>Toplam Gider<b style="color:#c8392b">{money(total_exp)}</b></div><div class="card stat metric {'red' if net<0 else 'green'}"><span class="metric-icon">⚖️</span>Net Durum<b style="color:{'#c8392b' if net<0 else '#176b3a'}">{money(net)}</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a></div><h3>Son Finans İşlemleri</h3><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Tutar</th></tr>{rows}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
             with db() as c:
