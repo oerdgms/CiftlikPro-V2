@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.1.3'
+APP_VERSION='3.1.4'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.1.3 DASHBOARD SADE'
+APP_LABEL='ENTERPRISE V3.1.4 DASHBOARD SADE'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -620,20 +620,14 @@ class App(BaseHTTPRequestHandler):
             body=f'''<div class="hero"><div><h1>ÇiftlikPro Yönetim Merkezi</h1><div>Bugünün sürü, sağlık ve finans görünümü</div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div>
             <div class="dashboard-section-title"><h2>Sürü Özeti</h2><span>Aktif kayıtların güncel görünümü</span></div>
             <div class="grid"><div class="card stat metric green"><span class="metric-icon">🐄</span>Toplam Aktif Hayvan<b>{active_total}</b></div><div class="card stat metric green"><span class="metric-icon">🐮</span>Dişi Hayvan<b>{animals}</b></div><div class="card stat metric blue"><span class="metric-icon">🐂</span>Erkek Hayvan<b>{males}</b></div><div class="card stat metric orange"><span class="metric-icon">🤰</span>Gebe Hayvan<b>{pregnant}</b></div><div class="card stat metric teal"><span class="metric-icon">🐮</span>Buzağı<b>{calves}</b></div><div class="card stat metric purple"><span class="metric-icon">📅</span>Yaklaşan Doğum<b>{len(due_rows)}</b></div></div>
-            <div class="dashboard-section-title"><h2>Besi Performans Merkezi</h2><span>Son iki tartıma göre günlük canlı ağırlık artışı</span></div><div class="grid"><div class="card stat metric red"><span class="metric-icon">⚠️</span>Düşük Performans<b>{len(low_performance)}</b><small>Hedefin %90'ından düşük</small></div><div class="card stat metric orange"><span class="metric-icon">🟡</span>Takip Edilecek<b>{len(watch_performance)}</b><small>Hedefe yakın fakat altında</small></div><div class="card stat metric green"><span class="metric-icon">✅</span>Hedefte / Üstünde<b>{sum(1 for _,p in male_performance if p['status']=='good')}</b><small>Minimum {min_daily_gain:.2f} kg/gün</small></div><div class="card stat metric blue"><span class="metric-icon">⚙️</span>Performans Ayarı<b>{min_daily_gain:.2f} kg/gün</b><small><a class="taglink" href="/performance-settings">Eşiği değiştir</a></small></div></div><div class="two" style="margin-top:14px"><div class="card warning-panel"><h2>Kontrol Gerektiren Erkekler</h2><div class="alertlist">{performance_warning_html}</div><div class="actions"><a class="btn red" href="/performance?status=low">Tümünü Gör</a></div></div><div class="card"><h2>Performans Açıklaması</h2><p><span class="perf-badge status-good">Yeşil</span> hedefte veya hedefin üzerinde.</p><p><span class="perf-badge status-watch">Sarı</span> hedefin altında fakat yakın.</p><p><span class="perf-badge status-low">Kırmızı</span> hedefin %90'ından düşük; rasyon, sağlık ve bakım kontrol edilmeli.</p></div></div>
-            <div class="dashboard-section-title"><h2>Erkek Hayvan Maliyet Merkezi</h2><span>Alış bedeli ve çiftlikte oluşan giderler ayrı gösterilir</span></div>
-            <div class="grid"><div class="card stat metric blue"><span class="metric-icon">💵</span>Erkek Hayvan Alış Değeri<b>{money(male_purchase_total)}</b><small>Aktif + kesilen erkeklerin alış fiyatı</small></div><div class="card stat metric orange"><span class="metric-icon">🌾</span>Birikmiş Yem ve Bakım Gideri<b>{money(male_operating_cost)}</b><small>Kesilenlerde kesim gününe kadar hesaplanır</small></div><div class="card stat metric green"><span class="metric-icon">💰</span>Erkekler Toplam Anlık Maliyeti<b>{money(male_current_cost)}</b><small>Aktif + kesilen erkeklerin gerçekleşmiş maliyeti</small></div><div class="card stat metric {target_profit_class}"><span class="metric-icon">📈</span>Hedeflenen Erkek Kârı<b style="color:{target_profit_color}">{target_profit_text}</b><small>{len(targeted_males)} hayvan için hedef fiyat girildi</small></div></div>
-            <div class="dashboard-section-title"><h2>Maliyet Kaynağı Özeti</h2><span>Toplam rakamın aktif ve kesilen hayvanlara dağılımı</span></div>
-            <div class="grid"><div class="card stat metric blue"><span class="metric-icon">🐂</span>Bizdeki Erkek<b>{active_male_count}</b><small>Alış {money(active_male_purchase)} · Yem/Bakım {money(active_male_operating)}</small></div><div class="card stat metric red"><span class="metric-icon">🥩</span>Kesilen Erkek<b>{slaughtered_male_count}</b><small>Alış {money(slaughtered_male_purchase)} · Yem/Bakım {money(slaughtered_male_operating)}</small></div><div class="card stat metric green"><span class="metric-icon">🏠</span>Aktiflerin Maliyeti<b>{money(active_male_cost)}</b><small>Bugüne kadar artmaya devam eder</small></div><div class="card stat metric orange"><span class="metric-icon">🔒</span>Kesimde Donmuş Maliyet<b>{money(slaughtered_male_cost)}</b><small>Kesim tarihinden sonra artmaz</small></div></div>
-            <div class="card" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div><h2 style="margin:0 0 6px">Hayvan Bazında Maliyet Detayı</h2><p class="mut" style="margin:0">Küpe bazında alış, yem/bakım, maliyet günü ve kesimde donan tutarları ayrı sayfada inceleyin.</p></div><a class="btn blue" href="/cost-details">🔎 Maliyet Detayını Gör</a></div>
+            <div class="dashboard-section-title"><h2>Besi</h2><span>Detaylı analiz ayrı merkezde</span></div>
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap"><div><h2 style="margin:0 0 6px">🐂 Besi Performansı</h2><p class="mut" style="margin:0">Aktif ve kesilen erkekleri; alım tarihi, kesim tarihi, kilo performansı ve gerçekleşmiş maliyete göre inceleyin.</p></div><a class="btn blue" href="/performance">Besi Analizine Git →</a></div>
             <div class="dashboard-section-title"><h2>🚨 Gebelik Aşı Alarmı</h2><span>7. ve 8. ay aşıları yapılana kadar uyarı devam eder</span></div><div class="card"><div class="alertlist">{pregnancy_vaccine_html}</div></div>
             <div class="dashboard-section-title"><h2>Finans Özeti</h2><span>Gelir ve giderlerin genel görünümü</span></div><div class="grid"><div class="card stat metric green"><span class="metric-icon">📥</span>Toplam Gelir<b style="color:#176b3a">{money(total_inc)}</b></div><div class="card stat metric red"><span class="metric-icon">📤</span>Toplam Gider<b style="color:#c8392b">{money(total_exp)}</b></div><div class="card stat metric {'red' if net<0 else 'green'}"><span class="metric-icon">⚖️</span>Net Durum<b style="color:{'#c8392b' if net<0 else '#176b3a'}">{money(net)}</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a></div><h3>Son Finans İşlemleri</h3><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Tutar</th></tr>{rows}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
             with db() as c:
-                recent_animals=c.execute("select id,tag,nickname,gender,birth_date from animals where coalesce(status,'Aktif')='Aktif' order by id desc limit 6").fetchall()
                 today_milk=c.execute("select coalesce(sum(liters),0) from milk where measure_date=?",(date.today().isoformat(),)).fetchone()[0]
                 recent_weights=c.execute("select count(*) from weights where measure_date>=?",((date.today()-timedelta(days=30)).isoformat(),)).fetchone()[0]
-            recent_animal_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">{h(r["gender"])} · {age_text(r["birth_date"])}</span></div>' for r in recent_animals) or '<p class="mut">Henüz hayvan kaydı yok.</p>'
-            body += f'''<div class="two" style="margin-top:14px"><div class="card"><h2>Son Eklenen Hayvanlar</h2><div class="alertlist">{recent_animal_html}</div></div><div class="card"><h2>Üretim Özeti</h2><div class="grid" style="grid-template-columns:repeat(2,1fr)"><div class="card stat metric blue">Bugünkü Süt<b>{today_milk:.1f} L</b></div><div class="card stat metric orange">30 Günlük Kilo Kaydı<b>{recent_weights}</b></div></div><div class="actions"><a class="btn" href="/animal-add">+ Hayvan Ekle</a><a class="btn alt" href="/reports">Raporları Aç</a></div></div></div>'''
+            body += f'''<div class="card" style="margin-top:14px"><h2>Üretim Özeti</h2><div class="grid" style="grid-template-columns:repeat(2,1fr)"><div class="card stat metric blue">Bugünkü Süt<b>{today_milk:.1f} L</b></div><div class="card stat metric orange">30 Günlük Kilo Kaydı<b>{recent_weights}</b></div></div><div class="actions"><a class="btn" href="/animal-add">+ Hayvan Ekle</a><a class="btn alt" href="/reports">Raporları Aç</a></div></div>'''
             return self.send_html(page('Profesyonel Dashboard',body,'/',u,msg))
 
         if path=='/cost-details':
@@ -695,28 +689,69 @@ class App(BaseHTTPRequestHandler):
             body=f"""<h1>Besi Performans Ayarları</h1><div class="card setting-box"><form method="post" action="/performance-settings" class="form"><label>Minimum Günlük Canlı Ağırlık Artışı (kg/gün)<input type="number" min="0.01" step="0.01" name="male_min_daily_gain" value="{target:.2f}" required></label><label>Sarı Uyarı Başlangıcı (% hedef)<input type="number" min="1" max="100" step="1" name="warning_percent" value="{ratio*100:.0f}" required></label><div class="full"><p class="mut">Örnek: hedef 1,00 kg/gün ve sarı sınır %90 ise; 0,90-0,99 sarı, 0,90 altı kırmızı olur.</p><button class="btn">Ayarları Kaydet</button> <a class="btn alt" href="/performance">İptal</a></div></form></div>"""
             return self.send_html(page('Besi Performans Ayarları',body,path,u,msg))
         if path=='/performance':
-            status_filter=q.get('status',[''])[0]
+            status_filter=(q.get('status',[''])[0] or '').strip()
+            scope=(q.get('scope',['all'])[0] or 'all').strip()
+            if scope not in ('all','active','cut'): scope='all'
+            purchase_start=(q.get('purchase_start',[''])[0] or '').strip()
+            purchase_end=(q.get('purchase_end',[''])[0] or '').strip()
+            cut_start=(q.get('cut_start',[''])[0] or '').strip()
+            cut_end=(q.get('cut_end',[''])[0] or '').strip()
             with db() as c:
-                males_rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                perf_rows=[]
+                males_rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif') in ('Aktif','Kesildi') order by tag").fetchall()
+                selected=[]
                 for ar in males_rows:
+                    st=str(ar['status'] or 'Aktif')
+                    if scope=='active' and st!='Aktif': continue
+                    if scope=='cut' and st!='Kesildi': continue
+                    pd=(ar['purchase_date'] or '') if 'purchase_date' in ar.keys() else ''
+                    ed=(ar['exit_date'] or '') if 'exit_date' in ar.keys() else ''
+                    if purchase_start and (not pd or pd<purchase_start): continue
+                    if purchase_end and (not pd or pd>purchase_end): continue
+                    if cut_start and (st!='Kesildi' or not ed or ed<cut_start): continue
+                    if cut_end and (st!='Kesildi' or not ed or ed>cut_end): continue
                     perf=male_weight_performance(ar['id'],c)
-                    if status_filter and perf['status']!=status_filter:continue
-                    perf_rows.append((ar,perf))
+                    if status_filter and perf['status']!=status_filter: continue
+                    selected.append((ar,perf))
+                detail=[]
+                for ar,perf in selected:
+                    wr=c.execute("select measure_date,weight from weights where animal_id=? order by measure_date,id",(ar['id'],)).fetchall()
+                    first=wr[0] if wr else None; last=wr[-1] if wr else None
+                    total_gain=(float(last['weight'])-float(first['weight'])) if first and last and len(wr)>=2 else None
+                    days,daily,operating,total_cost=animal_cost_values(ar)
+                    kg_cost=(operating/total_gain) if total_gain is not None and total_gain>0 else None
+                    detail.append((ar,perf,days,operating,total_cost,total_gain,kg_cost,first,last))
+            active_count=sum(1 for ar,*_ in detail if str(ar['status'] or 'Aktif')=='Aktif')
+            cut_count=sum(1 for ar,*_ in detail if str(ar['status'] or '')=='Kesildi')
+            purchase_total=sum(float(ar['purchase_price'] or 0) for ar,*_ in detail)
+            operating_total=sum(x[3] for x in detail)
+            total_cost=sum(x[4] for x in detail)
+            daily_vals=[perf['daily'] for _,perf,*_ in detail if perf.get('daily') is not None]
+            avg_daily=(sum(daily_vals)/len(daily_vals)) if daily_vals else None
+            kg_cost_vals=[x[6] for x in detail if x[6] is not None]
+            avg_kg_cost=(sum(kg_cost_vals)/len(kg_cost_vals)) if kg_cost_vals else None
             labels={'good':('Hedefte','status-good'),'watch':('Takip','status-watch'),'low':('Düşük','status-low'),'none':('Veri Yetersiz','status-none')}
             trs=''
-            for ar,perf in perf_rows:
+            for ar,perf,days,operating,current_cost,total_gain,kg_cost,first,last in detail:
                 label,cls=labels[perf['status']]
-                latest=perf.get('latest')
-                gain_text=f"{perf['gain']:+.1f} kg" if perf['gain'] is not None else '-'
-                daily_text=f"{perf['daily']:.3f} kg/gün" if perf['daily'] is not None else '-'
-                monthly_text=f"{perf['monthly']:.1f} kg/30 gün" if perf['monthly'] is not None else '-'
-                latest_date=h(latest['measure_date']) if latest else '-'
-                latest_weight=(str(round(float(latest['weight']),1))+' kg') if latest else '-'
-                trs+=f'<tr class="{perf["status"]}-row"><td><a class="taglink" href="/animal?id={ar["id"]}">{h(ar["tag"])}</a></td><td>{h(ar["nickname"])}</td><td>{latest_date}</td><td>{latest_weight}</td><td>{gain_text}</td><td>{perf["days"] or "-"}</td><td>{daily_text}</td><td>{monthly_text}</td><td><span class="perf-badge {cls}">{label}</span></td></tr>'
-            trs=trs or '<tr><td colspan="9">Kayıt bulunamadı.</td></tr>'
-            body=f"""<div class="actions"><h1 style="margin-right:auto">Besi Performansı</h1><a class="btn alt" href="/performance-settings">⚙️ Eşik Ayarları</a></div><div class="grid"><div class="card stat metric blue">Hedef Günlük Artış<b>{setting_float('male_min_daily_gain',1.0):.2f} kg</b></div><div class="card stat metric red">Düşük Performans<b>{sum(1 for _,p in perf_rows if p['status']=='low')}</b></div><div class="card stat metric orange">Takip Edilecek<b>{sum(1 for _,p in perf_rows if p['status']=='watch')}</b></div><div class="card stat metric green">Hedefte<b>{sum(1 for _,p in perf_rows if p['status']=='good')}</b></div></div><div class="actions"><a class="btn alt" href="/performance">Tümü</a><a class="btn red" href="/performance?status=low">Düşük</a><a class="btn orange" href="/performance?status=watch">Takip</a><a class="btn" href="/performance?status=good">Hedefte</a></div><div class="card"><table class="performance-table"><tr><th>Küpe</th><th>Takma Ad</th><th>Son Tartım</th><th>Son Kilo</th><th>Kilo Farkı</th><th>Gün</th><th>Günlük Artış</th><th>30 Günlük Tahmin</th><th>Durum</th></tr>{trs}</table></div>"""
-            return self.send_html(page('Besi Performansı',body,path,u,msg))
+                st=str(ar['status'] or 'Aktif')
+                pd=h(ar['purchase_date'] or '-'); ed=h(ar['exit_date'] or '-') if st=='Kesildi' else 'Devam ediyor'
+                gain_text=(f'{total_gain:+.1f} kg' if total_gain is not None else '-')
+                daily_text=(f"{perf['daily']:.3f} kg/gün" if perf.get('daily') is not None else '-')
+                kgcost_text=(money(kg_cost)+'/kg' if kg_cost is not None else '-')
+                trs+=f"""<tr><td><a class="taglink" href="/animal?id={ar["id"]}">{h(ar["tag"])}</a></td><td>{h(ar["nickname"])}</td><td>{st}</td><td>{pd}</td><td>{ed}</td><td>{days}</td><td>{gain_text}</td><td>{daily_text}</td><td>{money(operating)}</td><td>{kgcost_text}</td><td>{money(current_cost)}</td><td><span class="perf-badge {cls}">{label}</span></td></tr>"""
+            trs=trs or '<tr><td colspan="12">Seçilen tarih ve filtrelerde hayvan bulunamadı.</td></tr>'
+            avg_daily_text=f'{avg_daily:.3f} kg/gün' if avg_daily is not None else '—'
+            avg_kg_text=(money(avg_kg_cost)+'/kg') if avg_kg_cost is not None else '—'
+            body=f"""<div class="actions"><h1 style="margin-right:auto">🐂 Besi Analiz Merkezi</h1><a class="btn alt" href="/performance-settings">⚙️ Performans Eşiği</a></div>
+            <div class="card"><h2>Analiz Aralığı</h2><form method="get" action="/performance" class="form">
+            <label>Hayvan Durumu<select name="scope"><option value="all" {'selected' if scope=='all' else ''}>Aktif + Kesilen</option><option value="active" {'selected' if scope=='active' else ''}>Sadece Aktif</option><option value="cut" {'selected' if scope=='cut' else ''}>Sadece Kesilen</option></select></label>
+            <label>Alım Tarihi Başlangıç<input type="date" name="purchase_start" value="{h(purchase_start)}"></label><label>Alım Tarihi Bitiş<input type="date" name="purchase_end" value="{h(purchase_end)}"></label>
+            <label>Kesim Tarihi Başlangıç<input type="date" name="cut_start" value="{h(cut_start)}"></label><label>Kesim Tarihi Bitiş<input type="date" name="cut_end" value="{h(cut_end)}"></label>
+            <label>Performans<select name="status"><option value="">Tümü</option><option value="good" {'selected' if status_filter=='good' else ''}>Hedefte</option><option value="watch" {'selected' if status_filter=='watch' else ''}>Takip</option><option value="low" {'selected' if status_filter=='low' else ''}>Düşük</option><option value="none" {'selected' if status_filter=='none' else ''}>Veri Yetersiz</option></select></label>
+            <button class="btn blue">Raporla</button><a class="btn alt" href="/performance">Filtreleri Temizle</a></form></div>
+            <div class="grid" style="margin-top:14px"><div class="card stat metric blue">Seçilen Hayvan<b>{len(detail)}</b><small>{active_count} aktif · {cut_count} kesilen</small></div><div class="card stat metric green">Gerçekleşmiş Maliyet<b>{money(total_cost)}</b><small>Alış {money(purchase_total)} · Yem/Bakım {money(operating_total)}</small></div><div class="card stat metric orange">Ort. Günlük Artış<b>{avg_daily_text}</b><small>Son iki tartısı olan hayvanlar</small></div><div class="card stat metric purple">Ort. 1 kg Artış Maliyeti<b>{avg_kg_text}</b><small>Tartı verisi yeterli hayvanlar</small></div></div>
+            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Analiz</h2><p class="mut">Kesilen hayvanın maliyeti kesim tarihinde donar. 1 kg artış maliyeti, ilk-son tartı farkına karşı oluşan yem/bakım giderini gösterir.</p><div style="overflow:auto"><table class="performance-table"><tr><th>Küpe</th><th>Takma Ad</th><th>Durum</th><th>Alım</th><th>Kesim</th><th>Maliyet Günü</th><th>Toplam Kilo Artışı</th><th>Son Dönem Günlük</th><th>Yem/Bakım</th><th>1 kg Artış Maliyeti</th><th>Toplam Maliyet</th><th>Performans</th></tr>{trs}</table></div></div>"""
+            return self.send_html(page('Besi Analiz Merkezi',body,path,u,msg))
         if path=='/animal-edit':
             aid=q.get('id',[''])[0]
             with db() as c:
