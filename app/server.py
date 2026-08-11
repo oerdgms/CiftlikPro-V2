@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.1.7'
+APP_VERSION='3.1.8'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.1.7 DASHBOARD SADE'
+APP_LABEL='ENTERPRISE V3.1.8 ÜREME TAKİP MERKEZİ'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -42,6 +42,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .metric-icon{font-size:24px;display:block;margin-bottom:8px}.metric small{display:block;margin-top:5px;color:var(--mut);font-size:12px;font-weight:600}.metric.green{border-left-color:#2c9660}.metric.purple{border-left-color:#7b5cc7}.metric.teal{border-left-color:#178c91}.cost-visual{display:grid;grid-template-columns:.9fr 1.1fr;gap:18px;align-items:center}.donut{width:190px;height:190px;border-radius:50%;margin:auto;position:relative;background:conic-gradient(var(--blue) 0 var(--purchase-pct),var(--orange) var(--purchase-pct) 100%)}.donut:after{content:"";position:absolute;inset:31px;background:var(--card);border-radius:50%}.donut-center{position:absolute;inset:0;display:flex;z-index:2;align-items:center;justify-content:center;flex-direction:column;text-align:center}.donut-center b{font-size:20px}.legend-row{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;margin:11px 0}.legend-dot{width:12px;height:12px;border-radius:4px}.dot-blue{background:var(--blue)}.dot-orange{background:var(--orange)}.progress-list{display:grid;gap:12px}.progress-item{display:grid;gap:5px}.progress-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}.progress-track{height:11px;background:#e8eee9;border-radius:99px;overflow:hidden}.progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--g2),var(--blue))}.dashboard-section-title{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:22px 0 10px}.dashboard-section-title h2{margin:0}.dashboard-section-title span{color:var(--mut);font-size:13px}@media(max-width:760px){.cost-visual{grid-template-columns:1fr}.donut{width:165px;height:165px}}
 
 .performance-card{border-left:5px solid var(--blue)}.status-good{color:#176b3a;background:#e8f7ec}.status-watch{color:#8a5a00;background:#fff4d6}.status-low{color:#a52d25;background:#fdebea}.status-none{color:var(--mut);background:#f0f3f1}.perf-badge{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px}.weight-chart{width:100%;height:240px;border-radius:14px;background:linear-gradient(180deg,#f7fbf8,#fff);border:1px solid #e0e9e2}.weight-chart text{font-family:Segoe UI,Arial,sans-serif;font-size:11px;fill:#6b7b70}.weight-chart .axis{stroke:#bccac0;stroke-width:1}.weight-chart .gridline{stroke:#e2e9e4;stroke-width:1}.weight-chart .trend{fill:none;stroke:var(--blue);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.weight-chart .point{fill:var(--g);stroke:#fff;stroke-width:3}.warning-panel{border-left:5px solid var(--red);background:#fff7f6}.performance-table tr.low-row td{background:#fff3f2}.performance-table tr.watch-row td{background:#fff9e8}.performance-table tr.good-row td{background:#f2fbf5}.setting-box{background:#f7fbf8;border:1px solid #d8e7dc;border-radius:14px;padding:16px}
+.insem-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}.insem-head h1{margin-bottom:4px}.insem-search{display:flex;gap:8px;align-items:center;min-width:min(100%,460px)}.insem-search input{flex:1;padding:11px;border:1px solid #cfd9d1;border-radius:10px}.insem-stats{grid-template-columns:repeat(4,minmax(150px,1fr));margin:14px 0}.insem-table details summary{cursor:pointer;color:var(--g);font-weight:800}.insem-history{margin:10px 0 2px;background:#f8fbf9;border-radius:10px}.status-badge{display:inline-block;padding:5px 9px;border-radius:999px;font-weight:800;font-size:12px}.status-preg{background:#e8f7ec;color:#176b3a}.status-wait{background:#eaf2ff;color:#2e6fc2}.status-neg{background:#fdebea;color:#a52d25}.status-unknown{background:#fff4d6;color:#8a5a00}.animal-picker-note{font-size:12px;color:var(--mut);margin-top:5px}.attempt-preview{display:flex;align-items:center;min-height:42px;padding:10px;border:1px solid #cfd9d1;border-radius:9px;margin-top:5px;background:#f7fbf8;font-weight:800}.future-warning{font-size:12px;color:var(--red);display:none;margin-top:5px}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.compact-btn{padding:7px 10px;font-size:12px}.insem-empty{display:none;padding:18px;text-align:center;color:var(--mut)}@media(max-width:800px){.insem-stats{grid-template-columns:repeat(2,1fr)}.insem-search{min-width:100%}}
 '''
 
 def db():
@@ -947,32 +948,61 @@ class App(BaseHTTPRequestHandler):
             return self.send_html(page('Buzağı Kartı',body,'/calves',u,msg))
         if path=='/inseminations':
             aid=q.get('animal',[''])[0]
-            term=q.get('q',[''])[0].strip()
             with db() as c:
                 females=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                if term:
-                    like=f"%{term}%"
-                    rows=c.execute(
-                        '''select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id
-                           where a.tag like ? or a.nickname like ? or i.pregnancy_result like ? or i.insemination_date like ? or i.due_date like ?
-                           order by i.insemination_date desc''',
-                        (like,like,like,like,like)
-                    ).fetchall()
-                else:
-                    rows=c.execute('select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id order by i.insemination_date desc').fetchall()
-            opts=''.join(f'<option value="{a["id"]}" {"selected" if str(a["id"])==aid else ""}>{h(a["tag"])} - {h(a["nickname"])}</option>' for a in females)
-            trs=''.join(
-                '<tr class="{0}"><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td></tr>'.format(
-                    'pregnant-row' if is_pregnant_value(r["pregnancy_result"]) else '',
-                    h(r["tag"]),
-                    r["attempt"],
-                    h(r["insemination_date"]),
-                    '<span class="pregnant-badge">Gebe</span>' if is_pregnant_value(r["pregnancy_result"]) else h(r["pregnancy_result"]),
-                    h(r["due_date"])
-                ) for r in rows
-            )
-            body=f'''<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h1>Tohumlama</h1><form method="get" action="/inseminations" class="actions"><input name="q" value="{h(term)}" placeholder="Küpe, takma ad, sonuç veya tarih ara"><button class="btn">Ara</button>{'<a class="btn alt" href="/inseminations">Temizle</a>' if term else ''}</form></div><div class="card"><form method="post" class="form"><label>Dişi Hayvan<select name="animal_id" required>{opts}</select></label><label>Deneme<select name="attempt"><option>1</option><option>2</option><option>3</option></select></label><label>Tohumlama Tarihi<input type="date" name="insemination_date" required></label><label>Gebelik Sonucu<select name="pregnancy_result"><option>Bekleniyor</option><option>Pozitif</option><option>Negatif</option></select></label><div class="full"><button class="btn">Kaydet</button></div></form></div><div class="card" style="margin-top:14px"><table><tr><th>Küpe</th><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{trs}</table></div>'''
-            return self.send_html(page('Tohumlama',body,'/inseminations',u,msg))
+                all_rows=c.execute('''select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id order by a.tag,i.attempt,i.insemination_date''').fetchall()
+            grouped={}
+            for r in all_rows:grouped.setdefault(r['animal_id'],[]).append(r)
+            waiting=sum(1 for records in grouped.values() if str(records[-1]['pregnancy_result'] or '').strip().lower() in ('bekleniyor',''))
+            pregnant=sum(1 for records in grouped.values() if is_pregnant_value(records[-1]['pregnancy_result']))
+            third_attempt=sum(1 for records in grouped.values() if int(records[-1]['attempt'] or 0)>=3)
+            month_prefix=date.today().strftime('%Y-%m')
+            this_month=sum(1 for r in all_rows if str(r['insemination_date'] or '').startswith(month_prefix))
+            next_attempts={a['id']:(max([int(x['attempt']) for x in grouped.get(a['id'],[])],default=0)+1) for a in females}
+            selected=next((a for a in females if str(a['id'])==aid),None)
+            selected_label=(f"{selected['tag']} · {selected['nickname']}" if selected else '')
+            picker_options=''.join(f'<option value="{h(a["tag"])} · {h(a["nickname"])}" data-id="{a["id"]}" data-attempt="{next_attempts[a["id"]]}"></option>' for a in females)
+            latest_rows=[]
+            for animal_id,records in grouped.items():
+                latest=records[-1]
+                result=str(latest['pregnancy_result'] or 'Belirsiz')
+                if is_pregnant_value(result):badge='<span class="status-badge status-preg">Gebe</span>'
+                elif result.strip().lower()=='negatif':badge='<span class="status-badge status-neg">Gebe Değil</span>'
+                elif result.strip().lower()=='bekleniyor':badge='<span class="status-badge status-wait">Kontrol Bekliyor</span>'
+                else:badge='<span class="status-badge status-unknown">Belirsiz</span>'
+                hist=[]
+                for rec in reversed(records):
+                    rr=str(rec['pregnancy_result'] or 'Belirsiz')
+                    if is_pregnant_value(rr):rb='<span class="status-badge status-preg">Gebe</span>'
+                    elif rr.strip().lower()=='negatif':rb='<span class="status-badge status-neg">Gebe Değil</span>'
+                    elif rr.strip().lower()=='bekleniyor':rb='<span class="status-badge status-wait">Kontrol Bekliyor</span>'
+                    else:rb='<span class="status-badge status-unknown">Belirsiz</span>'
+                    hist.append(f'''<tr><td>{rec["attempt"]}. deneme</td><td>{h(rec["insemination_date"])}</td><td>{rb}</td><td>{h(rec["due_date"]) or '—'}</td><td><div class="row-actions"><a class="btn alt compact-btn" href="/insemination-edit?id={rec['id']}">✏️ Düzenle</a><form method="post" action="/insemination-delete" class="inline-form" onsubmit="return confirm('Bu tohumlama kaydı silinsin mi?')"><input type="hidden" name="id" value="{rec['id']}"><button class="btn red compact-btn">Sil</button></form></div></td></tr>''')
+                history=''.join(hist)
+                latest_rows.append(f'''<tr class="data-row"><td><a class="taglink" href="/animal?id={animal_id}">{h(latest['tag'])}</a><div class="mut">{h(latest['nickname'])}</div></td><td>{latest['attempt']}. Deneme</td><td>{h(latest['insemination_date'])}</td><td>{badge}</td><td>{h(latest['due_date']) or '—'}</td><td><details><summary>Geçmiş ({len(records)})</summary><div style="overflow:auto"><table class="insem-history"><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th><th>İşlem</th></tr>{history}</table></div></details></td></tr>''')
+            table_rows=''.join(latest_rows)
+            body=f'''<div class="insem-head"><div><h1>🐄 Üreme Takip Merkezi</h1><div class="mut">Tohumlama kayıtlarını hayvan bazında yönetin, gebelik sonucunu güncelleyin.</div></div><div class="insem-search"><input id="inseminationLiveSearch" type="search" placeholder="Küpe veya takma ad yazın..." autocomplete="off"><button type="button" class="btn alt" onclick="document.getElementById('inseminationLiveSearch').value='';document.getElementById('inseminationLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div></div>
+            <div class="grid insem-stats"><div class="card stat metric blue">Kontrol Bekleyen<b>{waiting}</b><small>Son kaydı sonuç bekleyen</small></div><div class="card stat metric green">Gebe<b>{pregnant}</b><small>Son sonucu pozitif olan</small></div><div class="card stat metric orange">3. Denemede<b>{third_attempt}</b><small>Yakın takip gereken</small></div><div class="card stat metric purple">Bu Ay Tohumlanan<b>{this_month}</b><small>{date.today().strftime('%m/%Y')}</small></div></div>
+            <div class="card"><h2>Yeni Tohumlama</h2><form id="inseminationForm" method="post" action="/inseminations" class="form"><label>Dişi Hayvan<input id="inseminationAnimalSearch" list="inseminationAnimalOptions" value="{h(selected_label)}" placeholder="Küpe veya takma ad yazın..." autocomplete="off" required><datalist id="inseminationAnimalOptions">{picker_options}</datalist><input type="hidden" id="inseminationAnimalId" name="animal_id" value="{h(aid if selected else '')}"><div class="animal-picker-note">Yazmaya başlayın; eşleşen küpe ve takma adlar otomatik çıkar.</div></label><label>Deneme<div id="attemptPreview" class="attempt-preview">{(str(next_attempts[selected['id']])+'. Deneme') if selected else 'Hayvan seçildiğinde otomatik belirlenecek'}</div></label><label>Tohumlama Tarihi<input id="inseminationDate" type="date" name="insemination_date" required max="{date.today().isoformat()}"><div id="futureWarning" class="future-warning">Gelecek tarihli tohumlama kaydı girilemez.</div></label><label>İlk Durum<div class="attempt-preview">Kontrol Bekliyor</div><input type="hidden" name="pregnancy_result" value="Bekleniyor"></label><div class="full"><button class="btn">💾 Tohumlamayı Kaydet</button></div></form></div>
+            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Tohumlama Geçmişi</h2><p class="mut">Her hayvan tek satırda gösterilir. “Geçmiş” bağlantısından tüm denemeleri açabilir ve kayıtları düzenleyebilirsiniz.</p><div id="insemEmpty" class="insem-empty">Eşleşen kayıt bulunamadı.</div><div style="overflow:auto"><table id="inseminationLiveTable" class="insem-table"><thead><tr><th>Hayvan</th><th>Son Deneme</th><th>Son Tohumlama</th><th>Durum</th><th>Tahmini Doğum</th><th>Geçmiş / İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
+            <script>
+            document.addEventListener('DOMContentLoaded',function(){{
+              liveTableFilter('inseminationLiveSearch','inseminationLiveTable','insemEmpty');
+              var input=document.getElementById('inseminationAnimalSearch'),hidden=document.getElementById('inseminationAnimalId'),preview=document.getElementById('attemptPreview'),form=document.getElementById('inseminationForm'),dt=document.getElementById('inseminationDate'),warn=document.getElementById('futureWarning');
+              function syncAnimal(){{var match=null;document.querySelectorAll('#inseminationAnimalOptions option').forEach(function(o){{if(o.value===input.value)match=o;}});hidden.value=match?match.dataset.id:'';preview.textContent=match?(match.dataset.attempt+'. Deneme'):'Hayvan seçildiğinde otomatik belirlenecek';if(match&&parseInt(match.dataset.attempt)>3)preview.textContent='3 deneme sınırına ulaşıldı';}}
+              input.addEventListener('input',syncAnimal);input.addEventListener('change',syncAnimal);syncAnimal();
+              dt.addEventListener('change',function(){{var bad=dt.value&&dt.value>'{date.today().isoformat()}';warn.style.display=bad?'block':'none';}});
+              form.addEventListener('submit',function(e){{syncAnimal();if(!hidden.value){{e.preventDefault();alert('Lütfen listeden geçerli bir dişi hayvan seçin.');return;}}if(dt.value>'{date.today().isoformat()}'){{e.preventDefault();warn.style.display='block';alert('Gelecek tarihli tohumlama kaydı girilemez.');}}}});
+            }});
+            </script>'''
+            return self.send_html(page('Üreme Takip Merkezi',body,'/inseminations',u,msg))
+        if path=='/insemination-edit':
+            iid=q.get('id',[''])[0]
+            with db() as c:rec=c.execute('''select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id where i.id=?''',(iid,)).fetchone()
+            if not rec:return self.redirect('/inseminations','Tohumlama kaydı bulunamadı.')
+            result=str(rec['pregnancy_result'] or 'Bekleniyor')
+            body=f'''<div class="actions"><a class="btn alt" href="/inseminations">← Tohumlamalara Dön</a></div><h1>Tohumlama Kaydını Düzenle</h1><div class="card"><form method="post" action="/insemination-edit" class="form"><input type="hidden" name="id" value="{rec['id']}"><label>Hayvan<div class="attempt-preview">{h(rec['tag'])} · {h(rec['nickname'])}</div></label><label>Deneme<div class="attempt-preview">{rec['attempt']}. Deneme</div></label><label>Tohumlama Tarihi<input type="date" name="insemination_date" required max="{date.today().isoformat()}" value="{h(rec['insemination_date'])}"></label><label>Gebelik Sonucu<select name="pregnancy_result"><option value="Bekleniyor" {'selected' if result=='Bekleniyor' else ''}>Kontrol Bekliyor</option><option value="Pozitif" {'selected' if is_pregnant_value(result) else ''}>Gebe</option><option value="Negatif" {'selected' if result=='Negatif' else ''}>Gebe Değil</option><option value="Belirsiz" {'selected' if result=='Belirsiz' else ''}>Belirsiz</option></select></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/inseminations">İptal</a></div></form></div>'''
+            return self.send_html(page('Tohumlama Düzenle',body,'/inseminations',u,msg))
         if path=='/health':
             with db() as c: animals=c.execute('select id,tag,nickname from animals order by tag').fetchall(); rows=c.execute('select h.*,a.tag from health h left join animals a on a.id=h.animal_id order by applied_date desc').fetchall()
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals); trs=''.join(f'<tr><td>{h(r["tag"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{h(r["applied_date"])}</td><td>{h(r["next_date"])}</td><td>{money(r["cost"])}</td></tr>' for r in rows)
@@ -1314,10 +1344,43 @@ class App(BaseHTTPRequestHandler):
                     else:c.execute('insert into calves(tag,mother_id,father_tag,birth_date,gender,notes) values(?,?,?,?,?,?)',vals);msg='Buzağı kaydedildi.'
                     promote_mature_calves(); return self.redirect('/calves',msg)
                 if path=='/inseminations':
-                    a=c.execute("select id from animals where id=? and gender='Dişi'",(f['animal_id'],)).fetchone()
-                    if not a:return self.redirect('/inseminations','Tohumlama yalnızca dişi hayvanlara uygulanabilir.')
-                    due=(date.fromisoformat(f['insemination_date'])+timedelta(days=280)).isoformat() if f['pregnancy_result']=='Pozitif' else ''
-                    c.execute('insert or replace into inseminations(animal_id,attempt,insemination_date,pregnancy_result,due_date) values(?,?,?,?,?)',(f['animal_id'],f['attempt'],f['insemination_date'],f['pregnancy_result'],due));return self.redirect('/inseminations','Tohumlama kaydedildi.')
+                    aid=f.get('animal_id','')
+                    a=c.execute("select id,tag from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(aid,)).fetchone()
+                    if not a:return self.redirect('/inseminations','Lütfen geçerli ve aktif bir dişi hayvan seçin.')
+                    ins_date=f.get('insemination_date','')
+                    try:ins_day=date.fromisoformat(ins_date)
+                    except Exception:return self.redirect('/inseminations','Geçerli bir tohumlama tarihi girin.')
+                    if ins_day>date.today():return self.redirect('/inseminations','Gelecek tarihli tohumlama kaydı girilemez.')
+                    latest=c.execute('select max(attempt) from inseminations where animal_id=?',(aid,)).fetchone()[0] or 0
+                    attempt=int(latest)+1
+                    if attempt>3:return self.redirect('/inseminations?animal='+str(aid),'Bu hayvan için 3 tohumlama denemesi zaten kayıtlı. Önce mevcut kayıtları düzenleyin.')
+                    c.execute('insert into inseminations(animal_id,attempt,insemination_date,pregnancy_result,due_date) values(?,?,?,?,?)',(aid,attempt,ins_date,'Bekleniyor',''))
+                    audit(username,'Tohumlama kaydı eklendi',f'{a["tag"]} · {attempt}. deneme · {ins_date}',self.client_ip())
+                    return self.redirect('/inseminations?animal='+str(aid),f'{a["tag"]} için {attempt}. tohumlama kaydedildi.')
+                if path=='/insemination-edit':
+                    iid=f.get('id','')
+                    rec=c.execute('select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=?',(iid,)).fetchone()
+                    if not rec:return self.redirect('/inseminations','Tohumlama kaydı bulunamadı.')
+                    ins_date=f.get('insemination_date','')
+                    try:ins_day=date.fromisoformat(ins_date)
+                    except Exception:return self.redirect('/insemination-edit?id='+str(iid),'Geçerli bir tarih girin.')
+                    if ins_day>date.today():return self.redirect('/insemination-edit?id='+str(iid),'Gelecek tarihli tohumlama kaydı girilemez.')
+                    result=f.get('pregnancy_result','Bekleniyor')
+                    if result not in ('Bekleniyor','Pozitif','Negatif','Belirsiz'):result='Belirsiz'
+                    due=(ins_day+timedelta(days=280)).isoformat() if is_pregnant_value(result) else ''
+                    c.execute('update inseminations set insemination_date=?,pregnancy_result=?,due_date=? where id=?',(ins_date,result,due,iid))
+                    audit(username,'Tohumlama kaydı güncellendi',f'{rec["tag"]} · {rec["attempt"]}. deneme',self.client_ip())
+                    return self.redirect('/inseminations?animal='+str(rec['animal_id']),'Tohumlama kaydı güncellendi.')
+                if path=='/insemination-delete':
+                    iid=f.get('id','')
+                    rec=c.execute('select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=?',(iid,)).fetchone()
+                    if not rec:return self.redirect('/inseminations','Tohumlama kaydı bulunamadı.')
+                    c.execute('delete from inseminations where id=?',(iid,))
+                    remaining=c.execute('select id,attempt from inseminations where animal_id=? order by attempt,insemination_date,id',(rec['animal_id'],)).fetchall()
+                    for idx,row in enumerate(remaining,1):
+                        if row['attempt']!=idx:c.execute('update inseminations set attempt=? where id=?',(idx,row['id']))
+                    audit(username,'Tohumlama kaydı silindi',f'{rec["tag"]} · {rec["attempt"]}. deneme',self.client_ip())
+                    return self.redirect('/inseminations?animal='+str(rec['animal_id']),'Tohumlama kaydı silindi ve deneme sırası yeniden düzenlendi.')
                 if path=='/pregnancy-vaccine/done':
                     aid=int(f['animal_id']); ins_id=int(f['insemination_id']); month=int(f['month'])
                     if month not in (7,8):return self.redirect('/','Geçersiz gebelik aşı görevi.')

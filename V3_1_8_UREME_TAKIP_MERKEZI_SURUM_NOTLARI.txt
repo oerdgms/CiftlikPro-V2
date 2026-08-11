@@ -1,0 +1,16 @@
+ÇiftlikPro Enterprise V3.1.8 - Üreme Takip Merkezi
+
+- Tohumlama ekranı baştan düzenlendi ve “Üreme Takip Merkezi” görünümüne geçirildi.
+- Üst arama alanı artık yazdıkça küpe/takma ad eşleşmelerini canlı filtreler.
+- Yeni tohumlama formunda dişi hayvan seçimi yazdıkça öneri veren arama alanına dönüştürüldü.
+- Deneme numarası kullanıcı tarafından seçilmez; hayvanın mevcut kayıtlarına göre otomatik belirlenir.
+- Hayvan başına en fazla 3 tohumlama denemesi kuralı sunucu tarafında doğrulanır.
+- Yeni tohumlama kaydı otomatik “Kontrol Bekliyor” durumuyla oluşturulur.
+- Mevcut tohumlama kayıtlarına Düzenle ve Sil işlemleri eklendi.
+- Gebelik sonucu düzenlenirken Gebe seçilirse tahmini doğum tarihi otomatik +280 gün hesaplanır.
+- Gelecek tarihli tohumlama kayıtları hem ekranda hem sunucu tarafında engellenir.
+- Kayıt listesi hayvan bazında tek satıra düşürüldü; tüm denemeler “Geçmiş” altında açılır.
+- Kontrol Bekleyen, Gebe, 3. Denemede ve Bu Ay Tohumlanan özet kartları eklendi.
+- Durumlar renkli rozetlerle daha okunabilir hale getirildi.
+- Silinen ara denemeden sonra kalan deneme numaraları otomatik yeniden sıralanır.
+- Önceki V3.1.7 Dashboard geliştirmeleri ve diğer modüller korunur.
