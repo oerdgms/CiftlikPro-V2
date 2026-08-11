@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V3.2.3 — Kızgınlık / Tohumlama Entegrasyonu
+
+- Yaklaşan kızgınlık kartlarında Tohumlamaya Gönder düğmesi artık her zaman görünür.
+- Beklenen pencere içindeyse “Bugün Tohumlandı” onayı doğrudan tohumlama kaydı oluşturur.
+- Pencere başlamadıysa Tohumlama ekranı ilgili hayvan seçili açılır; kullanıcı gerçek tohumlama tarihini girer.
+- Tohumlama ekranında kızgınlık kaydından gelindiğini ve beklenen pencereyi gösteren bilgi kutusu eklenmiştir.
+- Aynı gün mükerrer tohumlama ve 3 deneme sınırı korunur.
