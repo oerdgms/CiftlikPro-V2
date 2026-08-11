@@ -1,0 +1,11 @@
+ÇiftlikPro Enterprise V3.2.2 — Kızgınlık İş Akışı
+
+- Aynı dişi hayvan için aynı tarihte mükerrer kızgınlık kaydı engellendi.
+- Kızgınlık formunda çift tıklama / tekrar gönderme kilidi eklendi.
+- Kızgınlık geçmişine Düzenle işlemi eklendi.
+- Kızgınlık geçmişi mobil ekranda kart görünümüne dönüştürüldü.
+- Dashboard'a Yaklaşan Kızgınlık özeti ve detay bölümü eklendi.
+- Beklenen 18–24 günlük kızgınlık penceresindeki hayvanlar için “Bugün Tohumlandı” işlemi eklendi.
+- Kullanıcı onayından sonra kayıt otomatik olarak Tohumlama bölümünde sıradaki deneme olarak açılır.
+- Aynı hayvan için aynı gün ikinci tohumlama kaydı engellenir.
+- 3 tohumlama sınırı korunur; yeni kayıt Gebelik Sonucu = Bekleniyor olarak oluşturulur.
