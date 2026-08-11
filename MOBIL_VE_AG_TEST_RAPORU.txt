@@ -1,0 +1,23 @@
+ÇiftlikPro Enterprise V3.1.8.1 — Ağ ve Mobil Kontrol Raporu
+
+AĞ ERİŞİMİ
+- app/server.py doğrudan çalıştırıldığında 0.0.0.0:8953 dinliyor.
+- Windows EXE'nin kullandığı app/desktop_launcher.py 127.0.0.1 yerine 0.0.0.0:8953 dinleyecek şekilde düzeltildi.
+- Yerel tarayıcı otomatik olarak 127.0.0.1:8953/login açmaya devam eder.
+- Aynı özel ağdaki cihazlar ana makinenin LAN IP'si:8953 üzerinden erişebilir.
+- Kurulum TCP 8953 için yalnızca Private ağ profiline Windows Güvenlik Duvarı kuralı ekler.
+
+MOBİL UYUMLULUK
+- viewport etiketi mevcut.
+- 900 px altında yan menü hamburger menüye dönüşür.
+- 560 px altında formlar tek kolona düşer.
+- Dokunmatik buton ve giriş alanları en az 44 px hedef yüksekliğine çıkarıldı.
+- Mobil giriş alanlarında 16 px font kullanıldı.
+- Geniş tablolar kart içinde yatay kaydırılabilir hale getirildi.
+- Üst sürüm etiketi dar ekranlarda gizlenerek kullanıcı alanı sıkışması azaltıldı.
+- Tohumlama araması özel, dokunmatik uyumlu öneri listesine geçirildi.
+- Tohumlama özet kartları telefonda 2 sütun gösterilir.
+
+KAYNAK KONTROLÜ
+- server.py ve desktop_launcher.py Python sözdizimi kontrolünden geçti.
+- Test sunucusuna hem 127.0.0.1 hem de makinenin ağ arayüzü IP'si üzerinden HTTP erişimi doğrulandı.
