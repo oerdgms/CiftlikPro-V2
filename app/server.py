@@ -407,7 +407,7 @@ async function optimizePhotoFile(file,status,text,bar){{
    if(bar)bar.style.width='22%';
    const blob=await new Promise(function(resolve){{canvas.toBlob(resolve,'image/jpeg',quality);}});
    if(!blob)throw new Error('Fotoğraf dönüştürülemedi');
-   const base=(file.name||'hayvan').replace(/\.[^.]+$/,'');
+   const base=(file.name||'hayvan').replace(/[.][^.]+$/,'');
    return new File([blob],base+'.jpg',{{type:'image/jpeg',lastModified:Date.now()}});
  }}catch(err){{
    console.warn('Fotoğraf optimizasyonu atlandı:',err);return file;
