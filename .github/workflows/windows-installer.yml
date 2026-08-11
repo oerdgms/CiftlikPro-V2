@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.1.4 Besi Analiz Merkezi Windows Kurulum
+name: CiftlikPro Enterprise V3.1.5 Finans Dashboard Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.4'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.1.5'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Kaynak sunucuyu başlat ve sayfaları test et
         shell: pwsh
@@ -171,7 +171,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_1_4_Besi_Analiz_Merkezi_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_1_5_Finans_Dashboard_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -179,17 +179,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_1_4_Besi_Analiz_Merkezi_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_1_5_Finans_Dashboard_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_1_4_Besi_Analiz_Merkezi_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_1_5_Finans_Dashboard_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.1.4-Besi-Analiz-Merkezi-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.1.5-Finans-Dashboard-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_1_4_Besi_Analiz_Merkezi_Setup.exe
+            release/CiftlikPro_Enterprise_V3_1_5_Finans_Dashboard_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
