@@ -35,12 +35,12 @@ Name: "{autodesktop}\ÇiftlikPro"; Filename: "{app}\CiftlikPro.exe"; WorkingDir:
 Name: "{userprograms}\ÇiftlikPro"; Filename: "{app}\CiftlikPro.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ÇiftlikPro LAN 8953\""; Flags: runhidden waituntilterminated
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=\"ÇiftlikPro LAN 8953\" dir=in action=allow protocol=TCP localport=8953 profile=private"; Flags: runhidden waituntilterminated
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ÇiftlikPro LAN 8953"""; Flags: runhidden waituntilterminated
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""ÇiftlikPro LAN 8953"" dir=in action=allow protocol=TCP localport=8953 profile=private"; Flags: runhidden waituntilterminated
 Filename: "{app}\CiftlikPro.exe"; Description: "ÇiftlikPro'yu başlat"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=\"ÇiftlikPro LAN 8953\""; Flags: runhidden waituntilterminated
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ÇiftlikPro LAN 8953"""; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
