@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.3.0'
+APP_VERSION='3.3.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.3.0 ÇİFTLİK PROFİLİ'
+APP_LABEL='ENTERPRISE V3.3.1 ÇİFTLİK PROFİLİ HOTFIX'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -691,37 +691,6 @@ class App(BaseHTTPRequestHandler):
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
-        if path=='/farm-profile':
-            if not self.require_admin():return
-            text_keys=('farm_name','owner_name','phone','email','province','district','address','business_no','tax_or_tc','vet_name','vet_phone','vet_email','notes')
-            with db() as c:
-                for key in text_keys:
-                    val=(f.get(key,'') or '').strip()
-                    c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",(key,val))
-                current=c.execute("select setting_value from settings where setting_key='farm_logo'").fetchone()
-                current_logo=current['setting_value'] if current else ''
-                if f.get('remove_logo')=='1':
-                    if current_logo.startswith('/uploads/'):
-                        try:(UPLOADS/os.path.basename(current_logo)).unlink(missing_ok=True)
-                        except Exception:pass
-                    c.execute("insert into settings(setting_key,setting_value) values('farm_logo','') on conflict(setting_key) do update set setting_value=''")
-                    current_logo=''
-                upload=f.get('farm_logo_file')
-                if isinstance(upload,dict) and upload.get('filename') and upload.get('content'):
-                    content=upload['content']
-                    if len(content)>5*1024*1024:return self.redirect('/farm-profile','Logo dosyası 5 MB sınırını aşıyor.')
-                    ext=Path(upload['filename']).suffix.lower()
-                    if ext not in ('.jpg','.jpeg','.png','.webp'):return self.redirect('/farm-profile','Logo yalnızca JPG, PNG veya WebP olabilir.')
-                    UPLOADS.mkdir(parents=True,exist_ok=True)
-                    if current_logo.startswith('/uploads/'):
-                        try:(UPLOADS/os.path.basename(current_logo)).unlink(missing_ok=True)
-                        except Exception:pass
-                    filename='farm_logo'+('.jpg' if ext=='.jpeg' else ext)
-                    (UPLOADS/filename).write_bytes(content)
-                    logo_url='/uploads/'+filename
-                    c.execute("insert into settings(setting_key,setting_value) values('farm_logo',?) on conflict(setting_key) do update set setting_value=excluded.setting_value",(logo_url,))
-            audit(username,'Çiftlik profilini güncelledi',(f.get('farm_name') or 'ÇiftlikPro').strip(),self.client_ip())
-            return self.redirect('/farm-profile','Çiftlik profili başarıyla kaydedildi.')
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
             return self.send_html(page('Şifremi Değiştir',body,'/password-change',u,msg))
@@ -1410,6 +1379,37 @@ class App(BaseHTTPRequestHandler):
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path=='/farm-profile':
+            if not self.require_admin():return
+            text_keys=('farm_name','owner_name','phone','email','province','district','address','business_no','tax_or_tc','vet_name','vet_phone','vet_email','notes')
+            with db() as c:
+                for key in text_keys:
+                    val=(f.get(key,'') or '').strip()
+                    c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",(key,val))
+                current=c.execute("select setting_value from settings where setting_key='farm_logo'").fetchone()
+                current_logo=current['setting_value'] if current else ''
+                if f.get('remove_logo')=='1':
+                    if current_logo.startswith('/uploads/'):
+                        try:(UPLOADS/os.path.basename(current_logo)).unlink(missing_ok=True)
+                        except Exception:pass
+                    c.execute("insert into settings(setting_key,setting_value) values('farm_logo','') on conflict(setting_key) do update set setting_value=''")
+                    current_logo=''
+                upload=f.get('farm_logo_file')
+                if isinstance(upload,dict) and upload.get('filename') and upload.get('content'):
+                    content=upload['content']
+                    if len(content)>5*1024*1024:return self.redirect('/farm-profile','Logo dosyası 5 MB sınırını aşıyor.')
+                    ext=Path(upload['filename']).suffix.lower()
+                    if ext not in ('.jpg','.jpeg','.png','.webp'):return self.redirect('/farm-profile','Logo yalnızca JPG, PNG veya WebP olabilir.')
+                    UPLOADS.mkdir(parents=True,exist_ok=True)
+                    if current_logo.startswith('/uploads/'):
+                        try:(UPLOADS/os.path.basename(current_logo)).unlink(missing_ok=True)
+                        except Exception:pass
+                    filename='farm_logo'+('.jpg' if ext=='.jpeg' else ext)
+                    (UPLOADS/filename).write_bytes(content)
+                    logo_url='/uploads/'+filename
+                    c.execute("insert into settings(setting_key,setting_value) values('farm_logo',?) on conflict(setting_key) do update set setting_value=excluded.setting_value",(logo_url,))
+            audit(username,'Çiftlik profilini güncelledi',(f.get('farm_name') or 'ÇiftlikPro').strip(),self.client_ip())
+            return self.redirect('/farm-profile','Çiftlik profili başarıyla kaydedildi.')
         if path=='/password-change':
             np=f.get('new_password','')
             if len(np)<8:return self.redirect('/password-change','Yeni şifre en az 8 karakter olmalıdır.')
