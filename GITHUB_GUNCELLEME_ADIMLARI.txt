@@ -1,0 +1,9 @@
+1. ZIP'i çıkarın.
+2. İçindeki tüm dosyaları GitHub Desktop depo klasörüne kopyalayın.
+3. Summary: V2.1 Beta1 düzenleme hotfix
+4. Commit to main
+5. Push origin
+6. Actions tamamlanınca CiftlikPro-V2.1-Beta1-EditHotfix-Windows-Setup artifactını indirin.
+7. CiftlikPro_Enterprise_V2_1_Beta1_EditHotfix_Setup.exe dosyasını kurun.
+
+Mevcut veriler %LOCALAPPDATA%\CiftlikPro altında korunur.

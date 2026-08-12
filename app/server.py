@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.5.0'
+APP_VERSION='3.5.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.5.0 KİŞİSEL DASHBOARD'
+APP_LABEL='ENTERPRISE V3.5.1 FİNANS TOPLU SEÇİM HOTFIX'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -54,12 +54,18 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 }
 
 .bulk-animal-box{display:none}
-.bulk-animal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:10px}
-.bulk-animal{border:2px solid #dce8df;background:#f8fbf9;border-radius:14px;padding:12px;text-align:left;cursor:pointer;color:#183426;font:inherit}
-.bulk-animal b{display:block;color:#176b3a}.bulk-animal span{font-size:13px;color:#6d8074}
-.bulk-animal.selected{border-color:#178447;background:#e9f7ee;box-shadow:0 0 0 2px #17844718}
-.bulk-summary{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.bulk-picker{border:1px solid #d8e5dc;border-radius:16px;background:#fbfdfb;padding:14px}
+.bulk-picker-head{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.bulk-search{max-width:420px;width:100%}
+.bulk-list{max-height:300px;overflow:auto;border:1px solid #dfe9e2;border-radius:12px;background:white}
+.bulk-row{display:grid;grid-template-columns:34px minmax(130px,1fr) minmax(110px,1fr);gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #edf2ee;cursor:pointer}
+.bulk-row:last-child{border-bottom:0}.bulk-row:hover{background:#f5faf6}.bulk-row.selected{background:#eaf7ee}
+.bulk-row input{width:20px;height:20px}.bulk-row .tag{font-weight:800;color:#176b3a}.bulk-row .nick{color:#6d8074;font-size:13px}
+.bulk-summary{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .bulk-summary .pill{background:#edf6ef;padding:9px 12px;border-radius:999px}
+.bulk-selected-preview{font-size:13px;color:#5f7466;margin-top:8px}
+.finance-savebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.finance-savebar .btn{min-width:180px}
 
 .farm-profile-head{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .farm-logo-preview{width:120px;height:120px;border-radius:18px;object-fit:contain;background:#f4f7f5;border:1px solid #dbe5de;padding:8px}
@@ -1393,7 +1399,7 @@ class App(BaseHTTPRequestHandler):
                 rows=c.execute(sql,args).fetchall()
                 inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
-            bulk_cards=''.join(f'''<button type="button" class="bulk-animal" data-animal-id="{a["id"]}" onclick="toggleBulkAnimal(this)"><b>🐄 {h(a["tag"])}</b><span>{h(a["nickname"]) or "Takma ad yok"}</span></button>''' for a in animals)
+            bulk_cards=''.join(f'''<label class="bulk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="bulk-check" value="{a["id"]}" onchange="syncBulkSelection()"><span class="tag">🐄 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in animals)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
@@ -1408,51 +1414,54 @@ class App(BaseHTTPRequestHandler):
 <label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
 <label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label>
 <input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
-<div class="full bulk-animal-box" id="bulkAnimalBox"><h3 style="margin:0">🐄 İlgili Hayvanları Seç</h3><p class="mut">Hayvan Satışı veya Kesim Geliri için birden fazla hayvana dokunun. Toplam tutar eşit olarak dağıtılır.</p><div class="bulk-animal-grid">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen: <b id="bulkCount">0</b></span><span class="pill">Hayvan başı: <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div></div>
+<div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">Satılan / kesilen hayvanları işaretleyin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill">Hayvan başı <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div>
 <label class="full">Açıklama<input name="description"></label>
 <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam gelir hayvanlara eşit paylaştırılır.</div>
-<div class="full"><button class="btn" id="financeSubmitBtn">Finans Kaydı Ekle</button></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="finance-toolbar"><label>Başlangıç<input type="date" name="start" value="{h(start)}"></label><label>Bitiş<input type="date" name="end" value="{h(end)}"></label><label>Tür<select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label>Kategori<select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
+<div class="full finance-savebar"><button type="submit" class="btn" id="financeSubmitBtn">💾 Finans Kaydını Kaydet</button><span class="mut" id="financeSaveHint"></span></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="finance-toolbar"><label>Başlangıç<input type="date" name="start" value="{h(start)}"></label><label>Bitiş<input type="date" name="end" value="{h(end)}"></label><label>Tür<select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label>Kategori<select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
             body += f'''<script>
-            const bulkSelected=new Set();
             function isBulkFinance(){{
               const t=document.getElementById('tx').value;
               const c=document.getElementById('financeCategory').value;
               return t==='Gelir' && (c==='Hayvan Satışı' || c==='Kesim Geliri');
             }}
             function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
+            function selectedChecks(){{return Array.from(document.querySelectorAll('.bulk-check:checked'));}}
+            function syncBulkSelection(){{
+              const checks=selectedChecks();
+              checks.forEach(x=>x.closest('.bulk-row').classList.add('selected'));
+              document.querySelectorAll('.bulk-check:not(:checked)').forEach(x=>x.closest('.bulk-row').classList.remove('selected'));
+              document.getElementById('bulkAnimalIds').value=checks.map(x=>x.value).join(',');
+              document.getElementById('bulkCount').textContent=checks.length;
+              const total=parseFloat(document.getElementById('financeAmount').value||'0');
+              document.getElementById('bulkShare').textContent=formatTRY(checks.length ? total/checks.length : 0);
+              const labels=checks.slice(0,5).map(x=>x.closest('.bulk-row').querySelector('.tag').textContent.trim());
+              document.getElementById('bulkSelectedPreview').textContent=checks.length ? labels.join(' · ')+(checks.length>5?' · +'+(checks.length-5)+' diğer':'') : 'Henüz hayvan seçilmedi.';
+              document.getElementById('financeSaveHint').textContent=(isBulkFinance()&&checks.length) ? checks.length+' hayvana dağıtılacak' : '';
+            }}
             function refreshBulkFinance(){{
               const on=isBulkFinance();
               document.getElementById('bulkAnimalBox').style.display=on?'block':'none';
               document.getElementById('singleAnimalLabel').style.display=on?'none':'block';
               document.getElementById('statusWarning').style.display=on?'block':'none';
-              document.getElementById('bulkAnimalIds').value=Array.from(bulkSelected).join(',');
-              document.getElementById('bulkCount').textContent=bulkSelected.size;
-              const total=parseFloat(document.getElementById('financeAmount').value||'0');
-              document.getElementById('bulkShare').textContent=formatTRY(bulkSelected.size ? total/bulkSelected.size : 0);
-            }}
-            function toggleBulkAnimal(el){{
-              const id=el.dataset.animalId;
-              if(bulkSelected.has(id)){{bulkSelected.delete(id);el.classList.remove('selected');}}
-              else{{bulkSelected.add(id);el.classList.add('selected');}}
-              refreshBulkFinance();
+              syncBulkSelection();
             }}
             function clearBulkAnimals(){{
-              bulkSelected.clear();
-              document.querySelectorAll('.bulk-animal.selected').forEach(x=>x.classList.remove('selected'));
-              refreshBulkFinance();
+              document.querySelectorAll('.bulk-check').forEach(x=>x.checked=false);
+              syncBulkSelection();
+            }}
+            function filterBulkAnimals(){{
+              const q=(document.getElementById('bulkSearch').value||'').toLocaleLowerCase('tr-TR').trim();
+              document.querySelectorAll('.bulk-row').forEach(row=>{{row.style.display=!q||row.dataset.search.toLocaleLowerCase('tr-TR').includes(q)?'grid':'none';}});
             }}
             document.getElementById('tx').addEventListener('change',refreshBulkFinance);
             document.getElementById('financeCategory').addEventListener('change',refreshBulkFinance);
-            document.getElementById('financeAmount').addEventListener('input',refreshBulkFinance);
+            document.getElementById('financeAmount').addEventListener('input',syncBulkSelection);
             document.getElementById('financeCreateForm').addEventListener('submit',function(e){{
-              if(isBulkFinance() && bulkSelected.size===0){{
-                e.preventDefault(); alert('Hayvan satışı veya kesim geliri için en az bir hayvan seçmelisiniz.'); return;
+              syncBulkSelection();
+              if(isBulkFinance() && selectedChecks().length===0){{
+                e.preventDefault();
+                alert('Hayvan satışı veya kesim geliri için en az bir hayvan seçmelisiniz.');
               }}
-              if(isBulkFinance()){{
-                const n=bulkSelected.size,total=parseFloat(document.getElementById('financeAmount').value||'0');
-                if(!confirm(n+' hayvana toplam '+formatTRY(total)+' gelir eşit dağıtılacak. Devam edilsin mi?')){{e.preventDefault();return;}}
-              }}
-              const b=document.getElementById('financeSubmitBtn'); b.disabled=true; b.textContent='Kaydediliyor…';
             }});
             refreshBulkFinance();
             </script>'''
