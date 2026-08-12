@@ -1,0 +1,11 @@
+ÇiftlikPro Enterprise V3.3.0 - Çiftlik Profili / İşletme Tanımları
+
+- Yönetim menüsüne Çiftlik Profili eklendi.
+- Çiftlik/işletme adı, işletme sahibi, telefon, e-posta, il/ilçe, adres ve işletme numarası.
+- İsteğe bağlı Vergi / TC alanı.
+- Veteriner adı, telefonu ve e-posta bilgileri.
+- İşletme notları.
+- JPG/PNG/WebP çiftlik logosu yükleme ve kaldırma.
+- Dashboard başlığı çiftlik adına göre kişiselleştirilir ve logo gösterilir.
+- Finans Raporları başlığı çiftlik adından beslenir.
+- Profil değişiklikleri işlem günlüğüne kaydedilir.
