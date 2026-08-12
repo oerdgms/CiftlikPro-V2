@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.4.0'
+APP_VERSION='3.5.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.4.0 TOPLU GELİR DAĞITIMI'
+APP_LABEL='ENTERPRISE V3.5.0 KİŞİSEL DASHBOARD'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -30,6 +30,28 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 @media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
 
 
+
+
+.finance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.finance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}
+.finance-table-wrap{overflow-x:auto;border-radius:14px}
+.finance-table{width:100%;border-collapse:collapse;min-width:900px}
+.finance-table th{white-space:nowrap;background:#edf5ef}
+.finance-table td{vertical-align:middle}
+.finance-table .finance-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.finance-table .finance-actions form{margin:0}
+.finance-table .btn{padding:8px 12px}
+.dashboard-editbar{display:flex;justify-content:flex-end;margin:10px 0 14px}
+.dashboard-slot{position:relative}
+.dashboard-slot-editor{margin-top:8px;padding:10px;border:1px dashed #9cb8a5;border-radius:12px;background:#f7fbf8}
+.dashboard-slot-editor form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
+.dashboard-slot-editor select{min-width:190px}
+.dashboard-empty-slot{min-height:145px;border:2px dashed #9cb8a5;border-radius:18px;display:flex;align-items:center;justify-content:center;background:#f7fbf8;color:#176b3a;font-size:34px;font-weight:800}
+.dashboard-empty-slot small{display:block;font-size:14px;color:#6d8074;margin-top:6px}
+@media(max-width:700px){
+ .finance-toolbar{align-items:stretch}.finance-toolbar>*{width:100%}.finance-toolbar input,.finance-toolbar select,.finance-toolbar .btn{width:100%}
+ .finance-table{min-width:760px}
+}
 
 .bulk-animal-box{display:none}
 .bulk-animal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:10px}
@@ -266,6 +288,34 @@ def farm_profile():
 def farm_display_name(profile=None):
     p=profile or farm_profile()
     return (p.get('farm_name') or '').strip() or 'ÇiftlikPro'
+
+
+DASHBOARD_CARD_OPTIONS = [
+    ('active_total','🐄 Toplam Aktif Hayvan'),
+    ('female','🐮 Dişi Hayvan'),
+    ('male','🐂 Erkek Hayvan'),
+    ('pregnant','🤰 Gebe Hayvan'),
+    ('calves','🐮 Buzağı'),
+    ('due','📅 Yaklaşan Doğum'),
+    ('estrus','🌸 Yaklaşan Kızgınlık'),
+    ('income','📥 Toplam Gelir'),
+    ('expense','📤 Toplam Gider'),
+    ('net','⚖️ Net Durum'),
+]
+DASHBOARD_DEFAULT_LAYOUT=['active_total','female','male','pregnant','calves','due','estrus','']
+
+def dashboard_layout(username):
+    key='dashboard_layout_'+str(username)
+    try:
+        with db() as c:
+            r=c.execute("select setting_value from settings where setting_key=?",(key,)).fetchone()
+        if r and r['setting_value']:
+            vals=(r['setting_value'].split(',')+['']*8)[:8]
+            valid={x[0] for x in DASHBOARD_CARD_OPTIONS}
+            return [v if v in valid else '' for v in vals]
+    except Exception:
+        pass
+    return DASHBOARD_DEFAULT_LAYOUT[:]
 
 def h(s):
     return str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
@@ -753,6 +803,8 @@ class App(BaseHTTPRequestHandler):
         if path=='/':
             profile=farm_profile()
             farm_name=farm_display_name(profile)
+            edit_dashboard=(q.get('edit',['0'])[0]=='1')
+            dash_layout=dashboard_layout(u)
             with db() as c:
                 animals=c.execute("select count(*) from animals where gender='Dişi' and status='Aktif'").fetchone()[0]
                 males=c.execute("select count(*) from animals where gender='Erkek' and status='Aktif'").fetchone()[0]
@@ -832,10 +884,36 @@ class App(BaseHTTPRequestHandler):
             target_profit_class='red' if male_target_profit is not None and male_target_profit<0 else 'green'
             target_profit_color='#c8392b' if male_target_profit is not None and male_target_profit<0 else '#176b3a'
             performance_warning_html=''.join(f'<div class="alertitem" style="border-left-color:#c8392b">⚠️ <a class="taglink" href="/animal?id={r[0]["id"]}">{h(r[0]["tag"])} {h(r[0]["nickname"])}</a><br><span class="mut">{r[1]["daily"]:.3f} kg/gün · Hedef {min_daily_gain:.2f} kg/gün</span></div>' for r in low_performance[:8]) or '<p class="mut">Kritik seviyede düşük kilo artışı olan erkek yok.</p>'
+            dash_cards={
+                'active_total':f'<a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐄</span>Toplam Aktif Hayvan<b>{active_total}</b><small>Dişi hayvanları aç →</small></a>',
+                'female':f'<a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐮</span>Dişi Hayvan<b>{animals}</b><small>Listeyi aç →</small></a>',
+                'male':f'<a class="card stat metric blue summary-link" href="/males"><span class="metric-icon">🐂</span>Erkek Hayvan<b>{males}</b><small>Listeyi aç →</small></a>',
+                'pregnant':f'<a class="card stat metric orange summary-link" href="/inseminations"><span class="metric-icon">🤰</span>Gebe Hayvan<b>{pregnant}</b><small>Gebelikleri aç →</small></a>',
+                'calves':f'<a class="card stat metric teal summary-link" href="/calves"><span class="metric-icon">🐮</span>Buzağı<b>{calves}</b><small>Listeyi aç →</small></a>',
+                'due':f'<a class="card stat metric purple summary-link" href="#approaching-births"><span class="metric-icon">📅</span>Yaklaşan Doğum<b>{len(due_rows)}</b><small>Detaya git ↓</small></a>',
+                'estrus':f'<a class="card stat metric green summary-link" href="#approaching-estrus"><span class="metric-icon">🌸</span>Yaklaşan Kızgınlık<b>{len(estrus_upcoming)}</b><small>Detaya git ↓</small></a>',
+                'income':f'<a class="card stat metric green summary-link" href="/finance?type=Gelir"><span class="metric-icon">📥</span>Toplam Gelir<b>{money(total_inc)}</b><small>Gelirleri aç →</small></a>',
+                'expense':f'<a class="card stat metric red summary-link" href="/finance?type=Gider"><span class="metric-icon">📤</span>Toplam Gider<b>{money(total_exp)}</b><small>Giderleri aç →</small></a>',
+                'net':f'<a class="card stat metric {"red" if net<0 else "green"} summary-link" href="/finance"><span class="metric-icon">⚖️</span>Net Durum<b>{money(net)}</b><small>Finansı aç →</small></a>',
+            }
+            option_html=''.join(f'<option value="{h(k)}">{h(label)}</option>' for k,label in DASHBOARD_CARD_OPTIONS)
+            dash_slots=[]
+            for slot,key in enumerate(dash_layout):
+                card=dash_cards.get(key,'')
+                if not card:
+                    card='<div class="dashboard-empty-slot"><div>＋<small>Bu yuvaya kart ekle</small></div></div>'
+                if edit_dashboard:
+                    selected_opts=''.join(f'<option value="{h(k)}" {"selected" if k==key else ""}>{h(label)}</option>' for k,label in DASHBOARD_CARD_OPTIONS)
+                    editor=f'''<div class="dashboard-slot-editor"><form method="post" action="/dashboard-layout"><input type="hidden" name="slot" value="{slot}"><select name="card_key"><option value="">＋ Boş bırak</option>{selected_opts}</select><button class="btn">Uygula</button></form></div>'''
+                else:
+                    editor=''
+                dash_slots.append(f'<div class="dashboard-slot">{card}{editor}</div>')
+            dashboard_summary_html=''.join(dash_slots)
             dashboard_logo=(f'<img class="farm-hero-logo" src="{h(profile.get("farm_logo"))}" alt="Çiftlik logosu">' if profile.get('farm_logo') else '')
             body=f'''<div class="hero"><div class="farm-hero">{dashboard_logo}<div><h1>{h(farm_name)}</h1><div>ÇiftlikPro · Bugünün sürü, sağlık ve finans görünümü</div></div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div>
-            <div class="dashboard-section-title"><h2>Sürü Özeti</h2><span>Aktif kayıtların güncel görünümü</span></div>
-            <div class="grid summary-grid"><a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐄</span>Toplam Aktif Hayvan<b>{active_total}</b><small>Dişi hayvanları aç →</small></a><a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐮</span>Dişi Hayvan<b>{animals}</b><small>Listeyi aç →</small></a><a class="card stat metric blue summary-link" href="/males"><span class="metric-icon">🐂</span>Erkek Hayvan<b>{males}</b><small>Listeyi aç →</small></a><a class="card stat metric orange summary-link" href="/inseminations"><span class="metric-icon">🤰</span>Gebe Hayvan<b>{pregnant}</b><small>Gebelikleri aç →</small></a><a class="card stat metric teal summary-link" href="/calves"><span class="metric-icon">🐮</span>Buzağı<b>{calves}</b><small>Listeyi aç →</small></a><a class="card stat metric purple summary-link" href="#approaching-births"><span class="metric-icon">📅</span>Yaklaşan Doğum<b>{len(due_rows)}</b><small>Detaya git ↓</small></a><a class="card stat metric green summary-link" href="#approaching-estrus"><span class="metric-icon">🌸</span>Yaklaşan Kızgınlık<b>{len(estrus_upcoming)}</b><small>Detaya git ↓</small></a></div>
+            <div class="dashboard-editbar"><a class="btn alt" href="/{'?' if edit_dashboard else '?edit=1'}">{'✅ Düzenlemeyi Bitir' if edit_dashboard else '⚙️ Dashboard’u Düzenle'}</a></div>
+            <div class="dashboard-section-title"><h2>Dashboard Kartlarım</h2><span>{'Her yuvada göstermek istediğiniz kartı seçin' if edit_dashboard else 'Size özel hızlı görünüm'}</span></div>
+            <div class="grid summary-grid">{dashboard_summary_html}</div>
             <div class="dashboard-section-title" id="approaching-estrus"><h2>🌸 Yaklaşan Kızgınlıklar</h2><span>Son kızgınlık kaydına göre 18–24 günlük takip penceresi</span></div><div class="card"><div class="alertlist">{estrus_dashboard_html}</div></div>
             <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-top:16px"><div><h2 style="margin:0 0 6px">🐂 Besi Performansı</h2><p class="mut" style="margin:0">Aktif ve kesilen erkekleri; alım tarihi, kesim tarihi, kilo performansı ve gerçekleşmiş maliyete göre inceleyin.</p></div><a class="btn blue" href="/performance">Besi Analizine Git →</a></div>
             <div class="dashboard-section-title"><h2>🚨 Gebelik Aşı Alarmı</h2><span>7. ve 8. ay aşıları yapılana kadar uyarı devam eder</span></div><div class="card"><div class="alertlist">{pregnancy_vaccine_html}</div></div>
@@ -1318,8 +1396,8 @@ class App(BaseHTTPRequestHandler):
             bulk_cards=''.join(f'''<button type="button" class="bulk-animal" data-animal-id="{a["id"]}" onclick="toggleBulkAnimal(this)"><b>🐄 {h(a["tag"])}</b><span>{h(a["nickname"]) or "Takma ad yok"}</span></button>''' for a in animals)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a> <form method="post" action="/finance/delete" style="display:inline" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></td></tr>'.format(
-                    h(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["tag"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
+                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["tag"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="card" style="margin-top:14px"><h2>Yeni Kayıt</h2><form method="post" class="form" id="financeCreateForm">
@@ -1333,7 +1411,7 @@ class App(BaseHTTPRequestHandler):
 <div class="full bulk-animal-box" id="bulkAnimalBox"><h3 style="margin:0">🐄 İlgili Hayvanları Seç</h3><p class="mut">Hayvan Satışı veya Kesim Geliri için birden fazla hayvana dokunun. Toplam tutar eşit olarak dağıtılır.</p><div class="bulk-animal-grid">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen: <b id="bulkCount">0</b></span><span class="pill">Hayvan başı: <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div></div>
 <label class="full">Açıklama<input name="description"></label>
 <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam gelir hayvanlara eşit paylaştırılır.</div>
-<div class="full"><button class="btn" id="financeSubmitBtn">Finans Kaydı Ekle</button></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="actions"><label>Başlangıç <input type="date" name="start" value="{h(start)}"></label><label>Bitiş <input type="date" name="end" value="{h(end)}"></label><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum İşlemi</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div>'''
+<div class="full"><button class="btn" id="financeSubmitBtn">Finans Kaydı Ekle</button></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="finance-toolbar"><label>Başlangıç<input type="date" name="start" value="{h(start)}"></label><label>Bitiş<input type="date" name="end" value="{h(end)}"></label><label>Tür<select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label>Kategori<select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
             body += f'''<script>
             const bulkSelected=new Set();
             function isBulkFinance(){{
@@ -1444,6 +1522,18 @@ class App(BaseHTTPRequestHandler):
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path=='/dashboard-layout':
+            try: slot=int(f.get('slot','-1'))
+            except Exception: slot=-1
+            valid={x[0] for x in DASHBOARD_CARD_OPTIONS}
+            card_key=(f.get('card_key') or '').strip()
+            if slot<0 or slot>=8:return self.redirect('/?edit=1','Geçersiz Dashboard yuvası.')
+            if card_key and card_key not in valid:return self.redirect('/?edit=1','Geçersiz Dashboard kartı.')
+            layout=dashboard_layout(username)
+            layout[slot]=card_key
+            with db() as c:
+                c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",('dashboard_layout_'+username,','.join(layout)))
+            return self.redirect('/?edit=1','Dashboard kartı güncellendi.')
         if path=='/farm-profile':
             if not self.require_admin():return
             text_keys=('farm_name','owner_name','phone','email','province','district','address','business_no','tax_or_tc','vet_name','vet_phone','vet_email','notes')
