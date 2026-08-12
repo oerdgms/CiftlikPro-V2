@@ -1,6 +1,0 @@
-ÇiftlikPro Enterprise V3.1.8.2 - Installer Quote Hotfix
-
-- Inno Setup installer.iss içindeki netsh Parameters alanlarında yanlış kullanılan \\" kaçışları düzeltildi.
-- Inno Setup sözdizimine uygun olarak çift tırnaklar "" biçiminde kaçırıldı.
-- Windows Güvenlik Duvarı TCP 8953 Private profil kuralı korunuyor.
-- Uygulamanın 0.0.0.0:8953 ağ dinleme ve mobil uyumluluk iyileştirmeleri aynen korunuyor.

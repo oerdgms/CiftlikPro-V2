@@ -1,9 +1,0 @@
-ÇiftlikPro Enterprise V3.5.3 - Sade Finans Satış Akışı
-
-- Kullanıcı arayüzünde tekli / toplu satış ayrımı kaldırıldı.
-- Hayvan Satışı ve Kesim Geliri için aynı “İlgili Hayvanlar” alanı kullanılır.
-- Kullanıcı 1 veya daha fazla hayvan seçebilir.
-- 1 hayvan seçilirse toplam tutarın tamamı o hayvana yazılır.
-- Birden fazla hayvan seçilirse toplam tutar otomatik ve kuruş hassasiyetinde eşit dağıtılır.
-- 1 hayvanda özet “Satış / Kesim Bedeli”, çoklu seçimde “Hayvan Başı” olarak gösterilir.
-- V3.5.2 kaydetme düzeltmesi ve V3.5.0 kişiselleştirilebilir Dashboard korunur.

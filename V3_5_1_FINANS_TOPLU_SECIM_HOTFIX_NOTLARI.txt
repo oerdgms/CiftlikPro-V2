@@ -1,9 +1,0 @@
-ÇiftlikPro Enterprise V3.5.1 - Finans Toplu Seçim Hotfix
-
-- Toplu Kesim Geliri / Hayvan Satışı kaydetme akışı sadeleştirildi.
-- JavaScript confirm ve buton kilidi kaldırıldı; normal form POST akışı kullanılır.
-- Hayvan seçim ekranı kart duvarı yerine kompakt checkbox listesine dönüştürüldü.
-- Küpe / takma ad araması eklendi.
-- Seçilen hayvanlar yeşil vurgulanır, seçilen sayı ve hayvan başı tutar anlık hesaplanır.
-- İlk 5 seçilen hayvan özet olarak gösterilir.
-- Sunucu tarafındaki kuruş hassasiyetli eşit dağıtım ve Satıldı/Kesildi işlemleri korunur.

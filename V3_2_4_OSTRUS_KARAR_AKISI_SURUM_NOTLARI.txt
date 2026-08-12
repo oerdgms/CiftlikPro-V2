@@ -1,6 +1,0 @@
-ÇiftlikPro Enterprise V3.2.4 - Östrus Karar Akışı
-- Tohumlamaya Gönder / Bu Östrusu Atla karar akışı.
-- Sonuçlandırılan pencere Dashboard’dan kalkar.
-- Atlanan dönem geçmişte korunur; sonraki yaklaşık 21 günlük döngü otomatik izlenir.
-- Tohumlama ekranından kayıt tamamlanınca ilgili östrus sonuçlandırılır.
-- 🐄 ÇiftlikPro başlığına tıklayınca Dashboard açılır.

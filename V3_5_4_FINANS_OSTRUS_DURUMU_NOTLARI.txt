@@ -1,6 +1,0 @@
-ÇiftlikPro Enterprise V3.5.4
-- V3.5.3 sade finans satış/kesim akışı korunur.
-- Kızgınlık Geçmişi: atlanan döngüler “Sonraki Döngüye Ertelendi” rozetiyle görünür.
-- Rozet altında sonraki tahmini 21. gün GG/AA/YYYY olarak gösterilir.
-- Tohumlanmış döngüler “Tohumlandı” rozeti ve işlem tarihiyle görünür.
-- Kişiselleştirilebilir Dashboard ve önceki özellikler korunur.

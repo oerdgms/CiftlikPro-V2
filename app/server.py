@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.5.4'
+APP_VERSION='3.6.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.5.4 FİNANS + ÖSTRUS DURUMU'
+APP_LABEL='ENTERPRISE V3.6.0 GÖRSEL DASHBOARD + TR TARİH'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -47,13 +47,29 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .finance-table .finance-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}
 .finance-table .finance-actions form{margin:0}
 .finance-table .btn{padding:8px 12px}
-.dashboard-editbar{display:flex;justify-content:flex-end;margin:10px 0 14px}
-.dashboard-slot{position:relative}
-.dashboard-slot-editor{margin-top:8px;padding:10px;border:1px dashed #9cb8a5;border-radius:12px;background:#f7fbf8}
-.dashboard-slot-editor form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
-.dashboard-slot-editor select{min-width:190px}
-.dashboard-empty-slot{min-height:145px;border:2px dashed #9cb8a5;border-radius:18px;display:flex;align-items:center;justify-content:center;background:#f7fbf8;color:#176b3a;font-size:34px;font-weight:800}
-.dashboard-empty-slot small{display:block;font-size:14px;color:#6d8074;margin-top:6px}
+.dashboard-editbar{display:flex;justify-content:flex-end;gap:10px;margin:10px 0 14px}
+.dashboard-slot{position:relative;min-width:0}
+.dashboard-slot.editing{padding-top:0}
+.dashboard-slot.editing>.summary-link{outline:2px dashed #83ad90;outline-offset:3px}
+.dashboard-slot-plus{position:absolute;right:-7px;top:-9px;z-index:4;width:34px;height:34px;border-radius:50%;border:3px solid #fff;background:#167a43;color:#fff;font-size:23px;line-height:27px;font-weight:900;cursor:pointer;box-shadow:0 4px 12px #173b2828;display:flex;align-items:center;justify-content:center}
+.dashboard-slot-plus:hover{transform:scale(1.08);background:#0f6838}
+.dashboard-empty-slot{min-height:145px;border:2px dashed #91b59c;border-radius:18px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f8fcf9,#edf7f0);color:#176b3a;cursor:pointer;transition:.18s}
+.dashboard-empty-slot:hover{border-color:#176b3a;background:#eaf7ee;transform:translateY(-2px)}
+.dashboard-empty-slot .plus-icon{width:52px;height:52px;border-radius:50%;background:#176b3a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:35px;margin:0 auto 8px;box-shadow:0 7px 18px #176b3a2c}
+.dashboard-empty-slot small{display:block;font-size:14px;color:#607869;font-weight:700;text-align:center}
+.dashboard-picker-backdrop{display:none;position:fixed;inset:0;background:#10271b8c;z-index:100;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px)}
+.dashboard-picker-backdrop.open{display:flex}
+.dashboard-picker{width:min(760px,96vw);max-height:88vh;overflow:auto;background:#fff;border-radius:24px;padding:22px;box-shadow:0 25px 80px #07150d55}
+.dashboard-picker-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;margin-bottom:16px}
+.dashboard-picker-head h2{margin:0;color:#173c29}.dashboard-picker-head p{margin:4px 0 0;color:#718276}
+.dashboard-picker-close{border:0;background:#edf4ef;width:42px;height:42px;border-radius:50%;font-size:22px;cursor:pointer}
+.dashboard-card-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.dashboard-card-choice{display:flex;align-items:center;gap:12px;text-align:left;border:2px solid #e0eae3;background:#fbfdfb;border-radius:16px;padding:14px;cursor:pointer;font:inherit;color:#183a29}
+.dashboard-card-choice:hover,.dashboard-card-choice.active{border-color:#248952;background:#eaf7ee;transform:translateY(-1px)}
+.dashboard-card-choice .choice-icon{width:44px;height:44px;border-radius:13px;background:#edf6ef;display:flex;align-items:center;justify-content:center;font-size:24px}
+.dashboard-card-choice b{display:block}.dashboard-card-choice small{color:#6f8174}
+.dashboard-picker-footer{display:flex;gap:9px;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap}
+@media(max-width:600px){.dashboard-card-gallery{grid-template-columns:1fr}.dashboard-picker{padding:16px;border-radius:18px}.dashboard-slot-plus{right:-3px;top:-6px}}
 @media(max-width:700px){
  .finance-toolbar{align-items:stretch}.finance-toolbar>*{width:100%}.finance-toolbar input,.finance-toolbar select,.finance-toolbar .btn{width:100%}
  .finance-table{min-width:760px}
@@ -339,6 +355,15 @@ def fmt_date(v):
     if not v:return ''
     try:return datetime.strptime(str(v)[:10],'%Y-%m-%d').strftime('%d/%m/%Y')
     except Exception:return str(v)
+
+def fmt_datetime(v):
+    if not v:return ''
+    try:
+        x=str(v).replace('T',' ')
+        d=datetime.fromisoformat(x)
+        return d.strftime('%d/%m/%Y %H:%M')
+    except Exception:
+        return fmt_date(v)
 
 def age_text(d):
     if not d:return '-'
@@ -808,7 +833,7 @@ class App(BaseHTTPRequestHandler):
         if path=='/audit-log':
             if not self.require_admin():return
             with db() as c:rows=c.execute('select * from audit_log order by id desc limit 300').fetchall()
-            trs=''.join(f'<tr><td>{h(r["created_at"])}</td><td>{h(r["username"])}</td><td>{h(r["action"])}</td><td>{h(r["detail"])}</td><td>{h(r["ip_address"])}</td></tr>' for r in rows) or '<tr><td colspan=5>Kayıt yok.</td></tr>'
+            trs=''.join(f'<tr><td>{fmt_datetime(r["created_at"])}</td><td>{h(r["username"])}</td><td>{h(r["action"])}</td><td>{h(r["detail"])}</td><td>{h(r["ip_address"])}</td></tr>' for r in rows) or '<tr><td colspan=5>Kayıt yok.</td></tr>'
             body=f'''<h1>İşlem Günlüğü</h1><div class="card"><table><tr><th>Tarih</th><th>Kullanıcı</th><th>İşlem</th><th>Detay</th><th>IP</th></tr>{trs}</table></div>'''
             return self.send_html(page('İşlem Günlüğü',body,'/audit-log',u,msg))
         promote_mature_calves()
@@ -881,8 +906,8 @@ class App(BaseHTTPRequestHandler):
             estrus_dashboard_html=''.join(estrus_dashboard_cards) or '<p class="mut">Önümüzdeki 14 gün için beklenen kızgınlık yok.</p>'
             net=total_inc-total_exp; maxv=max([max(x[1],x[2]) for x in months]+[1])
             bars=''.join(f'<div class="mini-col"><b title="Gelir {money(i)}" style="height:{max(2,int(i/maxv*100))}%"></b><i title="Gider {money(e)}" style="height:{max(2,int(e/maxv*100))}%"></i><span>{h(m)}</span></div>' for m,i,e in months)
-            due_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">Tahmini doğum: {h(r["due_date"])}</span></div>' for r in due_rows) or '<p class="mut">45 gün içinde beklenen doğum yok.</p>'
-            health_html=''.join(f'<div class="alertitem">💉 {h(r["tag"] or "Genel")} · {h(r["kind"])}<br><span class="mut">{h(r["product"])} — {h(r["next_date"])}</span></div>' for r in health_rows) or '<p class="mut">30 gün içinde planlanan sağlık işlemi yok.</p>'
+            due_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">Tahmini doğum: {fmt_date(r["due_date"])}</span></div>' for r in due_rows) or '<p class="mut">45 gün içinde beklenen doğum yok.</p>'
+            health_html=''.join(f'<div class="alertitem">💉 {h(r["tag"] or "Genel")} · {h(r["kind"])}<br><span class="mut">{h(r["product"])} — {fmt_date(r["next_date"])}</span></div>' for r in health_rows) or '<p class="mut">30 gün içinde planlanan sağlık işlemi yok.</p>'
             def vaccine_task_html(t):
                 if t['overdue']:
                     label=f"GECİKTİ · {abs(t['days_left'])} gün"; style='border-left-color:#c8392b;background:#fff1f0'
@@ -890,7 +915,7 @@ class App(BaseHTTPRequestHandler):
                     label='BUGÜN YAPILMALI'; style='border-left-color:#e27b1f;background:#fff6e8'
                 else:
                     label=f"{t['days_left']} gün kaldı"; style='border-left-color:#e2a21f;background:#fff9e8'
-                return f'<div class="alertitem" style="{style}"><b>💉 {h(t["tag"])} · {t["month"]}. Ay Gebelik Aşısı</b><br><span class="mut">Planlanan: {h(t["task_date"])} · {label}</span><form method="post" action="/pregnancy-vaccine/done" class="actions" style="margin-top:8px"><input type="hidden" name="animal_id" value="{t["animal_id"]}"><input type="hidden" name="insemination_id" value="{t["insemination_id"]}"><input type="hidden" name="month" value="{t["month"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ Aşı Yapıldı</button><a class="btn alt" href="/animal?id={t["animal_id"]}">Hayvanı Aç</a></form></div>'
+                return f'<div class="alertitem" style="{style}"><b>💉 {h(t["tag"])} · {t["month"]}. Ay Gebelik Aşısı</b><br><span class="mut">Planlanan: {fmt_date(t["task_date"])} · {label}</span><form method="post" action="/pregnancy-vaccine/done" class="actions" style="margin-top:8px"><input type="hidden" name="animal_id" value="{t["animal_id"]}"><input type="hidden" name="insemination_id" value="{t["insemination_id"]}"><input type="hidden" name="month" value="{t["month"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ Aşı Yapıldı</button><a class="btn alt" href="/animal?id={t["animal_id"]}">Hayvanı Aç</a></form></div>'
             pregnancy_vaccine_html=''.join(vaccine_task_html(t) for t in pregnancy_vaccines) or '<p class="mut">7 gün içinde 7./8. ay gebelik aşısı görevi yok.</p>'
             target_profit_text=money(male_target_profit) if male_target_profit is not None else '—'
             target_profit_class='red' if male_target_profit is not None and male_target_profit<0 else 'green'
@@ -908,24 +933,39 @@ class App(BaseHTTPRequestHandler):
                 'expense':f'<a class="card stat metric red summary-link" href="/finance?type=Gider"><span class="metric-icon">📤</span>Toplam Gider<b>{money(total_exp)}</b><small>Giderleri aç →</small></a>',
                 'net':f'<a class="card stat metric {"red" if net<0 else "green"} summary-link" href="/finance"><span class="metric-icon">⚖️</span>Net Durum<b>{money(net)}</b><small>Finansı aç →</small></a>',
             }
-            option_html=''.join(f'<option value="{h(k)}">{h(label)}</option>' for k,label in DASHBOARD_CARD_OPTIONS)
+            card_meta={
+                'active_total':('🐄','Toplam Aktif Hayvan','Sürüdeki toplam aktif kayıt'),
+                'female':('🐮','Dişi Hayvan','Aktif dişi hayvan sayısı'),
+                'male':('🐂','Erkek Hayvan','Aktif erkek hayvan sayısı'),
+                'pregnant':('🤰','Gebe Hayvan','Pozitif gebelik kayıtları'),
+                'calves':('🐮','Buzağı','Aktif buzağı kayıtları'),
+                'due':('📅','Yaklaşan Doğum','Yaklaşan doğum sayısı'),
+                'estrus':('🌸','Yaklaşan Kızgınlık','Takip penceresindeki hayvanlar'),
+                'income':('📥','Toplam Gelir','Tüm gelirlerin toplamı'),
+                'expense':('📤','Toplam Gider','Tüm giderlerin toplamı'),
+                'net':('⚖️','Net Durum','Gelir eksi gider'),
+            }
             dash_slots=[]
             for slot,key in enumerate(dash_layout):
                 card=dash_cards.get(key,'')
-                if not card:
-                    card='<div class="dashboard-empty-slot"><div>＋<small>Bu yuvaya kart ekle</small></div></div>'
                 if edit_dashboard:
-                    selected_opts=''.join(f'<option value="{h(k)}" {"selected" if k==key else ""}>{h(label)}</option>' for k,label in DASHBOARD_CARD_OPTIONS)
-                    editor=f'''<div class="dashboard-slot-editor"><form method="post" action="/dashboard-layout"><input type="hidden" name="slot" value="{slot}"><select name="card_key"><option value="">＋ Boş bırak</option>{selected_opts}</select><button class="btn">Uygula</button></form></div>'''
+                    if card:
+                        card=card+f'<button type="button" class="dashboard-slot-plus" title="Bu kartı değiştir" onclick="openDashboardPicker({slot},\'{h(key)}\')">+</button>'
+                    else:
+                        card=f'''<div class="dashboard-empty-slot" onclick="openDashboardPicker({slot},'')"><div><div class="plus-icon">+</div><small>Bu yuvaya kart ekle</small></div></div>'''
+                    cls='dashboard-slot editing'
                 else:
-                    editor=''
-                dash_slots.append(f'<div class="dashboard-slot">{card}{editor}</div>')
+                    if not card: continue
+                    cls='dashboard-slot'
+                dash_slots.append(f'<div class="{cls}">{card}</div>')
             dashboard_summary_html=''.join(dash_slots)
+            gallery_choices=''.join(f'''<button type="button" class="dashboard-card-choice" data-key="{h(k)}" onclick="chooseDashboardCard('{h(k)}')"><span class="choice-icon">{card_meta[k][0]}</span><span><b>{h(card_meta[k][1])}</b><small>{h(card_meta[k][2])}</small></span></button>''' for k,_ in DASHBOARD_CARD_OPTIONS)
+            dashboard_picker_html=f'''<div class="dashboard-picker-backdrop" id="dashboardPicker" onclick="if(event.target===this)closeDashboardPicker()"><div class="dashboard-picker"><div class="dashboard-picker-head"><div><h2>Dashboard Kartı Seç</h2><p>Seçtiğiniz kart bu yuvaya anında yerleşir.</p></div><button type="button" class="dashboard-picker-close" onclick="closeDashboardPicker()">×</button></div><div class="dashboard-card-gallery">{gallery_choices}</div><div class="dashboard-picker-footer"><button type="button" class="btn red" onclick="chooseDashboardCard('')">Yuvayı Boşalt</button><span class="mut">Daha sonra tekrar ekleyebilirsiniz.</span></div><form id="dashboardPickerForm" method="post" action="/dashboard-layout"><input type="hidden" name="slot" id="dashboardPickerSlot"><input type="hidden" name="card_key" id="dashboardPickerKey"></form></div></div><script>function openDashboardPicker(slot,current){{document.getElementById('dashboardPickerSlot').value=slot;document.getElementById('dashboardPicker').classList.add('open');document.querySelectorAll('.dashboard-card-choice').forEach(function(b){{b.classList.toggle('active',b.dataset.key===current);}});}}function closeDashboardPicker(){{document.getElementById('dashboardPicker').classList.remove('open');}}function chooseDashboardCard(key){{document.getElementById('dashboardPickerKey').value=key;document.getElementById('dashboardPickerForm').submit();}}document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeDashboardPicker();}});</script>'''
             dashboard_logo=(f'<img class="farm-hero-logo" src="{h(profile.get("farm_logo"))}" alt="Çiftlik logosu">' if profile.get('farm_logo') else '')
             body=f'''<div class="hero"><div class="farm-hero">{dashboard_logo}<div><h1>{h(farm_name)}</h1><div>ÇiftlikPro · Bugünün sürü, sağlık ve finans görünümü</div></div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div>
             <div class="dashboard-editbar"><a class="btn alt" href="/{'?' if edit_dashboard else '?edit=1'}">{'✅ Düzenlemeyi Bitir' if edit_dashboard else '⚙️ Dashboard’u Düzenle'}</a></div>
-            <div class="dashboard-section-title"><h2>Dashboard Kartlarım</h2><span>{'Her yuvada göstermek istediğiniz kartı seçin' if edit_dashboard else 'Size özel hızlı görünüm'}</span></div>
-            <div class="grid summary-grid">{dashboard_summary_html}</div>
+            <div class="dashboard-section-title"><h2>Dashboard Kartlarım</h2><span>{'Kartın üzerindeki + işaretine dokunarak değiştirebilirsiniz' if edit_dashboard else 'Size özel hızlı görünüm'}</span></div>
+            <div class="grid summary-grid">{dashboard_summary_html}</div>{dashboard_picker_html if edit_dashboard else ''}
             <div class="dashboard-section-title" id="approaching-estrus"><h2>🌸 Yaklaşan Kızgınlıklar</h2><span>Son kızgınlık kaydına göre 18–24 günlük takip penceresi</span></div><div class="card"><div class="alertlist">{estrus_dashboard_html}</div></div>
             <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-top:16px"><div><h2 style="margin:0 0 6px">🐂 Besi Performansı</h2><p class="mut" style="margin:0">Aktif ve kesilen erkekleri; alım tarihi, kesim tarihi, kilo performansı ve gerçekleşmiş maliyete göre inceleyin.</p></div><a class="btn blue" href="/performance">Besi Analizine Git →</a></div>
             <div class="dashboard-section-title"><h2>🚨 Gebelik Aşı Alarmı</h2><span>7. ve 8. ay aşıları yapılana kadar uyarı devam eder</span></div><div class="card"><div class="alertlist">{pregnancy_vaccine_html}</div></div>
@@ -971,7 +1011,7 @@ class App(BaseHTTPRequestHandler):
                 end=(r['exit_date'] or '-') if is_cut else 'Bugün'
                 badge='<span class="perf-badge status-low">Kesildi</span>' if is_cut else '<span class="perf-badge status-good">Aktif</span>'
                 note='<br><span class="mut">Kesim tarihinde donduruldu</span>' if is_cut else ''
-                return f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a><br><span class="mut">{h(r["nickname"])}</span></td><td>{badge}</td><td>{h(start)}</td><td>{h(end)}</td><td><b>{days} gün</b>{note}</td><td>{money(purchase)}</td><td>{money(operating)}</td><td><b>{money(total)}</b></td></tr>'
+                return f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a><br><span class="mut">{h(r["nickname"])}</span></td><td>{badge}</td><td>{fmt_date(start)}</td><td>{fmt_date(end)}</td><td><b>{days} gün</b>{note}</td><td>{money(purchase)}</td><td>{money(operating)}</td><td><b>{money(total)}</b></td></tr>'
             detail_rows=''.join(cost_detail_tr(r) for r in shown) or '<tr><td colspan="8">Bu filtreye uygun hayvan bulunamadı.</td></tr>'
             active_rows=[r for r in filtered if str(r['status'] or '')=='Aktif']
             cut_rows=[r for r in filtered if str(r['status'] or '')=='Kesildi']
@@ -1042,7 +1082,7 @@ class App(BaseHTTPRequestHandler):
             for ar,perf,days,operating,current_cost,total_gain,kg_cost,first,last in detail:
                 label,cls=labels[perf['status']]
                 st=str(ar['status'] or 'Aktif')
-                pd=h(ar['purchase_date'] or '-'); ed=h(ar['exit_date'] or '-') if st=='Kesildi' else 'Devam ediyor'
+                pd=fmt_date(ar['purchase_date'] or '-'); ed=fmt_date(ar['exit_date'] or '-') if st=='Kesildi' else 'Devam ediyor'
                 gain_text=(f'{total_gain:+.1f} kg' if total_gain is not None else '-')
                 daily_text=(f"{perf['daily']:.3f} kg/gün" if perf.get('daily') is not None else '-')
                 kgcost_text=(money(kg_cost)+'/kg' if kg_cost is not None else '-')
@@ -1136,7 +1176,7 @@ class App(BaseHTTPRequestHandler):
             trs=''.join(
                 f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td>'
                 f'<td>{h(r["nickname"])}</td><td>{h(r["gender"])}</td><td>{h(r["breed"])}</td>'
-                f'<td>{h(r["exit_date"])}</td><td>{h(r["exit_reason"])}</td><td>{money(r["sold_price"])}</td></tr>'
+                f'<td>{fmt_date(r["exit_date"])}</td><td>{h(r["exit_reason"])}</td><td>{money(r["sold_price"])}</td></tr>'
                 for r in rows
             ) or '<tr><td colspan=7>Kayıt yok.</td></tr>'
             body=f'<h1>{title}</h1><div class="card"><p class="mut">Bu hayvanların geçmiş kayıtları silinmez; yalnızca aktif sürü listesinden çıkarılır.</p><table><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Çıkış Tarihi</th><th>Neden</th><th>Satış/Kesim Tutarı</th></tr>{trs}</table></div>'
@@ -1177,9 +1217,9 @@ class App(BaseHTTPRequestHandler):
             purchase_summary=(f'<div class="costbox"><h3>Canlı Anlık Maliyet ve Performans</h3><div class="quick-metrics"><span class="pill">Alış Fiyatı<br><b>{money(a["purchase_price"])}</b></span><span class="pill">Bizde Kaldığı Süre<br><b>{stay_days} gün</b></span><span class="pill">Birikmiş Yem + Bakım<br><b>{money(accumulated_cost)}</b></span><span class="pill">Anlık Toplam Maliyet<br><b>{money(current_cost)}</b></span><span class="pill">Toplam Kilo Artışı<br><b>{(str(round(weight_gain,1))+" kg") if weight_gain is not None else "-"}</b></span><span class="pill">Günlük Kilo Artışı<br><b>{(str(round(daily_gain,3))+" kg/gün") if daily_gain is not None else "-"}</b></span><span class="pill">Hedef Satış<br><b>{money(a["target_sale_price"]) if float(a["target_sale_price"] or 0)>0 else "-"}</b></span><span class="pill">Hedef Kâr<br><b>{money(target_profit) if target_profit is not None else "-"}</b></span></div><p class="mut">Günlük yem/rasyon: {money(a["daily_feed_cost"])} · Günlük bakım: {money(a["daily_care_cost"])} · Günlük toplam: {money(daily_cost)}</p></div>') if a['gender']=='Erkek' else ''
             sale_box=(f'<div class="card" style="margin-top:14px"><h2>Erkek Hayvan Satışı</h2><p class="mut">Satış kaydı oluşturulduğunda hayvan Satılan Hayvanlar arşivine alınır ve net kâr otomatik hesaplanır.</p><form method="post" action="/animal/sale" class="form" onsubmit="return confirm(\'Bu hayvanı satıldı olarak işaretlemek istediğinize emin misiniz?\')"><input type="hidden" name="animal_id" value="{aid}"><label>Satış Tarihi<input type="date" name="sale_date" required value="{date.today().isoformat()}"></label><label>Satış Fiyatı (TL)<input type="number" name="sale_price" min="0" step="0.01" required value="{h(a["target_sale_price"])}"></label><label>Satış Kilosu (kg)<input type="number" name="sale_weight" min="0" step="0.1" value="{h(latest_weight)}"></label><label>Alıcı / Açıklama<input name="description"></label><div class="full"><button class="btn orange">Satışı Tamamla</button></div></form></div>') if a['gender']=='Erkek' and a['status']=='Aktif' else ''
             photo=f'<img class="photo" src="{h(a["photo_url"])}">' if a['photo_url'] else '<div class="photo">🐄</div>'
-            gallery=''.join(f'<figure><img src="/uploads/{h(r["filename"])}"><figcaption>{h(r["caption"])}<br>{h(r["created_at"])}</figcaption></figure>' for r in photos) or '<p class="mut">Henüz fotoğraf yüklenmedi.</p>'
-            itr=''.join(f'<tr><td>{r["attempt"]}</td><td>{h(r["insemination_date"])}</td><td>{h(r["pregnancy_result"])}</td><td>{h(r["due_date"])}</td></tr>' for r in ins) or '<tr><td colspan=4>Kayıt yok</td></tr>'
-            htr=''.join(f'<tr><td>{h(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{money(r["cost"])}</td></tr>' for r in health) or '<tr><td colspan=4>Kayıt yok</td></tr>'
+            gallery=''.join(f'<figure><img src="/uploads/{h(r["filename"])}"><figcaption>{h(r["caption"])}<br>{fmt_datetime(r["created_at"])}</figcaption></figure>' for r in photos) or '<p class="mut">Henüz fotoğraf yüklenmedi.</p>'
+            itr=''.join(f'<tr><td>{r["attempt"]}</td><td>{fmt_date(r["insemination_date"])}</td><td>{h(r["pregnancy_result"])}</td><td>{fmt_date(r["due_date"])}</td></tr>' for r in ins) or '<tr><td colspan=4>Kayıt yok</td></tr>'
+            htr=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{money(r["cost"])}</td></tr>' for r in health) or '<tr><td colspan=4>Kayıt yok</td></tr>'
             weight_chron=list(reversed(weights)); wrows=[]
             for i,r in enumerate(weight_chron):
                 gain_txt=daily_txt=monthly_txt='-'
@@ -1192,19 +1232,19 @@ class App(BaseHTTPRequestHandler):
                         if wd>0:
                             dd=wg/wd;daily_txt=f'{dd:.3f} kg/gün';monthly_txt=f'{dd*30:.1f} kg'
                     except Exception:pass
-                wrows.append(f'<tr><td>{h(r["measure_date"])}</td><td>{r["weight"]} kg</td><td>{gain_txt}</td><td>{daily_txt}</td><td>{monthly_txt}</td><td>{h(r["notes"])}</td></tr>')
+                wrows.append(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["weight"]} kg</td><td>{gain_txt}</td><td>{daily_txt}</td><td>{monthly_txt}</td><td>{h(r["notes"])}</td></tr>')
             wtr=''.join(reversed(wrows)) or '<tr><td colspan=6>Kayıt yok</td></tr>'
-            mtr=''.join(f'<tr><td>{h(r["measure_date"])}</td><td>{r["liters"]} L</td><td>{h(r["notes"])}</td></tr>' for r in milk) or '<tr><td colspan=3>Kayıt yok</td></tr>'
-            ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{h(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
+            mtr=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["liters"]} L</td><td>{h(r["notes"])}</td></tr>' for r in milk) or '<tr><td colspan=3>Kayıt yok</td></tr>'
+            ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{fmt_date(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             back='/males' if a['gender']=='Erkek' else '/animals'; edit_url='/animal-edit?id='+str(aid)
-            body=f'''<div class="actions"><a class="btn alt" href="{back}">← Hayvanlara Dön</a><a class="btn" href="{edit_url}">Bilgileri Düzenle</a><a class="btn blue" href="/animal/print?id={aid}">Kimlik Kartını Yazdır</a></div><div class="card profile">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname'])}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed'])}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span><p class="preg {cls}">Gebelik: {h(preg)} {('· Tahmini doğum '+h(due)) if due else ''}</p><div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span><span class="pill">Son Süt<br><b>{(str(latest_milk)+' L') if latest_milk is not None else '-'}</b></span><span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div><p>Toplam masraf: <b>{money(total_cost)}</b> · Buzağı: <b>{len(calves)}</b></p>{purchase_summary}<p>{h(a['notes'])}</p></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Tohumlama ve Gebelik</h2><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="card"><h2>Buzağıları</h2><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''}<form method="post" action="/animal/weight" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div><div class="card"><h2>Süt Verimi</h2><form method="post" action="/animal/milk" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>{sale_box}<div class="card" style="margin-top:14px"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button><div class="camera-note">Mobil tarayıcıda arka kamera açılır. Fotoğraflar uygulama klasöründeki uploads dizininde saklanır; bu klasörü de düzenli kopyalayın.</div></form><div class="gallery" style="margin-top:14px">{gallery}</div></div><div class="card" style="margin-top:14px"><h2>Sağlık Geçmişi</h2><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div>'''
+            body=f'''<div class="actions"><a class="btn alt" href="{back}">← Hayvanlara Dön</a><a class="btn" href="{edit_url}">Bilgileri Düzenle</a><a class="btn blue" href="/animal/print?id={aid}">Kimlik Kartını Yazdır</a></div><div class="card profile">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname'])}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed'])}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span><p class="preg {cls}">Gebelik: {h(preg)} {('· Tahmini doğum '+fmt_date(due)) if due else ''}</p><div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span><span class="pill">Son Süt<br><b>{(str(latest_milk)+' L') if latest_milk is not None else '-'}</b></span><span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div><p>Toplam masraf: <b>{money(total_cost)}</b> · Buzağı: <b>{len(calves)}</b></p>{purchase_summary}<p>{h(a['notes'])}</p></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Tohumlama ve Gebelik</h2><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="card"><h2>Buzağıları</h2><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''}<form method="post" action="/animal/weight" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div><div class="card"><h2>Süt Verimi</h2><form method="post" action="/animal/milk" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>{sale_box}<div class="card" style="margin-top:14px"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button><div class="camera-note">Mobil tarayıcıda arka kamera açılır. Fotoğraflar uygulama klasöründeki uploads dizininde saklanır; bu klasörü de düzenli kopyalayın.</div></form><div class="gallery" style="margin-top:14px">{gallery}</div></div><div class="card" style="margin-top:14px"><h2>Sağlık Geçmişi</h2><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div>'''
             return self.send_html(page('Hayvan Kartı',body,'/animals',u,msg))
         if path=='/animal/print':
             aid=q.get('id',[''])[0]
             with db() as c:a=c.execute('select * from animals where id=?',(aid,)).fetchone(); ins=c.execute('select * from inseminations where animal_id=? order by attempt',(aid,)).fetchall()
             if not a:return self.send_html('Hayvan bulunamadı',404)
             latest=ins[-1] if ins else None
-            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>ÇiftlikPro Hayvan Kartı</title><style>body{{font-family:Arial;padding:30px}}.box{{border:2px solid #176b3a;border-radius:16px;padding:24px;max-width:700px}}h1{{color:#176b3a}}table{{width:100%;border-collapse:collapse}}td{{padding:8px;border-bottom:1px solid #ddd}}@media print{{button{{display:none}}}}</style></head><body><button onclick="print()">Yazdır / PDF Kaydet</button><div class="box"><h1>🐄 ÇiftlikPro Hayvan Kimlik Kartı</h1><table><tr><td>Küpe</td><td><b>{h(a['tag'])}</b></td></tr><tr><td>Takma Ad</td><td>{h(a['nickname'])}</td></tr><tr><td>Cinsiyet / Irk</td><td>{h(a['gender'])} / {h(a['breed'])}</td></tr><tr><td>Doğum / Yaş</td><td>{h(a['birth_date'])} / {age_text(a['birth_date'])}</td></tr><tr><td>Padok</td><td>{h(a['paddock'])}</td></tr><tr><td>Gebelik</td><td>{h(latest['pregnancy_result'] if latest else 'Kayıt yok')}</td></tr><tr><td>Tahmini Doğum</td><td>{h(latest['due_date'] if latest else '')}</td></tr><tr><td>Not</td><td>{h(a['notes'])}</td></tr></table></div></body></html>''')
+            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>ÇiftlikPro Hayvan Kartı</title><style>body{{font-family:Arial;padding:30px}}.box{{border:2px solid #176b3a;border-radius:16px;padding:24px;max-width:700px}}h1{{color:#176b3a}}table{{width:100%;border-collapse:collapse}}td{{padding:8px;border-bottom:1px solid #ddd}}@media print{{button{{display:none}}}}</style></head><body><button onclick="print()">Yazdır / PDF Kaydet</button><div class="box"><h1>🐄 ÇiftlikPro Hayvan Kimlik Kartı</h1><table><tr><td>Küpe</td><td><b>{h(a['tag'])}</b></td></tr><tr><td>Takma Ad</td><td>{h(a['nickname'])}</td></tr><tr><td>Cinsiyet / Irk</td><td>{h(a['gender'])} / {h(a['breed'])}</td></tr><tr><td>Doğum / Yaş</td><td>{fmt_date(a['birth_date'])} / {age_text(a['birth_date'])}</td></tr><tr><td>Padok</td><td>{h(a['paddock'])}</td></tr><tr><td>Gebelik</td><td>{h(latest['pregnancy_result'] if latest else 'Kayıt yok')}</td></tr><tr><td>Tahmini Doğum</td><td>{fmt_date(latest['due_date'] if latest else '')}</td></tr><tr><td>Not</td><td>{h(a['notes'])}</td></tr></table></div></body></html>''')
         if path=='/calves':
             edit=q.get('edit',[''])[0]
             term=q.get('q',[''])[0].strip()
@@ -1240,7 +1280,7 @@ class App(BaseHTTPRequestHandler):
             if calf['promoted_animal_id']:
                 promoted=f'<p class="flash">Bu kayıt 10 ayını doldurduğu için hayvan listesine aktarıldı. <a class="taglink" href="/animal?id={calf["promoted_animal_id"]}">Yeni hayvan kartını aç</a></p>'
             icon='🐮' if calf['gender']=='Dişi' else '🐂'
-            body=f'''<div class="actions"><a class="btn alt" href="/calves">← Buzağılara Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}<div class="card profile"><div class="photo">{icon}</div><div><h1>{h(calf['tag'])}</h1><span class="pill">{h(calf['gender'])}</span><span class="pill">Yaş: {age_text(calf['birth_date'])}</span><p>Doğum tarihi: <b>{h(calf['birth_date'])}</b></p><p>Anne: <a class="taglink" href="/animal?id={calf['mother_id']}">{h(calf['mother_tag'])} {h(calf['mother_name'])}</a></p><p>Baba: <b>{h(calf['father_tag']) or '-'}</b></p><p>{h(calf['notes'])}</p></div></div>'''
+            body=f'''<div class="actions"><a class="btn alt" href="/calves">← Buzağılara Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}<div class="card profile"><div class="photo">{icon}</div><div><h1>{h(calf['tag'])}</h1><span class="pill">{h(calf['gender'])}</span><span class="pill">Yaş: {age_text(calf['birth_date'])}</span><p>Doğum tarihi: <b>{fmt_date(calf['birth_date'])}</b></p><p>Anne: <a class="taglink" href="/animal?id={calf['mother_id']}">{h(calf['mother_tag'])} {h(calf['mother_name'])}</a></p><p>Baba: <b>{h(calf['father_tag']) or '-'}</b></p><p>{h(calf['notes'])}</p></div></div>'''
             return self.send_html(page('Buzağı Kartı',body,'/calves',u,msg))
         if path=='/estrus-edit':
             eid=q.get('id',[''])[0]
@@ -1375,7 +1415,7 @@ class App(BaseHTTPRequestHandler):
             return self.send_html(page('Tohumlama Düzenle',body,'/inseminations',u,msg))
         if path=='/health':
             with db() as c: animals=c.execute('select id,tag,nickname from animals order by tag').fetchall(); rows=c.execute('select h.*,a.tag from health h left join animals a on a.id=h.animal_id order by applied_date desc').fetchall()
-            opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals); trs=''.join(f'<tr><td>{h(r["tag"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{h(r["applied_date"])}</td><td>{h(r["next_date"])}</td><td>{money(r["cost"])}</td></tr>' for r in rows)
+            opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals); trs=''.join(f'<tr><td>{h(r["tag"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["applied_date"])}</td><td>{fmt_date(r["next_date"])}</td><td>{money(r["cost"])}</td></tr>' for r in rows)
             body=f'''<h1>Sağlık</h1><div class="card"><form method="post" class="form"><label>Hayvan<select name="animal_id">{opts}</select></label><label>Tür<select name="kind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label><label>Ürün/İşlem<input name="product" required></label><label>Uygulama Tarihi<input type="date" name="applied_date" required></label><label>Sonraki Tarih<input type="date" name="next_date"></label><label>Maliyet<input type="number" step="0.01" name="cost" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Kaydet</button></div></form></div><div class="card" style="margin-top:14px"><table><tr><th>Küpe</th><th>Tür</th><th>Ürün</th><th>Tarih</th><th>Sonraki</th><th>Maliyet</th></tr>{trs}</table></div>'''
             return self.send_html(page('Sağlık',body,'/health',u,msg))
         if path=='/finance/edit':
@@ -1508,7 +1548,7 @@ class App(BaseHTTPRequestHandler):
         if path=='/backups':
             if not self.require_admin():return
             with db() as c:rows=c.execute('select * from backups order by created_at desc limit 100').fetchall()
-            trs=''.join(f'<tr><td>{h(r["created_at"])}</td><td>{h(r["filename"])}</td><td>{(r["size_bytes"] or 0)//1024} KB</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(r["filename"])}">İndir</a> <a class="btn red" href="/backup/delete?file={urllib.parse.quote(r["filename"])}">Sil</a></td></tr>' for r in rows) or '<tr><td colspan=4>Henüz yedek yok.</td></tr>'
+            trs=''.join(f'<tr><td>{fmt_datetime(r["created_at"])}</td><td>{h(r["filename"])}</td><td>{(r["size_bytes"] or 0)//1024} KB</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(r["filename"])}">İndir</a> <a class="btn red" href="/backup/delete?file={urllib.parse.quote(r["filename"])}">Sil</a></td></tr>' for r in rows) or '<tr><td colspan=4>Henüz yedek yok.</td></tr>'
             body=f'''<h1>Yedekleme Merkezi</h1><div class="two"><div class="card"><h2>Tam Yedek Al</h2><p>Veritabanı, fotoğraflar ve sürüm bilgisi tek ZIP dosyasında saklanır.</p><a class="btn orange" href="/backup/create">Şimdi Yedek Al</a></div><div class="card"><h2>Yedeği Geri Yükle</h2><form method="post" action="/backup/restore" enctype="multipart/form-data"><input type="file" name="backup_file" accept=".zip" required><label style="display:block;margin:12px 0"><input type="checkbox" name="confirm_restore" value="yes" required> Mevcut verilerin değiştirileceğini kabul ediyorum.</label><button class="btn red">Yedeği Geri Yükle</button></form></div></div><div class="card" style="margin-top:14px"><h2>Yedek Geçmişi</h2><table><tr><th>Tarih</th><th>Dosya</th><th>Boyut</th><th>İşlem</th></tr>{trs}</table></div>'''
             return self.send_html(page('Yedekleme Merkezi',body,'/backups',u,msg))
         if path=='/backup/create':
