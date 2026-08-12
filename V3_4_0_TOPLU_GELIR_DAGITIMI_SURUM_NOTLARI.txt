@@ -1,0 +1,10 @@
+ÇiftlikPro Enterprise V3.4.0 - Toplu Gelir Dağıtımı
+
+- Finans > Hayvan Satışı ve Kesim Geliri için çoklu hayvan seçimi.
+- Toplam tutar seçilen hayvanlara otomatik ve kuruş hassasiyetinde eşit dağıtılır.
+- Seçilen hayvan sayısı ve hayvan başı tahmini pay ekranda anlık gösterilir.
+- Kayıt öncesi toplam tutar ve hayvan sayısı için onay istenir.
+- Her hayvana kendi finans kaydı yazılır; toplam finans geliri değişmez.
+- Hayvan Satışı seçilen hayvanları Satıldı, Kesim Geliri seçilen hayvanları Kesildi durumuna alır.
+- Her hayvanın sold_price alanına kendisine düşen pay yazılır.
+- Eski tek-hayvan finans akışı diğer kategoriler için korunur.

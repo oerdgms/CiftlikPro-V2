@@ -1,0 +1,10 @@
+ÇiftlikPro Enterprise V3.2.2
+
+Kızgınlık iş akışı güncellemesi:
+- mükerrer kızgınlık kayıt engeli
+- kızgınlık kaydı düzenleme
+- mobil kızgınlık geçmişi kart görünümü
+- Dashboard Yaklaşan Kızgınlıklar
+- kızgınlıktan onaylı tohumlama aktarımı
+- aynı gün mükerrer tohumlama koruması
+- V3.2.1 mobil fotoğraf iyileştirmeleri korunur

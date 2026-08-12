@@ -1,0 +1,3 @@
+2c53370f82c8e96b38b9afe50da348d5e5bbc71c032b2cf57d824bb8cf00b954  app/server.py
+87dbd879548792f5ce6008132255ddb994d2ab2d95360da6103925956b4bb126  installer.iss
+b8f05ffb03ea92f94efdc4bffdeb344b0f75c1f0c088ba960f304c750ebb9760  .github/workflows/windows-installer.yml

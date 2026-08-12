@@ -1,0 +1,9 @@
+ÇiftlikPro Enterprise V3.0.1 Stable Hotfix
+
+Düzeltmeler:
+- Hayvan detay kartındaki “Bilgileri Düzenle” butonunun hayvan listesine dönmesi düzeltildi.
+- Buton artık doğrudan /animal-edit?id=... düzenleme formunu açar.
+- Buzağı detayındaki Düzenle bağlantısı da gerçek /calf-edit?id=... adresine bağlandı.
+- Uygulama ve kurulum sürümü 3.0.1 olarak güncellendi.
+
+Veritabanı yapısı değişmedi; mevcut V3.0 verileri korunur.

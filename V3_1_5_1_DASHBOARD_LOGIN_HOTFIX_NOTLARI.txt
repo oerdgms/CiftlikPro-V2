@@ -1,0 +1,9 @@
+ÇiftlikPro Enterprise V3.1.5.1 - Dashboard Login Hotfix
+
+Düzeltme:
+- V3.1.5'te Dashboard'dan Son Finans İşlemleri kaldırılırken kalan eski `recent`
+  referansı temizlendi.
+- Login sonrasında Dashboard açılırken oluşan NameError ve tarayıcıdaki
+  ERR_EMPTY_RESPONSE sorunu giderildi.
+- V3.1.5 Finans kategori filtresi, tarih aralığı toplamları, Bu Ay Süt Geliri,
+  Bu Ay Kesim Geliri ve Besi Analiz Merkezi korunur.

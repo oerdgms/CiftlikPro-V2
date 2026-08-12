@@ -1,0 +1,7 @@
+ÇiftlikPro Enterprise V3.5.2 - Finans Kaydetme Hotfix
+
+- Toplu Hayvan Satışı / Kesim Geliri kayıt butonunun çalışmamasına neden olan doğrulama çakışması giderildi.
+- Eski tek-hayvan seçim alanı toplu modda artık required yapılmaz.
+- Toplu seçimde animal_ids alanı gönderilir; sunucu tarafındaki eşit dağıtım korunur.
+- V3.5.1 kompakt arama + checkbox seçim görünümü korunur.
+- V3.5.0 kişiselleştirilebilir Dashboard özellikleri korunur.
