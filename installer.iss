@@ -1,5 +1,5 @@
 #define MyAppName "ÇiftlikPro Enterprise"
-#define MyAppVersion "3.3.1"
+#define MyAppVersion "3.4.0"
 #define MyAppPublisher "ÇiftlikPro"
 #define MyAppExeName "CiftlikPro.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\CiftlikPro
 DefaultGroupName=ÇiftlikPro
 OutputDir=release
-OutputBaseFilename=CiftlikPro_Enterprise_V3_3_1_Ciftlik_Profili_Hotfix_Setup
+OutputBaseFilename=CiftlikPro_Enterprise_V3_4_0_Toplu_Gelir_Dagitimi_Setup
 SetupIconFile=CiftlikPro.ico
 UninstallDisplayIcon={app}\CiftlikPro.exe
 PrivilegesRequired=admin

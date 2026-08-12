@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.3.1'
+APP_VERSION='3.4.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.3.1 ÇİFTLİK PROFİLİ HOTFIX'
+APP_LABEL='ENTERPRISE V3.4.0 TOPLU GELİR DAĞITIMI'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -29,6 +29,15 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .side .nav-home{font-weight:800}.nav-group{margin:5px 0}.nav-group summary{list-style:none;cursor:pointer;padding:12px;border-radius:10px;font-weight:800;display:flex;align-items:center;justify-content:space-between;user-select:none}.nav-group summary::-webkit-details-marker{display:none}.nav-group summary:hover,.nav-group.open-group summary{background:#ffffff10}.nav-group summary:after{content:"›";font-size:20px;transition:transform .18s ease}.nav-group[open] summary:after{transform:rotate(90deg)}.nav-children{padding:2px 0 4px 10px;border-left:1px solid #ffffff22;margin-left:13px}.side .nav-children a{padding:9px 11px;margin:2px 0;font-size:13px}.menu-toggle{display:none;border:0;background:#ffffff22;color:#fff;border-radius:9px;padding:8px 11px;font-size:20px;cursor:pointer}.top-left{display:flex;align-items:center;gap:10px}
 @media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
 
+
+
+.bulk-animal-box{display:none}
+.bulk-animal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:10px}
+.bulk-animal{border:2px solid #dce8df;background:#f8fbf9;border-radius:14px;padding:12px;text-align:left;cursor:pointer;color:#183426;font:inherit}
+.bulk-animal b{display:block;color:#176b3a}.bulk-animal span{font-size:13px;color:#6d8074}
+.bulk-animal.selected{border-color:#178447;background:#e9f7ee;box-shadow:0 0 0 2px #17844718}
+.bulk-summary{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.bulk-summary .pill{background:#edf6ef;padding:9px 12px;border-radius:999px}
 
 .farm-profile-head{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .farm-logo-preview{width:120px;height:120px;border-radius:18px;object-fit:contain;background:#f4f7f5;border:1px solid #dbe5de;padding:8px}
@@ -1306,13 +1315,69 @@ class App(BaseHTTPRequestHandler):
                 rows=c.execute(sql,args).fetchall()
                 inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
+            bulk_cards=''.join(f'''<button type="button" class="bulk-animal" data-animal-id="{a["id"]}" onclick="toggleBulkAnimal(this)"><b>🐄 {h(a["tag"])}</b><span>{h(a["nickname"]) or "Takma ad yok"}</span></button>''' for a in animals)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a> <form method="post" action="/finance/delete" style="display:inline" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></td></tr>'.format(
                     h(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["tag"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
                 ) for r in rows
             )
-            body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="card" style="margin-top:14px"><h2>Yeni Kayıt</h2><form method="post" class="form"><label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label><label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option></select></label><label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Diğer</option></select></label><label>Tutar<input type="number" step="0.01" min="0" name="amount" required></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label>İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label><label class="full">Açıklama<input name="description"></label><div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Bu işlem kaydedildiğinde seçilen hayvan aktif sürüden çıkarılacak, ancak geçmiş bilgileri silinmeyecektir.</div><div class="full"><button class="btn">Finans Kaydı Ekle</button></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="actions"><label>Başlangıç <input type="date" name="start" value="{h(start)}"></label><label>Bitiş <input type="date" name="end" value="{h(end)}"></label><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum İşlemi</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div>'''
+            body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="card" style="margin-top:14px"><h2>Yeni Kayıt</h2><form method="post" class="form" id="financeCreateForm">
+<label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label>
+<label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option></select></label>
+<label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Diğer</option></select></label>
+<label>Toplam Tutar<input type="number" step="0.01" min="0.01" name="amount" id="financeAmount" required></label>
+<label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
+<label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label>
+<input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
+<div class="full bulk-animal-box" id="bulkAnimalBox"><h3 style="margin:0">🐄 İlgili Hayvanları Seç</h3><p class="mut">Hayvan Satışı veya Kesim Geliri için birden fazla hayvana dokunun. Toplam tutar eşit olarak dağıtılır.</p><div class="bulk-animal-grid">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen: <b id="bulkCount">0</b></span><span class="pill">Hayvan başı: <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div></div>
+<label class="full">Açıklama<input name="description"></label>
+<div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam gelir hayvanlara eşit paylaştırılır.</div>
+<div class="full"><button class="btn" id="financeSubmitBtn">Finans Kaydı Ekle</button></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="actions"><label>Başlangıç <input type="date" name="start" value="{h(start)}"></label><label>Bitiş <input type="date" name="end" value="{h(end)}"></label><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum İşlemi</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div>'''
+            body += f'''<script>
+            const bulkSelected=new Set();
+            function isBulkFinance(){{
+              const t=document.getElementById('tx').value;
+              const c=document.getElementById('financeCategory').value;
+              return t==='Gelir' && (c==='Hayvan Satışı' || c==='Kesim Geliri');
+            }}
+            function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
+            function refreshBulkFinance(){{
+              const on=isBulkFinance();
+              document.getElementById('bulkAnimalBox').style.display=on?'block':'none';
+              document.getElementById('singleAnimalLabel').style.display=on?'none':'block';
+              document.getElementById('statusWarning').style.display=on?'block':'none';
+              document.getElementById('bulkAnimalIds').value=Array.from(bulkSelected).join(',');
+              document.getElementById('bulkCount').textContent=bulkSelected.size;
+              const total=parseFloat(document.getElementById('financeAmount').value||'0');
+              document.getElementById('bulkShare').textContent=formatTRY(bulkSelected.size ? total/bulkSelected.size : 0);
+            }}
+            function toggleBulkAnimal(el){{
+              const id=el.dataset.animalId;
+              if(bulkSelected.has(id)){{bulkSelected.delete(id);el.classList.remove('selected');}}
+              else{{bulkSelected.add(id);el.classList.add('selected');}}
+              refreshBulkFinance();
+            }}
+            function clearBulkAnimals(){{
+              bulkSelected.clear();
+              document.querySelectorAll('.bulk-animal.selected').forEach(x=>x.classList.remove('selected'));
+              refreshBulkFinance();
+            }}
+            document.getElementById('tx').addEventListener('change',refreshBulkFinance);
+            document.getElementById('financeCategory').addEventListener('change',refreshBulkFinance);
+            document.getElementById('financeAmount').addEventListener('input',refreshBulkFinance);
+            document.getElementById('financeCreateForm').addEventListener('submit',function(e){{
+              if(isBulkFinance() && bulkSelected.size===0){{
+                e.preventDefault(); alert('Hayvan satışı veya kesim geliri için en az bir hayvan seçmelisiniz.'); return;
+              }}
+              if(isBulkFinance()){{
+                const n=bulkSelected.size,total=parseFloat(document.getElementById('financeAmount').value||'0');
+                if(!confirm(n+' hayvana toplam '+formatTRY(total)+' gelir eşit dağıtılacak. Devam edilsin mi?')){{e.preventDefault();return;}}
+              }}
+              const b=document.getElementById('financeSubmitBtn'); b.disabled=true; b.textContent='Kaydediliyor…';
+            }});
+            refreshBulkFinance();
+            </script>'''
             return self.send_html(page('Finans',body,'/finance',u,msg))
         if path=='/reports':
             profile=farm_profile(); farm_name=farm_display_name(profile)
@@ -1783,13 +1848,41 @@ class App(BaseHTTPRequestHandler):
                     recalculate_animal_exit_status(c,animal_id)
                     return self.redirect('/finance','Finans kaydı silindi. Hayvan durumu yeniden hesaplandı.')
                 if path=='/finance':
-                    category=f['category']; animal_id=f.get('animal_id') or None
+                    category=f['category']; tx_type=f.get('tx_type','Gelir')
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
+                    amount=round(float(f['amount']),2)
+                    if amount<=0:return self.redirect('/finance','Tutar 0’dan büyük olmalıdır.')
+                    bulk_mode=tx_type=='Gelir' and category in ('Hayvan Satışı','Kesim Geliri')
+                    if bulk_mode:
+                        raw_ids=[x.strip() for x in (f.get('animal_ids') or '').split(',') if x.strip()]
+                        animal_ids=[]
+                        for x in raw_ids:
+                            try: aid=int(x)
+                            except: continue
+                            if aid not in animal_ids: animal_ids.append(aid)
+                        if not animal_ids:return self.redirect('/finance','Hayvan satışı veya kesim geliri için en az bir hayvan seçilmelidir.')
+                        placeholders=','.join('?' for _ in animal_ids)
+                        selected=c.execute(f"select id,tag,nickname,status from animals where id in ({placeholders})",animal_ids).fetchall()
+                        if len(selected)!=len(animal_ids):return self.redirect('/finance','Seçilen hayvanlardan biri bulunamadı.')
+                        inactive=[r for r in selected if str(r['status'] or 'Aktif')!='Aktif']
+                        if inactive:return self.redirect('/finance','Seçilen hayvanlardan biri artık aktif sürüde değil. Sayfayı yenileyip tekrar deneyin.')
+                        total_cents=int(round(amount*100)); n=len(animal_ids)
+                        base=total_cents//n; remainder=total_cents-(base*n)
+                        description=(f.get('description') or '').strip()
+                        batch_note=f'Toplu {category}: {n} hayvan · toplam {money(amount)}'
+                        created=datetime.now().isoformat()
+                        for idx,aid in enumerate(animal_ids):
+                            cents=base+(1 if idx<remainder else 0)
+                            share=cents/100.0
+                            desc=(description+' · ' if description else '')+batch_note
+                            c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,share,desc,f.get('payment_method'),aid,created,action))
+                            c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,share,aid))
+                        audit(username,'Toplu finans geliri eklendi',f'{category} · {n} hayvan · {money(amount)}',self.client_ip())
+                        return self.redirect('/finance',f'{n} hayvana toplam {money(amount)} gelir dağıtıldı. Hayvan başı ortalama {money(amount/n)}.')
+                    animal_id=f.get('animal_id') or None
                     if action and not animal_id:return self.redirect('/finance','Hayvan satışı veya kesim geliri için ilgili hayvan seçilmelidir.')
-                    amount=float(f['amount'])
-                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],f['tx_type'],category,amount,f.get('description'),f.get('payment_method'),animal_id,datetime.now().isoformat(),action))
-                    if action:
-                        c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,amount,animal_id))
+                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,f.get('description'),f.get('payment_method'),animal_id,datetime.now().isoformat(),action))
+                    if action:c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,amount,animal_id))
                     return self.redirect('/finance','Finans kaydı eklendi.' + (' Hayvan aktif sürüden çıkarıldı.' if action else ''))
         except sqlite3.IntegrityError as e:return self.redirect(path,'Aynı küpe numarası daha önce kaydedilmiş olabilir.')
         except Exception as e:return self.redirect(path,'Hata: '+str(e))
