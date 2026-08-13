@@ -21,7 +21,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.7.3'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.3 LİSANS ANAHTARI AKTİVASYONU'
+APP_LABEL='ENTERPRISE V3.7.3 LİSANS BİLGİLERİ HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -908,7 +908,33 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             ok,payload,status=license_status();payload=payload or {}
             exp=payload.get('expires_on') or 'Süresiz'
             if exp!='Süresiz': exp=fmt_date(exp)
-            body=f'''<h1>🔐 Lisans Bilgileri</h1><div class="card"><p><span class="{{'license-ok' if ok else 'license-bad'}}">{{'🟢 Aktif' if ok else '🔴 Geçersiz'}}</span></p><div class="kv"><div><b>Lisans Sahibi</b><span>{{h(payload.get('licensee') or '-')}}</span></div><div><b>Ürün</b><span>{{h(payload.get('product') or APP_NAME)}}</span></div><div><b>Lisans Türü</b><span>{{h(payload.get('license_type') or '-')}}</span></div><div><b>Geçerlilik</b><span>{{h(exp)}}</span></div><div><b>Cihaz Kimliği</b><span class="device-code">{{h(device_id())}}</span></div><div><b>Durum</b><span>{{h(status)}}</span></div></div><p class="mut">Lisans bu cihazın kimliğine ve dijital imzaya bağlıdır. Lisans dosyasında yapılan değişiklikler imzayı geçersiz kılar.</p></div>'''
+            badge_class='license-info-ok' if ok else 'license-info-bad'
+            badge_text='🟢 Lisans Aktif' if ok else '🔴 Lisans Geçersiz'
+            body=f'''<style>
+.license-info-card{{background:#fff;border:1px solid #dfeae3;border-radius:22px;padding:26px;box-shadow:0 12px 35px rgba(20,80,48,.07)}}
+.license-info-status{{display:inline-flex;padding:9px 14px;border-radius:999px;font-weight:800;margin-bottom:20px}}
+.license-info-ok{{background:#e5f6eb;color:#14723d}}.license-info-bad{{background:#fff0ed;color:#ad3529}}
+.license-info-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}
+.license-info-item{{background:#f5f9f6;border:1px solid #e2ece5;border-radius:14px;padding:15px}}
+.license-info-item span{{display:block;color:#6d8075;font-size:12px;margin-bottom:5px;font-weight:700}}
+.license-info-item b{{font-size:15px;color:#173b27;overflow-wrap:anywhere}}
+.device-info{{grid-column:1/-1}}.device-row-info{{display:flex;align-items:center;gap:10px}}
+.device-row-info b{{flex:1;font-family:Consolas,monospace}}
+.copy-license-device{{border:0;border-radius:10px;background:#e2f1e7;color:#17683c;font-weight:800;padding:9px 13px;cursor:pointer}}
+.license-note{{margin-top:18px;color:#6c7d73;line-height:1.55}}
+@media(max-width:650px){{.license-info-grid{{grid-template-columns:1fr}}.device-info{{grid-column:auto}}.device-row-info{{align-items:stretch;flex-direction:column}}}}
+</style>
+<h1>🔐 Lisans Bilgileri</h1><div class="license-info-card">
+<div class="license-info-status {badge_class}">{badge_text}</div>
+<div class="license-info-grid">
+<div class="license-info-item"><span>Lisans Sahibi</span><b>{h(payload.get('licensee') or '-')}</b></div>
+<div class="license-info-item"><span>Ürün</span><b>{h(payload.get('product') or APP_NAME)}</b></div>
+<div class="license-info-item"><span>Lisans Türü</span><b>{h(payload.get('license_type') or '-')}</b></div>
+<div class="license-info-item"><span>Geçerlilik</span><b>{h(exp)}</b></div>
+<div class="license-info-item device-info"><span>Cihaz Kimliği</span><div class="device-row-info"><b id="license-device-id">{h(device_id())}</b><button type="button" class="copy-license-device" onclick="copyLicenseDevice()">Kopyala</button></div></div>
+<div class="license-info-item"><span>Durum</span><b>{h(status)}</b></div>
+</div><p class="license-note">Lisans bu bilgisayarın cihaz kimliğine ve dijital imzaya bağlıdır. Lisans verisinde yapılan yetkisiz değişiklikler dijital imzayı geçersiz kılar.</p></div>
+<script>function copyLicenseDevice(){{var e=document.getElementById("license-device-id");if(!e)return;navigator.clipboard.writeText(e.innerText).then(function(){{var b=document.querySelector(".copy-license-device");b.innerText="Kopyalandı ✓";setTimeout(function(){{b.innerText="Kopyala"}},1500)}})}}</script>'''
             return self.send_html(page('Lisans Bilgileri',body,'/license-info',u,msg))
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
