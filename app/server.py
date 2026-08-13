@@ -19,9 +19,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.4'
+APP_VERSION='3.7.5'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.4 LİSANS TEST & DEĞİŞTİRME'
+APP_LABEL='ENTERPRISE V3.7.5 KISA KEY + KOPYALA HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -49,13 +49,41 @@ def license_doc_to_key(doc):
     text=base64.b32encode(packed).decode("ascii").rstrip("=")
     return "CFP-"+"-".join(text[i:i+5] for i in range(0,len(text),5))
 
+def _device_id_from_raw(raw8):
+    hx=raw8.hex().upper()
+    return 'CF-'+hx[0:4]+'-'+hx[4:8]+'-'+hx[8:12]+'-'+hx[12:16]
+
+def _license_date(value):
+    if not value:return ''
+    return (date(2020,1,1)+timedelta(days=int(value)-1)).isoformat()
+
 def license_key_to_bytes(key):
-    import zlib
-    clean=str(key or "").upper().strip()
-    if clean.startswith("CFP-"): clean=clean[4:]
-    clean=re.sub(r"[^A-Z2-7]","",clean)
-    if not clean: raise ValueError("Lisans anahtarı boş.")
-    clean += "="*((8-len(clean)%8)%8)
+    import zlib,struct,re
+    raw_key=str(key or '').upper().strip()
+    if raw_key.startswith('CFS-'):
+        clean=re.sub(r'[^A-Z2-7]','',raw_key[4:])
+        if not clean:raise ValueError('Lisans anahtarı boş.')
+        clean+='='*((8-len(clean)%8)%8)
+        blob=base64.b32decode(clean,casefold=True)
+        if len(blob)<78 or blob[0]!=1:raise ValueError('Kısa lisans anahtarı biçimi geçersiz.')
+        owner_len=blob[13]
+        if len(blob)!=(14+owner_len+64):raise ValueError('Kısa lisans anahtarı eksik veya bozuk.')
+        issued_days,expires_days=struct.unpack('>HH',blob[9:13])
+        payload={
+            'product':'CiftlikPro Enterprise',
+            'licensee':blob[14:14+owner_len].decode('utf-8'),
+            'device_id':_device_id_from_raw(blob[1:9]),
+            'license_type':'Süresiz' if not expires_days else 'Süreli',
+            'issued_on':_license_date(issued_days),
+            'expires_on':_license_date(expires_days),
+        }
+        doc={'payload':payload,'signature':base64.b64encode(blob[14+owner_len:]).decode('ascii')}
+        return json.dumps(doc,ensure_ascii=False,separators=(',',':')).encode('utf-8')
+    clean=raw_key
+    if clean.startswith('CFP-'):clean=clean[4:]
+    clean=re.sub(r'[^A-Z2-7]','',clean)
+    if not clean:raise ValueError('Lisans anahtarı boş.')
+    clean+='='*((8-len(clean)%8)%8)
     return zlib.decompress(base64.b32decode(clean,casefold=True))
 
 def validate_license_bytes(raw=None):
@@ -612,6 +640,13 @@ def page(title,body,path='/',user='admin',flash=''):
  document.querySelectorAll(".nav-group").forEach(function(d){{d.addEventListener("toggle",function(){{if(!d.open)return;document.querySelectorAll(".nav-group").forEach(function(o){{if(o!==d)o.open=false;}});}});}});
  const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning"),bulk=document.getElementById("bulkAnimalIds");if(c&&a&&w){{function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r&&!bulk;}}c.addEventListener("change",x);x();}}
 }})();
+function copyDeviceSimple(id,btn){{
+ var el=document.getElementById(id);if(!el)return;var v=(el.innerText||el.textContent||'').trim();
+ var ta=document.createElement('textarea');ta.value=v;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();
+ try{{document.execCommand('copy');var old=btn.innerText;btn.innerText='✓ Kopyalandı';setTimeout(function(){{btn.innerText=old}},1400)}}
+ catch(e){{window.prompt('Cihaz Kimliğini kopyalayın:',v)}}
+ document.body.removeChild(ta);
+}}
 function toggleAnimalFields(){{
  var type=document.getElementById('recordType');if(!type)return;var calf=type.value==='Buzağı';
  document.querySelectorAll('.calf-only').forEach(function(e){{e.style.display=calf?'block':'none';}});
@@ -938,11 +973,11 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             return self.send_html(page('Lisans Bilgileri',body,'/license-info',u,msg))
         if path=='/license-test':
             if not self.require_admin():return
-            body=f'''<h1>🧪 Lisans Aktivasyon Testi</h1><div class="card"><p class="mut">Bu ekran yeni CFP anahtarını doğrular; mevcut aktif lisansınızı değiştirmez.</p><div class="kv"><div><b>Cihaz Kimliği</b><span>{h(device_id())}</span></div></div><form method="post" action="/license-test" class="form" style="margin-top:18px"><label class="full">Test Edilecek Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><div class="full"><button class="btn">🧪 Anahtarı Doğrula</button> <a class="btn secondary" href="/license-info">Geri Dön</a></div></form></div>'''
+            body=f'''<h1>🧪 Lisans Aktivasyon Testi</h1><div class="card"><p class="mut">Bu ekran yeni CFP anahtarını doğrular; mevcut aktif lisansınızı değiştirmez.</p><div class="kv"><div><b>Cihaz Kimliği</b><span><code id="testDeviceId">{h(device_id())}</code> <button type="button" class="btn alt compact-btn" onclick="copyDeviceSimple('testDeviceId',this)">📋 Kopyala</button></span></div></div><form method="post" action="/license-test" class="form" style="margin-top:18px"><label class="full">Test Edilecek Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><div class="full"><button class="btn">🧪 Anahtarı Doğrula</button> <a class="btn secondary" href="/license-info">Geri Dön</a></div></form></div>'''
             return self.send_html(page('Lisans Aktivasyon Testi',body,'/license-info',u,msg))
         if path=='/license-change':
             if not self.require_admin():return
-            body=f'''<h1>🔄 Lisansı Değiştir</h1><div class="card"><div class="flash" style="background:#fff4dc;color:#7c5600">Bu işlem doğrulanan yeni lisansı mevcut aktif lisansın yerine kaydeder.</div><div class="kv"><div><b>Cihaz Kimliği</b><span>{h(device_id())}</span></div></div><form method="post" action="/license-change" class="form" style="margin-top:18px"><label class="full">Yeni Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="confirm_change" value="yes" required style="width:auto"> Mevcut lisansın yeni lisansla değiştirileceğini onaylıyorum.</label><div class="full"><button class="btn">🔄 Yeni Lisansı Etkinleştir</button> <a class="btn secondary" href="/license-info">İptal</a></div></form></div>'''
+            body=f'''<h1>🔄 Lisansı Değiştir</h1><div class="card"><div class="flash" style="background:#fff4dc;color:#7c5600">Bu işlem doğrulanan yeni lisansı mevcut aktif lisansın yerine kaydeder.</div><div class="kv"><div><b>Cihaz Kimliği</b><span><code id="changeDeviceId">{h(device_id())}</code> <button type="button" class="btn alt compact-btn" onclick="copyDeviceSimple('changeDeviceId',this)">📋 Kopyala</button></span></div></div><form method="post" action="/license-change" class="form" style="margin-top:18px"><label class="full">Yeni Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="confirm_change" value="yes" required style="width:auto"> Mevcut lisansın yeni lisansla değiştirileceğini onaylıyorum.</label><div class="full"><button class="btn">🔄 Yeni Lisansı Etkinleştir</button> <a class="btn secondary" href="/license-info">İptal</a></div></form></div>'''
             return self.send_html(page('Lisansı Değiştir',body,'/license-info',u,msg))
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
@@ -1765,7 +1800,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             if not self.require_admin():return
             key=(f.get('license_key') or '').strip()
             try: raw=license_key_to_bytes(key)
-            except Exception:return self.redirect('/license-test','❌ Lisans anahtarı okunamadı veya geçersiz.')
+            except Exception:return self.redirect('/license-test','❌ Lisans anahtarı eksik, bozuk veya okunamadı. Anahtarı yeniden kopyalayıp yapıştırın.')
             ok,payload,status=validate_license_bytes(raw);payload=payload or {}
             if not ok:return self.redirect('/license-test','❌ '+str(status))
             exp=payload.get('expires_on') or 'Süresiz'
@@ -1777,7 +1812,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             if (f.get('confirm_change') or '')!='yes':return self.redirect('/license-change','Değişiklik için onay kutusunu işaretleyin.')
             key=(f.get('license_key') or '').strip()
             try:raw=license_key_to_bytes(key)
-            except Exception:return self.redirect('/license-change','❌ Lisans anahtarı okunamadı veya geçersiz.')
+            except Exception:return self.redirect('/license-change','❌ Lisans anahtarı eksik, bozuk veya okunamadı. Anahtarı yeniden kopyalayıp yapıştırın.')
             ok,payload,status=validate_license_bytes(raw)
             if not ok:return self.redirect('/license-change','❌ '+str(status))
             tmp=LICENSE_FILE.with_suffix('.license.tmp');tmp.write_bytes(raw);os.replace(tmp,LICENSE_FILE)

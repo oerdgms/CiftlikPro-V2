@@ -1,3 +1,18 @@
+ÇiftlikPro Enterprise V3.7.4
+================================
+Windows üzerinde çalışan yerel web tabanlı çiftlik ve sürü yönetim uygulaması.
+
+Güncel öne çıkan özellikler:
+- Hayvan, buzağı, tohumlama, kızgınlık, sağlık, finans ve besi performansı takibi
+- Kişiselleştirilebilir Dashboard
+- Türkçe GG/AA/YYYY tarih gösterimi
+- Mobil ve ağ erişimi
+- Yedekleme / geri yükleme
+- Cihaza bağlı, dijital imzalı CFP lisans anahtarı aktivasyonu
+- Yönetim ekranında lisans test etme ve lisans değiştirme
+
+Kaynak paket, GitHub Actions + PyInstaller + Inno Setup ile Windows kurulum EXE'si üretmek için hazırlanmıştır.
+
 ÇİFTLİKPRO ENTERPRISE — KAYNAK KOD V1.0
 =======================================
 

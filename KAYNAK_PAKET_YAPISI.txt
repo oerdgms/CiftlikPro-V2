@@ -1,0 +1,20 @@
+ÇiftlikPro V3.7.4 temiz GitHub kaynak paketi
+
+Kök:
+- app/                       Uygulama kaynakları
+- .github/workflows/        Windows build workflow
+- CiftlikPro.spec            PyInstaller tanımı
+- installer.iss             Inno Setup tanımı
+- CiftlikPro.ico             Uygulama ikonu
+- .gitignore
+- GITHUB_GUNCELLEME_ADIMLARI.txt
+- V3_7_4_LISANS_TEST_DEGISTIRME_NOTLARI.txt
+
+Temizlenenler:
+- Eski Beta/V3.x sürüm notlarının onlarca kopyası
+- app/ içindeki eski sürüm notları ve test raporları
+- Kaynak paket için geçerli olmayan eski SHA256.txt
+- Mükerrer mobil/ağ test raporları
+
+Not:
+Lisans Yöneticisi özel anahtarı bu kaynak pakette YOKTUR ve burada tutulmamalıdır.
