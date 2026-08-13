@@ -17,9 +17,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.6.0'
+APP_VERSION='3.6.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.6.0 GÖRSEL DASHBOARD + TR TARİH'
+APP_LABEL='ENTERPRISE V3.6.1 TOHUMLAMA TABLO İYİLEŞTİRMELERİ'
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -32,6 +32,15 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .estrus-decision-badge small{font-weight:600;opacity:.8}
 .estrus-skipped{background:#f1ecff;color:#6542a6}
 .estrus-done{background:#e7f6eb;color:#176b3a}
+
+
+.sortable-insem th{white-space:nowrap}
+.sort-head{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-weight:800;padding:8px 4px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.sort-head span{color:#718278;font-size:13px}
+.sort-head:hover{color:#08783e}
+.sort-head.active{color:#08783e}
+.sort-head.active span{color:#08783e}
+@media(max-width:760px){.sort-head{padding:6px 2px;font-size:12px;white-space:normal;text-align:left}.sort-head span{font-size:11px}}
 
 @media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
 
@@ -1376,7 +1385,8 @@ class App(BaseHTTPRequestHandler):
                     else:rb='<span class="status-badge status-unknown">Belirsiz</span>'
                     hist.append(f'''<tr><td>{rec["attempt"]}. deneme</td><td>{h(fmt_date(rec["insemination_date"]))}</td><td>{rb}</td><td>{h(fmt_date(rec["due_date"])) or '—'}</td><td><div class="row-actions"><a class="btn alt compact-btn" href="/insemination-edit?id={rec['id']}">✏️ Düzenle</a><form method="post" action="/insemination-delete" class="inline-form" onsubmit="return confirm('Bu tohumlama kaydı silinsin mi?')"><input type="hidden" name="id" value="{rec['id']}"><button class="btn red compact-btn">Sil</button></form></div></td></tr>''')
                 history=''.join(hist)
-                latest_rows.append(f'''<tr class="data-row"><td><a class="taglink" href="/animal?id={animal_id}">{h(latest['tag'])}</a><div class="mut">{h(latest['nickname'])}</div></td><td>{latest['attempt']}. Deneme</td><td>{h(fmt_date(latest['insemination_date']))}</td><td>{badge}</td><td>{h(fmt_date(latest['due_date'])) or '—'}</td><td><details><summary>Geçmiş ({len(records)})</summary><div style="overflow:auto"><table class="insem-history"><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th><th>İşlem</th></tr>{history}</table></div></details></td></tr>''')
+                status_sort=('1' if is_pregnant_value(result) else '2' if result.strip().lower()=='bekleniyor' else '3' if result.strip().lower()=='negatif' else '4')
+                latest_rows.append(f'''<tr class="data-row" data-animal="{h((str(latest['tag'] or '')+' '+str(latest['nickname'] or '')).lower())}" data-attempt="{int(latest['attempt'] or 0)}" data-insem="{h(latest['insemination_date'] or '')}" data-status="{status_sort}" data-due="{h(latest['due_date'] or '')}" data-history="{len(records)}"><td><a class="taglink" href="/animal?id={animal_id}">{h(latest['tag'])}</a><div class="mut">{h(latest['nickname'])}</div></td><td>{latest['attempt']}. Deneme</td><td>{h(fmt_date(latest['insemination_date']))}</td><td>{badge}</td><td>{h(fmt_date(latest['due_date'])) or '—'}</td><td><details><summary>Geçmiş ({len(records)})</summary><div style="overflow:auto"><table class="insem-history"><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th><th>İşlem</th></tr>{history}</table></div></details></td></tr>''')
             table_rows=''.join(latest_rows)
             estrus_info=''
             if estrus_context:
@@ -1389,10 +1399,31 @@ class App(BaseHTTPRequestHandler):
             {estrus_info}
             <div class="grid insem-stats"><div class="card stat metric blue">Kontrol Bekleyen<b>{waiting}</b><small>Son kaydı sonuç bekleyen</small></div><div class="card stat metric green">Gebe<b>{pregnant}</b><small>Son sonucu pozitif olan</small></div><div class="card stat metric orange">3. Denemede<b>{third_attempt}</b><small>Yakın takip gereken</small></div><div class="card stat metric purple">Bu Ay Tohumlanan<b>{this_month}</b><small>{date.today().strftime('%m/%Y')}</small></div></div>
             <div class="card"><h2>Yeni Tohumlama</h2><form id="inseminationForm" method="post" action="/inseminations" class="form"><input type="hidden" name="estrus_id" value="{h(estrus_id if estrus_context else '')}"><label>Dişi Hayvan<div class="animal-picker"><input id="inseminationAnimalSearch" value="{h(selected_label)}" placeholder="Küpe veya takma ad yazın..." autocomplete="off" inputmode="search" required><div id="inseminationAnimalSuggestions" class="animal-suggestions" role="listbox" aria-label="Eşleşen dişi hayvanlar"></div></div><datalist id="inseminationAnimalOptions">{picker_options}</datalist><input type="hidden" id="inseminationAnimalId" name="animal_id" value="{h(aid if selected else '')}"><div class="animal-picker-note">Küpe veya takma ad yazın; eşleşen hayvanlar anında aşağıda görünür.</div></label><label>Deneme<div id="attemptPreview" class="attempt-preview">{(str(next_attempts[selected['id']])+'. Deneme') if selected else 'Hayvan seçildiğinde otomatik belirlenecek'}</div></label><label>Tohumlama Tarihi<input id="inseminationDate" type="date" name="insemination_date" required max="{date.today().isoformat()}"><div id="futureWarning" class="future-warning">Gelecek tarihli tohumlama kaydı girilemez.</div></label><label>İlk Durum<div class="attempt-preview">Kontrol Bekliyor</div><input type="hidden" name="pregnancy_result" value="Bekleniyor"></label><div class="full"><button class="btn">💾 Tohumlamayı Kaydet</button></div></form></div>
-            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Tohumlama Geçmişi</h2><p class="mut">Her hayvan tek satırda gösterilir. “Geçmiş” bağlantısından tüm denemeleri açabilir ve kayıtları düzenleyebilirsiniz.</p><div id="insemEmpty" class="insem-empty">Eşleşen kayıt bulunamadı.</div><div style="overflow:auto"><table id="inseminationLiveTable" class="insem-table"><thead><tr><th>Hayvan</th><th>Son Deneme</th><th>Son Tohumlama</th><th>Durum</th><th>Tahmini Doğum</th><th>Geçmiş / İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
+            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Tohumlama Geçmişi</h2><p class="mut">Her hayvan tek satırda gösterilir. “Geçmiş” bağlantısından tüm denemeleri açabilir ve kayıtları düzenleyebilirsiniz.</p><div id="insemEmpty" class="insem-empty">Eşleşen kayıt bulunamadı.</div><div style="overflow:auto"><table id="inseminationLiveTable" class="insem-table sortable-insem"><thead><tr><th><button type="button" class="sort-head" data-sort="animal">Hayvan <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="attempt">Son Deneme <span>↕</span></button></th><th><button type="button" class="sort-head active" data-sort="insem" data-dir="desc">Son Tohumlama <span>↓</span></button></th><th><button type="button" class="sort-head" data-sort="status">Durum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="due">Tahmini Doğum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="history">Geçmiş / İşlem <span>↕</span></button></th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
             <script>
             document.addEventListener('DOMContentLoaded',function(){{
               liveTableFilter('inseminationLiveSearch','inseminationLiveTable','insemEmpty');
+              var sortTable=document.getElementById('inseminationLiveTable'),sortBody=sortTable.querySelector('tbody');
+              function sortInsem(key,dir){{
+                var rows=Array.from(sortBody.querySelectorAll('tr.data-row'));
+                rows.sort(function(a,b){{
+                  var av=a.dataset[key]||'',bv=b.dataset[key]||'';
+                  if(key==='attempt'||key==='status'||key==='history'){{av=parseInt(av||'0');bv=parseInt(bv||'0');return dir==='asc'?av-bv:bv-av;}}
+                  var cmp=av.localeCompare(bv,'tr',{{numeric:true,sensitivity:'base'}});
+                  return dir==='asc'?cmp:-cmp;
+                }});
+                rows.forEach(function(r){{sortBody.appendChild(r);}});
+              }}
+              document.querySelectorAll('.sort-head').forEach(function(btn){{
+                btn.addEventListener('click',function(){{
+                  var key=btn.dataset.sort,dir=(btn.dataset.dir==='asc'?'desc':'asc');
+                  if(!btn.dataset.dir && (key==='insem'||key==='due'||key==='attempt'||key==='history'))dir='desc';
+                  document.querySelectorAll('.sort-head').forEach(function(x){{x.classList.remove('active');x.removeAttribute('data-dir');x.querySelector('span').textContent='↕';}});
+                  btn.classList.add('active');btn.dataset.dir=dir;btn.querySelector('span').textContent=dir==='asc'?'↑':'↓';
+                  sortInsem(key,dir);
+                }});
+              }});
+              sortInsem('insem','desc');
               var input=document.getElementById('inseminationAnimalSearch'),hidden=document.getElementById('inseminationAnimalId'),preview=document.getElementById('attemptPreview'),form=document.getElementById('inseminationForm'),dt=document.getElementById('inseminationDate'),warn=document.getElementById('futureWarning'),suggestions=document.getElementById('inseminationAnimalSuggestions');
               var animals={picker_data};
               function norm(v){{return (v||'').toLocaleLowerCase('tr-TR').trim();}}
