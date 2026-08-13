@@ -1,7 +1,0 @@
-ÇiftlikPro Enterprise V3.7.5
-- Lisans Test ve Lisans Değiştir ekranlarında Cihaz Kimliği yanında Kopyala butonu.
-- HTTP/Tailscale ortamında klasik clipboard fallback ile kopyalama.
-- Yeni CFS kısa lisans anahtarı desteği.
-- Eski CFP uzun anahtarları geriye dönük olarak desteklenir.
-- Lisans Yöneticisi V4 aynı Ed25519 özel anahtarıyla daha kısa CFS anahtarı üretir.
-- Kısa key üret->çöz->dijital imza doğrulama testi geçti.

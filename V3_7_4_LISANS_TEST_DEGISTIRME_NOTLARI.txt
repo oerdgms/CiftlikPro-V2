@@ -1,5 +1,0 @@
-ÇiftlikPro Enterprise V3.7.4
-- Lisans Aktivasyonunu Test Et: CFP anahtarını doğrular, mevcut lisansı değiştirmez.
-- Test sonucu dijital imza, cihaz eşleşmesi, lisans sahibi, tür ve geçerliliği gösterir.
-- Lisansı Değiştir: açık onay sonrası yalnızca geçerli yeni anahtarı aktif lisans yapar.
-- V3.7.3 CFP key ve .license yedek sistemi korunur.

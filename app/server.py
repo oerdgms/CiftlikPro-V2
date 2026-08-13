@@ -293,7 +293,23 @@ def recalculate_animal_exit_status(con, animal_id):
         """select animal_status_action,tx_date,category,amount
            from finance
            where animal_id=? and animal_status_action in ('Satıldı','Kesildi')
-           order by tx_date desc,id desc limit 1""",
+           order by tx_date desc,id desc limit 1
+/* V3.7.6 Görsel Standartlar */
+.btn{min-height:40px;border-radius:11px;padding:9px 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1.15;text-decoration:none;transition:transform .12s ease,filter .12s ease,box-shadow .12s ease}
+.btn:hover{filter:brightness(.97);box-shadow:0 5px 14px rgba(20,70,43,.10)}
+.btn:active{transform:translateY(1px)}
+.btn.red,.btn.danger{background:#d83a2e;color:#fff}.btn.secondary{background:#eef4ef;color:#176b3a}.compact-btn{min-height:34px;padding:7px 10px;border-radius:9px}
+.row-actions,.finance-actions,.actions{gap:8px;align-items:center;flex-wrap:wrap}.inline-form{margin:0}
+.finance-filter-card{background:linear-gradient(180deg,#fff,#f8fbf9);border:1px solid #dce8df}
+.finance-filter-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.finance-filter-title h2{margin:0 0 3px}
+.filter-count-pill{display:inline-flex;padding:7px 11px;border-radius:999px;background:#edf5ef;color:#315943;font-weight:800;white-space:nowrap}
+.finance-toolbar-modern{display:grid;grid-template-columns:1fr 1fr .9fr 1.15fr auto;gap:10px;align-items:end}
+.finance-toolbar-modern label{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:800}.finance-toolbar-modern label>span{color:#415f50}
+.finance-toolbar-modern input,.finance-toolbar-modern select{min-height:42px;border:1px solid #ccd9d0;border-radius:10px;background:#fff;padding:8px 10px}
+.finance-filter-actions{display:flex;gap:7px;align-items:center;white-space:nowrap}.export-btn{background:#2f74c7;color:#fff}
+@media(max-width:1100px){.finance-toolbar-modern{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-filter-actions{grid-column:1/-1}}
+@media(max-width:600px){.finance-filter-title{align-items:flex-start;flex-direction:column}.finance-toolbar-modern{grid-template-columns:1fr}.finance-filter-actions{grid-column:auto;display:grid;grid-template-columns:1fr 1fr}.finance-filter-actions .export-btn{grid-column:1/-1}.btn{min-height:44px}}
+""",
         (animal_id,)
     ).fetchone()
     if row:
@@ -461,6 +477,7 @@ def h(s):
 def money(v):
     return f"₺{float(v or 0):,.2f}".replace(',','X').replace('.',',').replace('X','.')
 
+# Kullanıcıya gösterilen tarihler GG/AA/YYYY; form/veritabanı ISO kalır.
 def fmt_date(v):
     if not v:return ''
     try:return datetime.strptime(str(v)[:10],'%Y-%m-%d').strftime('%d/%m/%Y')
@@ -938,7 +955,29 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
         if not lic_ok and path not in ('/license','/license-activate','/license-key-activate'):
             return self.redirect('/license',lic_msg)
         if path=='/login':
-            return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">{h(APP_LABEL)} • Güvenli Yedekleme ve Kullanıcı Yönetimi</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
+            login_msg=('<div class="flash err">'+h(msg)+'</div>') if msg else ''
+            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ÇiftlikPro Giriş</title><style>{CSS}
+            body{{background:linear-gradient(145deg,#eef5f0 0%,#f8faf9 55%,#edf4ef 100%)}}
+            .login{{max-width:470px;margin:8vh auto;padding:32px;border-radius:24px;border:1px solid #dfe9e2;box-shadow:0 18px 50px rgba(20,73,43,.10)}}
+            .login-brand{{display:flex;align-items:center;gap:10px;font-size:34px;font-weight:900;color:#183c2a;margin-bottom:8px}}
+            .login-version{{display:inline-flex;background:#eef6f0;color:#557064;border:1px solid #dae8de;border-radius:999px;padding:7px 11px;font-weight:800;font-size:13px;margin-bottom:24px}}
+            .login-form label{{display:block;font-size:14px;font-weight:800;margin-top:4px;color:#263b30}}
+            .login-form input{{font-size:16px;padding:13px 14px}}
+            .password-wrap{{position:relative}}.password-wrap input{{padding-right:100px}}
+            .password-toggle{{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:#edf5ef;color:#176b3a;border-radius:9px;padding:8px 10px;font-weight:800;cursor:pointer}}
+            .login-submit{{margin-top:8px;min-height:48px;padding:12px 20px;font-size:16px}}
+            @media(max-width:600px){{.login{{margin:5vh 16px;padding:26px 22px;border-radius:22px}}.login-brand{{font-size:31px}}.login-submit{{width:100%}}}}
+            </style></head><body><div class="login">
+            <div class="login-brand"><span>🐄</span><span>ÇiftlikPro</span></div>
+            <div class="login-version">ÇiftlikPro Enterprise • V{APP_VERSION}</div>
+            {login_msg}
+            <form method="post" class="login-form">
+              <label>Kullanıcı adı</label><input name="username" autocomplete="username" required>
+              <label>Şifre</label><div class="password-wrap"><input id="loginPassword" type="password" name="password" autocomplete="current-password" required><button class="password-toggle" type="button" onclick="toggleLoginPassword(this)">👁 Göster</button></div>
+              <button class="btn login-submit">Giriş Yap</button>
+            </form></div>
+            <script>function toggleLoginPassword(btn){{var p=document.getElementById('loginPassword');var show=p.type==='password';p.type=show?'text':'password';btn.textContent=show?'🙈 Gizle':'👁 Göster';}}</script>
+            </body></html>''')
         if path.startswith('/uploads/'):
             name=os.path.basename(path.split('/uploads/',1)[1]); fp=UPLOADS/name
             if not fp.exists(): return self.send_html('Fotoğraf bulunamadı',404)
@@ -1682,7 +1721,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
 <div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div>
 <label class="full">Açıklama<input name="description"></label>
 <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam tutar seçilen hayvan sayısına göre otomatik dağıtılır.</div>
-<div class="full finance-savebar"><button type="submit" class="btn" id="financeSubmitBtn">💾 Finans Kaydını Kaydet</button><span class="mut" id="financeSaveHint"></span></div></form></div><div class="card" style="margin-top:14px"><form method="get" class="finance-toolbar"><label>Başlangıç<input type="date" name="start" value="{h(start)}"></label><label>Bitiş<input type="date" name="end" value="{h(end)}"></label><label>Tür<select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label>Kategori<select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><button class="btn alt">Filtrele</button><a class="btn alt" href="/finance">Temizle</a><a class="btn blue" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">CSV İndir</a></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
+<div class="full finance-savebar"><button type="submit" class="btn" id="financeSubmitBtn">💾 Finans Kaydını Kaydet</button><span class="mut" id="financeSaveHint"></span></div></form></div><div class="card finance-filter-card" style="margin-top:14px"><div class="finance-filter-title"><div><h2>🔎 Finans Filtreleri</h2><span class="mut">Tarih, işlem türü ve kategoriye göre kayıtları daraltın.</span></div><span class="filter-count-pill">{len(rows)} kayıt</span></div><form method="get" class="finance-toolbar finance-toolbar-modern"><label><span>📅 Başlangıç</span><input type="date" name="start" value="{h(start)}"></label><label><span>📅 Bitiş</span><input type="date" name="end" value="{h(end)}"></label><label><span>↕️ Tür</span><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label><span>🏷️ Kategori</span><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><div class="finance-filter-actions"><button class="btn blue">🔎 Filtrele</button><a class="btn alt" href="/finance">↺ Temizle</a><a class="btn export-btn" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">⬇ CSV</a></div></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
             body += f'''<script>
             function isBulkFinance(){{
               const t=document.getElementById('tx').value;
