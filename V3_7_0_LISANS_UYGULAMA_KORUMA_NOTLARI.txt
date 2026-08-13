@@ -1,0 +1,11 @@
+ÇiftlikPro Enterprise V3.7.0
+- Cihaza bağlı çevrimdışı lisans sistemi eklendi.
+- Ed25519 dijital imzalı lisans dosyaları kullanılır.
+- Lisans yoksa uygulama Aktivasyon ekranında kalır; giriş ve uygulama sayfaları açılmaz.
+- Cihaz Kimliği Windows MachineGuid tabanlı türetilir.
+- Lisans dosyası başka cihaza kopyalanırsa geçersiz olur.
+- Lisans dosyası değiştirilirse dijital imza doğrulaması başarısız olur.
+- Süresiz ve bitiş tarihli lisans desteklenir.
+- Yönetim > Lisans Bilgileri ekranı eklendi.
+- Özel imzalama anahtarı uygulama kaynak paketine dahil DEĞİLDİR.
+- V3.6.1 ve önceki tüm işlevler korunur.

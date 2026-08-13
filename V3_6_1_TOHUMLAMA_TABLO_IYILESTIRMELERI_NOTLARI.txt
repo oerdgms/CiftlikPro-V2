@@ -1,8 +1,0 @@
-ÇiftlikPro Enterprise V3.6.1
-- Hayvan Bazında Tohumlama Geçmişi ilk açılışta Son Tohumlama tarihine göre en yeni üstte sıralanır.
-- Hayvan, Son Deneme, Son Tohumlama, Durum, Tahmini Doğum ve Geçmiş/İşlem başlıkları tıklanabilir.
-- Aynı başlığa tekrar tıklayınca artan/azalan sıralama değişir.
-- Aktif sütunda ↑ / ↓ göstergesi görünür.
-- Durum sıralaması: Gebe, Kontrol Bekliyor, Gebe Değil, Belirsiz.
-- Sıralama sayfa yenilenmeden tarayıcıda yapılır.
-- V3.6.0 görsel Dashboard, TR tarih standardı ve önceki özellikler korunur.

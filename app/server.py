@@ -1,10 +1,12 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid
 from email.parser import BytesParser
 from email.policy import default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http import cookies
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.exceptions import InvalidSignature
 
 PROGRAM_DIR=Path(__file__).resolve().parent
 DEFAULT_DATA_ROOT=Path(os.environ.get('LOCALAPPDATA') or Path.home())/'CiftlikPro'
@@ -17,9 +19,49 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.6.1'
+APP_VERSION='3.7.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.6.1 TOHUMLAMA TABLO İYİLEŞTİRMELERİ'
+APP_LABEL='ENTERPRISE V3.7.0 LİSANS & UYGULAMA KORUMA'
+
+LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
+LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
+
+def device_id():
+    parts=[]
+    if os.name=='nt':
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,r'SOFTWARE\Microsoft\Cryptography') as k:
+                parts.append(str(winreg.QueryValueEx(k,'MachineGuid')[0]))
+        except Exception: pass
+    if not parts:
+        parts.extend([socket.gethostname(),str(uuid.getnode())])
+    digest=hashlib.sha256(('|'.join(parts)+'|CiftlikPro').encode('utf-8')).hexdigest().upper()
+    return 'CF-'+digest[:4]+'-'+digest[4:8]+'-'+digest[8:12]+'-'+digest[12:16]
+
+def license_payload_bytes(payload):
+    return json.dumps(payload,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
+
+def validate_license_bytes(raw=None):
+    try:
+        if raw is None:
+            if not LICENSE_FILE.exists(): return False,None,'Lisans dosyası bulunamadı.'
+            raw=LICENSE_FILE.read_bytes()
+        doc=json.loads(raw.decode('utf-8'))
+        payload=doc.get('payload') or {}
+        signature=base64.b64decode(doc.get('signature',''),validate=True)
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(LICENSE_PUBLIC_KEY_B64)).verify(signature,license_payload_bytes(payload))
+        if payload.get('product')!='CiftlikPro Enterprise': return False,payload,'Bu lisans farklı bir ürün için.'
+        if str(payload.get('device_id','')).upper()!=device_id().upper(): return False,payload,'Lisans bu bilgisayara ait değil.'
+        expires=str(payload.get('expires_on') or '').strip()
+        if expires and date.today()>date.fromisoformat(expires): return False,payload,'Lisans süresi dolmuş.'
+        return True,payload,'Aktif'
+    except InvalidSignature:return False,None,'Lisans imzası geçersiz.'
+    except Exception as exc:return False,None,'Lisans doğrulanamadı: '+str(exc)
+
+def license_status():
+    return validate_license_bytes()
+
 
 CSS='''
 :root{--g:#176b3a;--g2:#228b4f;--bg:#f3f6f4;--card:#fff;--txt:#203127;--mut:#6b7b70;--red:#c8392b;--orange:#e58c16;--blue:#2e6fc2}
@@ -40,6 +82,11 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .sort-head:hover{color:#08783e}
 .sort-head.active{color:#08783e}
 .sort-head.active span{color:#08783e}
+
+.license-shell{max-width:760px;margin:55px auto;padding:18px}.license-card{background:#fff;border-radius:22px;padding:28px;box-shadow:0 12px 38px #183c2820;border:1px solid #dfe9e2}
+.device-code{font-family:Consolas,monospace;font-size:20px;font-weight:800;letter-spacing:1px;background:#eef6f0;padding:14px;border-radius:12px;word-break:break-all}
+.license-ok{display:inline-block;background:#e7f6eb;color:#176b3a;padding:7px 11px;border-radius:999px;font-weight:800}.license-bad{display:inline-block;background:#fff0ee;color:#a92f24;padding:7px 11px;border-radius:999px;font-weight:800}
+
 @media(max-width:760px){.sort-head{padding:6px 2px;font-size:12px;white-space:normal;text-align:left}.sort-head span{font-size:11px}}
 
 @media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
@@ -534,7 +581,7 @@ def page(title,body,path='/',user='admin',flash=''):
         ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups')]),
-        ('⚙️ Yönetim',[('🔐 Şifremi Değiştir','/password-change')]+([('🏡 Çiftlik Profili','/farm-profile'),('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')] if role=='admin' else []))
+        ('⚙️ Yönetim',[('🔐 Şifremi Değiştir','/password-change')]+([('🏡 Çiftlik Profili','/farm-profile'),('🔐 Lisans Bilgileri','/license-info'),('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')] if role=='admin' else []))
     ]
     nav=nav_link('🏠 Dashboard','/')
     for label,items in groups:
@@ -785,6 +832,13 @@ class App(BaseHTTPRequestHandler):
     def do_GET(self):
         ensure_archive_schema()
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
+        lic_ok,lic_payload,lic_msg=license_status()
+        if path=='/license':
+            owner=h((lic_payload or {{}}).get('licensee',''))
+            flash=f'<div class="flash err">{{h(msg)}}</div>' if msg else ''
+            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>{{CSS}}</style></head><body><div class="license-shell"><div class="license-card"><h1>🔐 ÇiftlikPro Aktivasyon</h1><p class="mut">Bu ÇiftlikPro kurulumu bu bilgisayar için lisanslanmalıdır.</p>{{flash}}<p><b>Cihaz Kimliği</b></p><div class="device-code">{{h(device_id())}}</div><p class="mut">Bu kodu lisans yöneticisine iletin. Size verilen <b>.license</b> dosyasını aşağıdan yükleyin.</p><form method="post" action="/license-activate" enctype="multipart/form-data"><label>Lisans Dosyası<input type="file" name="license_file" accept=".license,application/json" required></label><button class="btn">🔓 Lisansı Etkinleştir</button></form><p style="margin-top:18px"><span class="{{'license-ok' if lic_ok else 'license-bad'}}">{{'🟢 Aktif' if lic_ok else '🔴 Lisans Gerekli'}}</span> {{h(lic_msg)}}</p></div></div></body></html>''')
+        if not lic_ok and path not in ('/license','/license-activate'):
+            return self.redirect('/license',lic_msg)
         if path=='/login':
             return self.send_html(f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>{CSS}</style></head><body><div class="login"><h1>🐄 ÇiftlikPro</h1><p class="mut">{h(APP_LABEL)} • Güvenli Yedekleme ve Kullanıcı Yönetimi</p>{'<div class="flash err">'+h(msg)+'</div>' if msg else ''}<form method="post"><label>Kullanıcı adı</label><input name="username" required><label>Şifre</label><input type="password" name="password" required><button class="btn">Giriş Yap</button></form></div></body></html>''')
         if path.startswith('/uploads/'):
@@ -796,6 +850,13 @@ class App(BaseHTTPRequestHandler):
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        if path=='/license-info':
+            if not self.require_admin():return
+            ok,payload,status=license_status();payload=payload or {{}}
+            exp=payload.get('expires_on') or 'Süresiz'
+            if exp!='Süresiz': exp=fmt_date(exp)
+            body=f'''<h1>🔐 Lisans Bilgileri</h1><div class="card"><p><span class="{{'license-ok' if ok else 'license-bad'}}">{{'🟢 Aktif' if ok else '🔴 Geçersiz'}}</span></p><div class="kv"><div><b>Lisans Sahibi</b><span>{{h(payload.get('licensee') or '-')}}</span></div><div><b>Ürün</b><span>{{h(payload.get('product') or APP_NAME)}}</span></div><div><b>Lisans Türü</b><span>{{h(payload.get('license_type') or '-')}}</span></div><div><b>Geçerlilik</b><span>{{h(exp)}}</span></div><div><b>Cihaz Kimliği</b><span class="device-code">{{h(device_id())}}</span></div><div><b>Durum</b><span>{{h(status)}}</span></div></div><p class="mut">Lisans bu cihazın kimliğine ve dijital imzaya bağlıdır. Lisans dosyasında yapılan değişiklikler imzayı geçersiz kılar.</p></div>'''
+            return self.send_html(page('Lisans Bilgileri',body,'/license-info',u,msg))
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
             return self.send_html(page('Şifremi Değiştir',body,'/password-change',u,msg))
@@ -1613,7 +1674,18 @@ class App(BaseHTTPRequestHandler):
             f=self.post_data()
         except Exception as exc:
             return self.redirect('/','Form verisi okunamadı: '+str(exc))
+        if path=='/license-activate':
+            item=f.get('license_file')
+            if not isinstance(item,dict) or not item.get('content'):
+                return self.redirect('/license','Lütfen geçerli bir lisans dosyası seçin.')
+            raw=item['content']
+            ok,payload,status=validate_license_bytes(raw)
+            if not ok:return self.redirect('/license',status)
+            tmp=LICENSE_FILE.with_suffix('.license.tmp');tmp.write_bytes(raw);os.replace(tmp,LICENSE_FILE)
+            return self.redirect('/login','Lisans başarıyla etkinleştirildi.')
         if path=='/login':
+            ok,_,status=license_status()
+            if not ok:return self.redirect('/license',status)
             username=(f.get('username') or '').strip()
             with db() as c:r=c.execute('select * from users where username=?',(username,)).fetchone()
             if not r or not r['active'] or not password_verify(f.get('password',''),r['password']):audit(username or 'bilinmeyen','Başarısız giriş','',self.client_ip());return self.redirect('/login','Kullanıcı adı veya şifre hatalı ya da hesap pasif.')
