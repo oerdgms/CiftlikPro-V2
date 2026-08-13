@@ -1,0 +1,12 @@
+ÇiftlikPro Enterprise V3.7.1 — Lisans Aktivasyon Hotfix
+
+Düzeltme:
+- /license aktivasyon ekranındaki `lic_payload or {{}}` Python yazım hatası giderildi.
+- Doğru ifade `lic_payload or {}` olarak değiştirildi.
+- Lisans yokken aktivasyon ekranının HTTP 200 ile açılması test edildi.
+- Cihaz kimliği ve lisans yükleme formunun ekranda bulunduğu doğrulandı.
+- V3.7.0 lisans mimarisi ve V3.6.1 dahil önceki özellikler korunur.
+
+Not:
+- V3.7.0 ile oluşturulan Lisans Yöneticisi / imzalama anahtarı değişmedi.
+- Mevcut V2 ÖZEL Lisans Yöneticisi aynı lisansları üretmeye devam eder.

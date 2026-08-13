@@ -19,9 +19,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.0'
+APP_VERSION='3.7.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.0 LİSANS & UYGULAMA KORUMA'
+APP_LABEL='ENTERPRISE V3.7.1 LİSANS AKTİVASYON HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -834,7 +834,7 @@ class App(BaseHTTPRequestHandler):
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
         lic_ok,lic_payload,lic_msg=license_status()
         if path=='/license':
-            owner=h((lic_payload or {{}}).get('licensee',''))
+            owner=h((lic_payload or {}).get('licensee',''))
             flash=f'<div class="flash err">{{h(msg)}}</div>' if msg else ''
             return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>{{CSS}}</style></head><body><div class="license-shell"><div class="license-card"><h1>🔐 ÇiftlikPro Aktivasyon</h1><p class="mut">Bu ÇiftlikPro kurulumu bu bilgisayar için lisanslanmalıdır.</p>{{flash}}<p><b>Cihaz Kimliği</b></p><div class="device-code">{{h(device_id())}}</div><p class="mut">Bu kodu lisans yöneticisine iletin. Size verilen <b>.license</b> dosyasını aşağıdan yükleyin.</p><form method="post" action="/license-activate" enctype="multipart/form-data"><label>Lisans Dosyası<input type="file" name="license_file" accept=".license,application/json" required></label><button class="btn">🔓 Lisansı Etkinleştir</button></form><p style="margin-top:18px"><span class="{{'license-ok' if lic_ok else 'license-bad'}}">{{'🟢 Aktif' if lic_ok else '🔴 Lisans Gerekli'}}</span> {{h(lic_msg)}}</p></div></div></body></html>''')
         if not lic_ok and path not in ('/license','/license-activate'):
@@ -852,7 +852,7 @@ class App(BaseHTTPRequestHandler):
         u=self.user()['username']
         if path=='/license-info':
             if not self.require_admin():return
-            ok,payload,status=license_status();payload=payload or {{}}
+            ok,payload,status=license_status();payload=payload or {}
             exp=payload.get('expires_on') or 'Süresiz'
             if exp!='Süresiz': exp=fmt_date(exp)
             body=f'''<h1>🔐 Lisans Bilgileri</h1><div class="card"><p><span class="{{'license-ok' if ok else 'license-bad'}}">{{'🟢 Aktif' if ok else '🔴 Geçersiz'}}</span></p><div class="kv"><div><b>Lisans Sahibi</b><span>{{h(payload.get('licensee') or '-')}}</span></div><div><b>Ürün</b><span>{{h(payload.get('product') or APP_NAME)}}</span></div><div><b>Lisans Türü</b><span>{{h(payload.get('license_type') or '-')}}</span></div><div><b>Geçerlilik</b><span>{{h(exp)}}</span></div><div><b>Cihaz Kimliği</b><span class="device-code">{{h(device_id())}}</span></div><div><b>Durum</b><span>{{h(status)}}</span></div></div><p class="mut">Lisans bu cihazın kimliğine ve dijital imzaya bağlıdır. Lisans dosyasında yapılan değişiklikler imzayı geçersiz kılar.</p></div>'''
