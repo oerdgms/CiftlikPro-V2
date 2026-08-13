@@ -19,9 +19,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.5'
+APP_VERSION='3.7.6'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.5 KISA KEY + KOPYALA HOTFIX'
+APP_LABEL='ENTERPRISE V3.7.6 BESİ KÂRLILIK & GÖRSEL FİLTRELER'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -133,7 +133,17 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 
 @media(max-width:760px){.sort-head{padding:6px 2px;font-size:12px;white-space:normal;text-align:left}.sort-head span{font-size:11px}}
 
-@media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
+@media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}
+/* V3.7.6 Besi Kârlılık */
+.perf-hero{background:linear-gradient(135deg,#173f2b,#245f3e);color:#fff;border-radius:24px;padding:24px 26px;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px rgba(22,72,45,.16)}
+.perf-hero h1{margin:0 0 6px;font-size:28px}.perf-hero p{margin:0;color:#dcece2}.perf-hero .btn{background:#fff;color:#18492f}
+.perf-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.perf-tab{display:inline-flex;padding:10px 15px;border-radius:999px;background:#edf4ef;color:#355747;font-weight:800;text-decoration:none;border:1px solid #dce8df}.perf-tab.active{background:#1f6b42;color:#fff;border-color:#1f6b42}
+.perf-filter-card{border:1px solid #dce8df;background:linear-gradient(180deg,#fff,#f8fbf9)}.perf-filter-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.perf-filter-head h2{margin:0}
+.perf-filter-grid{display:grid;grid-template-columns:1.2fr repeat(3,1fr);gap:10px;align-items:end}.perf-filter-grid label{display:flex;flex-direction:column;gap:5px;font-weight:800;font-size:13px}.perf-filter-actions{display:flex;gap:8px}
+.perf-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:14px}.perf-summary small{display:block;margin-top:7px;color:#6d8075}.perf-table-wrap{overflow:auto;border:1px solid #e1e9e4;border-radius:16px}.performance-table{min-width:1450px;margin:0}.performance-table th{position:sticky;top:0;background:#edf5ef;z-index:1;white-space:nowrap}.performance-table td{white-space:nowrap}.performance-table tbody tr:hover{background:#f7fbf8}
+.profit-pill{display:inline-flex;padding:6px 10px;border-radius:999px;font-weight:900}.profit-pill.good{background:#e5f6eb;color:#14723d}.profit-pill.bad{background:#fff0ed;color:#b33a2e}.profit-pill.wait{background:#eef2f0;color:#65756d}
+@media(max-width:1100px){.perf-filter-grid{grid-template-columns:repeat(2,1fr)}.perf-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:650px){.perf-hero{padding:19px;align-items:flex-start;flex-direction:column}.perf-filter-grid{grid-template-columns:1fr}.perf-summary{grid-template-columns:1fr 1fr}.perf-summary .card:last-child{grid-column:1/-1}.perf-tabs{overflow-x:auto;flex-wrap:nowrap}.perf-tab{white-space:nowrap}}
+@media(max-width:900px){.menu-toggle{display:inline-block}.side{transform:translateX(-105%);transition:transform .2s ease;width:260px;box-shadow:8px 0 24px #0003}.side.mobile-open{transform:translateX(0)}.main{margin-left:0;padding-top:18px}.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}@media(max-width:560px){.grid,.form{grid-template-columns:1fr}.main{padding:12px}.top{padding:0 12px}.brand{font-size:17px}}
 
 
 
@@ -1229,69 +1239,53 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             body=f"""<h1>Besi Performans Ayarları</h1><div class="card setting-box"><form method="post" action="/performance-settings" class="form"><label>Minimum Günlük Canlı Ağırlık Artışı (kg/gün)<input type="number" min="0.01" step="0.01" name="male_min_daily_gain" value="{target:.2f}" required></label><label>Sarı Uyarı Başlangıcı (% hedef)<input type="number" min="1" max="100" step="1" name="warning_percent" value="{ratio*100:.0f}" required></label><div class="full"><p class="mut">Örnek: hedef 1,00 kg/gün ve sarı sınır %90 ise; 0,90-0,99 sarı, 0,90 altı kırmızı olur.</p><button class="btn">Ayarları Kaydet</button> <a class="btn alt" href="/performance">İptal</a></div></form></div>"""
             return self.send_html(page('Besi Performans Ayarları',body,path,u,msg))
         if path=='/performance':
-            status_filter=(q.get('status',[''])[0] or '').strip()
-            scope=(q.get('scope',['all'])[0] or 'all').strip()
-            if scope not in ('all','active','cut'): scope='all'
-            purchase_start=(q.get('purchase_start',[''])[0] or '').strip()
-            purchase_end=(q.get('purchase_end',[''])[0] or '').strip()
-            cut_start=(q.get('cut_start',[''])[0] or '').strip()
-            cut_end=(q.get('cut_end',[''])[0] or '').strip()
+            status_filter=(q.get('status',[''])[0] or '').strip();scope=(q.get('scope',['all'])[0] or 'all').strip();search=(q.get('search',[''])[0] or '').strip()
+            if scope not in ('all','active','completed'):scope='all'
+            purchase_start=(q.get('purchase_start',[''])[0] or '').strip();purchase_end=(q.get('purchase_end',[''])[0] or '').strip();exit_start=(q.get('exit_start',[''])[0] or '').strip();exit_end=(q.get('exit_end',[''])[0] or '').strip();profit_filter=(q.get('profit',[''])[0] or '').strip()
+            if profit_filter not in ('','profit','loss','pending'):profit_filter=''
+            detail=[]
             with db() as c:
-                males_rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif') in ('Aktif','Kesildi') order by tag").fetchall()
-                selected=[]
-                for ar in males_rows:
-                    st=str(ar['status'] or 'Aktif')
-                    if scope=='active' and st!='Aktif': continue
-                    if scope=='cut' and st!='Kesildi': continue
-                    pd=(ar['purchase_date'] or '') if 'purchase_date' in ar.keys() else ''
-                    ed=(ar['exit_date'] or '') if 'exit_date' in ar.keys() else ''
-                    if purchase_start and (not pd or pd<purchase_start): continue
-                    if purchase_end and (not pd or pd>purchase_end): continue
-                    if cut_start and (st!='Kesildi' or not ed or ed<cut_start): continue
-                    if cut_end and (st!='Kesildi' or not ed or ed>cut_end): continue
+                rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif') in ('Aktif','Kesildi','Satıldı') order by tag").fetchall()
+                for ar in rows:
+                    st=str(ar['status'] or 'Aktif');completed=st in ('Kesildi','Satıldı');hay=(str(ar['tag'] or '')+' '+str(ar['nickname'] or '')+' '+str(ar['breed'] or '')).casefold()
+                    if scope=='active' and st!='Aktif':continue
+                    if scope=='completed' and not completed:continue
+                    if search and search.casefold() not in hay:continue
+                    pd=ar['purchase_date'] or '';ed=ar['exit_date'] or ''
+                    if purchase_start and (not pd or pd<purchase_start):continue
+                    if purchase_end and (not pd or pd>purchase_end):continue
+                    if exit_start and (not completed or not ed or ed<exit_start):continue
+                    if exit_end and (not completed or not ed or ed>exit_end):continue
                     perf=male_weight_performance(ar['id'],c)
-                    if status_filter and perf['status']!=status_filter: continue
-                    selected.append((ar,perf))
-                detail=[]
-                for ar,perf in selected:
-                    wr=c.execute("select measure_date,weight from weights where animal_id=? order by measure_date,id",(ar['id'],)).fetchall()
-                    first=wr[0] if wr else None; last=wr[-1] if wr else None
-                    total_gain=(float(last['weight'])-float(first['weight'])) if first and last and len(wr)>=2 else None
+                    if status_filter and perf['status']!=status_filter:continue
                     days,daily,operating,total_cost=animal_cost_values(ar)
-                    kg_cost=(operating/total_gain) if total_gain is not None and total_gain>0 else None
-                    detail.append((ar,perf,days,operating,total_cost,total_gain,kg_cost,first,last))
-            active_count=sum(1 for ar,*_ in detail if str(ar['status'] or 'Aktif')=='Aktif')
-            cut_count=sum(1 for ar,*_ in detail if str(ar['status'] or '')=='Kesildi')
-            purchase_total=sum(float(ar['purchase_price'] or 0) for ar,*_ in detail)
-            operating_total=sum(x[3] for x in detail)
-            total_cost=sum(x[4] for x in detail)
-            daily_vals=[perf['daily'] for _,perf,*_ in detail if perf.get('daily') is not None]
-            avg_daily=(sum(daily_vals)/len(daily_vals)) if daily_vals else None
-            kg_cost_vals=[x[6] for x in detail if x[6] is not None]
-            avg_kg_cost=(sum(kg_cost_vals)/len(kg_cost_vals)) if kg_cost_vals else None
-            labels={'good':('Hedefte','status-good'),'watch':('Takip','status-watch'),'low':('Düşük','status-low'),'none':('Veri Yetersiz','status-none')}
-            trs=''
-            for ar,perf,days,operating,current_cost,total_gain,kg_cost,first,last in detail:
-                label,cls=labels[perf['status']]
-                st=str(ar['status'] or 'Aktif')
-                pd=fmt_date(ar['purchase_date'] or '-'); ed=fmt_date(ar['exit_date'] or '-') if st=='Kesildi' else 'Devam ediyor'
-                gain_text=(f'{total_gain:+.1f} kg' if total_gain is not None else '-')
-                daily_text=(f"{perf['daily']:.3f} kg/gün" if perf.get('daily') is not None else '-')
-                kgcost_text=(money(kg_cost)+'/kg' if kg_cost is not None else '-')
-                trs+=f"""<tr><td><a class="taglink" href="/animal?id={ar["id"]}">{h(ar["tag"])}</a></td><td>{h(ar["nickname"])}</td><td>{st}</td><td>{pd}</td><td>{ed}</td><td>{days}</td><td>{gain_text}</td><td>{daily_text}</td><td>{money(operating)}</td><td>{kgcost_text}</td><td>{money(current_cost)}</td><td><span class="perf-badge {cls}">{label}</span></td></tr>"""
-            trs=trs or '<tr><td colspan="12">Seçilen tarih ve filtrelerde hayvan bulunamadı.</td></tr>'
-            avg_daily_text=f'{avg_daily:.3f} kg/gün' if avg_daily is not None else '—'
-            avg_kg_text=(money(avg_kg_cost)+'/kg') if avg_kg_cost is not None else '—'
-            body=f"""<div class="actions"><h1 style="margin-right:auto">🐂 Besi Analiz Merkezi</h1><a class="btn alt" href="/performance-settings">⚙️ Performans Eşiği</a></div>
-            <div class="card"><h2>Analiz Aralığı</h2><form method="get" action="/performance" class="form">
-            <label>Hayvan Durumu<select name="scope"><option value="all" {'selected' if scope=='all' else ''}>Aktif + Kesilen</option><option value="active" {'selected' if scope=='active' else ''}>Sadece Aktif</option><option value="cut" {'selected' if scope=='cut' else ''}>Sadece Kesilen</option></select></label>
-            <label>Alım Tarihi Başlangıç<input type="date" name="purchase_start" value="{h(purchase_start)}"></label><label>Alım Tarihi Bitiş<input type="date" name="purchase_end" value="{h(purchase_end)}"></label>
-            <label>Kesim Tarihi Başlangıç<input type="date" name="cut_start" value="{h(cut_start)}"></label><label>Kesim Tarihi Bitiş<input type="date" name="cut_end" value="{h(cut_end)}"></label>
-            <label>Performans<select name="status"><option value="">Tümü</option><option value="good" {'selected' if status_filter=='good' else ''}>Hedefte</option><option value="watch" {'selected' if status_filter=='watch' else ''}>Takip</option><option value="low" {'selected' if status_filter=='low' else ''}>Düşük</option><option value="none" {'selected' if status_filter=='none' else ''}>Veri Yetersiz</option></select></label>
-            <button class="btn blue">Raporla</button><a class="btn alt" href="/performance">Filtreleri Temizle</a></form></div>
-            <div class="grid" style="margin-top:14px"><div class="card stat metric blue">Seçilen Hayvan<b>{len(detail)}</b><small>{active_count} aktif · {cut_count} kesilen</small></div><div class="card stat metric green">Gerçekleşmiş Maliyet<b>{money(total_cost)}</b><small>Alış {money(purchase_total)} · Yem/Bakım {money(operating_total)}</small></div><div class="card stat metric orange">Ort. Günlük Artış<b>{avg_daily_text}</b><small>Son iki tartısı olan hayvanlar</small></div><div class="card stat metric purple">Ort. 1 kg Artış Maliyeti<b>{avg_kg_text}</b><small>Tartı verisi yeterli hayvanlar</small></div></div>
-            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Analiz</h2><p class="mut">Kesilen hayvanın maliyeti kesim tarihinde donar. 1 kg artış maliyeti, ilk-son tartı farkına karşı oluşan yem/bakım giderini gösterir.</p><div style="overflow:auto"><table class="performance-table"><tr><th>Küpe</th><th>Takma Ad</th><th>Durum</th><th>Alım</th><th>Kesim</th><th>Maliyet Günü</th><th>Toplam Kilo Artışı</th><th>Son Dönem Günlük</th><th>Yem/Bakım</th><th>1 kg Artış Maliyeti</th><th>Toplam Maliyet</th><th>Performans</th></tr>{trs}</table></div></div>"""
-            return self.send_html(page('Besi Analiz Merkezi',body,path,u,msg))
+                    revenue=float(c.execute("select coalesce(sum(amount),0) from finance where animal_id=? and tx_type='Gelir' and category in ('Kesim Geliri','Hayvan Satışı')",(ar['id'],)).fetchone()[0] or 0)
+                    if completed and revenue<=0 and float(ar['sold_price'] or 0)>0:revenue=float(ar['sold_price'] or 0)
+                    net_profit=(revenue-total_cost) if completed and revenue>0 else None;profit_pct=((net_profit/total_cost)*100) if net_profit is not None and total_cost>0 else None
+                    if profit_filter=='profit' and not(net_profit is not None and net_profit>0):continue
+                    if profit_filter=='loss' and not(net_profit is not None and net_profit<0):continue
+                    if profit_filter=='pending' and net_profit is not None:continue
+                    wr=c.execute('select measure_date,weight from weights where animal_id=? order by measure_date,id',(ar['id'],)).fetchall();first=wr[0] if wr else None;last=wr[-1] if wr else None
+                    gain=(float(last['weight'])-float(first['weight'])) if first and last and len(wr)>=2 else None
+                    detail.append((ar,perf,days,operating,total_cost,gain,revenue,net_profit,profit_pct))
+            active_count=sum(1 for x in detail if str(x[0]['status'] or '')=='Aktif');completed_count=len(detail)-active_count
+            purchase_total=sum(float(x[0]['purchase_price'] or 0) for x in detail);operating_total=sum(x[3] for x in detail);total_cost=sum(x[4] for x in detail)
+            realized_revenue=sum(x[6] for x in detail if x[7] is not None);realized_cost=sum(x[4] for x in detail if x[7] is not None);realized_profit=sum(x[7] for x in detail if x[7] is not None);margin=((realized_profit/realized_cost)*100) if realized_cost>0 else None
+            daily_vals=[x[1]['daily'] for x in detail if x[1].get('daily') is not None];avg_daily=(sum(daily_vals)/len(daily_vals)) if daily_vals else None
+            labels={'good':('Hedefte','status-good'),'watch':('Takip','status-watch'),'low':('Düşük','status-low'),'none':('Veri Yetersiz','status-none')};trs=''
+            for ar,perf,days,operating,cost,gain,revenue,profit,pct in detail:
+                st=str(ar['status'] or 'Aktif');completed=st in ('Kesildi','Satıldı');label,cls=labels[perf['status']];daily_text=f"{perf['daily']:.3f} kg/gün" if perf.get('daily') is not None else '-';gain_text=f'{gain:+.1f} kg' if gain is not None else '-'
+                if profit is None:profit_html='<span class="profit-pill wait">Henüz gerçekleşmedi</span>';pct_text='—'
+                else:profit_html=f'<span class="profit-pill {"good" if profit>=0 else "bad"}">{"+" if profit>0 else ""}{money(profit)}</span>';pct_text=f'{pct:+.1f}%' if pct is not None else '—'
+                rev=money(revenue) if completed and revenue>0 else ('Gelir bekleniyor' if completed else '—');ed=fmt_date(ar['exit_date'] or '-') if completed else 'Devam ediyor'
+                trs+=f'<tr><td><a class="taglink" href="/animal?id={ar["id"]}">{h(ar["tag"])}</a><br><span class="mut">{h(ar["nickname"])}</span></td><td>{h(st)}</td><td>{fmt_date(ar["purchase_date"] or "-")}</td><td>{ed}</td><td>{days} gün</td><td>{gain_text}<br><span class="mut">{daily_text}</span></td><td>{money(float(ar["purchase_price"] or 0))}</td><td>{money(operating)}</td><td><b>{money(cost)}</b></td><td><b>{rev}</b></td><td>{profit_html}</td><td><b>{pct_text}</b></td><td><span class="perf-badge {cls}">{label}</span></td></tr>'
+            trs=trs or '<tr><td colspan="13">Seçilen filtrelerde hayvan bulunamadı.</td></tr>';margin_text=f'{margin:+.1f}%' if margin is not None else '—';avg_text=f'{avg_daily:.3f} kg/gün' if avg_daily is not None else '—';net_cls='green' if realized_profit>=0 else 'red'
+            body=f'''<div class="perf-hero"><div><h1>🐂 Besi Performansı & Kârlılık Merkezi</h1><p>Canlı ağırlık performansı, gerçek maliyet ve satış/kesim gelirini tek ekranda karşılaştırın.</p></div><a class="btn" href="/performance-settings">⚙️ Performans Eşiği</a></div>
+            <div class="perf-tabs"><a class="perf-tab {'active' if scope=='all' else ''}" href="/performance?scope=all">📊 Tümü</a><a class="perf-tab {'active' if scope=='active' else ''}" href="/performance?scope=active">🐂 Aktif Besi</a><a class="perf-tab {'active' if scope=='completed' else ''}" href="/performance?scope=completed">💰 Tamamlanan Besiler</a></div>
+            <div class="card perf-filter-card"><div class="perf-filter-head"><div><h2>🔎 Akıllı Filtreler</h2><span class="mut">Küpe, tarih, performans ve kârlılık durumuna göre daraltın.</span></div><a class="btn alt" href="/performance">Tümünü Temizle</a></div><form method="get" class="perf-filter-grid"><input type="hidden" name="scope" value="{h(scope)}"><label>Küpe / Hayvan Ara<input name="search" value="{h(search)}" placeholder="Küpe, takma ad veya ırk"></label><label>Alım Başlangıç<input type="date" name="purchase_start" value="{h(purchase_start)}"></label><label>Alım Bitiş<input type="date" name="purchase_end" value="{h(purchase_end)}"></label><label>Çıkış Başlangıç<input type="date" name="exit_start" value="{h(exit_start)}"></label><label>Çıkış Bitiş<input type="date" name="exit_end" value="{h(exit_end)}"></label><label>Performans<select name="status"><option value="">Tümü</option><option value="good" {'selected' if status_filter=='good' else ''}>Hedefte</option><option value="watch" {'selected' if status_filter=='watch' else ''}>Takip</option><option value="low" {'selected' if status_filter=='low' else ''}>Düşük</option><option value="none" {'selected' if status_filter=='none' else ''}>Veri Yetersiz</option></select></label><label>Kârlılık<select name="profit"><option value="">Tümü</option><option value="profit" {'selected' if profit_filter=='profit' else ''}>Kârlı</option><option value="loss" {'selected' if profit_filter=='loss' else ''}>Zararda</option><option value="pending" {'selected' if profit_filter=='pending' else ''}>Henüz Gerçekleşmedi</option></select></label><div class="perf-filter-actions"><button class="btn blue">Filtrele</button><a class="btn alt" href="/performance?scope={h(scope)}">Sıfırla</a></div></form></div>
+            <div class="perf-summary"><div class="card stat metric blue">Seçilen Hayvan<b>{len(detail)}</b><small>{active_count} aktif · {completed_count} tamamlanan</small></div><div class="card stat metric orange">Toplam Maliyet<b>{money(total_cost)}</b><small>Alış {money(purchase_total)} · Yem/Bakım {money(operating_total)}</small></div><div class="card stat metric green">Gerçekleşen Gelir<b>{money(realized_revenue)}</b><small>Kesim + hayvan satış gelirleri</small></div><div class="card stat metric {net_cls}">Gerçekleşen Net Kâr<b>{money(realized_profit)}</b><small>Geliri kayıtlı tamamlanan hayvanlar</small></div><div class="card stat metric purple">Gerçekleşen Kâr Oranı<b>{margin_text}</b><small>Maliyet üzerinden · Ort. artış {avg_text}</small></div></div>
+            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Kârlılık Analizi</h2><p class="mut">Kesilen/satılan hayvanın maliyeti çıkış tarihinde donar. Finansta hayvana dağıtılan Kesim Geliri / Hayvan Satışı otomatik eşleşir.</p><div class="perf-table-wrap"><table class="performance-table"><thead><tr><th>Hayvan</th><th>Durum</th><th>Alım</th><th>Çıkış</th><th>Besi Süresi</th><th>Kilo Performansı</th><th>Alış Maliyeti</th><th>Yem + Bakım</th><th>Toplam Maliyet</th><th>Gerçekleşen Gelir</th><th>Net Kâr/Zarar</th><th>Kâr %</th><th>Besi Performansı</th></tr></thead><tbody>{trs}</tbody></table></div></div>'''
+            return self.send_html(page('Besi Performansı & Kârlılık',body,path,u,msg))
         if path=='/animal-edit':
             aid=q.get('id',[''])[0]
             with db() as c:

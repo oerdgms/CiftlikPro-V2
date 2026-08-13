@@ -1,0 +1,8 @@
+ÇiftlikPro Enterprise V3.7.6
+- Besi Performansı & Kârlılık Merkezi yeni tasarım.
+- Aktif/Tamamlanan sekmeleri ve modern filtreler.
+- Finans Kesim Geliri/Hayvan Satışı otomatik eşleştirme.
+- Net kâr = gerçekleşen gelir - toplam maliyet.
+- Kâr oranı = net kâr / toplam maliyet x 100.
+- Kesilen/satılan hayvan maliyeti çıkış tarihinde donar.
+- Mobil görünüm iyileştirmeleri.
