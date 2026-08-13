@@ -1,0 +1,5 @@
+ÇiftlikPro Enterprise V3.7.3
+- Birincil aktivasyon: CFP lisans anahtarı.
+- Cihaza bağlı Ed25519 imzalı lisans doğrulaması korunur.
+- .license dosyası yedek/gelişmiş yöntem olarak korunur.
+- İnternet gerekmez.

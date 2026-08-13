@@ -1,6 +1,0 @@
-ÇiftlikPro Enterprise V3.7.2
-- Profesyonel ve mobil uyumlu aktivasyon ekranı.
-- Ham template ifadeleri giderildi.
-- Cihaz kimliği kopyalama, modern lisans dosyası seçimi ve durum rozeti.
-- Aktif lisansta sahip/tür/geçerlilik ve devam butonu.
-- V3.7.1 lisans sistemi ve Lisans Yöneticisi V2 ile uyumlu.
