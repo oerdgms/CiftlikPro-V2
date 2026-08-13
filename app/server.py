@@ -19,9 +19,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.1'
+APP_VERSION='3.7.2'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.1 LİSANS AKTİVASYON HOTFIX'
+APP_LABEL='ENTERPRISE V3.7.2 PROFESYONEL AKTİVASYON'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -834,9 +834,42 @@ class App(BaseHTTPRequestHandler):
         p=urllib.parse.urlparse(self.path); path=p.path; q=urllib.parse.parse_qs(p.query); msg=q.get('msg',[''])[0]
         lic_ok,lic_payload,lic_msg=license_status()
         if path=='/license':
-            owner=h((lic_payload or {}).get('licensee',''))
-            flash=f'<div class="flash err">{{h(msg)}}</div>' if msg else ''
-            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>{{CSS}}</style></head><body><div class="license-shell"><div class="license-card"><h1>🔐 ÇiftlikPro Aktivasyon</h1><p class="mut">Bu ÇiftlikPro kurulumu bu bilgisayar için lisanslanmalıdır.</p>{{flash}}<p><b>Cihaz Kimliği</b></p><div class="device-code">{{h(device_id())}}</div><p class="mut">Bu kodu lisans yöneticisine iletin. Size verilen <b>.license</b> dosyasını aşağıdan yükleyin.</p><form method="post" action="/license-activate" enctype="multipart/form-data"><label>Lisans Dosyası<input type="file" name="license_file" accept=".license,application/json" required></label><button class="btn">🔓 Lisansı Etkinleştir</button></form><p style="margin-top:18px"><span class="{{'license-ok' if lic_ok else 'license-bad'}}">{{'🟢 Aktif' if lic_ok else '🔴 Lisans Gerekli'}}</span> {{h(lic_msg)}}</p></div></div></body></html>''')
+            payload=lic_payload or {}
+            flash_html=('<div class="activation-alert">'+h(msg)+'</div>') if msg else ''
+            status_class='license-ok' if lic_ok else 'license-bad'
+            status_text='🟢 Lisans Aktif' if lic_ok else '🔴 Lisans Gerekli'
+            active_details=''
+            if lic_ok:
+                exp=payload.get('expires_on') or 'Süresiz'
+                if exp!='Süresiz': exp=fmt_date(exp)
+                active_details='<div class="activation-details"><div><span>Lisans Sahibi</span><b>'+h(payload.get('licensee') or '-')+'</b></div><div><span>Lisans Türü</span><b>'+h(payload.get('license_type') or '-')+'</b></div><div><span>Geçerlilik</span><b>'+h(exp)+'</b></div></div><a class="activation-continue" href="/login">ÇiftlikPro\'ya Devam →</a>'
+            upload_section='' if lic_ok else '''<form class="activation-form" method="post" action="/license-activate" enctype="multipart/form-data">
+              <label class="activation-upload" for="license_file"><span class="upload-icon">📄</span><span><b>Lisans dosyanızı seçin</b><small>.license uzantılı aktivasyon dosyası</small></span><span class="upload-button">Dosya Seç</span></label>
+              <input id="license_file" type="file" name="license_file" accept=".license,application/json" required hidden>
+              <div id="selected-license" class="selected-license">Henüz dosya seçilmedi</div>
+              <button class="activation-submit" type="submit">🔓 Lisansı Etkinleştir</button></form>'''
+            html='''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ÇiftlikPro Aktivasyon</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,"Segoe UI",Arial,sans-serif;background:linear-gradient(145deg,#eef5f0 0%,#f8faf9 55%,#e7f1eb 100%);color:#173426;min-height:100vh}
+.activation-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 16px}.activation-card{width:min(760px,100%);background:#fff;border:1px solid #dce9e0;border-radius:28px;box-shadow:0 24px 70px rgba(17,73,43,.14);overflow:hidden}
+.activation-head{background:linear-gradient(135deg,#105b35,#18824a);padding:30px 34px;color:#fff}.activation-brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:19px}.activation-brand span:first-child{font-size:27px}
+.activation-head h1{font-size:34px;line-height:1.1;margin:28px 0 8px}.activation-head p{margin:0;color:#dcefe4;font-size:15px}.activation-body{padding:32px 34px 34px}
+.activation-status{display:inline-flex;padding:8px 13px;border-radius:999px;font-weight:800;font-size:14px;margin-bottom:22px}.license-ok{background:#e5f6eb;color:#14723d}.license-bad{background:#fff0ed;color:#ad3529}
+.activation-alert{padding:13px 15px;border-radius:12px;background:#fff4dc;color:#7c5600;border:1px solid #f2d797;margin-bottom:18px}.device-label{font-size:13px;color:#698075;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.device-row{display:flex;gap:10px}.device-code{flex:1;background:#f0f7f2;border:1px solid #cfe2d5;border-radius:14px;padding:15px 17px;font:800 18px Consolas,monospace;letter-spacing:.7px;color:#145c36;overflow-wrap:anywhere}
+.copy-btn{border:0;border-radius:14px;background:#e6f2e9;color:#176a3c;font-weight:800;padding:0 18px;cursor:pointer}.activation-help{color:#65786d;font-size:14px;line-height:1.55;margin:12px 0 24px}
+.activation-upload{display:flex;align-items:center;gap:14px;border:2px dashed #b8d4c0;background:#f8fbf9;border-radius:18px;padding:18px;cursor:pointer}.upload-icon{font-size:28px}.activation-upload b,.activation-upload small{display:block}.activation-upload small{color:#77887f;margin-top:3px}.upload-button{margin-left:auto;background:#e4f1e8;color:#16693b;padding:9px 12px;border-radius:10px;font-weight:800}
+.selected-license{font-size:13px;color:#718177;margin:8px 2px 14px}.activation-submit,.activation-continue{width:100%;border:0;border-radius:14px;background:linear-gradient(135deg,#14763f,#199151);color:#fff;font-weight:800;font-size:16px;padding:15px 18px;cursor:pointer;text-decoration:none;display:block;text-align:center}
+.activation-details{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}.activation-details div{background:#f3f8f5;border-radius:13px;padding:13px}.activation-details span{display:block;color:#708278;font-size:12px}.activation-foot{text-align:center;color:#829087;font-size:12px;margin-top:22px}
+@media(max-width:600px){.activation-page{padding:0}.activation-card{min-height:100vh;border-radius:0}.activation-head{padding:26px 22px}.activation-head h1{font-size:29px}.activation-body{padding:26px 22px}.device-row{display:block}.copy-btn{width:100%;padding:12px;margin-top:8px}.activation-details{grid-template-columns:1fr}}
+</style></head><body><main class="activation-page"><section class="activation-card"><header class="activation-head"><div class="activation-brand"><span>🐄</span><span>ÇiftlikPro Enterprise</span></div><h1>🔐 Lisans Aktivasyonu</h1><p>Bu bilgisayarı güvenli bir ÇiftlikPro lisansıyla etkinleştirin.</p></header><div class="activation-body">'''
+            html+=flash_html+'<div class="activation-status '+status_class+'">'+status_text+'</div><div class="device-label">Bu Bilgisayarın Cihaz Kimliği</div><div class="device-row"><div id="device-code" class="device-code">'+h(device_id())+'</div><button class="copy-btn" type="button" onclick="copyDevice()">Kopyala</button></div><p class="activation-help">Bu cihaz kodunu lisans yöneticisine iletin. Size oluşturulan <b>.license</b> dosyasını aşağıdan seçerek bu bilgisayarı etkinleştirin.</p>'+active_details+upload_section
+            html+='''<div class="activation-foot">ÇiftlikPro Enterprise · Cihaza bağlı dijital lisans koruması</div></div></section></main>
+<script>
+function copyDevice(){var t=document.getElementById("device-code").innerText;navigator.clipboard.writeText(t).then(function(){var b=document.querySelector(".copy-btn");b.innerText="Kopyalandı ✓";setTimeout(function(){b.innerText="Kopyala"},1600)})}
+var f=document.getElementById("license_file");if(f){f.addEventListener("change",function(){document.getElementById("selected-license").innerText=f.files.length?"Seçilen dosya: "+f.files[0].name:"Henüz dosya seçilmedi"})}
+</script></body></html>'''
+            return self.send_html(html)
         if not lic_ok and path not in ('/license','/license-activate'):
             return self.redirect('/license',lic_msg)
         if path=='/login':
