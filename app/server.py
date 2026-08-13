@@ -19,9 +19,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.3'
+APP_VERSION='3.7.4'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.3 LİSANS BİLGİLERİ HOTFIX'
+APP_LABEL='ENTERPRISE V3.7.4 LİSANS TEST & DEĞİŞTİRME'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -933,9 +933,17 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
 <div class="license-info-item"><span>Geçerlilik</span><b>{h(exp)}</b></div>
 <div class="license-info-item device-info"><span>Cihaz Kimliği</span><div class="device-row-info"><b id="license-device-id">{h(device_id())}</b><button type="button" class="copy-license-device" onclick="copyLicenseDevice()">Kopyala</button></div></div>
 <div class="license-info-item"><span>Durum</span><b>{h(status)}</b></div>
-</div><p class="license-note">Lisans bu bilgisayarın cihaz kimliğine ve dijital imzaya bağlıdır. Lisans verisinde yapılan yetkisiz değişiklikler dijital imzayı geçersiz kılar.</p></div>
+</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px"><a class="btn" href="/license-test">🧪 Lisans Aktivasyonunu Test Et</a><a class="btn secondary" href="/license-change">🔄 Lisansı Değiştir</a></div><p class="license-note">Lisans bu bilgisayarın cihaz kimliğine ve dijital imzaya bağlıdır. Lisans verisinde yapılan yetkisiz değişiklikler dijital imzayı geçersiz kılar.</p></div>
 <script>function copyLicenseDevice(){{var e=document.getElementById("license-device-id");if(!e)return;navigator.clipboard.writeText(e.innerText).then(function(){{var b=document.querySelector(".copy-license-device");b.innerText="Kopyalandı ✓";setTimeout(function(){{b.innerText="Kopyala"}},1500)}})}}</script>'''
             return self.send_html(page('Lisans Bilgileri',body,'/license-info',u,msg))
+        if path=='/license-test':
+            if not self.require_admin():return
+            body=f'''<h1>🧪 Lisans Aktivasyon Testi</h1><div class="card"><p class="mut">Bu ekran yeni CFP anahtarını doğrular; mevcut aktif lisansınızı değiştirmez.</p><div class="kv"><div><b>Cihaz Kimliği</b><span>{h(device_id())}</span></div></div><form method="post" action="/license-test" class="form" style="margin-top:18px"><label class="full">Test Edilecek Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><div class="full"><button class="btn">🧪 Anahtarı Doğrula</button> <a class="btn secondary" href="/license-info">Geri Dön</a></div></form></div>'''
+            return self.send_html(page('Lisans Aktivasyon Testi',body,'/license-info',u,msg))
+        if path=='/license-change':
+            if not self.require_admin():return
+            body=f'''<h1>🔄 Lisansı Değiştir</h1><div class="card"><div class="flash" style="background:#fff4dc;color:#7c5600">Bu işlem doğrulanan yeni lisansı mevcut aktif lisansın yerine kaydeder.</div><div class="kv"><div><b>Cihaz Kimliği</b><span>{h(device_id())}</span></div></div><form method="post" action="/license-change" class="form" style="margin-top:18px"><label class="full">Yeni Lisans Anahtarı<textarea name="license_key" rows="5" placeholder="CFP-XXXXX-XXXXX-..." required></textarea></label><label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="confirm_change" value="yes" required style="width:auto"> Mevcut lisansın yeni lisansla değiştirileceğini onaylıyorum.</label><div class="full"><button class="btn">🔄 Yeni Lisansı Etkinleştir</button> <a class="btn secondary" href="/license-info">İptal</a></div></form></div>'''
+            return self.send_html(page('Lisansı Değiştir',body,'/license-info',u,msg))
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
             return self.send_html(page('Şifremi Değiştir',body,'/password-change',u,msg))
@@ -1753,6 +1761,27 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             f=self.post_data()
         except Exception as exc:
             return self.redirect('/','Form verisi okunamadı: '+str(exc))
+        if path=='/license-test':
+            if not self.require_admin():return
+            key=(f.get('license_key') or '').strip()
+            try: raw=license_key_to_bytes(key)
+            except Exception:return self.redirect('/license-test','❌ Lisans anahtarı okunamadı veya geçersiz.')
+            ok,payload,status=validate_license_bytes(raw);payload=payload or {}
+            if not ok:return self.redirect('/license-test','❌ '+str(status))
+            exp=payload.get('expires_on') or 'Süresiz'
+            if exp!='Süresiz':exp=fmt_date(exp)
+            body=f'''<h1>🧪 Lisans Test Sonucu</h1><div class="card"><p><span class="license-ok">✅ Anahtar Geçerli</span></p><div class="kv"><div><b>Dijital İmza</b><span>✅ Doğru</span></div><div><b>Cihaz Kimliği</b><span>✅ Eşleşiyor · {h(device_id())}</span></div><div><b>Lisans Sahibi</b><span>{h(payload.get('licensee') or '-')}</span></div><div><b>Lisans Türü</b><span>{h(payload.get('license_type') or '-')}</span></div><div><b>Geçerlilik</b><span>{h(exp)}</span></div></div><p class="mut">Test başarılı. Mevcut aktif lisans değiştirilmedi.</p><a class="btn" href="/license-test">Başka Anahtar Test Et</a> <a class="btn secondary" href="/license-info">Lisans Bilgilerine Dön</a></div>'''
+            return self.send_html(page('Lisans Test Sonucu',body,'/license-info',u,''))
+        if path=='/license-change':
+            if not self.require_admin():return
+            if (f.get('confirm_change') or '')!='yes':return self.redirect('/license-change','Değişiklik için onay kutusunu işaretleyin.')
+            key=(f.get('license_key') or '').strip()
+            try:raw=license_key_to_bytes(key)
+            except Exception:return self.redirect('/license-change','❌ Lisans anahtarı okunamadı veya geçersiz.')
+            ok,payload,status=validate_license_bytes(raw)
+            if not ok:return self.redirect('/license-change','❌ '+str(status))
+            tmp=LICENSE_FILE.with_suffix('.license.tmp');tmp.write_bytes(raw);os.replace(tmp,LICENSE_FILE)
+            return self.redirect('/license-info','✅ Yeni lisans başarıyla etkinleştirildi.')
         if path=='/license-key-activate':
             key=(f.get('license_key') or '').strip()
             try: raw=license_key_to_bytes(key)
