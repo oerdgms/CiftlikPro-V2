@@ -1,5 +1,6 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl
 from email.parser import BytesParser
+from email.message import EmailMessage
 from email.policy import default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http import cookies
@@ -19,9 +20,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.6'
+APP_VERSION='3.7.7'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.6 BESİ KÂRLILIK & GÖRSEL FİLTRELER'
+APP_LABEL='ENTERPRISE V3.7.7 ŞİFRE KURTARMA + SÜT SATIŞI'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -379,6 +380,52 @@ def audit(username,action,detail='',ip_address=''):
         with db() as c:c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username or 'sistem',action,detail,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),ip_address or ''))
     except Exception:pass
 
+
+def setting_get(key,default=''):
+    try:
+        with db() as c:
+            r=c.execute('select setting_value from settings where setting_key=?',(key,)).fetchone()
+        return (r['setting_value'] if r else default) or default
+    except Exception:
+        return default
+
+def setting_set(key,value):
+    with db() as c:
+        c.execute("""insert into settings(setting_key,setting_value) values(?,?)
+                     on conflict(setting_key) do update set setting_value=excluded.setting_value""",(key,str(value or '')))
+
+def smtp_config():
+    return {
+        'host':setting_get('smtp_host','smtp.gmail.com'),
+        'port':int(setting_get('smtp_port','587') or 587),
+        'username':setting_get('smtp_username',''),
+        'password':setting_get('smtp_password',''),
+        'sender':setting_get('smtp_sender','') or setting_get('smtp_username',''),
+        'security':setting_get('smtp_security','starttls') or 'starttls',
+    }
+
+def send_reset_email(to_email,full_name,code):
+    cfg=smtp_config()
+    if not cfg['host'] or not cfg['sender']:
+        raise RuntimeError('E-posta sunucusu ayarları tamamlanmamış.')
+    msg=EmailMessage();msg['Subject']='ÇiftlikPro şifre sıfırlama kodu';msg['From']=cfg['sender'];msg['To']=to_email
+    display=(full_name or 'ÇiftlikPro kullanıcısı').strip()
+    msg.set_content(f"Merhaba {display},\n\nÇiftlikPro şifre sıfırlama doğrulama kodunuz:\n\n{code}\n\nBu kod 5 dakika geçerlidir ve yalnızca bir kez kullanılabilir.\nBu işlemi siz başlatmadıysanız bu e-postayı dikkate almayın.\n\nÇiftlikPro Enterprise")
+    context=ssl.create_default_context()
+    if cfg['security']=='ssl':
+        with smtplib.SMTP_SSL(cfg['host'],cfg['port'],timeout=20,context=context) as server:
+            if cfg['username']:server.login(cfg['username'],cfg['password'])
+            server.send_message(msg)
+    else:
+        with smtplib.SMTP(cfg['host'],cfg['port'],timeout=20) as server:
+            server.ehlo()
+            if cfg['security']=='starttls':server.starttls(context=context);server.ehlo()
+            if cfg['username']:server.login(cfg['username'],cfg['password'])
+            server.send_message(msg)
+
+def reset_code_hash(salt,code):return hashlib.sha256((str(salt)+'|'+str(code)).encode('utf-8')).hexdigest()
+def reset_token_hash(token):return hashlib.sha256(str(token).encode('utf-8')).hexdigest()
+
 def active_admin_count():
     with db() as c:return c.execute("select count(*) from users where role='admin' and active=1").fetchone()[0]
 
@@ -403,12 +450,19 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings(setting_key TEXT PRIMARY KEY, setting_value TEXT);
         ''')
         user_cols={r[1] for r in c.execute('pragma table_info(users)').fetchall()}
-        for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT')]:
+        for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT'),('recovery_email','TEXT')]:
             if col not in user_cols:c.execute(f'ALTER TABLE users ADD COLUMN {col} {typ}')
         c.execute("update users set active=1 where active is null")
         c.execute("update users set full_name=username where full_name is null or trim(full_name)=''")
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_min_daily_gain','1.0')")
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_warning_ratio','0.90')")
+        c.execute("""CREATE TABLE IF NOT EXISTS password_reset_codes(
+            id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,code_hash TEXT NOT NULL,salt TEXT NOT NULL,expires_at TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,used INTEGER DEFAULT 0,reset_token_hash TEXT,reset_token_expires TEXT,created_at TEXT NOT NULL,ip_address TEXT)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS finance_animals(
+            finance_id INTEGER NOT NULL,animal_id INTEGER NOT NULL,relation_type TEXT DEFAULT 'İlgili',PRIMARY KEY(finance_id,animal_id))""")
+        for k,v in [('smtp_host','smtp.gmail.com'),('smtp_port','587'),('smtp_security','starttls'),('smtp_username',''),('smtp_password',''),('smtp_sender','')]:
+            c.execute("insert or ignore into settings(setting_key,setting_value) values(?,?)",(k,v))
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
@@ -974,10 +1028,23 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             <form method="post" class="login-form">
               <label>Kullanıcı adı</label><input name="username" autocomplete="username" required>
               <label>Şifre</label><div class="password-wrap"><input id="loginPassword" type="password" name="password" autocomplete="current-password" required><button class="password-toggle" type="button" onclick="toggleLoginPassword(this)">👁 Göster</button></div>
-              <button class="btn login-submit">Giriş Yap</button>
+              <button class="btn login-submit">Giriş Yap</button><div style="text-align:center;margin-top:14px"><a href="/forgot-password" style="color:#176b3a;font-weight:800;text-decoration:none">🔑 Şifremi Unuttum</a></div>
             </form></div>
             <script>function toggleLoginPassword(btn){{var p=document.getElementById('loginPassword');var show=p.type==='password';p.type=show?'text':'password';btn.textContent=show?'🙈 Gizle':'👁 Göster';}}</script>
             </body></html>''')
+        if path=='/forgot-password':
+            step=(q.get('step',['request'])[0] or 'request');rid=(q.get('id',[''])[0] or '');token=(q.get('token',[''])[0] or '')
+            notice=f'<div class="flash">{h(msg)}</div>' if msg else ''
+            base_style='''<style>
+            body{background:linear-gradient(145deg,#eef5f0,#f9fbfa);min-height:100vh}.reset-shell{max-width:520px;margin:6vh auto;background:#fff;border:1px solid #dce8df;border-radius:24px;padding:28px;box-shadow:0 18px 48px rgba(22,72,45,.11)}
+            .reset-brand{font-size:27px;font-weight:900;color:#183c2a;margin-bottom:5px}.reset-sub{color:#6c7f73;margin-bottom:22px}.reset-shell label{display:block;font-weight:800;font-size:13px;margin-top:12px}.reset-shell input{width:100%;padding:13px;border:1px solid #cbd9cf;border-radius:10px;margin-top:5px;font-size:16px}.reset-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}.reset-actions .btn{flex:1}.code-box{text-align:center;letter-spacing:8px;font:900 24px Consolas,monospace}@media(max-width:600px){.reset-shell{margin:3vh 14px;padding:23px 20px}}</style>'''
+            if step=='verify' and rid:
+                content=f'''<div class="reset-brand">📧 Doğrulama Kodu</div><div class="reset-sub">E-postanıza gönderilen 6 haneli kodu girin. Kod 5 dakika geçerlidir.</div>{notice}<form method="post" action="/forgot-verify"><input type="hidden" name="reset_id" value="{h(rid)}"><label>6 Haneli Kod<input class="code-box" name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" autocomplete="one-time-code" required></label><div class="reset-actions"><button class="btn">Kodu Doğrula</button><a class="btn alt" href="/forgot-password">Başa Dön</a></div></form>'''
+            elif step=='reset' and rid and token:
+                content=f'''<div class="reset-brand">🔐 Yeni Şifre Belirle</div><div class="reset-sub">Doğrulama tamamlandı. Yeni şifrenizi oluşturun.</div>{notice}<form method="post" action="/forgot-reset"><input type="hidden" name="reset_id" value="{h(rid)}"><input type="hidden" name="token" value="{h(token)}"><label>Yeni Şifre<input type="password" name="password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="password_confirm" minlength="8" required></label><div class="reset-actions"><button class="btn">Şifreyi Değiştir</button></div></form>'''
+            else:
+                content=f'''<div class="reset-brand">🔑 Şifremi Unuttum</div><div class="reset-sub">Kullanıcı adınızı veya hesabınıza kayıtlı kurtarma e-postasını girin.</div>{notice}<form method="post" action="/forgot-password"><label>Kullanıcı Adı / Kurtarma E-postası<input name="identifier" autocomplete="username" required></label><div class="reset-actions"><button class="btn">📧 Kod Gönder</button><a class="btn alt" href="/login">Girişe Dön</a></div></form><p class="mut" style="margin-top:16px">Kod, kullanıcı hesabına tanımlı kurtarma e-postasına gönderilir.</p>'''
+            return self.send_html(f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ÇiftlikPro Şifre Kurtarma</title><style>{CSS}</style>{base_style}</head><body><div class="reset-shell">🐄 <b>ÇiftlikPro Enterprise</b><hr style="border:0;border-top:1px solid #e6eee8;margin:16px 0">{content}</div></body></html>''')
         if path.startswith('/uploads/'):
             name=os.path.basename(path.split('/uploads/',1)[1]); fp=UPLOADS/name
             if not fp.exists(): return self.send_html('Fotoğraf bulunamadı',404)
@@ -1058,18 +1125,23 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             <div class="full"><button class="btn">💾 Çiftlik Profilini Kaydet</button></div>
             </form></div>'''
             return self.send_html(page('Çiftlik Profili',body,'/farm-profile',u,msg))
+        if path=='/smtp-settings':
+            if not self.require_admin():return
+            cfg=smtp_config();sec=cfg['security']
+            body=f'''<h1>📧 E-posta / Şifre Kurtarma Ayarları</h1><div class="two"><div class="card"><h2>SMTP Ayarları</h2><form method="post" action="/smtp-settings" class="form"><label>SMTP Sunucusu<input name="smtp_host" value="{h(cfg['host'])}" required></label><label>Port<input type="number" name="smtp_port" value="{cfg['port']}" required></label><label>Güvenlik<select name="smtp_security"><option value="starttls" {'selected' if sec=='starttls' else ''}>STARTTLS</option><option value="ssl" {'selected' if sec=='ssl' else ''}>SSL/TLS</option><option value="none" {'selected' if sec=='none' else ''}>Yok</option></select></label><label>SMTP Kullanıcı<input name="smtp_username" value="{h(cfg['username'])}"></label><label>Gönderen E-posta<input type="email" name="smtp_sender" value="{h(cfg['sender'])}" required></label><label>SMTP / Uygulama Şifresi<input type="password" name="smtp_password" placeholder="Değiştirmeyecekseniz boş bırakın"></label><div class="full"><button class="btn">💾 Ayarları Kaydet</button></div></form></div><div class="card"><h2>Test E-postası</h2><p class="mut">Sağlayıcınız iki aşamalı doğrulama kullanıyorsa normal hesap şifresi yerine uygulama şifresi kullanın.</p><form method="post" action="/smtp-settings" class="form"><input type="hidden" name="action" value="test"><label class="full">Test Adresi<input type="email" name="test_email" required></label><div class="full"><button class="btn blue">📨 Test E-postası Gönder</button></div></form></div></div>'''
+            return self.send_html(page('E-posta Ayarları',body,'/users',u,msg))
         if path=='/users':
             if not self.require_admin():return
-            with db() as c:rows=c.execute('select id,username,full_name,role,active,last_login from users order by username').fetchall()
-            trs=''.join(f'''<tr><td>{h(r["full_name"])}</td><td>{h(r["username"])}</td><td>{'Yönetici' if r["role"]=='admin' else 'Personel'}</td><td>{'Aktif' if r["active"] else 'Pasif'}</td><td>{h(r["last_login"]) or '-'}</td><td><a class="btn alt" href="/users/edit?id={r["id"]}">Düzenle</a></td></tr>''' for r in rows)
-            body=f'''<h1>Kullanıcı Yönetimi</h1><div class="two"><div class="card"><h2>Yeni Kullanıcı</h2><form method="post" action="/users/create" class="form"><label>Ad Soyad<input name="full_name" required></label><label>Kullanıcı Adı<input name="username" required></label><label>Şifre<input type="password" name="password" minlength="8" required></label><label>Rol<select name="role"><option value="personel">Personel</option><option value="admin">Yönetici</option></select></label><div class="full"><button class="btn">Kullanıcı Oluştur</button></div></form></div><div class="card"><h2>Güvenlik</h2><p class="mut">Şifreler PBKDF2-SHA256 ile saklanır. Son aktif yönetici pasifleştirilemez.</p></div></div><div class="card" style="margin-top:14px"><table><tr><th>Ad Soyad</th><th>Kullanıcı</th><th>Rol</th><th>Durum</th><th>Son Giriş</th><th>İşlem</th></tr>{trs}</table></div>'''
+            with db() as c:rows=c.execute('select id,username,full_name,recovery_email,role,active,last_login from users order by username').fetchall()
+            trs=''.join(f'''<tr><td>{h(r["full_name"])}</td><td>{h(r["username"])}</td><td>{h(r["recovery_email"]) or '-'}</td><td>{'Yönetici' if r["role"]=='admin' else 'Personel'}</td><td>{'Aktif' if r["active"] else 'Pasif'}</td><td>{fmt_datetime(r["last_login"]) if r["last_login"] else '-'}</td><td><a class="btn alt" href="/users/edit?id={r["id"]}">Düzenle</a></td></tr>''' for r in rows)
+            body=f'''<h1>Kullanıcı Yönetimi</h1><div class="two"><div class="card"><h2>Yeni Kullanıcı</h2><form method="post" action="/users/create" class="form"><label>Ad Soyad<input name="full_name" required></label><label>Kullanıcı Adı<input name="username" required></label><label>Kurtarma E-postası<input type="email" name="recovery_email" required></label><label>Şifre<input type="password" name="password" minlength="8" required></label><label>Rol<select name="role"><option value="personel">Personel</option><option value="admin">Yönetici</option></select></label><div class="full"><button class="btn">Kullanıcı Oluştur</button></div></form></div><div class="card"><h2>Güvenlik</h2><p class="mut">Şifreler PBKDF2-SHA256 ile saklanır. Şifre kurtarma kodları 5 dakika geçerli ve tek kullanımlıktır.</p><a class="btn alt" href="/smtp-settings">📧 E-posta Ayarları</a></div></div><div class="card" style="margin-top:14px"><table><tr><th>Ad Soyad</th><th>Kullanıcı</th><th>Kurtarma E-postası</th><th>Rol</th><th>Durum</th><th>Son Giriş</th><th>İşlem</th></tr>{trs}</table></div>'''
             return self.send_html(page('Kullanıcı Yönetimi',body,'/users',u,msg))
         if path=='/users/edit':
             if not self.require_admin():return
             uid=q.get('id',[''])[0]
             with db() as c:r=c.execute('select * from users where id=?',(uid,)).fetchone()
             if not r:return self.send_html('Kullanıcı bulunamadı',404)
-            body=f'''<h1>Kullanıcı Düzenle</h1><div class="card"><form method="post" action="/users/update" class="form"><input type="hidden" name="id" value="{r["id"]}"><label>Ad Soyad<input name="full_name" value="{h(r["full_name"])}" required></label><label>Rol<select name="role"><option value="personel" {'selected' if r["role"]=='personel' else ''}>Personel</option><option value="admin" {'selected' if r["role"]=='admin' else ''}>Yönetici</option></select></label><label>Durum<select name="active"><option value="1" {'selected' if r["active"] else ''}>Aktif</option><option value="0" {'selected' if not r["active"] else ''}>Pasif</option></select></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8"></label><div class="full"><button class="btn">Kaydet</button> <a class="btn alt" href="/users">İptal</a></div></form></div>'''
+            body=f'''<h1>Kullanıcı Düzenle</h1><div class="card"><form method="post" action="/users/update" class="form"><input type="hidden" name="id" value="{r["id"]}"><label>Ad Soyad<input name="full_name" value="{h(r["full_name"])}" required></label><label>Kurtarma E-postası<input type="email" name="recovery_email" value="{h(r["recovery_email"])}" required></label><label>Rol<select name="role"><option value="personel" {'selected' if r["role"]=='personel' else ''}>Personel</option><option value="admin" {'selected' if r["role"]=='admin' else ''}>Yönetici</option></select></label><label>Durum<select name="active"><option value="1" {'selected' if r["active"] else ''}>Aktif</option><option value="0" {'selected' if not r["active"] else ''}>Pasif</option></select></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8"></label><div class="full"><button class="btn">Kaydet</button> <a class="btn alt" href="/users">İptal</a></div></form></div>'''
             return self.send_html(page('Kullanıcı Düzenle',body,'/users',u,msg))
         if path=='/audit-log':
             if not self.require_admin():return
@@ -1693,21 +1765,23 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             return self.send_html(page('Finans Düzenle',body,path,u,msg))
         if path=='/finance':
             start=q.get('start',[date.today().replace(day=1).isoformat()])[0]; end=q.get('end',[date.today().isoformat()])[0]; typ=q.get('type',[''])[0]; category=q.get('category',[''])[0]
-            sql='select f.*,a.tag from finance f left join animals a on a.id=f.animal_id where tx_date between ? and ?'; args=[start,end]
+            sql='''select f.*,a.tag,coalesce((select group_concat(a2.tag, ', ') from finance_animals fa join animals a2 on a2.id=fa.animal_id where fa.finance_id=f.id),a.tag) as related_tags from finance f left join animals a on a.id=f.animal_id where tx_date between ? and ?'''; args=[start,end]
             if typ: sql+=' and tx_type=?'; args.append(typ)
             if category: sql+=' and category=?'; args.append(category)
             sql+=' order by tx_date desc,id desc'
             with db() as c:
-                animals=c.execute("select id,tag,nickname from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                animals=c.execute("select id,tag,nickname,gender from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                milk_females=[a for a in animals if str(a['gender'] or '')=='Dişi']
                 categories=c.execute("select distinct category from finance where coalesce(category,'')<>'' order by category").fetchall()
                 rows=c.execute(sql,args).fetchall()
                 inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
             bulk_cards=''.join(f'''<label class="bulk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="bulk-check" value="{a["id"]}" onchange="syncBulkSelection()"><span class="tag">🐄 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in animals)
+            milk_cards=''.join(f'''<label class="bulk-row milk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="milk-check" value="{a["id"]}" onchange="syncMilkSelection()"><span class="tag">🥛 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in milk_females)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
-                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["tag"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
+                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="card" style="margin-top:14px"><h2>Yeni Kayıt</h2><form method="post" class="form" id="financeCreateForm">
@@ -1718,7 +1792,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
 <label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
 <label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label>
 <input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
-<div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div>
+<div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div><input type="hidden" name="milk_animal_ids" id="milkAnimalIds" value=""><div class="full bulk-animal-box" id="milkAnimalBox" style="display:none"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🥛 Süt Gelirine Dahil Dişi Hayvanlar</h3><div class="mut">Yalnızca aktif dişi hayvanlar gösterilir. Toplam süt geliri bölünmez; seçilen hayvanlar kayda ilişkilendirilir.</div></div><input class="bulk-search" id="milkSearch" placeholder="Dişi küpe veya takma ad ara…" oninput="filterMilkAnimals()"></div><div class="bulk-list" id="milkList">{milk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="milkCount">0</b> dişi</span><span class="pill">Toplam gelir <b id="milkTotal">₺0,00</b></span><button type="button" class="btn alt" onclick="clearMilkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="milkSelectedPreview">Henüz dişi hayvan seçilmedi.</div></div></div>
 <label class="full">Açıklama<input name="description"></label>
 <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam tutar seçilen hayvan sayısına göre otomatik dağıtılır.</div>
 <div class="full finance-savebar"><button type="submit" class="btn" id="financeSubmitBtn">💾 Finans Kaydını Kaydet</button><span class="mut" id="financeSaveHint"></span></div></form></div><div class="card finance-filter-card" style="margin-top:14px"><div class="finance-filter-title"><div><h2>🔎 Finans Filtreleri</h2><span class="mut">Tarih, işlem türü ve kategoriye göre kayıtları daraltın.</span></div><span class="filter-count-pill">{len(rows)} kayıt</span></div><form method="get" class="finance-toolbar finance-toolbar-modern"><label><span>📅 Başlangıç</span><input type="date" name="start" value="{h(start)}"></label><label><span>📅 Bitiş</span><input type="date" name="end" value="{h(end)}"></label><label><span>↕️ Tür</span><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label><span>🏷️ Kategori</span><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><div class="finance-filter-actions"><button class="btn blue">🔎 Filtrele</button><a class="btn alt" href="/finance">↺ Temizle</a><a class="btn export-btn" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">⬇ CSV</a></div></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
@@ -1728,6 +1802,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
               const c=document.getElementById('financeCategory').value;
               return t==='Gelir' && (c==='Hayvan Satışı' || c==='Kesim Geliri');
             }}
+            function isMilkFinance(){{return document.getElementById('tx').value==='Gelir' && document.getElementById('financeCategory').value==='Süt Satışı';}}
             function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
             function selectedChecks(){{return Array.from(document.querySelectorAll('.bulk-check:checked'));}}
             function syncBulkSelection(){{
@@ -1746,13 +1821,22 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 ? (checks.length===1 ? 'Seçilen hayvana '+formatTRY(total)+' yazılacak' : checks.length+' hayvana otomatik dağıtılacak')
                 : '';
             }}
+            function syncMilkSelection(){{
+              const checks=Array.from(document.querySelectorAll('.milk-check:checked'));
+              document.querySelectorAll('.milk-row').forEach(x=>x.classList.toggle('selected',x.querySelector('.milk-check').checked));
+              document.getElementById('milkAnimalIds').value=checks.map(x=>x.value).join(',');document.getElementById('milkCount').textContent=checks.length;
+              document.getElementById('milkTotal').textContent=formatTRY(parseFloat(document.getElementById('financeAmount').value||'0'));
+              const labels=checks.slice(0,8).map(x=>x.closest('.milk-row').querySelector('.tag').textContent.trim());
+              document.getElementById('milkSelectedPreview').textContent=checks.length?labels.join(' · ')+(checks.length>8?' · +'+(checks.length-8)+' diğer':''):'Henüz dişi hayvan seçilmedi.';
+              if(isMilkFinance())document.getElementById('financeSaveHint').textContent=checks.length+' dişi hayvan süt gelirine ilişkilendirilecek';
+            }}
+            function clearMilkAnimals(){{document.querySelectorAll('.milk-check').forEach(x=>x.checked=false);syncMilkSelection();}}
+            function filterMilkAnimals(){{const q=(document.getElementById('milkSearch').value||'').toLocaleLowerCase('tr-TR').trim();document.querySelectorAll('.milk-row').forEach(row=>{{row.style.display=!q||row.dataset.search.toLocaleLowerCase('tr-TR').includes(q)?'grid':'none';}});}}
             function refreshBulkFinance(){{
-              const on=isBulkFinance();
-              document.getElementById('bulkAnimalBox').style.display=on?'block':'none';
-              document.getElementById('singleAnimalLabel').style.display=on?'none':'block';
-              document.getElementById('financeAnimal').required=false;
-              document.getElementById('statusWarning').style.display=on?'block':'none';
-              syncBulkSelection();
+              const on=isBulkFinance(),milk=isMilkFinance();
+              document.getElementById('bulkAnimalBox').style.display=on?'block':'none';document.getElementById('milkAnimalBox').style.display=milk?'block':'none';
+              document.getElementById('singleAnimalLabel').style.display=(on||milk)?'none':'block';document.getElementById('financeAnimal').required=false;
+              document.getElementById('statusWarning').style.display=on?'block':'none';syncBulkSelection();syncMilkSelection();
             }}
             function clearBulkAnimals(){{
               document.querySelectorAll('.bulk-check').forEach(x=>x.checked=false);
@@ -1764,7 +1848,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             }}
             document.getElementById('tx').addEventListener('change',refreshBulkFinance);
             document.getElementById('financeCategory').addEventListener('change',refreshBulkFinance);
-            document.getElementById('financeAmount').addEventListener('input',syncBulkSelection);
+            document.getElementById('financeAmount').addEventListener('input',function(){{syncBulkSelection();syncMilkSelection();}});
             document.getElementById('financeCreateForm').addEventListener('submit',function(e){{
               syncBulkSelection();
               if(isBulkFinance()) document.getElementById('financeAnimal').required=false;
@@ -1772,6 +1856,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 e.preventDefault();
                 alert('Hayvan satışı veya kesim geliri için en az bir hayvan seçmelisiniz.');
               }}
+              if(isMilkFinance() && document.querySelectorAll('.milk-check:checked').length===0){{e.preventDefault();alert('Süt satışı için en az bir aktif dişi hayvan seçmelisiniz.');}}
             }});
             refreshBulkFinance();
             </script>'''
@@ -1867,6 +1952,53 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             if not ok:return self.redirect('/license',status)
             tmp=LICENSE_FILE.with_suffix('.license.tmp');tmp.write_bytes(raw);os.replace(tmp,LICENSE_FILE)
             return self.redirect('/login','Lisans başarıyla etkinleştirildi.')
+        if path=='/forgot-password':
+            identifier=(f.get('identifier') or '').strip()
+            if not identifier:return self.redirect('/forgot-password','Kullanıcı adı veya e-posta girin.')
+            with db() as c:user=c.execute("select * from users where active=1 and (lower(username)=lower(?) or lower(coalesce(recovery_email,''))=lower(?)) limit 1",(identifier,identifier)).fetchone()
+            if not user or not (user['recovery_email'] or '').strip():return self.redirect('/forgot-password','Bu hesap için kurtarma e-postası tanımlı değil veya hesap bulunamadı.')
+            with db() as c:recent=c.execute('select created_at from password_reset_codes where user_id=? order by id desc limit 1',(user['id'],)).fetchone()
+            if recent:
+                try:
+                    if (datetime.now()-datetime.fromisoformat(recent['created_at'])).total_seconds()<60:return self.redirect('/forgot-password','Yeni kod istemeden önce 60 saniye bekleyin.')
+                except Exception:pass
+            code=f'{secrets.randbelow(1000000):06d}';salt=secrets.token_hex(16);expires=(datetime.now()+timedelta(minutes=5)).isoformat(timespec='seconds');created=datetime.now().isoformat(timespec='seconds')
+            with db() as c:
+                c.execute('insert into password_reset_codes(user_id,code_hash,salt,expires_at,attempts,used,created_at,ip_address) values(?,?,?,?,0,0,?,?)',(user['id'],reset_code_hash(salt,code),salt,expires,created,self.client_ip()));rid=c.execute('select last_insert_rowid()').fetchone()[0]
+            try:send_reset_email(user['recovery_email'],user['full_name'],code)
+            except Exception as exc:
+                with db() as c:c.execute('update password_reset_codes set used=1 where id=?',(rid,))
+                return self.redirect('/forgot-password','E-posta gönderilemedi. Yönetici SMTP ayarlarını kontrol etsin: '+str(exc))
+            audit(user['username'],'Şifre sıfırlama kodu istedi','',self.client_ip());return self.redirect(f'/forgot-password?step=verify&id={rid}','Doğrulama kodu kurtarma e-postasına gönderildi.')
+        if path=='/forgot-verify':
+            rid=int(f.get('reset_id') or 0);code=(f.get('code') or '').strip()
+            with db() as c:r=c.execute('select pr.*,u.username from password_reset_codes pr join users u on u.id=pr.user_id where pr.id=?',(rid,)).fetchone()
+            if not r:return self.redirect('/forgot-password','Şifre sıfırlama isteği bulunamadı.')
+            if r['used'] or int(r['attempts'] or 0)>=3:return self.redirect('/forgot-password','Bu doğrulama isteği artık kullanılamaz.')
+            try:
+                if datetime.now()>datetime.fromisoformat(r['expires_at']):
+                    with db() as c:c.execute('update password_reset_codes set used=1 where id=?',(rid,))
+                    return self.redirect('/forgot-password','Doğrulama kodunun süresi doldu. Yeni kod isteyin.')
+            except Exception:return self.redirect('/forgot-password','Doğrulama isteği geçersiz.')
+            if not hmac.compare_digest(reset_code_hash(r['salt'],code),r['code_hash']):
+                attempts=int(r['attempts'] or 0)+1
+                with db() as c:c.execute('update password_reset_codes set attempts=?,used=? where id=?',(attempts,1 if attempts>=3 else 0,rid))
+                return self.redirect(f'/forgot-password?step=verify&id={rid}',f'Kod hatalı. Kalan deneme: {max(0,3-attempts)}')
+            token=secrets.token_urlsafe(32);token_exp=(datetime.now()+timedelta(minutes=10)).isoformat(timespec='seconds')
+            with db() as c:c.execute('update password_reset_codes set reset_token_hash=?,reset_token_expires=? where id=?',(reset_token_hash(token),token_exp,rid))
+            return self.redirect(f'/forgot-password?step=reset&id={rid}&token={urllib.parse.quote(token)}','Kod doğrulandı.')
+        if path=='/forgot-reset':
+            rid=int(f.get('reset_id') or 0);token=f.get('token') or '';pw=f.get('password') or '';pw2=f.get('password_confirm') or ''
+            if len(pw)<8:return self.redirect('/forgot-password','Yeni şifre en az 8 karakter olmalıdır.')
+            if pw!=pw2:return self.redirect('/forgot-password','Yeni şifreler eşleşmiyor.')
+            with db() as c:r=c.execute('select pr.*,u.username from password_reset_codes pr join users u on u.id=pr.user_id where pr.id=?',(rid,)).fetchone()
+            if not r or r['used'] or not r['reset_token_hash']:return self.redirect('/forgot-password','Şifre sıfırlama bağlantısı geçersiz.')
+            try:
+                if datetime.now()>datetime.fromisoformat(r['reset_token_expires']):return self.redirect('/forgot-password','Şifre sıfırlama bağlantısının süresi doldu.')
+            except Exception:return self.redirect('/forgot-password','Şifre sıfırlama bağlantısı geçersiz.')
+            if not hmac.compare_digest(reset_token_hash(token),r['reset_token_hash']):return self.redirect('/forgot-password','Şifre sıfırlama bağlantısı geçersiz.')
+            with db() as c:c.execute('update users set password=?,password_changed_at=? where id=?',(password_hash(pw),datetime.now().strftime('%Y-%m-%d %H:%M:%S'),r['user_id']));c.execute('update password_reset_codes set used=1 where id=?',(rid,))
+            audit(r['username'],'Şifresini e-posta doğrulamasıyla sıfırladı','',self.client_ip());return self.redirect('/login','Şifreniz yenilendi. Yeni şifrenizle giriş yapabilirsiniz.')
         if path=='/login':
             ok,_,status=license_status()
             if not ok:return self.redirect('/license',status)
@@ -1881,6 +2013,18 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path=='/smtp-settings':
+            if not self.require_admin():return
+            action=(f.get('action') or 'save').strip()
+            if action=='test':
+                target=(f.get('test_email') or '').strip()
+                if not target:return self.redirect('/smtp-settings','Test e-posta adresi girin.')
+                try:send_reset_email(target,'SMTP Test','123456');return self.redirect('/smtp-settings','✅ Test e-postası gönderildi.')
+                except Exception as exc:return self.redirect('/smtp-settings','Test e-postası gönderilemedi: '+str(exc))
+            setting_set('smtp_host',(f.get('smtp_host') or '').strip());setting_set('smtp_port',(f.get('smtp_port') or '587').strip());setting_set('smtp_security',(f.get('smtp_security') or 'starttls').strip());setting_set('smtp_username',(f.get('smtp_username') or '').strip());setting_set('smtp_sender',(f.get('smtp_sender') or '').strip())
+            if (f.get('smtp_password') or '').strip():setting_set('smtp_password',f.get('smtp_password').strip())
+            audit(username,'SMTP ayarlarını güncelledi','',self.client_ip());return self.redirect('/smtp-settings','E-posta ayarları kaydedildi.')
+
         if path=='/dashboard-layout':
             try: slot=int(f.get('slot','-1'))
             except Exception: slot=-1
@@ -1937,7 +2081,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             uname=(f.get('username') or '').strip();password=f.get('password','');role=f.get('role','personel')
             if len(password)<8:return self.redirect('/users','Şifre en az 8 karakter olmalıdır.')
             try:
-                with db() as c:c.execute('insert into users(username,password,role,full_name,active,password_changed_at) values(?,?,?,?,1,?)',(uname,password_hash(password),role,f.get('full_name',''),datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                with db() as c:c.execute('insert into users(username,password,role,full_name,recovery_email,active,password_changed_at) values(?,?,?,?,?,1,?)',(uname,password_hash(password),role,f.get('full_name',''),(f.get('recovery_email') or '').strip(),datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             except sqlite3.IntegrityError:return self.redirect('/users','Bu kullanıcı adı zaten kullanılıyor.')
             audit(username,'Kullanıcı oluşturdu',uname+' · '+role,self.client_ip());return self.redirect('/users','Kullanıcı oluşturuldu.')
         if path=='/users/update':
@@ -1947,7 +2091,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             if not r:return self.redirect('/users','Kullanıcı bulunamadı.')
             if r['role']=='admin' and r['active'] and (role!='admin' or not active) and active_admin_count()<=1:return self.redirect('/users/edit?id='+str(uid),'Son aktif yönetici değiştirilemez.')
             with db() as c:
-                c.execute('update users set full_name=?,role=?,active=? where id=?',(f.get('full_name',''),role,active,uid))
+                c.execute('update users set full_name=?,recovery_email=?,role=?,active=? where id=?',(f.get('full_name',''),(f.get('recovery_email') or '').strip(),role,active,uid))
                 if f.get('new_password'):
                     if len(f['new_password'])<8:return self.redirect('/users/edit?id='+str(uid),'Yeni şifre en az 8 karakter olmalıdır.')
                     c.execute('update users set password=?,password_changed_at=? where id=?',(password_hash(f['new_password']),datetime.now().strftime('%Y-%m-%d %H:%M:%S'),uid))
@@ -2301,6 +2445,21 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     amount=round(float(f['amount']),2)
                     if amount<=0:return self.redirect('/finance','Tutar 0’dan büyük olmalıdır.')
+                    milk_mode=tx_type=='Gelir' and category=='Süt Satışı'
+                    if milk_mode:
+                        raw_ids=[x.strip() for x in (f.get('milk_animal_ids') or '').split(',') if x.strip()];animal_ids=[]
+                        for x in raw_ids:
+                            try:aid=int(x)
+                            except:continue
+                            if aid not in animal_ids:animal_ids.append(aid)
+                        if not animal_ids:return self.redirect('/finance','Süt satışı için en az bir aktif dişi hayvan seçilmelidir.')
+                        placeholders=','.join('?' for _ in animal_ids);selected=c.execute(f"select id,tag,gender,status from animals where id in ({placeholders})",animal_ids).fetchall()
+                        if len(selected)!=len(animal_ids):return self.redirect('/finance','Seçilen dişi hayvanlardan biri bulunamadı.')
+                        if any(str(r['gender'] or '')!='Dişi' or str(r['status'] or 'Aktif')!='Aktif' for r in selected):return self.redirect('/finance','Süt satışına yalnız aktif dişi hayvanlar bağlanabilir. Sayfayı yenileyin.')
+                        created=datetime.now().isoformat();tags=', '.join(str(r['tag']) for r in selected);desc=(f.get('description') or '').strip();relation_note=f'Süt satışı · {len(animal_ids)} dişi: {tags}'
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,(desc+' · ' if desc else '')+relation_note,f.get('payment_method'),None,created,''));finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                        for aid in animal_ids:c.execute('insert or ignore into finance_animals(finance_id,animal_id,relation_type) values(?,?,?)',(finance_id,aid,'Süt Satışı'))
+                        audit(username,'Süt satışını dişi hayvanlara ilişkilendirdi',f'{len(animal_ids)} dişi · {money(amount)}',self.client_ip());return self.redirect('/finance',f'Süt satışı kaydedildi ve {len(animal_ids)} aktif dişi hayvana ilişkilendirildi.')
                     bulk_mode=tx_type=='Gelir' and category in ('Hayvan Satışı','Kesim Geliri')
                     if bulk_mode:
                         raw_ids=[x.strip() for x in (f.get('animal_ids') or '').split(',') if x.strip()]
