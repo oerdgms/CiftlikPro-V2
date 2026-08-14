@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.7.9'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.9 AKILLI PARA HOTFIX + GEBE HAYVAN GİRİŞİ'
+APP_LABEL='ENTERPRISE V3.7.9 FİNANS HOTFIX + AKILLI PARA + GEBE HAYVAN'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -805,32 +805,67 @@ function bindSmartPhotoForms(){{
 }}
 
 function moneyRaw(v){{
- v=String(v||'').trim().replace(/[₺\s]/g,'');if(!v)return '';
- var comma=v.indexOf(','),whole=(comma>=0?v.slice(0,comma):v).replace(/\./g,'').replace(/[^0-9-]/g,'');
- var dec=comma>=0?v.slice(comma+1).replace(/[^0-9]/g,'').slice(0,2):'';
- return whole+(comma>=0&&dec!==''?'.'+dec:'');
+  v=String(v||'').trim().replace(/[₺\s]/g,'');
+  if(!v)return '';
+  const comma=v.indexOf(',');
+  const whole=(comma>=0?v.slice(0,comma):v).replace(/\D/g,'')||'0';
+  const dec=comma>=0?v.slice(comma+1).replace(/\D/g,'').slice(0,2):'';
+  return whole+(comma>=0&&dec!==''?'.'+dec:'');
 }}
-function moneyDisplay(v){{
- v=String(v||'').trim().replace(/[₺\s]/g,'');if(!v)return '';
- var hasComma=v.indexOf(',')>=0,comma=v.indexOf(',');
- var whole=(hasComma?v.slice(0,comma):v).replace(/\./g,'').replace(/[^0-9-]/g,'');
- var negative=whole.startsWith('-');whole=whole.replace(/-/g,'').replace(/^0+(?=\d)/,'')||'0';
- whole=whole.replace(/\B(?=(\d{{3}})+(?!\d))/g,'.');
- var dec=hasComma?v.slice(comma+1).replace(/[^0-9]/g,'').slice(0,2):'';
- return (negative?'-':'')+whole+(hasComma?','+dec:'');
+function moneyGroupDigits(digits){{
+  digits=String(digits||'').replace(/\D/g,'').replace(/^0+(?=\d)/,'');
+  if(!digits)return '';
+  return digits.replace(/\B(?=(\d{{3}})+(?!\d))/g,'.');
 }}
 function bindSmartMoney(){{
- const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
- document.querySelectorAll('input[name]').forEach(function(el){{
-  if(!names.has(el.name)||el.dataset.moneyBound==='1')return;
-  el.dataset.moneyBound='1';el.type='text';el.inputMode='decimal';el.autocomplete='off';el.classList.add('smart-money');
-  if(el.value)el.value=moneyDisplay(el.value);
-  el.addEventListener('input',function(){{el.value=moneyDisplay(el.value);try{{el.setSelectionRange(el.value.length,el.value.length);}}catch(e){{}}}});
- }});
- document.querySelectorAll('form').forEach(function(form){{
-  if(form.dataset.moneySubmitBound==='1')return;form.dataset.moneySubmitBound='1';
-  form.addEventListener('submit',function(){{form.querySelectorAll('input.smart-money').forEach(function(el){{el.value=moneyRaw(el.value);}});}},true);
- }});
+  const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
+  document.querySelectorAll('input[name]').forEach(function(el){{
+    if(!names.has(el.name)||el.dataset.moneyBound==='1')return;
+    el.dataset.moneyBound='1';
+    el.type='text';
+    el.inputMode='numeric';
+    el.autocomplete='off';
+    el.classList.add('smart-money');
+
+    // Existing database value -> Turkish display.
+    if(el.value){{
+      const initial=String(el.value).trim().replace(',', '.');
+      const n=Number(initial);
+      if(Number.isFinite(n)){{
+        const fixed=Math.round(n*100)/100;
+        const parts=String(fixed).split('.');
+        const whole=moneyGroupDigits(parts[0]);
+        const dec=(parts[1]||'').replace(/\D/g,'').slice(0,2);
+        el.value=whole+(dec?','+dec:'');
+      }}
+    }}
+
+    // IMPORTANT: while typing, only digits are accepted as the lira amount.
+    // The dots visible in the field are presentation only.
+    el.addEventListener('input',function(){{
+      const raw=el.value;
+      const digits=raw.replace(/\D/g,'');
+      el.value=moneyGroupDigits(digits);
+      try{{el.setSelectionRange(el.value.length,el.value.length);}}catch(e){{}}
+    }});
+
+    // Prevent punctuation typed by mobile/desktop keyboard from changing meaning.
+    el.addEventListener('beforeinput',function(ev){{
+      if(ev.data==='.'||ev.data===','){{
+        ev.preventDefault();
+      }}
+    }});
+  }});
+
+  document.querySelectorAll('form').forEach(function(form){{
+    if(form.dataset.moneySubmitBound==='1')return;
+    form.dataset.moneySubmitBound='1';
+    form.addEventListener('submit',function(){{
+      form.querySelectorAll('input.smart-money').forEach(function(el){{
+        el.value=String(el.value||'').replace(/\D/g,'');
+      }});
+    }},true);
+  }});
 }}
 document.addEventListener('DOMContentLoaded',bindSmartMoney);
 
@@ -1803,7 +1838,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     a["id"],'selected' if r["animal_id"]==a["id"] else '',h(a["tag"]),h(a["nickname"]),h(a["status"])
                 ) for a in animals
             )
-            categories=['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme','Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Diğer']
+            categories=['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme','Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı','Diğer']
             category_options=''.join('<option {0}>{1}</option>'.format('selected' if r["category"]==x else '',h(x)) for x in categories)
             body=f'''<h1>Finans Kaydını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form">
             <input type="hidden" name="id" value="{r["id"]}">
@@ -1820,7 +1855,11 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             return self.send_html(page('Finans Düzenle',body,path,u,msg))
         if path=='/finance':
             start=q.get('start',[date.today().replace(day=1).isoformat()])[0]; end=q.get('end',[date.today().isoformat()])[0]; typ=q.get('type',[''])[0]; category=q.get('category',[''])[0]
-            sql='''select f.*,a.tag,coalesce((select group_concat(a2.tag, ', ') from finance_animals fa join animals a2 on a2.id=fa.animal_id where fa.finance_id=f.id),a.tag) as related_tags from finance f left join animals a on a.id=f.animal_id where tx_date between ? and ?'''; args=[start,end]
+            sql='''select f.*,a.tag,
+            case when f.category='Süt Satışı'
+                 then coalesce((select group_concat(a2.tag, ', ') from finance_animals fa join animals a2 on a2.id=fa.animal_id where fa.finance_id=f.id and fa.relation_type='Süt Satışı'),a.tag)
+                 else a.tag end as related_tags
+            from finance f left join animals a on a.id=f.animal_id where tx_date between ? and ?'''; args=[start,end]
             if typ: sql+=' and tx_type=?'; args.append(typ)
             if category: sql+=' and category=?'; args.append(category)
             sql+=' order by tx_date desc,id desc'
@@ -1835,14 +1874,14 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             milk_cards=''.join(f'''<label class="bulk-row milk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="milk-check" value="{a["id"]}" onchange="syncMilkSelection()"><span class="tag">🥛 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in milk_females)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance-delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
                     fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
 <label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label>
 <label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option></select></label>
-<label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Diğer</option></select></label>
+<label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option><option>Diğer</option></select></label>
 <label>Toplam Tutar<input type="number" step="0.01" min="0.01" name="amount" id="financeAmount" required></label>
 <label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
 <label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label>
@@ -2515,14 +2554,17 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         'update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,payment_method=?,animal_id=?,animal_status_action=? where id=?',
                         (f['tx_date'],f['tx_type'],category,float(f['amount']),f.get('description'),f.get('payment_method'),animal_id,action,record_id)
                     )
+                    if category!='Süt Satışı':
+                        c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     recalculate_animal_exit_status(c,old_animal_id)
                     if animal_id!=old_animal_id:recalculate_animal_exit_status(c,animal_id)
                     return self.redirect('/finance','Finans kaydı güncellendi.')
-                if path=='/finance/delete':
+                if path=='/finance-delete':
                     record_id=int(f['id'])
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     animal_id=old['animal_id']
+                    c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     c.execute('delete from finance where id=?',(record_id,))
                     recalculate_animal_exit_status(c,animal_id)
                     return self.redirect('/finance','Finans kaydı silindi. Hayvan durumu yeniden hesaplandı.')
