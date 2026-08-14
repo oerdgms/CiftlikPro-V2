@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.7.8'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.8 PROFESYONEL FİNANS AKIŞI'
+APP_LABEL='ENTERPRISE V3.7.8 PROFESYONEL FİNANS AKIŞI HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -717,7 +717,19 @@ def page(title,body,path='/',user='admin',flash=''):
         children=''.join(nav_link(name,url) for name,url in items)
         nav+=f'<details class="nav-group {"open-group" if active else ""}" {"open" if active else ""}><summary>{label}</summary><div class="nav-children">{children}</div></details>'
     fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
-    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><script>
+    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}
+/* V3.7.8 Finance Drawer Hotfix */
+#financeDrawerBackdrop.finance-drawer-backdrop{{position:fixed!important;inset:0!important;z-index:2090!important;display:none!important;background:rgba(9,34,22,.42)!important;backdrop-filter:blur(2px)}}
+#financeDrawerBackdrop.finance-drawer-backdrop.open{{display:block!important}}
+#financeDrawer.finance-drawer{{position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:auto!important;width:min(760px,94vw)!important;height:100dvh!important;max-width:none!important;margin:0!important;padding:0!important;z-index:2100!important;display:flex!important;flex-direction:column!important;background:#f5f8f6!important;border:0!important;border-radius:0!important;box-shadow:-22px 0 55px rgba(12,45,28,.24)!important;transform:translateX(105%)!important;visibility:hidden!important;pointer-events:none!important;transition:transform .24s ease,visibility 0s linear .24s!important;overflow:hidden!important}}
+#financeDrawer.finance-drawer.open{{transform:translateX(0)!important;visibility:visible!important;pointer-events:auto!important;transition:transform .24s ease!important}}
+#financeDrawer .finance-drawer-head{{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:16px!important;padding:22px 24px 17px!important;flex:0 0 auto!important;background:#fff!important;border-bottom:1px solid #dce8df!important}}
+#financeDrawer .finance-drawer-close{{appearance:none!important;display:grid!important;place-items:center!important;width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;margin:0!important;border:0!important;border-radius:50%!important;background:#e8f3ec!important;color:#126c3b!important;font:700 28px/1 Arial,sans-serif!important;cursor:pointer!important}}
+#financeDrawer .finance-drawer-body{{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;padding:18px 20px 36px!important}}
+#financeDrawer .finance-entry-card{{margin:0!important;width:100%!important;box-sizing:border-box!important}}
+#financeDrawer .bulk-list{{max-height:310px!important;overflow-y:auto!important}}
+@media(max-width:700px){{#financeDrawer.finance-drawer{{width:100vw!important;max-width:100vw!important}}#financeDrawer .finance-drawer-head{{padding:16px!important}}#financeDrawer .finance-drawer-body{{padding:12px 12px 28px!important}}#financeDrawer .bulk-list{{max-height:42vh!important}}}}
+</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><script>
 (function(){{
  const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
  if(btn&&side){{btn.addEventListener("click",function(){{side.classList.toggle("mobile-open");}});side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{side.classList.remove("mobile-open");}});}});}}
@@ -1862,9 +1874,11 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
               if(isMilkFinance() && document.querySelectorAll('.milk-check:checked').length===0){{e.preventDefault();alert('Süt satışı için en az bir aktif dişi hayvan seçmelisiniz.');}}
             }});
             refreshBulkFinance();
-            function openFinanceDrawer(){{const d=document.getElementById('financeDrawer'),b=document.getElementById('financeDrawerBackdrop');d.classList.add('open');b.classList.add('open');d.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';}}
-function closeFinanceDrawer(ev){{if(ev&&ev.target!==document.getElementById('financeDrawerBackdrop'))return;const d=document.getElementById('financeDrawer'),b=document.getElementById('financeDrawerBackdrop');d.classList.remove('open');b.classList.remove('open');d.setAttribute('aria-hidden','true');document.body.style.overflow='';}}
-document.addEventListener('keydown',e=>{{if(e.key==='Escape')closeFinanceDrawer();}});
+            function setFinanceDrawer(open){{const d=document.getElementById('financeDrawer'),b=document.getElementById('financeDrawerBackdrop');if(!d||!b)return;d.classList.toggle('open',open);b.classList.toggle('open',open);d.setAttribute('aria-hidden',open?'false':'true');document.body.style.overflow=open?'hidden':'';}}
+function openFinanceDrawer(){{setFinanceDrawer(true);}}
+function closeFinanceDrawer(ev){{if(ev&&ev.target!==document.getElementById('financeDrawerBackdrop'))return;setFinanceDrawer(false);}}
+document.addEventListener('keydown',e=>{{if(e.key==='Escape')setFinanceDrawer(false);}});
+setTimeout(()=>setFinanceDrawer(false),0);
 </script>'''
             return self.send_html(page('Finans',body,'/finance',u,msg))
         if path=='/reports':
