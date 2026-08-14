@@ -27,3 +27,9 @@ Aşağıdaki modüller yeni sürümlerde korunmalıdır:
 - [x] Mobil uyumluluk
 
 Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
+
+## V3.7.9 Otomatik Hayvan Alımı Finans Entegrasyonu
+- Dişi/Erkek hayvan eklerken alış fiyatı > 0 ise Finans'a otomatik Gider / Hayvan Alımı kaydı açılır.
+- Alış ödeme yöntemi hayvan ekleme ekranından seçilir.
+- Daha önce Hayvan Alımı finans kaydıyla ilişkilendirilmiş hayvanlar yeni Hayvan Alımı seçiminde gösterilmez.
+- Backend aynı hayvana ikinci Hayvan Alımı bağlantısını engeller.

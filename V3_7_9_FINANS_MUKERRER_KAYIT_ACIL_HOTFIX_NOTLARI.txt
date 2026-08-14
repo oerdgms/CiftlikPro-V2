@@ -1,8 +1,0 @@
-ÇiftlikPro Enterprise V3.7.9 — Finans Mükerrer Kayıt Acil Hotfix
-
-Çift katmanlı koruma:
-1. Tarayıcı: İlk Kaydet tıklamasında form kilitlenir ve buton “Kaydediliyor…” olur.
-2. Sunucu: Aynı kullanıcı + aynı finans formu 15 saniye içinde tekrar gelirse ikinci kayıt reddedilir.
-
-Koruma Süt Satışı, Hayvan Satışı/Kesim Geliri ve normal Gelir/Gider kayıtlarının tamamında aktiftir.
-Önceki Finans Silme kök düzeltmesi, akıllı para, gebe hayvan girişi, süt satışı, Finans Drawer ve şifre kurtarma korunur.

@@ -1,1 +1,0 @@
-Finans yeni kayıt paneli kapalı başlar; sağdan açılır. X/ESC/arka alan ile kapanır. Mobilde tam ekran. Mevcut finans, süt satışı ve şifre kurtarma işlevleri korunur.

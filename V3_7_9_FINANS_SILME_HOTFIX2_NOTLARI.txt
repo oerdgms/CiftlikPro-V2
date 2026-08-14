@@ -1,7 +1,0 @@
-V3.7.9 Finans Silme Hotfix 2
-- Finans Sil formu /finance/delete adresine alındı.
-- Backend hem /finance/delete hem eski /finance-delete adresini kabul eder.
-- finance_animals ilişkileri önce temizlenir.
-- Ardından finance kaydı silinir.
-- Hayvan bağlantısı varsa durum yeniden hesaplanır.
-- Silme sonrası /finance ekranına dönülür.
