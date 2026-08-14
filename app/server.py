@@ -20,9 +20,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.7.8'
+APP_VERSION='3.7.9'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.8 PROFESYONEL FİNANS AKIŞI HOTFIX'
+APP_LABEL='ENTERPRISE V3.7.9 AKILLI PARA + GEBE HAYVAN GİRİŞİ'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -470,7 +470,7 @@ def init_db():
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
-        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0')]:
+        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\'')]:
             if col not in cols:c.execute(f'ALTER TABLE animals ADD COLUMN {col} {typ}')
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
@@ -747,7 +747,16 @@ function toggleAnimalFields(){{
  var type=document.getElementById('recordType');if(!type)return;var calf=type.value==='Buzağı';
  document.querySelectorAll('.calf-only').forEach(function(e){{e.style.display=calf?'block':'none';}});
  document.querySelectorAll('.adult-only').forEach(function(e){{e.style.display=calf?'none':'block';}});
+ document.querySelectorAll('.female-pregnancy').forEach(function(e){{e.style.display=type.value==='Dişi'?'block':'none';}});
  var badge=document.getElementById('recordTypeBadge');if(badge)badge.textContent=type.options[type.selectedIndex].text;
+ toggleEntryPregnancy();
+}}
+function toggleEntryPregnancy(){{
+ var type=document.getElementById('recordType'),status=document.getElementById('entryPregnancyStatus'),mode=document.getElementById('pregnancyInfoMode');
+ if(!type||!status)return;var pregnant=type.value==='Dişi'&&status.value==='Gebe',age=pregnant&&mode&&mode.value==='age';
+ ['pregnancyInfoModeLabel','pregnancyEntryDateLabel','pregnancyEntryHint'].forEach(function(id){{var e=document.getElementById(id);if(e)e.style.display=pregnant?'block':'none';}});
+ var kd=document.getElementById('knownInseminationLabel'),ag=document.getElementById('pregnancyAgeLabel');
+ if(kd)kd.style.display=pregnant&&!age?'block':'none';if(ag)ag.style.display=age?'block':'none';
 }}
 function liveTableFilter(inputId,tableId,emptyId){{
  var input=document.getElementById(inputId),table=document.getElementById(tableId),empty=document.getElementById(emptyId);if(!input||!table)return;
@@ -794,6 +803,35 @@ function bindSmartPhotoForms(){{
    }});
  }});
 }}
+
+function moneyRaw(v){{
+ v=String(v||'').trim().replace(/[₺\s]/g,'');if(!v)return '';
+ if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
+ else if((v.match(/\./g)||[]).length>1)v=v.replace(/\./g,'');
+ return v.replace(/[^0-9.-]/g,'');
+}}
+function moneyDisplay(v){{
+ const raw=moneyRaw(v);if(raw===''||raw==='-')return '';
+ let parts=raw.split('.'),whole=(parts[0]||'0').replace(/^0+(?=\d)/,'');
+ whole=whole.replace(/\B(?=(\d{{3}})+(?!\d))/g,'.');
+ let dec=parts.length>1?parts.slice(1).join('').slice(0,2):'';
+ return whole+(dec!==''?','+dec:'');
+}}
+function bindSmartMoney(){{
+ const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
+ document.querySelectorAll('input[name]').forEach(function(el){{
+  if(!names.has(el.name)||el.dataset.moneyBound==='1')return;
+  el.dataset.moneyBound='1';el.type='text';el.inputMode='decimal';el.autocomplete='off';el.classList.add('smart-money');
+  if(el.value)el.value=moneyDisplay(el.value);
+  el.addEventListener('input',function(){{el.value=moneyDisplay(el.value);try{{el.setSelectionRange(el.value.length,el.value.length);}}catch(e){{}}}});
+ }});
+ document.querySelectorAll('form').forEach(function(form){{
+  if(form.dataset.moneySubmitBound==='1')return;form.dataset.moneySubmitBound='1';
+  form.addEventListener('submit',function(){{form.querySelectorAll('input.smart-money').forEach(function(el){{el.value=moneyRaw(el.value);}});}},true);
+ }});
+}}
+document.addEventListener('DOMContentLoaded',bindSmartMoney);
+
 document.addEventListener('DOMContentLoaded',bindSmartPhotoForms);
 </script></body></html>"""
 
@@ -1437,7 +1475,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             mother_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in mothers)
             breed_options=''.join(f'<option value="{h(x)}">' for x in breeds)
             paddock_options=''.join(f'<option value="{h(x)}">' for x in paddocks)
-            body=f'''<div class="pro-form-head"><div><h1>Hayvan Ekle</h1><div class="mut">Tek formdan dişi, erkek veya buzağı kaydı oluşturun.</div></div><span id="recordTypeBadge" class="type-chip">Dişi Hayvan</span></div><div class="card"><form method="post" action="/animal-add" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><label>Kayıt Türü<select id="recordType" name="record_type" required onchange="toggleAnimalFields()"><option value="Dişi">Dişi Hayvan</option><option value="Erkek">Erkek Hayvan</option><option value="Buzağı">Buzağı</option></select></label><label>Küpe No<input name="tag" required autocomplete="off"></label><label>Takma Ad<input name="nickname"></label><label class="adult-only">Irk<input name="breed" list="breedOptions"><datalist id="breedOptions">{breed_options}</datalist></label><label>Doğum Tarihi<input type="date" name="birth_date"></label><label class="adult-only">Padok / Ahır<input name="paddock" list="paddockOptions"><datalist id="paddockOptions">{paddock_options}</datalist></label><label class="adult-only">Fotoğraf Yükle / Kameradan veya Galeriden Seç<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><label class="male-only" style="display:none">Alış Tarihi<input type="date" name="purchase_date"></label><label class="male-only" style="display:none">Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="male-only" style="display:none">Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight"></label><label class="male-only" style="display:none">Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost"></label><label class="male-only" style="display:none">Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="male-only" style="display:none">Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price"></label><label class="calf-only" style="display:none">Buzağı Cinsiyeti<select name="calf_gender"><option>Dişi</option><option>Erkek</option></select></label><label class="calf-only" style="display:none">Anne Küpesi<input name="mother_tag" list="motherTagOptions"><datalist id="motherTagOptions">{mother_options}</datalist></label><label class="calf-only" style="display:none">Baba Küpesi<input name="father_tag"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Kaydı Oluştur</button> <a class="btn alt" href="/">İptal</a></div></form></div><script>document.addEventListener('DOMContentLoaded',function(){{toggleAnimalFields();}});</script>'''
+            body=f'''<div class="pro-form-head"><div><h1>Hayvan Ekle</h1><div class="mut">Tek formdan dişi, erkek veya buzağı kaydı oluşturun.</div></div><span id="recordTypeBadge" class="type-chip">Dişi Hayvan</span></div><div class="card"><form method="post" action="/animal-add" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><label>Kayıt Türü<select id="recordType" name="record_type" required onchange="toggleAnimalFields()"><option value="Dişi">Dişi Hayvan</option><option value="Erkek">Erkek Hayvan</option><option value="Buzağı">Buzağı</option></select></label><label>Küpe No<input name="tag" required autocomplete="off"></label><label>Takma Ad<input name="nickname"></label><label class="adult-only">Irk<input name="breed" list="breedOptions"><datalist id="breedOptions">{breed_options}</datalist></label><label>Doğum Tarihi<input type="date" name="birth_date"></label><label class="adult-only">Padok / Ahır<input name="paddock" list="paddockOptions"><datalist id="paddockOptions">{paddock_options}</datalist></label><label class="adult-only">Fotoğraf Yükle / Kameradan veya Galeriden Seç<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><label class="adult-only">Alış Tarihi<input type="date" name="purchase_date"></label><label class="adult-only">Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="male-only" style="display:none">Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight"></label><label class="male-only" style="display:none">Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost"></label><label class="male-only" style="display:none">Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="male-only" style="display:none">Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price"></label><div class="female-pregnancy full" id="femalePregnancyBox"><div class="card" style="background:#f7fbf8;border:1px solid #d7eadc"><h3 style="margin-top:0">🤰 Üreme Durumu</h3><div class="form"><label>Hayvanın Durumu<select id="entryPregnancyStatus" name="entry_pregnancy_status" onchange="toggleEntryPregnancy()"><option value="Bos">Boş / Gebe Değil</option><option value="Gebe">Gebe</option><option value="Bilinmiyor">Bilinmiyor</option></select></label><label id="pregnancyInfoModeLabel" style="display:none">Gebelik Bilgisi<select id="pregnancyInfoMode" name="pregnancy_info_mode" onchange="toggleEntryPregnancy()"><option value="date">Son Tohumlama Tarihi Biliniyor</option><option value="age">Sadece Gebelik Yaşı Biliniyor</option></select></label><label id="knownInseminationLabel" style="display:none">Son Tohumlama Tarihi<input type="date" name="known_insemination_date"></label><label id="pregnancyAgeLabel" style="display:none">Gebelik Yaşı (Ay)<input type="number" name="pregnancy_age_months" min="1" max="9" step="0.5" placeholder="Örn. 6"></label><label id="pregnancyEntryDateLabel" style="display:none">Gebelik Bilgisinin Tarihi<input type="date" name="pregnancy_entry_date" value="{date.today().isoformat()}"></label><div class="full mut" id="pregnancyEntryHint" style="display:none">Satın alınırken gebe olduğu ayrıca kaydedilir. Yalnız gebelik ayı biliniyorsa tahmini doğum yaklaşık hesaplanır.</div></div></div></div><label class="calf-only" style="display:none">Buzağı Cinsiyeti<select name="calf_gender"><option>Dişi</option><option>Erkek</option></select></label><label class="calf-only" style="display:none">Anne Küpesi<input name="mother_tag" list="motherTagOptions"><datalist id="motherTagOptions">{mother_options}</datalist></label><label class="calf-only" style="display:none">Baba Küpesi<input name="father_tag"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Kaydı Oluştur</button> <a class="btn alt" href="/">İptal</a></div></form></div><script>document.addEventListener('DOMContentLoaded',function(){{toggleAnimalFields();}});</script>'''
             return self.send_html(page('Hayvan Ekle',body,'/animal-add',u,msg))
 
         if path=='/animals':
@@ -2221,9 +2259,35 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/animal-add','Desteklenmeyen fotoğraf biçimi.')
                             if len(upload['content'])>10*1024*1024:return self.redirect('/animal-add','Fotoğraf 10 MB sınırını aşıyor.')
                             name=f"animal_new_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}";(UPLOADS/name).write_bytes(upload['content']);photo_url='/uploads/'+name
-                        cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(tag,f.get('nickname',''),kind,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,0,'Aktif',f.get('purchase_date','') if kind=='Erkek' else '',float(f.get('purchase_price') or 0) if kind=='Erkek' else 0,float(f.get('purchase_weight') or 0) if kind=='Erkek' else 0,float(f.get('daily_feed_cost') or 0) if kind=='Erkek' else 0,float(f.get('daily_care_cost') or 0) if kind=='Erkek' else 0,float(f.get('target_sale_price') or 0) if kind=='Erkek' else 0))
+                        cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(tag,f.get('nickname',''),kind,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,0,'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0) if kind=='Erkek' else 0,float(f.get('daily_feed_cost') or 0) if kind=='Erkek' else 0,float(f.get('daily_care_cost') or 0) if kind=='Erkek' else 0,float(f.get('target_sale_price') or 0) if kind=='Erkek' else 0))
                         aid=cur.lastrowid
                         if photo_url:c.execute('insert into animal_photos(animal_id,filename,created_at,caption) values(?,?,?,?)',(aid,photo_url.split('/uploads/',1)[1],datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
+                        if kind=='Dişi' and (f.get('entry_pregnancy_status') or '')=='Gebe':
+                            mode=(f.get('pregnancy_info_mode') or 'date').strip()
+                            entry_date=(f.get('pregnancy_entry_date') or date.today().isoformat()).strip()
+                            try:ref_day=date.fromisoformat(entry_date)
+                            except:ref_day=date.today();entry_date=ref_day.isoformat()
+                            age_months=0.0
+                            if mode=='date':
+                                ins_date=(f.get('known_insemination_date') or '').strip()
+                                if not ins_date:return self.redirect('/animal-add','Gebe hayvan için son tohumlama tarihini girin.')
+                                try:ins_day=date.fromisoformat(ins_date)
+                                except:return self.redirect('/animal-add','Tohumlama tarihi geçersiz.')
+                                due=(ins_day+timedelta(days=280)).isoformat()
+                                result='Gebe (Satın Alındığında · Tohumlama Tarihi Biliniyor)'
+                                source='Satın Alındığında Gebe · Tohumlama Tarihi'
+                            else:
+                                try:age_months=float(f.get('pregnancy_age_months') or 0)
+                                except:age_months=0
+                                if age_months<=0 or age_months>9:return self.redirect('/animal-add','Gebelik yaşını 1-9 ay arasında girin.')
+                                elapsed=round(age_months*(280/9))
+                                ins_day=ref_day-timedelta(days=elapsed);ins_date=ins_day.isoformat()
+                                due=(ins_day+timedelta(days=280)).isoformat()
+                                result='Gebe (Satın Alındığında · Gebelik Yaşından Tahmini)'
+                                source='Satın Alındığında Gebe · Yaklaşık'
+                            c.execute('insert into inseminations(animal_id,attempt,insemination_date,pregnancy_result,due_date) values(?,?,?,?,?)',(aid,1,ins_date,result,due))
+                            c.execute('update animals set pregnancy_source=?,pregnancy_age_months_at_entry=?,pregnancy_entry_date=? where id=?',(source,age_months,entry_date,aid))
+
                         return self.redirect('/animals' if kind=='Dişi' else '/males',kind+' hayvan başarıyla kaydedildi.')
                     if kind=='Buzağı':
                         mt=(f.get('mother_tag') or '').strip();bd=(f.get('birth_date') or '').strip()

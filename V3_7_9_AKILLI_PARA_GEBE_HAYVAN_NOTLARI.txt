@@ -1,0 +1,9 @@
+ÇiftlikPro Enterprise V3.7.9
+- Tüm temel TL girişlerinde canlı Türkçe binlik ayırıcı: 165000 -> 165.000.
+- Gönderimde değer otomatik sayısal formata döner; mevcut hesaplamalar korunur.
+- Dişi hayvan eklerken Alış Tarihi ve Alış Fiyatı girilebilir.
+- Dişi için Üreme Durumu: Boş / Gebe / Bilinmiyor.
+- Gebe ise son tohumlama tarihi veya yalnız gebelik yaşı seçilebilir.
+- Tohumlama tarihi varsa +280 gün; yalnız ay varsa yaklaşık doğum hesaplanır.
+- Gebelik kaynağı 'Satın Alındığında Gebe' olarak ayrıca işaretlenir.
+- V3.7.8 Finans Hotfix, süt satışı ve şifre kurtarma korunur.
