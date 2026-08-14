@@ -1,0 +1,1 @@
+Finans kayıtları öncelikli; yeni kayıt sağ panelden açılır. V3.7.7 özellikleri korunur.

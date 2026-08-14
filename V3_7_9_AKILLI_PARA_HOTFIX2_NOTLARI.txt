@@ -1,0 +1,12 @@
+ÇiftlikPro Enterprise V3.7.9 — Akıllı Para Hotfix 2
+
+Para giriş motoru yeniden yazıldı:
+- Yazım sırasında para alanı yalnız rakam dizisini esas alır.
+- Programın eklediği noktalar sadece görseldir; asla ondalık/kuruş olarak yorumlanmaz.
+- 1 -> 12 -> 123 -> 1.234 -> 12.345 -> 123.456 -> 1.234.567
+- Mobilde numeric klavye kullanılır.
+- Nokta/virgül tuşları yazım sırasında engellenir; yanlışlıkla kuruşa geçiş yapılamaz.
+- Kaydet sırasında ayraçlar temizlenerek tam TL sayısı backend'e gönderilir.
+
+Bu hotfix günlük kullanımda tam TL girişini önceliklendirir.
+Gebe hayvan girişi, Finans Drawer, süt satışı ve şifre kurtarma korunur.

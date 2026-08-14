@@ -1,0 +1,9 @@
+ÇiftlikPro Enterprise V3.7.9 — Akıllı Para Hotfix
+
+Düzeltme:
+- Nokta artık para girişinde her zaman binlik ayırıcı kabul edilir.
+- 1 -> 12 -> 123 -> 1.234 -> 12.345 -> 123.456 -> 1.234.567
+- Kuruş bölümü yalnız kullanıcı virgül yazdığında başlar.
+- Örnek: 12.345,50
+- Form kaydedilirken değer hesaplamalara uygun sayısal biçime çevrilir.
+- Gebe hayvan girişi, Finans Drawer, süt satışı ve şifre kurtarma korunur.
