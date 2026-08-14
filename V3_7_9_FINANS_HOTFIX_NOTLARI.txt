@@ -1,8 +1,0 @@
-ÇiftlikPro Enterprise V3.7.9 — Finans Hotfix
-1. Gider kategorilerine Hayvan Alımı eklendi.
-2. Normal finans kayıtlarında tek hayvan ilişkisi artık finance.animal_id üzerinden gösterilir.
-3. Süt Satışı çoklu hayvan ilişkileri yalnız Süt Satışı kayıtlarında kullanılır.
-4. Finans silme endpoint'i /finance-delete olarak sadeleştirildi; bağlı finance_animals satırları da temizlenir.
-5. Normal finans kaydı düzenlenince eski/yanlış çoklu hayvan ilişkileri temizlenir.
-6. Düzenleme ekranındaki mevcut DB para değeri Number() ile güvenli okunur; 155000.0 -> 155.000.
-7. V3.7.9 gebe hayvan, akıllı para, süt satışı, Finans Drawer ve şifre kurtarma korunur.

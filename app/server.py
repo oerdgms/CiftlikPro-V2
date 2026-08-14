@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.7.9'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.9 FİNANS HOTFIX + AKILLI PARA + GEBE HAYVAN'
+APP_LABEL='ENTERPRISE V3.7.9 FİNANS SİLME HOTFIX 2 + AKILLI PARA + GEBE HAYVAN'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1874,7 +1874,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             milk_cards=''.join(f'''<label class="bulk-row milk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="milk-check" value="{a["id"]}" onchange="syncMilkSelection()"><span class="tag">🥛 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in milk_females)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             trs=''.join(
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance-delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
                     fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
                 ) for r in rows
             )
@@ -2559,15 +2559,15 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     recalculate_animal_exit_status(c,old_animal_id)
                     if animal_id!=old_animal_id:recalculate_animal_exit_status(c,animal_id)
                     return self.redirect('/finance','Finans kaydı güncellendi.')
-                if path=='/finance-delete':
-                    record_id=int(f['id'])
+                if path in ('/finance/delete','/finance-delete'):
+                    record_id=int(f.get('id') or 0)
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     animal_id=old['animal_id']
                     c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     c.execute('delete from finance where id=?',(record_id,))
-                    recalculate_animal_exit_status(c,animal_id)
-                    return self.redirect('/finance','Finans kaydı silindi. Hayvan durumu yeniden hesaplandı.')
+                    if animal_id:recalculate_animal_exit_status(c,animal_id)
+                    return self.redirect('/finance','Finans kaydı silindi.')
                 if path=='/finance':
                     category=f['category']; tx_type=f.get('tx_type','Gelir')
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
