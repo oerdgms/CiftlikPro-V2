@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.7.9'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.7.9 AKILLI PARA + GEBE HAYVAN GİRİŞİ'
+APP_LABEL='ENTERPRISE V3.7.9 AKILLI PARA HOTFIX + GEBE HAYVAN GİRİŞİ'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -806,16 +806,18 @@ function bindSmartPhotoForms(){{
 
 function moneyRaw(v){{
  v=String(v||'').trim().replace(/[₺\s]/g,'');if(!v)return '';
- if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
- else if((v.match(/\./g)||[]).length>1)v=v.replace(/\./g,'');
- return v.replace(/[^0-9.-]/g,'');
+ var comma=v.indexOf(','),whole=(comma>=0?v.slice(0,comma):v).replace(/\./g,'').replace(/[^0-9-]/g,'');
+ var dec=comma>=0?v.slice(comma+1).replace(/[^0-9]/g,'').slice(0,2):'';
+ return whole+(comma>=0&&dec!==''?'.'+dec:'');
 }}
 function moneyDisplay(v){{
- const raw=moneyRaw(v);if(raw===''||raw==='-')return '';
- let parts=raw.split('.'),whole=(parts[0]||'0').replace(/^0+(?=\d)/,'');
+ v=String(v||'').trim().replace(/[₺\s]/g,'');if(!v)return '';
+ var hasComma=v.indexOf(',')>=0,comma=v.indexOf(',');
+ var whole=(hasComma?v.slice(0,comma):v).replace(/\./g,'').replace(/[^0-9-]/g,'');
+ var negative=whole.startsWith('-');whole=whole.replace(/-/g,'').replace(/^0+(?=\d)/,'')||'0';
  whole=whole.replace(/\B(?=(\d{{3}})+(?!\d))/g,'.');
- let dec=parts.length>1?parts.slice(1).join('').slice(0,2):'';
- return whole+(dec!==''?','+dec:'');
+ var dec=hasComma?v.slice(comma+1).replace(/[^0-9]/g,'').slice(0,2):'';
+ return (negative?'-':'')+whole+(hasComma?','+dec:'');
 }}
 function bindSmartMoney(){{
  const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
