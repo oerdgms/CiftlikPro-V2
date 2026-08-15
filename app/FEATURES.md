@@ -33,3 +33,11 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Alış ödeme yöntemi hayvan ekleme ekranından seçilir.
 - Daha önce Hayvan Alımı finans kaydıyla ilişkilendirilmiş hayvanlar yeni Hayvan Alımı seçiminde gösterilmez.
 - Backend aynı hayvana ikinci Hayvan Alımı bağlantısını engeller.
+
+
+## V3.8.0 Sağlık + Aşı Planlama
+- Sağlık seçiminde yalnız aktif dişi/erkek ve aktif buzağılar görünür; satılan/kesilen hayvanlar dışlanır.
+- Küpe/takma ad ile aranabilir seçim.
+- Aşı kaydında 2. doz planlama: varsayılan 15 gün, değiştirilebilir.
+- Dashboard ve Sağlık ekranında yaklaşan/geciken doz uyarıları.
+- 2. Doz Yapıldı ile gerçek uygulama tarihi sağlık geçmişine kaydedilir.
