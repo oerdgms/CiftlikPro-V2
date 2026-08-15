@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.8.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.8.0 SAĞLIK + AŞI PLANLAMA'
+APP_LABEL='ENTERPRISE V3.8.0 SAĞLIK + AŞI PLANLAMA UI HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1901,11 +1901,16 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
               <label>Uygulama Tarihi<input type="date" name="applied_date" id="healthAppliedDate" required value="{date.today().isoformat()}"></label>
               <label>Sonraki Tarih<input type="date" name="next_date" id="healthNextDate"></label>
               <label>Maliyet<input type="number" step="0.01" name="cost" value="0"></label>
-              <div class="full card" id="secondDoseBox" style="background:#f7fbf8;border:1px solid #d7eadc;padding:14px">
-                <label style="display:flex;align-items:center;gap:10px"><input type="checkbox" name="second_dose_required" id="secondDoseRequired" value="1"> <b>💉 2. doz planla</b></label>
-                <div id="secondDoseFields" style="display:none;margin-top:10px">
-                  <label>2. Doz Aralığı (Gün)<input type="number" min="1" max="365" name="second_dose_days" id="secondDoseDays" value="15"></label>
-                  <div class="mut">Varsayılan 15 gündür; aşı ürününe veya veteriner planına göre değiştirebilirsiniz. Tarih otomatik hesaplanır.</div>
+              <div class="full" id="secondDoseBox">
+                <div style="background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px">
+                  <label for="secondDoseRequired" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;margin:0;cursor:pointer">
+                    <input type="checkbox" name="second_dose_required" id="secondDoseRequired" value="1" style="width:20px;height:20px;flex:0 0 auto;margin:0">
+                    <span style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;line-height:1.2">💉 2. doz planla</span>
+                  </label>
+                  <div id="secondDoseFields" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e3eee6">
+                    <label style="margin:0">2. Doz Aralığı (Gün)<input type="number" min="1" max="365" name="second_dose_days" id="secondDoseDays" value="15"></label>
+                    <div class="mut" style="margin-top:8px">Varsayılan 15 gündür; aşı ürününe veya veteriner planına göre değiştirebilirsiniz. Tarih otomatik hesaplanır.</div>
+                  </div>
                 </div>
               </div>
               <label class="full">Not<textarea name="notes"></textarea></label>
