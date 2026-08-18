@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http import cookies
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from PIL import Image, ImageOps
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
@@ -20,9 +21,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.8.4'
+APP_VERSION='3.8.5'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.8.4 GEBELİK SENKRON + TOHUMLAMA ARAMA'
+APP_LABEL='ENTERPRISE V3.8.5 AKILLI FOTOĞRAF + GELİŞMİŞ YEDEKLEME'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -808,17 +809,17 @@ function liveTableFilter(inputId,tableId,emptyId){{
 }}
 async function optimizePhotoFile(file,status,text,bar){{
  if(!file||!file.type||!file.type.startsWith('image/'))return file;
- const maxSide=1600,quality=.78;
+ const maxSide=1024,quality=.58;
  if(text)text.textContent='Fotoğraf hazırlanıyor…';if(status)status.classList.add('on');if(bar)bar.style.width='8%';
  try{{
    const bitmap=await createImageBitmap(file);
    let w=bitmap.width,h=bitmap.height,scale=Math.min(1,maxSide/Math.max(w,h));w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0,w,h);if(bitmap.close)bitmap.close();
    if(bar)bar.style.width='22%';
-   const blob=await new Promise(function(resolve){{canvas.toBlob(resolve,'image/jpeg',quality);}});
+   const blob=await new Promise(function(resolve){{canvas.toBlob(resolve,'image/webp',quality);}});
    if(!blob)throw new Error('Fotoğraf dönüştürülemedi');
    const base=(file.name||'hayvan').replace(/[.][^.]+$/,'');
-   return new File([blob],base+'.jpg',{{type:'image/jpeg',lastModified:Date.now()}});
+   return new File([blob],base+'.webp',{{type:'image/webp',lastModified:Date.now()}});
  }}catch(err){{
    console.warn('Fotoğraf optimizasyonu atlandı:',err);return file;
  }}
@@ -916,43 +917,136 @@ document.addEventListener('DOMContentLoaded',bindSmartMoney);
 document.addEventListener('DOMContentLoaded',bindSmartPhotoForms);
 </script></body></html>"""
 
+
+PHOTO_MAX_SIDE=1024
+PHOTO_WEBP_QUALITY=58
+PHOTO_JPEG_QUALITY=56
+
+def format_bytes(n):
+    n=float(n or 0)
+    for unit in ('B','KB','MB','GB'):
+        if n<1024 or unit=='GB':
+            return f'{n:.1f} {unit}' if unit!='B' else f'{int(n)} B'
+        n/=1024
+
+def get_setting(key,default=''):
+    try:
+        with db() as c:
+            r=c.execute('select setting_value from settings where setting_key=?',(key,)).fetchone()
+        return (r['setting_value'] if r else default) or default
+    except Exception:
+        return default
+
+def set_setting_value(key,value):
+    with db() as c:
+        c.execute('insert or replace into settings(setting_key,setting_value) values(?,?)',(key,str(value or '')))
+
+def configured_backup_dir():
+    raw=(get_setting('backup_directory','') or '').strip()
+    if not raw:return BACKUPS
+    try:
+        path=Path(os.path.expandvars(os.path.expanduser(raw)))
+        path.mkdir(parents=True,exist_ok=True)
+        probe=path/'.ciftlikpro_probe.tmp'
+        probe.write_text('ok',encoding='utf-8')
+        probe.unlink()
+        return path
+    except Exception:
+        return BACKUPS
+
+def uploads_storage_stats():
+    total=count=0
+    if UPLOADS.exists():
+        for fp in UPLOADS.rglob('*'):
+            if fp.is_file():
+                try:
+                    total+=fp.stat().st_size;count+=1
+                except OSError:pass
+    db_size=DB.stat().st_size if DB.exists() else 0
+    return {'db_bytes':db_size,'upload_bytes':total,'upload_count':count,'total_bytes':db_size+total}
+
+def optimized_webp_bytes(content):
+    with Image.open(io.BytesIO(content)) as im:
+        im=ImageOps.exif_transpose(im)
+        if getattr(im,'is_animated',False):
+            try:im.seek(0)
+            except Exception:pass
+        if im.mode not in ('RGB','RGBA'):im=im.convert('RGB')
+        im.thumbnail((PHOTO_MAX_SIDE,PHOTO_MAX_SIDE),Image.Resampling.LANCZOS)
+        out=io.BytesIO()
+        im.save(out,'WEBP',quality=PHOTO_WEBP_QUALITY,method=6)
+        return out.getvalue()
+
+def save_optimized_upload(prefix,upload):
+    content=upload.get('content') if isinstance(upload,dict) else None
+    if not content:raise ValueError('Fotoğraf içeriği boş.')
+    if len(content)>15*1024*1024:raise ValueError('Fotoğraf 15 MB sınırını aşıyor.')
+    data=optimized_webp_bytes(content)
+    name=f"{prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.webp"
+    UPLOADS.mkdir(parents=True,exist_ok=True)
+    (UPLOADS/name).write_bytes(data)
+    return name
+
+def optimize_existing_uploads():
+    if not UPLOADS.exists():return {'count':0,'saved':0,'before':0,'after':0}
+    before=after=count=0
+    for fp in list(UPLOADS.rglob('*')):
+        if not fp.is_file() or fp.suffix.lower() not in ('.jpg','.jpeg','.png','.webp'):continue
+        old_size=fp.stat().st_size;before+=old_size
+        tmp=fp.with_name(fp.name+'.optimize-tmp')
+        try:
+            with Image.open(fp) as im:
+                im=ImageOps.exif_transpose(im)
+                im.thumbnail((PHOTO_MAX_SIDE,PHOTO_MAX_SIDE),Image.Resampling.LANCZOS)
+                ext=fp.suffix.lower()
+                if ext in ('.jpg','.jpeg'):
+                    if im.mode!='RGB':im=im.convert('RGB')
+                    im.save(tmp,'JPEG',quality=PHOTO_JPEG_QUALITY,optimize=True,progressive=True)
+                elif ext=='.webp':
+                    if im.mode not in ('RGB','RGBA'):im=im.convert('RGB')
+                    im.save(tmp,'WEBP',quality=PHOTO_WEBP_QUALITY,method=6)
+                else:
+                    if im.mode not in ('RGB','RGBA'):im=im.convert('RGBA')
+                    im.save(tmp,'PNG',optimize=True,compress_level=9)
+            new_size=tmp.stat().st_size
+            if new_size<old_size:
+                os.replace(tmp,fp);after+=new_size;count+=1
+            else:
+                tmp.unlink(missing_ok=True);after+=old_size
+        except Exception:
+            tmp.unlink(missing_ok=True);after+=old_size
+    return {'count':count,'saved':max(0,before-after),'before':before,'after':after}
+
 def clean_text(v):
     if v is None:return ''
     t=str(v).strip()
     return '' if t.lower() in ('undefined','null','none') else t
 
 def create_backup(label='manuel'):
-    BACKUPS.mkdir(exist_ok=True);ts=datetime.now().strftime('%Y%m%d_%H%M%S')
-    name=f'CiftlikPro_Backup_{label}_{ts}.zip';dst=BACKUPS/name;temp_db=BACKUPS/f'.snapshot_{ts}.db'
+    target_dir=configured_backup_dir()
+    target_dir.mkdir(parents=True,exist_ok=True)
+    ts=datetime.now().strftime('%Y%m%d_%H%M%S')
+    name=f'CiftlikPro_Backup_{label}_{ts}.zip'
+    dst=target_dir/name
+    temp_db=DATA_ROOT/f'.snapshot_{ts}.db'
     with db() as src, sqlite3.connect(temp_db) as out:src.backup(out)
-    manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label}
+    manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label,'backup_directory':str(target_dir)}
     try:
         with zipfile.ZipFile(dst,'w',zipfile.ZIP_DEFLATED) as z:
-            z.write(temp_db,'ciftlik.db');z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+            z.write(temp_db,'ciftlik.db')
+            z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
             if UPLOADS.exists():
                 for fp in UPLOADS.rglob('*'):
                     if fp.is_file():z.write(fp,'uploads/'+str(fp.relative_to(UPLOADS)).replace('\\','/'))
     finally:
-        # Windows'ta SQLite/antivirüs dosya tanıtıcısını kısa süre açık tutabilir.
-        # Yedek başarıyla oluştuysa geçici snapshot temizleme hatası uygulamayı durdurmamalı.
         gc.collect()
         for attempt in range(12):
             try:
-                if temp_db.exists():
-                    temp_db.unlink()
+                if temp_db.exists():temp_db.unlink()
                 break
             except PermissionError:
-                if attempt == 11:
-                    try:
-                        stale = temp_db.with_name(temp_db.name + '.delete-later')
-                        if stale.exists(): stale.unlink()
-                        temp_db.replace(stale)
-                    except Exception:
-                        pass
-                else:
-                    time.sleep(0.25)
-            except FileNotFoundError:
-                break
+                if attempt<11:time.sleep(.25)
+            except FileNotFoundError:break
     with db() as c:c.execute('insert into backups(filename,created_at,size_bytes) values(?,?,?)',(name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),dst.stat().st_size))
     return name
 
@@ -2242,21 +2336,52 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/backups':
             if not self.require_admin():return
-            with db() as c:rows=c.execute('select * from backups order by created_at desc limit 100').fetchall()
-            trs=''.join(f'<tr><td>{fmt_datetime(r["created_at"])}</td><td>{h(r["filename"])}</td><td>{(r["size_bytes"] or 0)//1024} KB</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(r["filename"])}">İndir</a> <a class="btn red" href="/backup/delete?file={urllib.parse.quote(r["filename"])}">Sil</a></td></tr>' for r in rows) or '<tr><td colspan=4>Henüz yedek yok.</td></tr>'
-            body=f'''<h1>Yedekleme Merkezi</h1><div class="two"><div class="card"><h2>Tam Yedek Al</h2><p>Veritabanı, fotoğraflar ve sürüm bilgisi tek ZIP dosyasında saklanır.</p><a class="btn orange" href="/backup/create">Şimdi Yedek Al</a></div><div class="card"><h2>Yedeği Geri Yükle</h2><form method="post" action="/backup/restore" enctype="multipart/form-data"><input type="file" name="backup_file" accept=".zip" required><label style="display:block;margin:12px 0"><input type="checkbox" name="confirm_restore" value="yes" required> Mevcut verilerin değiştirileceğini kabul ediyorum.</label><button class="btn red">Yedeği Geri Yükle</button></form></div></div><div class="card" style="margin-top:14px"><h2>Yedek Geçmişi</h2><table><tr><th>Tarih</th><th>Dosya</th><th>Boyut</th><th>İşlem</th></tr>{trs}</table></div>'''
+            target_dir=configured_backup_dir()
+            raw_dir=(get_setting('backup_directory','') or '').strip()
+            disk_files=[fp for fp in target_dir.glob('CiftlikPro_Backup_*.zip') if fp.is_file()]
+            disk_files.sort(key=lambda x:x.stat().st_mtime,reverse=True)
+            trs=''.join(
+                f'<tr><td>{fmt_datetime(datetime.fromtimestamp(fp.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"))}</td><td>{h(fp.name)}</td><td>{format_bytes(fp.stat().st_size)}</td><td><a class="btn blue" href="/backup/download?file={urllib.parse.quote(fp.name)}">İndir</a> <form method="post" action="/backup/restore-existing" class="inline-form" onsubmit="return confirm(\'Bu yedek geri yüklensin mi?\')"><input type="hidden" name="file" value="{h(fp.name)}"><button class="btn orange">Geri Yükle</button></form> <a class="btn red" href="/backup/delete?file={urllib.parse.quote(fp.name)}" onclick="return confirm(\'Bu yedek silinsin mi?\')">Sil</a></td></tr>'
+                for fp in disk_files[:100]
+            ) or '<tr><td colspan=4>Seçili klasörde yedek bulunamadı.</td></tr>'
+            stats=uploads_storage_stats()
+            body=f'''<h1>Yedekleme Merkezi</h1>
+            <div class="grid" style="margin-bottom:14px">
+              <div class="card stat"><span class="mut">Veritabanı</span><b>{format_bytes(stats["db_bytes"])}</b></div>
+              <div class="card stat"><span class="mut">Fotoğraflar</span><b>{format_bytes(stats["upload_bytes"])}</b><small>{stats["upload_count"]} dosya</small></div>
+              <div class="card stat"><span class="mut">Toplam Veri</span><b>{format_bytes(stats["total_bytes"])}</b></div>
+              <div class="card stat"><span class="mut">Yedek Klasörü</span><b style="font-size:14px;word-break:break-all">{h(str(target_dir))}</b></div>
+            </div>
+            <div class="two">
+              <div class="card"><h2>Yedekleme Ayarları</h2>
+                <form method="post" action="/backup/settings" class="form">
+                  <label class="full">Yedek Klasörü<input name="backup_directory" value="{h(raw_dir or str(BACKUPS))}" placeholder="D:\\CiftlikPro_Yedekler"></label>
+                  <div class="full mut">D:, harici disk veya erişilebilir ağ klasörü kullanabilirsiniz. Program yolu hatırlar.</div>
+                  <div class="full"><button class="btn">Klasörü Kaydet ve Test Et</button></div>
+                </form>
+                <hr style="border:0;border-top:1px solid #e2ece5;margin:18px 0">
+                <h3>Fotoğraf Optimizasyonu</h3>
+                <p class="mut">Yeni fotoğraflar otomatik olarak 1024 px WebP biçiminde saklanır.</p>
+                <form method="post" action="/photos/optimize-existing" onsubmit="return confirm('Mevcut fotoğraflar küçültülsün mü? Önce güvenlik yedeği alınacaktır.')"><button class="btn orange">Mevcut Fotoğrafları Optimize Et</button></form>
+              </div>
+              <div class="card"><h2>Tam Yedek Al</h2><p>Veritabanı ve fotoğraflar seçili klasörde tek ZIP dosyasında saklanır.</p><a class="btn orange" href="/backup/create">Şimdi Yedek Al</a>
+                <hr style="border:0;border-top:1px solid #e2ece5;margin:18px 0">
+                <h2>Dosyadan Geri Yükle</h2><form method="post" action="/backup/restore" enctype="multipart/form-data"><input type="file" name="backup_file" accept=".zip" required><label style="display:block;margin:12px 0"><input type="checkbox" name="confirm_restore" value="yes" required> Mevcut verilerin değiştirileceğini kabul ediyorum.</label><button class="btn red">Yedeği Geri Yükle</button></form>
+              </div>
+            </div>
+            <div class="card" style="margin-top:14px"><h2>Seçili Klasördeki Yedekler</h2><div class="tablewrap"><table><tr><th>Tarih</th><th>Dosya</th><th>Boyut</th><th>İşlem</th></tr>{trs}</table></div></div>'''
             return self.send_html(page('Yedekleme Merkezi',body,'/backups',u,msg))
         if path=='/backup/create':
             if not self.require_admin():return
             name=create_backup('manuel');audit(u,'Yedek oluşturdu',name,self.client_ip());return self.redirect('/backups','Tam yedek oluşturuldu.')
         if path=='/backup/download':
             if not self.require_admin():return
-            name=os.path.basename(q.get('file',[''])[0]);fp=BACKUPS/name
+            name=os.path.basename(q.get('file',[''])[0]);fp=configured_backup_dir()/name
             if not fp.exists():return self.send_html('Dosya bulunamadı',404)
             b=fp.read_bytes();self.send_response(200);self.send_header('Content-Type','application/zip');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/backup/delete':
             if not self.require_admin():return
-            name=os.path.basename(q.get('file',[''])[0]);fp=BACKUPS/name
+            name=os.path.basename(q.get('file',[''])[0]);fp=configured_backup_dir()/name
             if fp.exists():fp.unlink()
             with db() as c:c.execute('delete from backups where filename=?',(name,))
             audit(u,'Yedek sildi',name,self.client_ip());return self.redirect('/backups','Yedek silindi.')
@@ -2522,8 +2647,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         ext=Path(upload['filename']).suffix.lower()
                         if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/animal-edit?id='+aid,'Desteklenmeyen fotoğraf biçimi.')
                         if len(upload['content'])>10*1024*1024:return self.redirect('/animal-edit?id='+aid,'Fotoğraf 10 MB sınırını aşıyor.')
-                        name=f"animal_edit_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
-                        (UPLOADS/name).write_bytes(upload['content'])
+                        name=save_optimized_upload('animal_edit',upload)
                         photo_url='/uploads/'+name
                     gender=f.get('gender') if f.get('gender') in ('Dişi','Erkek') else rec['gender']
                     c.execute('update animals set tag=?,nickname=?,gender=?,breed=?,birth_date=?,notes=?,paddock=?,photo_url=?,sold_price=?,status=?,purchase_date=?,purchase_price=?,purchase_weight=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=? where id=?',
@@ -2549,7 +2673,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         ext=Path(upload['filename']).suffix.lower()
                         if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/calf-edit?id='+cid,'Desteklenmeyen fotoğraf biçimi.')
                         if len(upload['content'])>10*1024*1024:return self.redirect('/calf-edit?id='+cid,'Fotoğraf 10 MB sınırını aşıyor.')
-                        name=f"calf_{cid}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}";(UPLOADS/name).write_bytes(upload['content']);photo_url='/uploads/'+name
+                        name=save_optimized_upload(f'calf_{cid}',upload);photo_url='/uploads/'+name
                         c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(cid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
                     c.execute('update calves set tag=?,nickname=?,mother_id=?,father_tag=?,birth_date=?,gender=?,breed=?,paddock=?,photo_url=?,purchase_date=?,purchase_price=?,purchase_payment_method=?,notes=? where id=?',
                         (tag,f.get('nickname',''),f.get('mother_id'),f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',f.get('notes',''),cid))
@@ -2568,7 +2692,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             ext=Path(upload['filename']).suffix.lower()
                             if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/animal-add','Desteklenmeyen fotoğraf biçimi.')
                             if len(upload['content'])>10*1024*1024:return self.redirect('/animal-add','Fotoğraf 10 MB sınırını aşıyor.')
-                            name=f"animal_new_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}";(UPLOADS/name).write_bytes(upload['content']);photo_url='/uploads/'+name
+                            name=save_optimized_upload('animal_new',upload);photo_url='/uploads/'+name
                         cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(tag,f.get('nickname',''),kind,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,0,'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0) if kind=='Erkek' else 0,float(f.get('daily_feed_cost') or 0) if kind=='Erkek' else 0,float(f.get('daily_care_cost') or 0) if kind=='Erkek' else 0,float(f.get('target_sale_price') or 0) if kind=='Erkek' else 0))
                         aid=cur.lastrowid
                         if photo_url:c.execute('insert into animal_photos(animal_id,filename,created_at,caption) values(?,?,?,?)',(aid,photo_url.split('/uploads/',1)[1],datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
@@ -2620,6 +2744,42 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except sqlite3.IntegrityError:return self.redirect('/animal-add','Bu küpe numarası zaten kayıtlı.')
             except Exception as exc:return self.redirect('/animal-add','Kayıt hatası: '+str(exc))
 
+        if path=='/backup/settings':
+            if not self.require_admin():return
+            raw=(f.get('backup_directory') or '').strip()
+            if not raw:
+                set_setting_value('backup_directory','')
+                return self.redirect('/backups','Yedek klasörü varsayılan konuma döndürüldü.')
+            try:
+                target=Path(os.path.expandvars(os.path.expanduser(raw)))
+                target.mkdir(parents=True,exist_ok=True)
+                probe=target/'.ciftlikpro_write_test.tmp'
+                probe.write_text('ok',encoding='utf-8');probe.unlink()
+            except Exception as exc:
+                return self.redirect('/backups','Yedek klasörü kullanılamıyor: '+str(exc))
+            set_setting_value('backup_directory',str(target))
+            audit(username,'Yedek klasörünü değiştirdi',str(target),self.client_ip())
+            return self.redirect('/backups','Yedek klasörü kaydedildi ve yazma testi başarılı.')
+        if path=='/backup/restore-existing':
+            if not self.require_admin():return
+            name=os.path.basename((f.get('file') or '').strip())
+            fp=configured_backup_dir()/name
+            if not fp.exists():return self.redirect('/backups','Yedek dosyası bulunamadı.')
+            try:
+                restore_backup_zip(fp)
+                audit(username,'Klasörden yedek geri yükledi',name,self.client_ip())
+                return self.redirect('/backups','Yedek başarıyla geri yüklendi.')
+            except Exception as exc:
+                return self.redirect('/backups','Geri yükleme hatası: '+str(exc))
+        if path=='/photos/optimize-existing':
+            if not self.require_admin():return
+            try:
+                safety=create_backup('FotoOptimizasyonOncesi')
+                result=optimize_existing_uploads()
+                audit(username,'Fotoğrafları optimize etti',f"{result['count']} dosya · {format_bytes(result['saved'])} kazanım",self.client_ip())
+                return self.redirect('/backups',f"Optimizasyon tamamlandı: {result['count']} fotoğraf küçültüldü, {format_bytes(result['saved'])} alan kazanıldı. Güvenlik yedeği: {safety}")
+            except Exception as exc:
+                return self.redirect('/backups','Fotoğraf optimizasyonu başarısız: '+str(exc))
         if path=='/data/import':
             try:
                 upload=f.get('json_file')
@@ -2639,7 +2799,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 ext=Path(upload['filename']).suffix.lower()
                 if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/calf?id='+cid,'Desteklenmeyen fotoğraf biçimi.')
                 if len(upload['content'])>10*1024*1024:return self.redirect('/calf?id='+cid,'Fotoğraf 10 MB sınırını aşıyor.')
-                name=f"calf_{cid}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}";(UPLOADS/name).write_bytes(upload['content'])
+                name=save_optimized_upload(f'calf_{cid}',upload)
                 with db() as c:
                     if not c.execute('select 1 from calves where id=?',(cid,)).fetchone():return self.redirect('/calves','Buzağı bulunamadı.')
                     c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(cid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),f.get('caption','')))
@@ -2665,7 +2825,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 ext=Path(upload['filename']).suffix.lower()
                 if ext not in ('.jpg','.jpeg','.png','.webp','.gif'): return self.redirect('/animal?id='+aid,'Desteklenmeyen fotoğraf biçimi.')
                 if len(upload['content'])>10*1024*1024: return self.redirect('/animal?id='+aid,'Fotoğraf 10 MB sınırını aşıyor.')
-                name=f"animal_{aid}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"; (UPLOADS/name).write_bytes(upload['content'])
+                name=save_optimized_upload(f'animal_{aid}',upload)
                 with db() as c:
                     c.execute('insert into animal_photos(animal_id,filename,created_at,caption) values(?,?,?,?)',(aid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),f.get('caption','')))
                     c.execute('update animals set photo_url=? where id=?',('/uploads/'+name,aid))
@@ -2705,7 +2865,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         ext=Path(upload['filename']).suffix.lower()
                         if ext not in ('.jpg','.jpeg','.png','.webp','.gif'): return self.redirect(path,'Desteklenmeyen fotoğraf biçimi.')
                         if len(upload['content'])>10*1024*1024: return self.redirect(path,'Fotoğraf 10 MB sınırını aşıyor.')
-                        name=f"animal_new_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"; (UPLOADS/name).write_bytes(upload['content']); photo_url='/uploads/'+name
+                        name=save_optimized_upload('animal_new',upload); photo_url='/uploads/'+name
                     vals=(f['tag'],f.get('nickname'),f['gender'],f.get('breed'),f.get('birth_date'),f.get('notes'),f.get('paddock'),photo_url,float(f.get('sold_price') or 0),f.get('status') or 'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0),float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0))
                     if f.get('id'):
                         c.execute('update animals set tag=?,nickname=?,gender=?,breed=?,birth_date=?,notes=?,paddock=?,photo_url=?,sold_price=?,status=?,purchase_date=?,purchase_price=?,purchase_weight=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=? where id=?',vals+(f['id'],)); aid=f['id']
