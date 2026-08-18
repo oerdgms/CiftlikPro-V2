@@ -22,7 +22,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.8.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.8.1 BUZAĞI PRO KART + SAĞLIK KAYIT YÖNETİMİ'
+APP_LABEL='ENTERPRISE V3.8.3 ÜREME AKILLI FİLTRE + GEBELİK PANELİ'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -574,6 +574,16 @@ def fmt_datetime(v):
         return d.strftime('%d/%m/%Y %H:%M')
     except Exception:
         return fmt_date(v)
+
+def current_pregnancy_record(c, animal_id):
+    latest=c.execute("select * from inseminations where animal_id=? order by insemination_date desc,id desc limit 1",(animal_id,)).fetchone()
+    if not latest or not is_pregnant_value(latest['pregnancy_result']): return None
+    ins_date=(latest['insemination_date'] or '').strip()
+    if ins_date and c.execute("select id from calves where mother_id=? and birth_date>=? order by birth_date desc,id desc limit 1",(animal_id,ins_date)).fetchone(): return None
+    return latest
+
+def is_currently_pregnant(c, animal_id):
+    return current_pregnancy_record(c,animal_id) is not None
 
 def age_text(d):
     if not d:return '-'
@@ -1314,7 +1324,8 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 due_rows=c.execute("select i.due_date,a.id,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id where i.pregnancy_result='Pozitif' and i.due_date between ? and ? order by i.due_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=45)).isoformat())).fetchall()
                 health_rows=c.execute("select h.id,h.next_date,h.kind,h.product,h.notes,h.animal_id,h.calf_id,a.id as adult_id,a.tag as animal_tag,ca.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where coalesce(h.next_date,'')<>'' and h.next_date<=? order by h.next_date limit 10",((date.today()+timedelta(days=30)).isoformat(),)).fetchall()
                 pregnancy_vaccines=pregnancy_vaccine_tasks(c,horizon_days=7)
-                estrus_dash_rows=c.execute("select e.*,a.tag,a.nickname from estrus_records e join animals a on a.id=e.animal_id where a.gender='Dişi' and coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc").fetchall()
+                estrus_dash_all=c.execute("select e.*,a.tag,a.nickname from estrus_records e join animals a on a.id=e.animal_id where a.gender='Dişi' and coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc").fetchall()
+                estrus_dash_rows=[r for r in estrus_dash_all if not is_currently_pregnant(c,r['animal_id'])]
                 months=[]
                 for n in range(5,-1,-1):
                     d=(date.today().replace(day=1)-timedelta(days=n*31)).replace(day=1); key=d.strftime('%Y-%m')
@@ -1636,23 +1647,25 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 calves=c.execute('select * from calves where mother_id=? order by birth_date desc',(aid,)).fetchall()
                 photos=c.execute('select * from animal_photos where animal_id=? order by created_at desc',(aid,)).fetchall()
             latest=ins[-1] if ins else None
-            preg=(latest['pregnancy_result'] if latest else 'Kayıt yok'); due=(latest['due_date'] if latest else '')
-            cls='pos' if preg=='Pozitif' else 'neg' if preg=='Negatif' else ''
-            pregnancy_extra=''
-            if a['gender']=='Dişi' and preg=='Pozitif' and due:
+            with db() as pc:
+                active_preg=current_pregnancy_record(pc,aid) if a['gender']=='Dişi' else None
+            preg=(active_preg['pregnancy_result'] if active_preg else (latest['pregnancy_result'] if latest else 'Kayıt yok'))
+            due=(active_preg['due_date'] if active_preg else '')
+            cls='pos' if active_preg else 'neg' if str(preg).strip().lower()=='negatif' else ''
+            pregnancy_panel=''
+            pregnancy_line=f'<p class="preg {cls}">Gebelik: {h(preg)}{(" · Tahmini doğum "+fmt_date(due)) if due else ""}</p>'
+            if active_preg and due:
                 try:
-                    due_day=date.fromisoformat(due)
-                    days_left=max(0,(due_day-date.today()).days)
-                    if latest and latest['insemination_date']:
-                        start_day=date.fromisoformat(latest['insemination_date'])
-                        preg_days=max(0,(date.today()-start_day).days)
-                    else:
-                        preg_days=max(0,280-days_left)
-                    preg_months=min(9,preg_days/30.44)
-                    month_text=(f'{preg_months:.1f}'.replace('.',',')+' aylık') if preg_months<9 else '9 aylık'
-                    pregnancy_extra=f' · Yaklaşık {month_text} · Doğuma {days_left} gün'
-                except Exception:
-                    pregnancy_extra=''
+                    due_day=date.fromisoformat(due);raw_days=(due_day-date.today()).days
+                    start_day=date.fromisoformat(active_preg['insemination_date']) if active_preg['insemination_date'] else date.today()-timedelta(days=max(0,280-max(0,raw_days)))
+                    preg_days=max(0,min(280,(date.today()-start_day).days));preg_months=min(9,preg_days/(280/9));month_text=f'{preg_months:.1f}'.replace('.',',')
+                    remain_text=f'{raw_days} gün' if raw_days>=0 else f'{abs(raw_days)} gün geçti';progress=max(0,min(100,round((preg_days/280)*100)))
+                    pregnancy_panel=(f'<div style="margin:18px 0;padding:16px;border:1px solid #cfe5d6;border-radius:18px;background:linear-gradient(180deg,#f7fcf8,#eef8f1)">'
+                        f'<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><b style="font-size:18px;color:#176b3a">🤰 Gebelik Durumu</b><span class="status-badge status-preg">Pozitif</span></div>'
+                        f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Gebelik Süresi</span><br><b style="font-size:18px">≈ {month_text} ay</b></div><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Doğuma Kalan</span><br><b style="font-size:18px">{remain_text}</b></div><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Tahmini Doğum</span><br><b style="font-size:18px">{fmt_date(due)}</b></div></div>'
+                        f'<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:13px;color:#667a6d"><span>Gebelik ilerlemesi</span><b>%{progress}</b></div><div style="height:10px;background:#dcebe1;border-radius:999px;overflow:hidden;margin-top:6px"><div style="height:100%;width:{progress}%;background:#238a50;border-radius:999px"></div></div></div></div>')
+                    pregnancy_line=''
+                except Exception:pass
             total_cost=sum(r['amount'] for r in fin if r['tx_type']=='Gider')+sum(r['cost'] or 0 for r in health)
             latest_weight=weights[0]['weight'] if weights else None
             first_weight=weights[-1]['weight'] if weights else (a['purchase_weight'] or None)
@@ -1694,7 +1707,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             mtr=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["liters"]} L</td><td>{h(r["notes"])}</td></tr>' for r in milk) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{fmt_date(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             back='/males' if a['gender']=='Erkek' else '/animals'; edit_url='/animal-edit?id='+str(aid)
-            body=f'''<div class="actions"><a class="btn alt" href="{back}">← Hayvanlara Dön</a><a class="btn" href="{edit_url}">Bilgileri Düzenle</a><a class="btn blue" href="/animal/print?id={aid}">Kimlik Kartını Yazdır</a></div><div class="card profile">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname'])}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed'])}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span><p class="preg {cls}">Gebelik: {h(preg)}{pregnancy_extra}{(' · Tahmini doğum '+fmt_date(due)) if due else ''}</p><div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span><span class="pill">Son Süt<br><b>{(str(latest_milk)+' L') if latest_milk is not None else '-'}</b></span><span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div><p>Toplam masraf: <b>{money(total_cost)}</b> · Buzağı: <b>{len(calves)}</b></p>{purchase_summary}<p>{h(a['notes'])}</p></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Tohumlama ve Gebelik</h2><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="card"><h2>Buzağıları</h2><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''}<form method="post" action="/animal/weight" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div><div class="card"><h2>Süt Verimi</h2><form method="post" action="/animal/milk" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>{sale_box}<div class="card" style="margin-top:14px"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button><div class="camera-note">Mobil tarayıcıda arka kamera açılır. Fotoğraflar uygulama klasöründeki uploads dizininde saklanır; bu klasörü de düzenli kopyalayın.</div></form><div class="gallery" style="margin-top:14px">{gallery}</div></div><div class="card" style="margin-top:14px"><h2>Sağlık Geçmişi</h2><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div>'''
+            body=f'''<div class="actions"><a class="btn alt" href="{back}">← Hayvanlara Dön</a><a class="btn" href="{edit_url}">Bilgileri Düzenle</a><a class="btn blue" href="/animal/print?id={aid}">Kimlik Kartını Yazdır</a></div><div class="card profile">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname'])}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed'])}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span>{pregnancy_panel}{pregnancy_line}<div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span><span class="pill">Son Süt<br><b>{(str(latest_milk)+' L') if latest_milk is not None else '-'}</b></span><span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div><p>Toplam masraf: <b>{money(total_cost)}</b> · Buzağı: <b>{len(calves)}</b></p>{purchase_summary}<p>{h(a['notes'])}</p></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Tohumlama ve Gebelik</h2><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="card"><h2>Buzağıları</h2><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''}<form method="post" action="/animal/weight" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div><div class="card"><h2>Süt Verimi</h2><form method="post" action="/animal/milk" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>{sale_box}<div class="card" style="margin-top:14px"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button><div class="camera-note">Mobil tarayıcıda arka kamera açılır. Fotoğraflar uygulama klasöründeki uploads dizininde saklanır; bu klasörü de düzenli kopyalayın.</div></form><div class="gallery" style="margin-top:14px">{gallery}</div></div><div class="card" style="margin-top:14px"><h2>Sağlık Geçmişi</h2><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div>'''
             return self.send_html(page('Hayvan Kartı',body,'/animals',u,msg))
         if path=='/animal/print':
             aid=q.get('id',[''])[0]
@@ -1761,7 +1774,8 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             return self.send_html(page('Kızgınlık Kaydı Düzenle',body,'/estrus',u,msg))
         if path=='/estrus':
             with db() as c:
-                females=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                female_rows=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                females=[a for a in female_rows if not is_currently_pregnant(c,a['id'])]
                 rows=c.execute("select e.*,a.tag,a.nickname from estrus_records e join animals a on a.id=e.animal_id order by e.estrus_date desc,e.id desc").fetchall()
                 latest={}
                 for r in rows:
@@ -1769,11 +1783,13 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             today=date.today(); upcoming=[]
             with db() as c:
                 for aid,r in latest.items():
+                    if is_currently_pregnant(c,aid):continue
                     cycle=next_estrus_cycle(c,r,today)
                     if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=14):
                         upcoming.append((cycle['start'],cycle['center'],cycle['end'],r,cycle['cycle_no']))
             upcoming.sort(key=lambda x:x[1])
-            opts=''.join(f'<option value="{r["id"]}">{h(r["tag"])}{(" · "+h(r["nickname"])) if r["nickname"] else ""}</option>' for r in females)
+            opts=''.join(f'<option value="{h(r["tag"])} · {h(r["nickname"])}"></option>' for r in females)
+            estrus_picker_data=json.dumps([{'id':r['id'],'label':(str(r['tag'] or '')+' · '+str(r['nickname'] or '')).strip(' ·')} for r in females],ensure_ascii=False)
             cards=[]
             for a,center,e,r,cycle_no in upcoming:
                 color='#e27b1f' if a<=today<=e else '#238a50'
@@ -1807,14 +1823,16 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 history.append(f'''<tr class="data-row"><td><a class="taglink" href="/animal?id={r['animal_id']}">{h(r['tag'])} {h(r['nickname'])}</a></td><td>{fmt_date(r['estrus_date'])}</td><td>{h(r['signs']) or '-'}</td><td>{window}</td><td>{fmt_date(center.isoformat()) if center else '-'}</td><td>{h(r['notes']) or '-'}</td><td>{decision_badge}{inseminate_action}<a class="btn alt" href="/estrus-edit?id={r['id']}">✏️ Düzenle</a><form method="post" action="/estrus-delete" class="inline-form" onsubmit="return confirm('Bu kızgınlık kaydı silinsin mi?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red">Sil</button></form></td></tr>''')
             history_html=''.join(history) or '<tr><td colspan="7">Henüz kayıt yok.</td></tr>'
             body=f'''<h1>🌸 Kızgınlık Takibi</h1><p class="mut">Dişi hayvanların gözlenen kızgınlıklarını kaydedin. Sistem 18–24 günlük takip penceresini ve 21. günü merkez tahmin olarak gösterir. Tahminler gözlem planlaması içindir.</p>
-            <div class="two"><div class="card"><h2>Yeni Kızgınlık Kaydı</h2><form method="post" action="/estrus" class="form" onsubmit="var b=this.querySelector('button[type=submit]');if(b.disabled)return false;b.disabled=true;b.textContent='Kaydediliyor…';return true;"><label>Dişi Hayvan<select name="animal_id" required><option value="">Seçin</option>{opts}</select></label><label>Kızgınlık Tarihi<input type="date" name="estrus_date" max="{today.isoformat()}" value="{today.isoformat()}" required></label><label class="full">Gözlenen Belirtiler<input name="signs" placeholder="Örn. üzerine atlamaya izin verme, huzursuzluk, şeffaf akıntı"></label><label class="full">Not<textarea name="notes" rows="3" placeholder="Ek gözlemler..."></textarea></label><div class="full"><button class="btn">💾 Kızgınlığı Kaydet</button></div></form></div><div class="card"><h2>📅 Yaklaşan Kızgınlıklar</h2>{cards_html}</div></div>
-            <div class="card" style="margin-top:14px"><h2>Kızgınlık Geçmişi</h2><div style="overflow:auto"><table class="estrus-table"><tr><th>Hayvan</th><th>Gözlem Tarihi</th><th>Belirtiler</th><th>18–24 Gün Penceresi</th><th>21. Gün</th><th>Not</th><th>İşlem</th></tr>{history_html}</table></div></div>'''
+            <div class="two"><div class="card"><h2>Yeni Kızgınlık Kaydı</h2><form method="post" action="/estrus" class="form" onsubmit="var b=this.querySelector('button[type=submit]');if(b.disabled)return false;b.disabled=true;b.textContent='Kaydediliyor…';return true;"><label>Dişi Hayvan<input id="estrusAnimalSearch" type="search" list="estrusAnimalOptions" placeholder="Küpe veya takma ad yazın..." autocomplete="off" required><input type="hidden" name="animal_id" id="estrusAnimalId"><datalist id="estrusAnimalOptions">{opts}</datalist><span class="mut">Gebe hayvanlar doğum ve buzağı kaydı tamamlanana kadar listelenmez.</span></label><label>Kızgınlık Tarihi<input type="date" name="estrus_date" max="{today.isoformat()}" value="{today.isoformat()}" required></label><label class="full">Gözlenen Belirtiler<input name="signs" placeholder="Örn. üzerine atlamaya izin verme, huzursuzluk, şeffaf akıntı"></label><label class="full">Not<textarea name="notes" rows="3" placeholder="Ek gözlemler..."></textarea></label><div class="full"><button class="btn">💾 Kızgınlığı Kaydet</button></div></form></div><div class="card"><h2>📅 Yaklaşan Kızgınlıklar</h2>{cards_html}</div></div>
+            <div class="card" style="margin-top:14px"><h2>Kızgınlık Geçmişi</h2><div class="livebox"><input id="estrusLiveSearch" type="search" placeholder="Küpe, takma ad, belirti veya not ara..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('estrusLiveSearch').value='';document.getElementById('estrusLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="estrusEmpty" class="empty-state">Eşleşen kızgınlık kaydı bulunamadı.</div><div style="overflow:auto"><table id="estrusLiveTable" class="estrus-table"><tr><th>Hayvan</th><th>Gözlem Tarihi</th><th>Belirtiler</th><th>18–24 Gün Penceresi</th><th>21. Gün</th><th>Not</th><th>İşlem</th></tr>{history_html}</table></div></div>
+            <script>const estrusPicker={estrus_picker_data};const estrusSearch=document.getElementById('estrusAnimalSearch'),estrusId=document.getElementById('estrusAnimalId');function syncEstrusAnimal(){{const v=(estrusSearch.value||'').trim().toLocaleLowerCase('tr-TR');const m=estrusPicker.find(x=>x.label.trim().toLocaleLowerCase('tr-TR')===v);estrusId.value=m?m.id:'';}}estrusSearch.addEventListener('input',syncEstrusAnimal);estrusSearch.addEventListener('change',syncEstrusAnimal);document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('estrusLiveSearch','estrusLiveTable','estrusEmpty');}});</script>'''
             return self.send_html(page('Kızgınlık Takibi',body,'/estrus',u,msg))
         if path=='/inseminations':
             aid=q.get('animal',[''])[0]
             estrus_id=q.get('estrus',[''])[0]
             with db() as c:
-                females=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                female_rows=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                females=[a for a in female_rows if not is_currently_pregnant(c,a['id'])]
                 all_rows=c.execute('''select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id order by a.tag,i.attempt,i.insemination_date''').fetchall()
                 estrus_context=c.execute('select * from estrus_records where id=? and animal_id=?',(estrus_id,aid)).fetchone() if estrus_id and aid else None
             grouped={}
@@ -2676,6 +2694,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if path=='/estrus':
                     aid=f.get('animal_id',''); a=c.execute("select id,tag from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(aid,)).fetchone()
                     if not a:return self.redirect('/estrus','Lütfen geçerli ve aktif bir dişi hayvan seçin.')
+                    if is_currently_pregnant(c,aid):return self.redirect('/estrus',f'{a["tag"]} şu anda gebe görünüyor. Doğum ve buzağı kaydı tamamlanmadan yeni kızgınlık kaydı açılamaz.')
                     estrus_date=f.get('estrus_date','')
                     try: estrus_day=date.fromisoformat(estrus_date)
                     except Exception:return self.redirect('/estrus','Geçerli bir kızgınlık tarihi girin.')
@@ -2713,6 +2732,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     eid=f.get('estrus_id','')
                     rec=c.execute('select e.*,a.tag from estrus_records e join animals a on a.id=e.animal_id where e.id=?',(eid,)).fetchone()
                     if not rec:return self.redirect('/estrus','Kızgınlık kaydı bulunamadı.')
+                    if is_currently_pregnant(c,rec['animal_id']):return self.redirect('/estrus',f'{rec["tag"]} şu anda gebe görünüyor. Yeni tohumlama işlemi engellendi.')
                     try:
                         observed=date.fromisoformat(rec['estrus_date']); start=observed+timedelta(days=18); end=observed+timedelta(days=24)
                     except Exception:return self.redirect('/estrus','Kızgınlık tarihi geçersiz.')
@@ -2739,6 +2759,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     aid=f.get('animal_id','')
                     a=c.execute("select id,tag from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(aid,)).fetchone()
                     if not a:return self.redirect('/inseminations','Lütfen geçerli ve aktif bir dişi hayvan seçin.')
+                    if is_currently_pregnant(c,aid):return self.redirect('/inseminations',f'{a["tag"]} şu anda gebe görünüyor. Doğum ve buzağı kaydı tamamlanmadan yeni tohumlama kaydı açılamaz.')
                     ins_date=f.get('insemination_date','')
                     try:ins_day=date.fromisoformat(ins_date)
                     except Exception:return self.redirect('/inseminations','Geçerli bir tohumlama tarihi girin.')
