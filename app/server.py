@@ -20,9 +20,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.8.1'
+APP_VERSION='3.8.4'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.8.3 ÜREME AKILLI FİLTRE + GEBELİK PANELİ'
+APP_LABEL='ENTERPRISE V3.8.4 GEBELİK SENKRON + TOHUMLAMA ARAMA'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -300,6 +300,8 @@ def db():
 
 def is_pregnant_value(value):
     normalized=str(value or "").strip().lower()
+    if normalized.startswith("gebe (satın alındığında"):
+        return True
     return normalized in {
         "pozitif","gebe","evet","yes","true","1","olumlu",
         "gebelik pozitif","pozitif (gebe)","pregnant"
@@ -1634,6 +1636,30 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             ) or '<tr><td colspan=7>Kayıt yok.</td></tr>'
             body=f'<h1>{title}</h1><div class="card"><p class="mut">Bu hayvanların geçmiş kayıtları silinmez; yalnızca aktif sürü listesinden çıkarılır.</p><table><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Çıkış Tarihi</th><th>Neden</th><th>Satış/Kesim Tutarı</th></tr>{trs}</table></div>'
             return self.send_html(page(title,body,path,u,msg))
+        if path=='/pregnancy-edit':
+            aid=q.get('animal_id',[''])[0]
+            with db() as c:
+                a=c.execute("select * from animals where id=? and gender='Dişi'",(aid,)).fetchone()
+                rec=current_pregnancy_record(c,aid) if a else None
+            if not a:return self.redirect('/animals','Dişi hayvan bulunamadı.')
+            if not rec:return self.redirect('/animal?id='+str(aid),'Düzenlenecek aktif gebelik kaydı bulunamadı.')
+            if not str(a['pregnancy_source'] or '').startswith('Satın Alındığında Gebe'):
+                return self.redirect('/animal?id='+str(aid),'Bu düzenleme ekranı dışarıdan gebe alınan hayvanlar içindir.')
+            source=str(a['pregnancy_source'] or '')
+            mode='date' if 'Tohumlama Tarihi' in source else 'age'
+            ref=(a['pregnancy_entry_date'] or a['purchase_date'] or date.today().isoformat())
+            age=float(a['pregnancy_age_months_at_entry'] or 0)
+            body=f'''<div class="actions"><a class="btn alt" href="/animal?id={aid}">← Hayvan Kartına Dön</a></div><h1>🤰 Gebelik Bilgisini Düzenle</h1>
+            <div class="card"><p class="mut">Dışarıdan gebe alınan hayvanın tahmini gebelik bilgisini düzeltin. Kaydedildiğinde hayvan kartı ve Tohumlama kaydı birlikte güncellenir.</p>
+            <form method="post" action="/pregnancy-edit" class="form"><input type="hidden" name="animal_id" value="{aid}">
+            <label>Hayvan<input value="{h(a['tag'])} · {h(a['nickname'])}" disabled></label>
+            <label>Gebelik Bilgisi<select name="pregnancy_info_mode" id="pregEditMode" onchange="syncPregEditMode()"><option value="age" {'selected' if mode=='age' else ''}>Gebelik Yaşı Biliniyor</option><option value="date" {'selected' if mode=='date' else ''}>Son Tohumlama Tarihi Biliniyor</option></select></label>
+            <label id="pregEditAge">Yaklaşık Gebelik Yaşı (Ay)<input type="number" min="0.5" max="9" step="0.1" name="pregnancy_age_months" value="{age if age>0 else ''}"></label>
+            <label id="pregEditDate">Son Tohumlama Tarihi<input type="date" name="known_insemination_date" value="{h(rec['insemination_date'])}"></label>
+            <label>Bilginin Geçerli Olduğu Tarih<input type="date" name="pregnancy_entry_date" value="{h(ref)}" required></label>
+            <div class="full"><button class="btn">💾 Gebelik Bilgisini Güncelle</button></div></form></div>
+            <script>function syncPregEditMode(){{const m=document.getElementById('pregEditMode').value;document.getElementById('pregEditAge').style.display=m==='age'?'block':'none';document.getElementById('pregEditDate').style.display=m==='date'?'block':'none';}}syncPregEditMode();</script>'''
+            return self.send_html(page('Gebelik Bilgisini Düzenle',body,'/animals',u,msg))
         if path=='/animal':
             aid=q.get('id',[''])[0]
             with db() as c:
@@ -1663,7 +1689,9 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     pregnancy_panel=(f'<div style="margin:18px 0;padding:16px;border:1px solid #cfe5d6;border-radius:18px;background:linear-gradient(180deg,#f7fcf8,#eef8f1)">'
                         f'<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><b style="font-size:18px;color:#176b3a">🤰 Gebelik Durumu</b><span class="status-badge status-preg">Pozitif</span></div>'
                         f'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px"><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Gebelik Süresi</span><br><b style="font-size:18px">≈ {month_text} ay</b></div><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Doğuma Kalan</span><br><b style="font-size:18px">{remain_text}</b></div><div class="pill" style="display:block;text-align:center;padding:12px"><span class="mut">Tahmini Doğum</span><br><b style="font-size:18px">{fmt_date(due)}</b></div></div>'
-                        f'<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:13px;color:#667a6d"><span>Gebelik ilerlemesi</span><b>%{progress}</b></div><div style="height:10px;background:#dcebe1;border-radius:999px;overflow:hidden;margin-top:6px"><div style="height:100%;width:{progress}%;background:#238a50;border-radius:999px"></div></div></div></div>')
+                        f'<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;font-size:13px;color:#667a6d"><span>Gebelik ilerlemesi</span><b>%{progress}</b></div><div style="height:10px;background:#dcebe1;border-radius:999px;overflow:hidden;margin-top:6px"><div style="height:100%;width:{progress}%;background:#238a50;border-radius:999px"></div></div></div>'
+                        + (f'<div style="margin-top:14px"><a class="btn alt" href="/pregnancy-edit?animal_id={aid}">✏️ Gebelik Bilgisini Düzenle</a></div>' if str(a["pregnancy_source"] or "").startswith("Satın Alındığında Gebe") else '')
+                        + '</div>')
                     pregnancy_line=''
                 except Exception:pass
             total_cost=sum(r['amount'] for r in fin if r['tx_type']=='Gider')+sum(r['cost'] or 0 for r in health)
@@ -1833,7 +1861,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             with db() as c:
                 female_rows=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 females=[a for a in female_rows if not is_currently_pregnant(c,a['id'])]
-                all_rows=c.execute('''select i.*,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id order by a.tag,i.attempt,i.insemination_date''').fetchall()
+                all_rows=c.execute('''select i.*,a.tag,a.nickname,a.pregnancy_source from inseminations i join animals a on a.id=i.animal_id order by a.tag,i.attempt,i.insemination_date''').fetchall()
                 estrus_context=c.execute('select * from estrus_records where id=? and animal_id=?',(estrus_id,aid)).fetchone() if estrus_id and aid else None
             grouped={}
             for r in all_rows:grouped.setdefault(r['animal_id'],[]).append(r)
@@ -1851,14 +1879,18 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             for animal_id,records in grouped.items():
                 latest=records[-1]
                 result=str(latest['pregnancy_result'] or 'Belirsiz')
-                if is_pregnant_value(result):badge='<span class="status-badge status-preg">Gebe</span>'
+                if is_pregnant_value(result):
+                    external=str(latest['pregnancy_source'] or '').startswith('Satın Alındığında Gebe')
+                    badge='<span class="status-badge status-preg">'+('Gebe · Dışarıdan Gebe' if external else 'Gebe')+'</span>'
                 elif result.strip().lower()=='negatif':badge='<span class="status-badge status-neg">Gebe Değil</span>'
                 elif result.strip().lower()=='bekleniyor':badge='<span class="status-badge status-wait">Kontrol Bekliyor</span>'
                 else:badge='<span class="status-badge status-unknown">Belirsiz</span>'
                 hist=[]
                 for rec in reversed(records):
                     rr=str(rec['pregnancy_result'] or 'Belirsiz')
-                    if is_pregnant_value(rr):rb='<span class="status-badge status-preg">Gebe</span>'
+                    if is_pregnant_value(rr):
+                        external=str(rec['pregnancy_source'] or '').startswith('Satın Alındığında Gebe')
+                        rb='<span class="status-badge status-preg">'+('Gebe · Dışarıdan' if external else 'Gebe')+'</span>'
                     elif rr.strip().lower()=='negatif':rb='<span class="status-badge status-neg">Gebe Değil</span>'
                     elif rr.strip().lower()=='bekleniyor':rb='<span class="status-badge status-wait">Kontrol Bekliyor</span>'
                     else:rb='<span class="status-badge status-unknown">Belirsiz</span>'
@@ -1874,11 +1906,11 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     estrus_info=f'<div class="flash">🌸 Bu hayvan Kızgınlık Takibi ekranından gönderildi. Beklenen pencere: <b>{fmt_date(es.isoformat())} – {fmt_date(ee.isoformat())}</b>. Tohumlama gerçekleştiğinde tarihi seçip kaydedin.</div>'
                 except Exception:
                     estrus_info='<div class="flash">🌸 Bu hayvan Kızgınlık Takibi ekranından gönderildi.</div>'
-            body=f'''<div class="insem-head"><div><h1>🐄 Üreme Takip Merkezi</h1><div class="mut">Tohumlama kayıtlarını hayvan bazında yönetin, gebelik sonucunu güncelleyin.</div></div><div class="insem-search"><input id="inseminationLiveSearch" type="search" placeholder="Küpe veya takma ad yazın..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('inseminationLiveSearch').value='';document.getElementById('inseminationLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div></div>
+            body=f'''<div class="insem-head"><div><h1>🐄 Üreme Takip Merkezi</h1><div class="mut">Tohumlama kayıtlarını hayvan bazında yönetin, gebelik sonucunu güncelleyin.</div></div></div>
             {estrus_info}
             <div class="grid insem-stats"><div class="card stat metric blue">Kontrol Bekleyen<b>{waiting}</b><small>Son kaydı sonuç bekleyen</small></div><div class="card stat metric green">Gebe<b>{pregnant}</b><small>Son sonucu pozitif olan</small></div><div class="card stat metric orange">3. Denemede<b>{third_attempt}</b><small>Yakın takip gereken</small></div><div class="card stat metric purple">Bu Ay Tohumlanan<b>{this_month}</b><small>{date.today().strftime('%m/%Y')}</small></div></div>
             <div class="card"><h2>Yeni Tohumlama</h2><form id="inseminationForm" method="post" action="/inseminations" class="form"><input type="hidden" name="estrus_id" value="{h(estrus_id if estrus_context else '')}"><label>Dişi Hayvan<div class="animal-picker"><input id="inseminationAnimalSearch" value="{h(selected_label)}" placeholder="Küpe veya takma ad yazın..." autocomplete="off" inputmode="search" required><div id="inseminationAnimalSuggestions" class="animal-suggestions" role="listbox" aria-label="Eşleşen dişi hayvanlar"></div></div><datalist id="inseminationAnimalOptions">{picker_options}</datalist><input type="hidden" id="inseminationAnimalId" name="animal_id" value="{h(aid if selected else '')}"><div class="animal-picker-note">Küpe veya takma ad yazın; eşleşen hayvanlar anında aşağıda görünür.</div></label><label>Deneme<div id="attemptPreview" class="attempt-preview">{(str(next_attempts[selected['id']])+'. Deneme') if selected else 'Hayvan seçildiğinde otomatik belirlenecek'}</div></label><label>Tohumlama Tarihi<input id="inseminationDate" type="date" name="insemination_date" required max="{date.today().isoformat()}"><div id="futureWarning" class="future-warning">Gelecek tarihli tohumlama kaydı girilemez.</div></label><label>İlk Durum<div class="attempt-preview">Kontrol Bekliyor</div><input type="hidden" name="pregnancy_result" value="Bekleniyor"></label><div class="full"><button class="btn">💾 Tohumlamayı Kaydet</button></div></form></div>
-            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Tohumlama Geçmişi</h2><p class="mut">Her hayvan tek satırda gösterilir. “Geçmiş” bağlantısından tüm denemeleri açabilir ve kayıtları düzenleyebilirsiniz.</p><div id="insemEmpty" class="insem-empty">Eşleşen kayıt bulunamadı.</div><div style="overflow:auto"><table id="inseminationLiveTable" class="insem-table sortable-insem"><thead><tr><th><button type="button" class="sort-head" data-sort="animal">Hayvan <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="attempt">Son Deneme <span>↕</span></button></th><th><button type="button" class="sort-head active" data-sort="insem" data-dir="desc">Son Tohumlama <span>↓</span></button></th><th><button type="button" class="sort-head" data-sort="status">Durum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="due">Tahmini Doğum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="history">Geçmiş / İşlem <span>↕</span></button></th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
+            <div class="card" style="margin-top:14px"><h2>Hayvan Bazında Tohumlama Geçmişi</h2><p class="mut">Her hayvan tek satırda gösterilir. “Geçmiş” bağlantısından tüm denemeleri açabilir ve kayıtları düzenleyebilirsiniz.</p><div class="insem-search" style="margin:12px 0 14px"><input id="inseminationLiveSearch" type="search" placeholder="Kayıtlarda küpe veya takma ad ara..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('inseminationLiveSearch').value='';document.getElementById('inseminationLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="insemEmpty" class="insem-empty">Eşleşen kayıt bulunamadı.</div><div style="overflow:auto"><table id="inseminationLiveTable" class="insem-table sortable-insem"><thead><tr><th><button type="button" class="sort-head" data-sort="animal">Hayvan <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="attempt">Son Deneme <span>↕</span></button></th><th><button type="button" class="sort-head active" data-sort="insem" data-dir="desc">Son Tohumlama <span>↓</span></button></th><th><button type="button" class="sort-head" data-sort="status">Durum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="due">Tahmini Doğum <span>↕</span></button></th><th><button type="button" class="sort-head" data-sort="history">Geçmiş / İşlem <span>↕</span></button></th></tr></thead><tbody>{table_rows}</tbody></table></div></div>
             <script>
             document.addEventListener('DOMContentLoaded',function(){{
               liveTableFilter('inseminationLiveSearch','inseminationLiveTable','insemEmpty');
@@ -2776,6 +2808,39 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             if cyc:c.execute("insert or replace into estrus_decisions(estrus_id,cycle_no,decision,decision_date,insemination_id,notes) values(?,?,?,?,?,?)",(er['id'],cyc['cycle_no'],'Tohumlamaya Gönderildi',ins_date,cur.lastrowid,'Tohumlama ekranından kaydedildi.'))
                     audit(username,'Tohumlama kaydı eklendi',f'{a["tag"]} · {attempt}. deneme · {ins_date}',self.client_ip())
                     return self.redirect('/inseminations?animal='+str(aid),f'{a["tag"]} için {attempt}. tohumlama kaydedildi.')
+                if path=='/pregnancy-edit':
+                    aid=int(f.get('animal_id') or 0)
+                    a=c.execute("select * from animals where id=? and gender='Dişi'",(aid,)).fetchone()
+                    if not a:return self.redirect('/animals','Dişi hayvan bulunamadı.')
+                    if not str(a['pregnancy_source'] or '').startswith('Satın Alındığında Gebe'):
+                        return self.redirect('/animal?id='+str(aid),'Bu işlem yalnız dışarıdan gebe alınan hayvanlar için kullanılabilir.')
+                    rec=current_pregnancy_record(c,aid)
+                    if not rec:return self.redirect('/animal?id='+str(aid),'Aktif gebelik kaydı bulunamadı.')
+                    mode=(f.get('pregnancy_info_mode') or 'age').strip()
+                    ref=(f.get('pregnancy_entry_date') or date.today().isoformat()).strip()
+                    try:ref_day=date.fromisoformat(ref)
+                    except:return self.redirect('/pregnancy-edit?animal_id='+str(aid),'Bilgi tarihi geçersiz.')
+                    age_months=0.0
+                    if mode=='date':
+                        ins_date=(f.get('known_insemination_date') or '').strip()
+                        try:ins_day=date.fromisoformat(ins_date)
+                        except:return self.redirect('/pregnancy-edit?animal_id='+str(aid),'Son tohumlama tarihi geçersiz.')
+                        if ins_day>ref_day:return self.redirect('/pregnancy-edit?animal_id='+str(aid),'Tohumlama tarihi bilgi tarihinden sonra olamaz.')
+                        due=(ins_day+timedelta(days=280)).isoformat()
+                        result='Gebe (Satın Alındığında · Tohumlama Tarihi Biliniyor)'
+                        source='Satın Alındığında Gebe · Tohumlama Tarihi'
+                    else:
+                        try:age_months=float(f.get('pregnancy_age_months') or 0)
+                        except:age_months=0
+                        if age_months<=0 or age_months>9:return self.redirect('/pregnancy-edit?animal_id='+str(aid),'Gebelik yaşını 0,5-9 ay arasında girin.')
+                        elapsed=round(age_months*(280/9));ins_day=ref_day-timedelta(days=elapsed);ins_date=ins_day.isoformat()
+                        due=(ins_day+timedelta(days=280)).isoformat()
+                        result='Gebe (Satın Alındığında · Gebelik Yaşından Tahmini)'
+                        source='Satın Alındığında Gebe · Yaklaşık'
+                    c.execute('update inseminations set insemination_date=?,pregnancy_result=?,due_date=? where id=?',(ins_date,result,due,rec['id']))
+                    c.execute('update animals set pregnancy_source=?,pregnancy_age_months_at_entry=?,pregnancy_entry_date=? where id=?',(source,age_months,ref,aid))
+                    audit(username,'Dışarıdan gebe hayvan bilgisini güncelledi',f'{a["tag"]} · Tahmini doğum {due}',self.client_ip())
+                    return self.redirect('/animal?id='+str(aid),'Gebelik bilgisi güncellendi; hayvan kartı ve Tohumlama kaydı senkronlandı.')
                 if path=='/insemination-edit':
                     iid=f.get('id','')
                     rec=c.execute('select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=?',(iid,)).fetchone()
@@ -2786,6 +2851,10 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if ins_day>date.today():return self.redirect('/insemination-edit?id='+str(iid),'Gelecek tarihli tohumlama kaydı girilemez.')
                     result=f.get('pregnancy_result','Bekleniyor')
                     if result not in ('Bekleniyor','Pozitif','Negatif','Belirsiz'):result='Belirsiz'
+                    animal=c.execute('select pregnancy_source from animals where id=?',(rec['animal_id'],)).fetchone()
+                    external=animal and str(animal['pregnancy_source'] or '').startswith('Satın Alındığında Gebe')
+                    if external and result=='Pozitif':
+                        result='Gebe (Satın Alındığında · Tohumlama Tarihi Biliniyor)'
                     due=(ins_day+timedelta(days=280)).isoformat() if is_pregnant_value(result) else ''
                     c.execute('update inseminations set insemination_date=?,pregnancy_result=?,due_date=? where id=?',(ins_date,result,due,iid))
                     audit(username,'Tohumlama kaydı güncellendi',f'{rec["tag"]} · {rec["attempt"]}. deneme',self.client_ip())
