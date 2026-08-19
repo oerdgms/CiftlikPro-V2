@@ -75,3 +75,19 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Akıllı dengeleme ilk bakışta üç kısa çözüm kartına indirildi.
 - Uzun yem adayları ve teknik tablolar varsayılan olarak kapalı hale getirildi.
 - Yeni yem ekleme ve padoka atama ikincil katlanabilir alanlara taşındı.
+
+## V3.9.6 Besi + Süt Akıllı Rasyon
+- Yeni Rasyon formu varsayılan kapalı; yalnız ihtiyaç olduğunda açılır.
+- Yeni rasyon oluşturma akışı Besi ve Süt olarak ayrıldı.
+- Süt rasyonu için ana girdiler: ortalama canlı ağırlık ve hedef süt (L/gün).
+- Akıllı Süt Rasyonu Hedefi KM, HP, ME, NDF, Ca ve P için hedef/mevcut/durum karşılaştırması yapar.
+- Süt yağı ve süt proteini gelişmiş/isteğe bağlı hedef girdileri olarak saklanır.
+- Mevcut Çalışma Masası ve Akıllı Dengeleme motoru, rasyon tipine göre Besi veya Süt hedeflerini kullanır.
+- Süt hedefleri ön değerlendirme/karar desteğidir; nihai rasyon veteriner veya zooteknist tarafından doğrulanmalıdır.
+
+
+## V3.9.6 Besi + Süt Akıllı Rasyon
+- Yeni Rasyon formu varsayılan kapalıdır.
+- Besi ve Süt rasyonu oluşturma akışları ayrıldı.
+- Süt rasyonu ana hedef girdileri: canlı ağırlık + hedef süt L/gün.
+- Süt hedef motoru KM, HP, ME, NDF, Ca ve P karşılaştırması yapar; çalışma masası ve akıllı dengeleme aynı hedefleri kullanır.

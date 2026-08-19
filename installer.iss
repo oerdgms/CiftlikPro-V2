@@ -1,5 +1,5 @@
-#define MyAppName "ÇiftlikPro Enterprise"
-#define MyAppVersion "3.9.5"
+﻿#define MyAppName "ÇiftlikPro Enterprise"
+#define MyAppVersion "3.9.6"
 #define MyAppPublisher "ÇiftlikPro"
 #define MyAppExeName "CiftlikPro.exe"
 
@@ -11,7 +11,7 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\CiftlikPro
 DefaultGroupName=ÇiftlikPro
 OutputDir=release
-OutputBaseFilename=CiftlikPro_Enterprise_V3_9_5_Kompakt_Rasyon_Masasi_Setup
+OutputBaseFilename=CiftlikPro_Enterprise_V3_9_6_Besi_Sut_Akilli_Rasyon_Setup
 SetupIconFile=CiftlikPro.ico
 UninstallDisplayIcon={app}\CiftlikPro.exe
 PrivilegesRequired=admin
