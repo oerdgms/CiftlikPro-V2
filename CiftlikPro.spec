@@ -5,7 +5,7 @@ project_root = Path(SPECPATH)
 app_root = project_root / "app"
 
 datas = []
-for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md"):
+for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md", "feed_catalog.json"):
     optional_file = app_root / optional_name
     if optional_file.exists():
         datas.append((str(optional_file), "."))

@@ -21,9 +21,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.8.5'
+APP_VERSION='3.9.0'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.8.5 AKILLI FOTOĞRAF + GELİŞMİŞ YEDEKLEME'
+APP_LABEL='ENTERPRISE V3.9.0 PADOK + YEM & RASYON'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -470,6 +470,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS animal_photos(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, filename TEXT NOT NULL, created_at TEXT NOT NULL, caption TEXT);
         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY, username TEXT, action TEXT, detail TEXT, created_at TEXT, ip_address TEXT);
         CREATE TABLE IF NOT EXISTS settings(setting_key TEXT PRIMARY KEY, setting_value TEXT);
+        CREATE TABLE IF NOT EXISTS paddocks(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,code TEXT,type TEXT,capacity INTEGER DEFAULT 0,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS paddock_history(id INTEGER PRIMARY KEY,animal_source TEXT NOT NULL,animal_id INTEGER NOT NULL,from_paddock_id INTEGER,to_paddock_id INTEGER,moved_at TEXT NOT NULL,notes TEXT);
+        CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,source TEXT,active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS feed_prices(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,price_per_kg REAL NOT NULL,notes TEXT);
+        CREATE TABLE IF NOT EXISTS feed_stock_transactions(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,tx_date TEXT NOT NULL,tx_type TEXT NOT NULL,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,notes TEXT);
+        CREATE TABLE IF NOT EXISTS rations(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,target_group TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS ration_items(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,kg_per_head_day REAL NOT NULL,UNIQUE(ration_id,feed_id));
+        CREATE TABLE IF NOT EXISTS paddock_rations(id INTEGER PRIMARY KEY,paddock_id INTEGER NOT NULL,ration_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT,active INTEGER DEFAULT 1,notes TEXT);
         ''')
         user_cols={r[1] for r in c.execute('pragma table_info(users)').fetchall()}
         for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT'),('recovery_email','TEXT')]:
@@ -502,6 +510,29 @@ def init_db():
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
         for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\'')]:
             if col not in cols:c.execute(f'ALTER TABLE animals ADD COLUMN {col} {typ}')
+        # V3.9.0 Padok + Yem/Rasyon veri modeli
+        calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
+        if 'paddock_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN paddock_id INTEGER')
+        animal_cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
+        if 'paddock_id' not in animal_cols:c.execute('ALTER TABLE animals ADD COLUMN paddock_id INTEGER')
+        # Eski serbest metin padokları kaybetmeden gerçek padok kayıtlarına dönüştür.
+        legacy_names=set()
+        for rr in c.execute("select distinct trim(coalesce(paddock,'')) p from animals where trim(coalesce(paddock,''))<>''").fetchall(): legacy_names.add(rr['p'])
+        for rr in c.execute("select distinct trim(coalesce(paddock,'')) p from calves where trim(coalesce(paddock,''))<>''").fetchall(): legacy_names.add(rr['p'])
+        for name in sorted(legacy_names):
+            c.execute('insert or ignore into paddocks(name,code,type,capacity,notes,active,created_at) values(?,?,?,?,?,?,?)',(name,'','Genel',0,'V3.8.x serbest metin padok kaydından aktarıldı',1,datetime.now().isoformat(timespec='seconds')))
+        c.execute("update animals set paddock_id=(select id from paddocks where paddocks.name=trim(animals.paddock)) where paddock_id is null and trim(coalesce(paddock,''))<>''")
+        c.execute("update calves set paddock_id=(select id from paddocks where paddocks.name=trim(calves.paddock)) where paddock_id is null and trim(coalesce(paddock,''))<>''")
+        # Besi_V5.02.xlsm'den yalnız besin referans verilerini ilk kurulumda yükle; fiyatlar özellikle taşınmaz.
+        if c.execute('select count(*) from feed_catalog').fetchone()[0]==0:
+            catalog_file=PROGRAM_DIR/'feed_catalog.json'
+            if catalog_file.exists():
+                try:
+                    for x in json.loads(catalog_file.read_text(encoding='utf-8')):
+                        c.execute('''insert or ignore into feed_catalog(name,category,dm_pct,ndf_pct,cp_pct,tdn_pct,me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,source,active) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
+                                  (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','')))
+                except Exception as exc:
+                    print('Yem kataloğu yüklenemedi:',exc)
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         n=c.execute('select count(*) from users').fetchone()[0]
@@ -672,6 +703,68 @@ def setting_float(key, default):
     except Exception:
         return float(default)
 
+
+def current_feed_price(feed_id, con=None, on_date=None):
+    own=con is None
+    c=con or db().__enter__()
+    try:
+        d=(on_date or date.today().isoformat())[:10]
+        r=c.execute("select price_per_kg from feed_prices where feed_id=? and effective_date<=? order by effective_date desc,id desc limit 1",(feed_id,d)).fetchone()
+        return float(r['price_per_kg'] or 0) if r else 0.0
+    finally:
+        if own:c.close()
+
+def feed_stock_kg(feed_id, con=None):
+    own=con is None
+    c=con or db().__enter__()
+    try:
+        r=c.execute("select coalesce(sum(case when tx_type in ('Giriş','Sayım +') then quantity_kg when tx_type in ('Çıkış','Tüketim','Sayım -') then -quantity_kg else 0 end),0) qty from feed_stock_transactions where feed_id=?",(feed_id,)).fetchone()
+        return float(r['qty'] or 0)
+    finally:
+        if own:c.close()
+
+def ration_summary(ration_id, con=None):
+    own=con is None
+    c=con or db().__enter__()
+    try:
+        sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
+                 from ration_items ri join feed_catalog f on f.id=ri.feed_id where ri.ration_id=? order by f.name"""
+        rows=c.execute(sql,(date.today().isoformat(),ration_id)).fetchall()
+        out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'tdn_kg':0.0,'me_mcal':0.0,'ca_g':0.0,'p_g':0.0,'cost':0.0,'items':rows}
+        for r in rows:
+            kg=float(r['kg_per_head_day'] or 0); dm=kg*float(r['dm_pct'] or 0)/100.0
+            out['as_fed_kg']+=kg; out['dm_kg']+=dm
+            out['cp_kg']+=dm*float(r['cp_pct'] or 0)/100.0
+            out['ndf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0
+            out['tdn_kg']+=dm*float(r['tdn_pct'] or 0)/100.0
+            out['me_mcal']+=dm*float(r['me_mcal_kg'] or 0)
+            out['ca_g']+=dm*float(r['ca_pct'] or 0)*10.0
+            out['p_g']+=dm*float(r['p_pct'] or 0)*10.0
+            out['cost']+=kg*float(r['price'] or 0)
+        out['cp_pct_dm']=(out['cp_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['ndf_pct_dm']=(out['ndf_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['me_per_kg_dm']=(out['me_mcal']/out['dm_kg']) if out['dm_kg'] else 0.0
+        return out
+    finally:
+        if own:c.close()
+
+def paddock_population(paddock_id, con=None):
+    own=con is None
+    c=con or db().__enter__()
+    try:
+        adults=c.execute("select count(*) n from animals where paddock_id=? and coalesce(status,'Aktif')='Aktif'",(paddock_id,)).fetchone()['n']
+        calves=c.execute("select count(*) n from calves where paddock_id=? and promoted_animal_id is null",(paddock_id,)).fetchone()['n']
+        return int(adults or 0)+int(calves or 0)
+    finally:
+        if own:c.close()
+
+def sync_paddock_text(c, source, animal_id, paddock_id):
+    name=''
+    if paddock_id:
+        r=c.execute('select name from paddocks where id=?',(paddock_id,)).fetchone(); name=r['name'] if r else ''
+    table='animals' if source=='animal' else 'calves'
+    c.execute(f'update {table} set paddock_id=?,paddock=? where id=?',(paddock_id or None,name,animal_id))
+
 def male_weight_performance(animal_id, con=None):
     own=con is None
     c=con or db()
@@ -751,7 +844,7 @@ def page(title,body,path='/',user='admin',flash=''):
         return f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>'
     groups=[
         ('🐄 Hayvanlar',[('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('➕ Hayvan Ekle','/animal-add')]),
-        ('🐂 Besi',[('Besi Performansı','/performance')]),
+        ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
         ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups')]),
@@ -1591,6 +1684,77 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             target=setting_float('male_min_daily_gain',1.0); ratio=setting_float('male_warning_ratio',0.90)
             body=f"""<h1>Besi Performans Ayarları</h1><div class="card setting-box"><form method="post" action="/performance-settings" class="form"><label>Minimum Günlük Canlı Ağırlık Artışı (kg/gün)<input type="number" min="0.01" step="0.01" name="male_min_daily_gain" value="{target:.2f}" required></label><label>Sarı Uyarı Başlangıcı (% hedef)<input type="number" min="1" max="100" step="1" name="warning_percent" value="{ratio*100:.0f}" required></label><div class="full"><p class="mut">Örnek: hedef 1,00 kg/gün ve sarı sınır %90 ise; 0,90-0,99 sarı, 0,90 altı kırmızı olur.</p><button class="btn">Ayarları Kaydet</button> <a class="btn alt" href="/performance">İptal</a></div></form></div>"""
             return self.send_html(page('Besi Performans Ayarları',body,path,u,msg))
+        if path=='/paddocks':
+            with db() as c:
+                paddocks=c.execute("select * from paddocks where active=1 order by name").fetchall()
+                rations=c.execute("select id,name from rations where active=1 order by name").fetchall()
+                adults=c.execute("select id,tag,nickname,gender,paddock_id from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                calves=c.execute("select id,tag,nickname,gender,paddock_id from calves where promoted_animal_id is null order by tag").fetchall()
+                rows=[]
+                for pd in paddocks:
+                    pop=paddock_population(pd['id'],c)
+                    ar=c.execute("select pr.*,r.name ration_name from paddock_rations pr join rations r on r.id=pr.ration_id where pr.paddock_id=? and pr.active=1 and (pr.end_date is null or pr.end_date='') order by pr.id desc limit 1",(pd['id'],)).fetchone()
+                    sm=ration_summary(ar['ration_id'],c) if ar else None
+                    cap=int(pd['capacity'] or 0); doluluk=(pop/cap*100) if cap else 0
+                    rows.append(f'''<tr><td><b>{h(pd['name'])}</b><div class="mut">{h(pd['code']) or '-'}</div></td><td>{h(pd['type']) or 'Genel'}</td><td>{pop}{('/'+str(cap)) if cap else ''}</td><td>{f'{doluluk:.0f}%' if cap else '-'}</td><td>{h(ar['ration_name']) if ar else '-'}</td><td>{(money(sm['cost'])+'/baş/gün · '+money(sm['cost']*pop)+'/padok/gün') if sm else '-'}</td><td>{h(pd['notes']) or '-'}</td></tr>''')
+                pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
+                ration_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in rations)
+                animal_opts=''.join(f'<option value="animal:{x["id"]}">🐄 {h(x["tag"])} · {h(x["nickname"])} · {h(x["gender"])}</option>' for x in adults)+''.join(f'<option value="calf:{x["id"]}">🐮 {h(x["tag"])} · {h(x["nickname"])} · Buzağı</option>' for x in calves)
+            body=f'''<h1>🏠 Padok Yönetimi</h1><p class="mut">Hayvanları padoklara yerleştirin; rasyonu padoka bağlayınca günlük yem ihtiyacı ve maliyet otomatik hesaplanır.</p>
+            <div class="two"><div class="card"><h2>➕ Yeni Padok</h2><form method="post" action="/paddock/create" class="form"><label>Padok Adı<input name="name" required placeholder="Besi B-01"></label><label>Kod<input name="code" placeholder="B01"></label><label>Tür<select name="type"><option>Genel</option><option>Besi</option><option>Dişi</option><option>Buzağı</option><option>Doğum</option><option>Karantina</option></select></label><label>Kapasite<input type="number" min="0" name="capacity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Padoku Kaydet</button></div></form></div>
+            <div class="card"><h2>🐄 Hayvanı Padoka Ata</h2><form method="post" action="/paddock/assign" class="form"><label class="full">Hayvan<select name="animal_ref" required><option value="">Seçin</option>{animal_opts}</select></label><label class="full">Padok<select name="paddock_id"><option value="">Padoksuz</option>{pd_opts}</select></label><label class="full">Taşıma Notu<input name="notes" placeholder="Grup değişimi"></label><div class="full"><button class="btn blue">Padoka Ata / Taşı</button></div></form></div></div>
+            <div class="card" style="margin-top:14px"><h2>🥣 Padoka Rasyon Ata</h2><form method="post" action="/ration/assign" class="form"><label>Padok<select name="paddock_id" required><option value="">Seçin</option>{pd_opts}</select></label><label>Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes"></label><div class="full"><button class="btn orange">Rasyonu Padoka Ata</button> <a class="btn alt" href="/rations">Rasyon Yönetimi →</a></div></form></div>
+            <div class="card" style="margin-top:14px;overflow:auto"><h2>Padoklar</h2><table><tr><th>Padok</th><th>Tür</th><th>Hayvan</th><th>Doluluk</th><th>Aktif Rasyon</th><th>Yem Maliyeti</th><th>Not</th></tr>{''.join(rows) if rows else '<tr><td colspan="7">Henüz padok tanımlanmadı.</td></tr>'}</table></div>'''
+            return self.send_html(page('Padok Yönetimi',body,'/paddocks',u,msg))
+        if path=='/feeds':
+            search=(q.get('q',[''])[0] or '').strip()
+            with db() as c:
+                params=[]; where='where f.active=1'
+                if search: where+=' and (f.name like ? or f.category like ?)';params=[f'%{search}%',f'%{search}%']
+                feeds=c.execute(f'''select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
+                    coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock
+                    from feed_catalog f {where} order by f.category,f.name limit 250''',[date.today().isoformat()]+params).fetchall()
+                allfeeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
+                daily_use={}
+                active_pr=c.execute("select paddock_id,ration_id from paddock_rations where active=1 and (end_date is null or end_date='')").fetchall()
+                for pr in active_pr:
+                    pop=paddock_population(pr['paddock_id'],c)
+                    for it in c.execute("select feed_id,kg_per_head_day from ration_items where ration_id=?",(pr['ration_id'],)).fetchall():
+                        daily_use[it['feed_id']]=daily_use.get(it['feed_id'],0.0)+pop*float(it['kg_per_head_day'] or 0)
+                opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in allfeeds)
+                trs=''.join(f'''<tr><td><b>{h(r['name'])}</b><div class="mut">{h(r['category'])}</div></td><td>{float(r['dm_pct'] or 0):.1f}</td><td>{float(r['cp_pct'] or 0):.1f}</td><td>{float(r['ndf_pct'] or 0):.1f}</td><td>{float(r['me_mcal_kg'] or 0):.2f}</td><td>{float(r['ca_pct'] or 0):.2f}</td><td>{float(r['p_pct'] or 0):.2f}</td><td><b>{money(r['price'])}/kg</b></td><td>{float(r['stock'] or 0):,.1f} kg</td><td>{daily_use.get(r['id'],0):,.1f} kg</td><td>{(f"{float(r['stock'] or 0)/daily_use.get(r['id'],1):.0f} gün" if daily_use.get(r['id'],0)>0 else '-')}</td></tr>''' for r in feeds)
+            body=f'''<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">Besin değerleri Besi_V5.02 referansından taşındı. Eski fiyatlar aktarılmadı; fiyatı kendi gerçek alış değerinizle girin.</p>
+            <div class="grid"><div class="card stat metric"><span>Yem Kataloğu</span><b>{len(allfeeds)}</b></div><div class="card stat metric blue"><span>Gösterilen</span><b>{len(feeds)}</b></div><div class="card stat metric orange"><span>Fiyat Mantığı</span><b>Geçmişli</b><small>Her tarih kendi fiyatını korur</small></div></div>
+            <div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2><form method="post" action="/feed/price" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tarih<input type="date" name="effective_date" value="{date.today().isoformat()}" required></label><label>₺ / kg<input type="number" step="0.0001" min="0" name="price_per_kg" required></label><label class="full">Not<input name="notes" placeholder="Tedarikçi / alım notu"></label><div class="full"><button class="btn">Fiyatı Kaydet</button></div></form></div>
+            <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.1" min="0.01" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
+            <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct"></label><label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" step="0.001" name="p_pct"></label><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
+            <div class="card" style="margin-top:14px;overflow:auto"><form class="actions"><input name="q" value="{h(search)}" placeholder="Yem ara..."><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a></form><table><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th></tr>{trs or '<tr><td colspan="11">Kayıt bulunamadı.</td></tr>'}</table></div>'''
+            return self.send_html(page('Yem Kataloğu',body,'/feeds',u,msg))
+        if path=='/rations':
+            selected=int((q.get('id',['0'])[0] or 0))
+            with db() as c:
+                rations=c.execute("select * from rations where active=1 order by name").fetchall()
+                feeds=c.execute("select id,name,category from feed_catalog where active=1 order by name").fetchall()
+                paddocks=c.execute("select id,name from paddocks where active=1 order by name").fetchall()
+                cards=[]
+                for r in rations:
+                    sm=ration_summary(r['id'],c)
+                    cards.append(f'''<a class="card" href="/rations?id={r['id']}" style="display:block;border:{'2px solid #176b3a' if selected==r['id'] else '1px solid #e1ebe4'}"><h3 style="margin-top:0">🥣 {h(r['name'])}</h3><div class="mut">{h(r['target_group']) or 'Genel'}</div><p><b>{sm['as_fed_kg']:.2f} kg</b>/baş/gün · <b>{money(sm['cost'])}</b>/baş/gün</p><small>KM {sm['dm_kg']:.2f} kg · HP %{sm['cp_pct_dm']:.1f} · NDF %{sm['ndf_pct_dm']:.1f}</small></a>''')
+                detail=''
+                if selected:
+                    rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
+                    if rr:
+                        sm=ration_summary(selected,c)
+                        item_rows=''.join(f'''<tr><td>{h(x['name'])}</td><td>{float(x['kg_per_head_day']):.2f} kg</td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td>{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><form method="post" action="/ration/item-delete" class="inline-form"><input type="hidden" name="id" value="{x['item_id']}"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
+                        pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
+                        detail=f'''<div class="card" style="margin-top:14px"><h2>🥣 {h(rr['name'])}</h2><div class="grid"><div class="card stat"><span>Yaş Yem</span><b>{sm['as_fed_kg']:.2f} kg</b></div><div class="card stat"><span>Kuru Madde</span><b>{sm['dm_kg']:.2f} kg</b></div><div class="card stat"><span>Ham Protein</span><b>%{sm['cp_pct_dm']:.1f}</b></div><div class="card stat"><span>NDF</span><b>%{sm['ndf_pct_dm']:.1f}</b></div><div class="card stat"><span>ME</span><b>{sm['me_mcal']:.1f} Mcal</b></div><div class="card stat"><span>Ca / P</span><b>{sm['ca_g']:.0f} / {sm['p_g']:.0f} g</b></div><div class="card stat metric orange"><span>Maliyet</span><b>{money(sm['cost'])}</b><small>baş/gün</small></div></div>
+                        <form method="post" action="/ration/item" class="form" style="margin-top:14px"><input type="hidden" name="ration_id" value="{selected}"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{feed_opts}</select></label><label>kg / baş / gün<input type="number" step="0.01" min="0.01" name="kg_per_head_day" required></label><div><button class="btn">Yemi Rasyona Ekle / Güncelle</button></div></form>
+                        <div style="overflow:auto;margin-top:14px"><table><tr><th>Yem</th><th>Miktar</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr>{item_rows}</table></div>
+                        <div class="costbox"><b>Not:</b> ÇiftlikPro bu ekranda rasyonun besin içeriği ve maliyetini analiz eder. Nihai rasyon uygunluğu hayvanın canlı ağırlığı, yaş, sağlık ve hedef performansına göre veteriner/zooteknist tarafından değerlendirilmelidir.</div>
+                        <h3>🏠 Padoka Ata</h3><form method="post" action="/ration/assign" class="actions"><input type="hidden" name="ration_id" value="{selected}"><select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select><input type="date" name="start_date" value="{date.today().isoformat()}" required><button class="btn orange">Padoka Ata</button></form></div>'''
+            body=f'''<h1>🥣 Rasyon Yönetimi</h1><p class="mut">Rasyon miktar, besin değeri ve gerçek yem fiyatlarını tek hesapta birleştirir.</p><div class="card"><h2>➕ Yeni Rasyon</h2><form method="post" action="/ration/create" class="form"><label>Rasyon Adı<input name="name" required placeholder="Besi 400-500 kg"></label><label>Hedef Grup<select name="target_group"><option>Besi</option><option>Dişi</option><option>Buzağı</option><option>Genel</option></select></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Rasyonu Oluştur</button></div></form></div><div class="grid" style="margin-top:14px">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>{detail}'''
+            return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
         if path=='/performance':
             status_filter=(q.get('status',[''])[0] or '').strip();scope=(q.get('scope',['all'])[0] or 'all').strip();search=(q.get('search',[''])[0] or '').strip()
             if scope not in ('all','active','completed'):scope='all'
@@ -2520,6 +2684,91 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path=='/paddock/create':
+            name=(f.get('name') or '').strip()
+            if not name:return self.redirect('/paddocks','Padok adı zorunludur.')
+            try:
+                cap=max(0,int(float(f.get('capacity') or 0)))
+            except Exception:cap=0
+            try:
+                with db() as c:c.execute('insert into paddocks(name,code,type,capacity,notes,active,created_at) values(?,?,?,?,?,1,?)',(name,(f.get('code') or '').strip(),(f.get('type') or 'Genel').strip(),cap,(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds')))
+            except sqlite3.IntegrityError:return self.redirect('/paddocks','Bu padok adı zaten kayıtlı.')
+            audit(username,'Padok oluşturdu',name,self.client_ip());return self.redirect('/paddocks','Padok oluşturuldu.')
+        if path=='/paddock/assign':
+            ref=(f.get('animal_ref') or '').strip();pid=int(f.get('paddock_id') or 0) or None
+            if ':' not in ref:return self.redirect('/paddocks','Hayvan seçin.')
+            source,raw_id=ref.split(':',1)
+            if source not in ('animal','calf'):return self.redirect('/paddocks','Geçersiz hayvan türü.')
+            aid=int(raw_id or 0);table='animals' if source=='animal' else 'calves'
+            with db() as c:
+                rec=c.execute(f'select id,tag,paddock_id from {table} where id=?',(aid,)).fetchone()
+                if not rec:return self.redirect('/paddocks','Hayvan bulunamadı.')
+                if pid and not c.execute('select id from paddocks where id=? and active=1',(pid,)).fetchone():return self.redirect('/paddocks','Padok bulunamadı.')
+                old=rec['paddock_id'];sync_paddock_text(c,source,aid,pid)
+                if old!=pid:c.execute('insert into paddock_history(animal_source,animal_id,from_paddock_id,to_paddock_id,moved_at,notes) values(?,?,?,?,?,?)',(source,aid,old,pid,datetime.now().isoformat(timespec='seconds'),(f.get('notes') or '').strip()))
+            audit(username,'Hayvan padok taşıma',f'{rec["tag"]} -> {pid or "Padoksuz"}',self.client_ip());return self.redirect('/paddocks','Hayvanın padoku güncellendi.')
+        if path=='/feed/create':
+            name=(f.get('name') or '').strip()
+            if not name:return self.redirect('/feeds','Yem adı zorunludur.')
+            def num(k):
+                try:return float(f.get(k) or 0)
+                except:return 0.0
+            try:
+                with db() as c:c.execute('''insert into feed_catalog(name,category,dm_pct,ndf_pct,cp_pct,me_mcal_kg,ca_pct,p_pct,source,active) values(?,?,?,?,?,?,?,?,?,1)''',(name,(f.get('category') or 'Özel Yem').strip(),num('dm_pct'),num('ndf_pct'),num('cp_pct'),num('me_mcal_kg'),num('ca_pct'),num('p_pct'),'Kullanıcı girişi'))
+            except sqlite3.IntegrityError:return self.redirect('/feeds','Bu yem zaten katalogda var.')
+            audit(username,'Yem kataloğuna ekledi',name,self.client_ip());return self.redirect('/feeds','Özel yem kataloğa eklendi.')
+        if path=='/feed/price':
+            try:fid=int(f.get('feed_id') or 0);price=float(f.get('price_per_kg') or 0)
+            except:return self.redirect('/feeds','Yem ve fiyat bilgisi geçersiz.')
+            if fid<=0 or price<0:return self.redirect('/feeds','Yem ve fiyat bilgisi geçersiz.')
+            d=(f.get('effective_date') or date.today().isoformat()).strip()
+            with db() as c:
+                feed=c.execute('select name from feed_catalog where id=?',(fid,)).fetchone()
+                if not feed:return self.redirect('/feeds','Yem bulunamadı.')
+                c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,price,(f.get('notes') or '').strip()))
+            audit(username,'Yem fiyatı girdi',f'{feed["name"]}: {price}',self.client_ip());return self.redirect('/feeds','Yem fiyatı kaydedildi.')
+        if path=='/feed/stock':
+            try:fid=int(f.get('feed_id') or 0);qty=float(f.get('quantity_kg') or 0);unit=float(f.get('unit_price') or 0)
+            except:return self.redirect('/feeds','Stok bilgisi geçersiz.')
+            typ=(f.get('tx_type') or 'Giriş').strip()
+            if fid<=0 or qty<=0 or typ not in ('Giriş','Çıkış','Tüketim','Sayım +','Sayım -'):return self.redirect('/feeds','Stok bilgisi geçersiz.')
+            d=(f.get('tx_date') or date.today().isoformat()).strip()
+            with db() as c:
+                feed=c.execute('select name from feed_catalog where id=?',(fid,)).fetchone()
+                if not feed:return self.redirect('/feeds','Yem bulunamadı.')
+                c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(fid,d,typ,qty,unit,(f.get('notes') or '').strip()))
+                if typ=='Giriş' and unit>0:c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,unit,'Stok girişinden otomatik fiyat'))
+            audit(username,'Yem stok hareketi',f'{feed["name"]} {typ} {qty} kg',self.client_ip());return self.redirect('/feeds','Stok hareketi kaydedildi.')
+        if path=='/ration/create':
+            name=(f.get('name') or '').strip()
+            if not name:return self.redirect('/rations','Rasyon adı zorunludur.')
+            try:
+                with db() as c:
+                    cur=c.execute('insert into rations(name,target_group,notes,active,created_at) values(?,?,?,1,?)',(name,(f.get('target_group') or 'Genel').strip(),(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds')));rid=cur.lastrowid
+            except sqlite3.IntegrityError:return self.redirect('/rations','Bu rasyon adı zaten kayıtlı.')
+            audit(username,'Rasyon oluşturdu',name,self.client_ip());return self.redirect('/rations?id='+str(rid),'Rasyon oluşturuldu. Şimdi yemleri ekleyin.')
+        if path=='/ration/item':
+            try:rid=int(f.get('ration_id') or 0);fid=int(f.get('feed_id') or 0);kg=float(f.get('kg_per_head_day') or 0)
+            except:return self.redirect('/rations','Rasyon kalemi geçersiz.')
+            if rid<=0 or fid<=0 or kg<=0:return self.redirect('/rations?id='+str(rid),'Rasyon kalemi geçersiz.')
+            with db() as c:c.execute('''insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?) on conflict(ration_id,feed_id) do update set kg_per_head_day=excluded.kg_per_head_day''',(rid,fid,kg))
+            return self.redirect('/rations?id='+str(rid),'Rasyon kalemi güncellendi.')
+        if path=='/ration/item-delete':
+            try:iid=int(f.get('id') or 0);rid=int(f.get('ration_id') or 0)
+            except:return self.redirect('/rations','Geçersiz kayıt.')
+            with db() as c:c.execute('delete from ration_items where id=?',(iid,))
+            return self.redirect('/rations?id='+str(rid),'Yem rasyondan çıkarıldı.')
+        if path=='/ration/assign':
+            try:pid=int(f.get('paddock_id') or 0);rid=int(f.get('ration_id') or 0)
+            except:return self.redirect('/paddocks','Padok ve rasyon seçin.')
+            if pid<=0 or rid<=0:return self.redirect('/paddocks','Padok ve rasyon seçin.')
+            start=(f.get('start_date') or date.today().isoformat()).strip()
+            with db() as c:
+                if not c.execute('select id from paddocks where id=? and active=1',(pid,)).fetchone():return self.redirect('/paddocks','Padok bulunamadı.')
+                if not c.execute('select id from rations where id=? and active=1',(rid,)).fetchone():return self.redirect('/paddocks','Rasyon bulunamadı.')
+                c.execute("update paddock_rations set active=0,end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",((date.fromisoformat(start)-timedelta(days=1)).isoformat(),pid))
+                c.execute('insert into paddock_rations(paddock_id,ration_id,start_date,end_date,active,notes) values(?,?,?,NULL,1,?)',(pid,rid,start,(f.get('notes') or '').strip()))
+            audit(username,'Padoka rasyon atadı',f'Padok {pid} / Rasyon {rid}',self.client_ip());return self.redirect('/paddocks','Rasyon padoka atandı.')
         if path=='/smtp-settings':
             if not self.require_admin():return
             action=(f.get('action') or 'save').strip()

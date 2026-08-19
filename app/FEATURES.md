@@ -41,3 +41,15 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Aşı kaydında 2. doz planlama: varsayılan 15 gün, değiştirilebilir.
 - Dashboard ve Sağlık ekranında yaklaşan/geciken doz uyarıları.
 - 2. Doz Yapıldı ile gerçek uygulama tarihi sağlık geçmişine kaydedilir.
+
+## V3.9.0 — Padok + Yem & Rasyon
+- Padok tanımlama: ad, kod, tür, kapasite, not.
+- Aktif hayvan ve buzağıları padoklara atama/taşıma; eski serbest metin padokları otomatik migrasyonla korunur.
+- Padok hareket geçmişi veri tabanında saklanır.
+- Besi_V5.02.xlsm besin veri tabanından 246 yem maddesi referans kataloğa alınmıştır; eski fiyatlar özellikle aktarılmamıştır.
+- Yem besin alanları: KM, HP, NDF, TDN, ME, NEm, NEg, nişasta, yağ, kül, Ca, P, Mg, K, Na, S.
+- Tarihli yem fiyat geçmişi ve stok giriş/çıkış/tüketim hareketleri.
+- Rasyon oluşturma ve yem bazında kg/baş/gün miktarı tanımlama.
+- Rasyon analizi: yaş yem, kuru madde, ham protein, NDF, ME, Ca/P ve günlük baş maliyeti.
+- Rasyonu padoka atama; padok ekranında aktif rasyon ve baş/gün maliyeti gösterimi.
+- Rasyon analizi karar destek amaçlıdır; nihai besleme programı veteriner/zooteknist değerlendirmesi gerektirir.

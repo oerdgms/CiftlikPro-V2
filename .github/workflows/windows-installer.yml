@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.8.5 Kizginlik Tohumlama Entegrasyonu Windows Kurulum
+name: CiftlikPro Enterprise V3.9.0 Kizginlik Tohumlama Entegrasyonu Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.8.5'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.0'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Kaynak sunucuyu başlat ve sayfaları test et
         shell: pwsh
@@ -187,7 +187,7 @@ jobs:
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.8.5-Lisans-Uygulama-Koruma-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.0-Lisans-Uygulama-Koruma-Windows-Setup
           path: |
             release/CiftlikPro_Enterprise_V3_7_3_Lisans_Key_Aktivasyonu_Setup.exe
             release/SHA256.txt
