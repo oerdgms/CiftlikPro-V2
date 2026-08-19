@@ -91,3 +91,11 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Besi ve Süt rasyonu oluşturma akışları ayrıldı.
 - Süt rasyonu ana hedef girdileri: canlı ağırlık + hedef süt L/gün.
 - Süt hedef motoru KM, HP, ME, NDF, Ca ve P karşılaştırması yapar; çalışma masası ve akıllı dengeleme aynı hedefleri kullanır.
+
+
+## V3.9.7 Hızlı Yem Ekle
+- Besi ve süt rasyonlarında Akıllı Rasyon Hedefi ile Rasyon Çalışma Masası arasına ortak Hızlı Yem Ekle paneli eklendi.
+- 246 yemlik katalog arama ile filtrelenir; ilk 8 sonuç gösterilir.
+- Yem kartında grup, KM, HP, NDF, fiyat, stok ve rasyondaki mevcut miktar görünür.
+- Seçilen yem için miktar doğrudan yazılabilir veya +/- 0,10 kg ile ayarlanabilir.
+- Rasyonda zaten bulunan yem seçilirse mevcut miktar otomatik gelir ve güncelleme yapılır.
