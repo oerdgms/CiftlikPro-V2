@@ -23,7 +23,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.1'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.9.0 PADOK + YEM & RASYON'
+APP_LABEL='ENTERPRISE V3.9.1 AKILLI RASYON HEDEFI'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -969,17 +969,17 @@ function bindSmartPhotoForms(){{
 }}
 
 function moneyRaw(v){{
-  v=String(v||'').trim().replace(/[₺\s]/g,'');
+  v=String(v||'').trim().replace(/[₺\\s]/g,'');
   if(!v)return '';
   const comma=v.indexOf(',');
-  const whole=(comma>=0?v.slice(0,comma):v).replace(/\D/g,'')||'0';
-  const dec=comma>=0?v.slice(comma+1).replace(/\D/g,'').slice(0,2):'';
+  const whole=(comma>=0?v.slice(0,comma):v).replace(/\\D/g,'')||'0';
+  const dec=comma>=0?v.slice(comma+1).replace(/\\D/g,'').slice(0,2):'';
   return whole+(comma>=0&&dec!==''?'.'+dec:'');
 }}
 function moneyGroupDigits(digits){{
-  digits=String(digits||'').replace(/\D/g,'').replace(/^0+(?=\d)/,'');
+  digits=String(digits||'').replace(/\\D/g,'').replace(/^0+(?=\\d)/,'');
   if(!digits)return '';
-  return digits.replace(/\B(?=(\d{{3}})+(?!\d))/g,'.');
+  return digits.replace(/\\B(?=(\\d{{3}})+(?!\\d))/g,'.');
 }}
 function bindSmartMoney(){{
   const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
@@ -999,7 +999,7 @@ function bindSmartMoney(){{
         const fixed=Math.round(n*100)/100;
         const parts=String(fixed).split('.');
         const whole=moneyGroupDigits(parts[0]);
-        const dec=(parts[1]||'').replace(/\D/g,'').slice(0,2);
+        const dec=(parts[1]||'').replace(/\\D/g,'').slice(0,2);
         el.value=whole+(dec?','+dec:'');
       }}
     }}
@@ -1008,7 +1008,7 @@ function bindSmartMoney(){{
     // The dots visible in the field are presentation only.
     el.addEventListener('input',function(){{
       const raw=el.value;
-      const digits=raw.replace(/\D/g,'');
+      const digits=raw.replace(/\\D/g,'');
       el.value=moneyGroupDigits(digits);
       try{{el.setSelectionRange(el.value.length,el.value.length);}}catch(e){{}}
     }});
@@ -1026,7 +1026,7 @@ function bindSmartMoney(){{
     form.dataset.moneySubmitBound='1';
     form.addEventListener('submit',function(){{
       form.querySelectorAll('input.smart-money').forEach(function(el){{
-        el.value=String(el.value||'').replace(/\D/g,'');
+        el.value=String(el.value||'').replace(/\\D/g,'');
       }});
     }},true);
   }});
