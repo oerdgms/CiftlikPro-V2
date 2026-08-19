@@ -53,3 +53,10 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Rasyon analizi: yaş yem, kuru madde, ham protein, NDF, ME, Ca/P ve günlük baş maliyeti.
 - Rasyonu padoka atama; padok ekranında aktif rasyon ve baş/gün maliyeti gösterimi.
 - Rasyon analizi karar destek amaçlıdır; nihai besleme programı veteriner/zooteknist değerlendirmesi gerektirir.
+
+## V3.9.1 Akıllı Rasyon Hedefi
+- Rasyona hedef canlı ağırlık ve hedef günlük canlı ağırlık artışı eklendi.
+- Kuru madde, ham protein, metabolik enerji, NDF, kalsiyum ve fosfor için hedef/mevcut karşılaştırması eklendi.
+- Eksik / uygun / fazla karar desteği eklendi.
+- Hedef profili rasyon bazında sonradan güncellenebilir.
+- Hesaplar ön değerlendirme/karar desteğidir; nihai rasyon uzman doğrulaması gerektirir.
