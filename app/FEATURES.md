@@ -68,3 +68,10 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Fiyatı olmayan yemlerde Fiyat girilmemiş gösterimi ve stok görünürlüğü.
 - Azalt + ekle kombine dengeleme fikirleri.
 - Negatif simülasyonun uygulanabilmesi ve rasyon miktar düzenleme UX hotfixleri korunur.
+
+
+## V3.9.5 Kompakt Rasyon Masası
+- Akıllı Rasyon Hedefi ile Rasyon Çalışma Masası art arda yerleştirildi.
+- Akıllı dengeleme ilk bakışta üç kısa çözüm kartına indirildi.
+- Uzun yem adayları ve teknik tablolar varsayılan olarak kapalı hale getirildi.
+- Yeni yem ekleme ve padoka atama ikincil katlanabilir alanlara taşındı.
