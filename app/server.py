@@ -21,9 +21,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.1'
+APP_VERSION='3.9.2'
 APP_CHANNEL='Stable'
-APP_LABEL='ENTERPRISE V3.9.1 AKILLI RASYON HEDEFI'
+APP_LABEL='ENTERPRISE V3.9.2 AKILLI RASYON DENGELEME'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -772,6 +772,56 @@ def ration_requirement_panel(rr,sm):
     ndf=sm['ndf_pct_dm']; ndf_s='✅ Uygun' if t['ndf_min']<=ndf<=t['ndf_max'] else ('⚠️ Düşük' if ndf<t['ndf_min'] else '⚠️ Yüksek')
     animal_type=h(rr['animal_type'] if 'animal_type' in rr.keys() else 'Besi Erkek')
     return f'''<div class="card" style="margin-top:14px;border:1px solid #cfe3d5"><h3>🎯 Akıllı Rasyon Hedefi</h3><form method="post" action="/ration/target" class="form"><input type="hidden" name="ration_id" value="{rr['id']}"><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="150" max="900" step="1" name="target_weight_kg" value="{t['weight_kg']:.0f}"></label><label>Hedef Günlük Artış (kg/gün)<input type="number" min="0.2" max="2.2" step="0.05" name="target_adg_kg" value="{t['adg']:.2f}"></label><label>Hayvan Tipi<input name="animal_type" value="{animal_type}"></label><div><button class="btn blue">Hedefi Hesapla / Güncelle</button></div></form><div style="overflow:auto;margin-top:12px"><table><tr><th>Besin</th><th>Hedef</th><th>Mevcut Rasyon</th><th>Durum</th></tr><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td class="{dm_c}">{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td class="{cp_c}">{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td class="{me_c}">{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f} KM</td><td>%{ndf:.1f} KM</td><td>{ndf_s}</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g/gün</td><td>{sm['ca_g']:.0f} g</td><td class="{ca_c}">{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g/gün</td><td>{sm['p_g']:.0f} g</td><td class="{p_c}">{p_s}</td></tr></table></div><p class="mut">Ön değerlendirme hedefidir. Gerçek tüketim, yem analizi, ırk/cinsiyet, çevre ve sağlık koşulları sonucu değiştirebilir; nihai rasyon veteriner/zooteknist tarafından doğrulanmalıdır.</p></div>'''
+
+def ration_smart_recommendations(rr, sm, con=None, limit=6):
+    """Katalogdaki yemleri mevcut besin açıklarını iyileştirme potansiyeline göre sıralar.
+    Bu bir karar-destek simülasyonudur; reçete değildir."""
+    own=con is None; c=con or db().__enter__()
+    try:
+        t=ration_requirement_targets(rr['target_weight_kg'] or 450,rr['target_adg_kg'] or 1.3,rr['animal_type'] or 'Besi Erkek')
+        deficits={
+            'dm':max(0,t['dmi_kg']-sm['dm_kg'])/max(t['dmi_kg'],.01),
+            'cp':max(0,t['cp_pct']-sm['cp_pct_dm'])/max(t['cp_pct'],.01),
+            'me':max(0,t['me_mcal_day']-sm['me_mcal'])/max(t['me_mcal_day'],.01),
+            'ca':max(0,t['ca_g']-sm['ca_g'])/max(t['ca_g'],.01),
+            'p':max(0,t['p_g']-sm['p_g'])/max(t['p_g'],.01),
+        }
+        rows=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1""",(date.today().isoformat(),)).fetchall()
+        out=[]
+        for f in rows:
+            dm=float(f['dm_pct'] or 0)/100; cp=float(f['cp_pct'] or 0)/100; ndf=float(f['ndf_pct'] or 0)/100; me=float(f['me_mcal_kg'] or 0); ca=float(f['ca_pct'] or 0); ph=float(f['p_pct'] or 0)
+            if dm<=0: continue
+            # 1 kg yaş yem katkısının açık kapatma yönündeki göreli puanı
+            score=(deficits['dm']*dm + deficits['cp']*dm*cp*5 + deficits['me']*dm*me/3 + deficits['ca']*dm*ca/1.0 + deficits['p']*dm*ph/0.6)
+            # NDF zaten yüksekse yüksek-NDF yemleri; protein zaten fazlaysa çok proteinli yemleri geri it
+            if sm['ndf_pct_dm']>t['ndf_max'] and float(f['ndf_pct'] or 0)>40: score*=0.55
+            if sm['cp_pct_dm']>t['cp_pct']*1.05 and float(f['cp_pct'] or 0)>18: score*=0.60
+            if score<=0: continue
+            price=float(f['price'] or 0); value=score/(1+(price/20 if price>0 else .15))
+            reasons=[]
+            if deficits['me']>.03 and me>=2.3: reasons.append('enerji')
+            if deficits['cp']>.03 and float(f['cp_pct'] or 0)>=14: reasons.append('protein')
+            if deficits['dm']>.05: reasons.append('kuru madde')
+            if deficits['ca']>.05 and ca>=.5: reasons.append('kalsiyum')
+            if deficits['p']>.05 and ph>=.3: reasons.append('fosfor')
+            out.append((value,f,', '.join(reasons) or 'denge'))
+        out.sort(key=lambda x:x[0],reverse=True)
+        return out[:limit]
+    finally:
+        if own:c.close()
+
+def ration_simulated_summary(ration_id, feed_id, delta_kg, con=None):
+    own=con is None; c=con or db().__enter__()
+    try:
+        base=ration_summary(ration_id,c); out={k:v for k,v in base.items() if k!='items'}; out['items']=base['items']
+        f=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),feed_id)).fetchone()
+        if not f:return base
+        kg=float(delta_kg); dm=kg*float(f['dm_pct'] or 0)/100
+        out['as_fed_kg']+=kg; out['dm_kg']+=dm; out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100; out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100; out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100; out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0); out['ca_g']+=dm*float(f['ca_pct'] or 0)*10; out['p_g']+=dm*float(f['p_pct'] or 0)*10; out['cost']+=kg*float(f['price'] or 0)
+        out['cp_pct_dm']=out['cp_kg']/out['dm_kg']*100 if out['dm_kg'] else 0; out['ndf_pct_dm']=out['ndf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0; out['me_per_kg_dm']=out['me_mcal']/out['dm_kg'] if out['dm_kg'] else 0
+        return out
+    finally:
+        if own:c.close()
 
 def paddock_population(paddock_id, con=None):
     own=con is None
@@ -1770,11 +1820,22 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
                     if rr:
                         sm=ration_summary(selected,c)
-                        item_rows=''.join(f'''<tr><td>{h(x['name'])}</td><td>{float(x['kg_per_head_day']):.2f} kg</td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td>{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><form method="post" action="/ration/item-delete" class="inline-form"><input type="hidden" name="id" value="{x['item_id']}"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        item_rows=''.join(f'''<tr><td><b>{h(x['name'])}</b></td><td><div style="display:flex;align-items:center;gap:6px;white-space:nowrap"><form method="post" action="/ration/item-adjust" class="inline-form"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="item_id" value="{x['item_id']}"><input type="hidden" name="delta" value="-0.10"><button class="btn alt compact-btn">−</button></form><b>{float(x['kg_per_head_day']):.2f} kg</b><form method="post" action="/ration/item-adjust" class="inline-form"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="item_id" value="{x['item_id']}"><input type="hidden" name="delta" value="0.10"><button class="btn alt compact-btn">+</button></form></div></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td>{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><form method="post" action="/ration/item-delete" class="inline-form"><input type="hidden" name="id" value="{x['item_id']}"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
                         feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
                         pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
+                        recs=ration_smart_recommendations(rr,sm,c)
+                        rec_html=''.join(f'''<tr><td><b>{h(fx['name'])}</b><div class="mut">{h(fx['category'])}</div></td><td>{h(reason)}</td><td>{money(fx['price'])}/kg</td><td><a class="btn alt compact-btn" href="/rations?id={selected}&sim_feed={fx['id']}&sim_delta=0.50">+0,50 kg Simüle Et</a></td></tr>''' for score,fx,reason in recs) or '<tr><td colspan="4">Belirgin bir besin açığı bulunmadı.</td></tr>'
+                        sim_html=''
+                        try: sim_feed=int((q.get('sim_feed',['0'])[0] or 0));sim_delta=float((q.get('sim_delta',['0.5'])[0] or .5))
+                        except: sim_feed=0;sim_delta=.5
+                        if sim_feed:
+                            sf=c.execute('select name from feed_catalog where id=?',(sim_feed,)).fetchone();ss=ration_simulated_summary(selected,sim_feed,sim_delta,c)
+                            if sf: sim_html=f'''<div class="card" style="margin-top:14px;border:2px solid #2f78d0"><h3>🧪 Kaydetmeden Simülasyon: +{sim_delta:.2f} kg {h(sf['name'])}</h3><div class="grid"><div class="card stat">KM<b>{sm['dm_kg']:.2f} → {ss['dm_kg']:.2f}</b></div><div class="card stat">HP<b>%{sm['cp_pct_dm']:.1f} → %{ss['cp_pct_dm']:.1f}</b></div><div class="card stat">ME<b>{sm['me_mcal']:.1f} → {ss['me_mcal']:.1f}</b></div><div class="card stat">NDF<b>%{sm['ndf_pct_dm']:.1f} → %{ss['ndf_pct_dm']:.1f}</b></div><div class="card stat metric orange">Maliyet<b>{money(sm['cost'])} → {money(ss['cost'])}</b></div></div><div class="actions"><form method="post" action="/ration/apply-suggestion"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="feed_id" value="{sim_feed}"><input type="hidden" name="delta" value="{sim_delta}"><button class="btn blue">✅ Bu Değişikliği Uygula</button></form><a class="btn alt" href="/rations?id={selected}">↩ Vazgeç</a></div></div>'''
                         detail=f'''<div class="card" style="margin-top:14px"><h2>🥣 {h(rr['name'])}</h2><div class="grid"><div class="card stat"><span>Yaş Yem</span><b>{sm['as_fed_kg']:.2f} kg</b></div><div class="card stat"><span>Kuru Madde</span><b>{sm['dm_kg']:.2f} kg</b></div><div class="card stat"><span>Ham Protein</span><b>%{sm['cp_pct_dm']:.1f}</b></div><div class="card stat"><span>NDF</span><b>%{sm['ndf_pct_dm']:.1f}</b></div><div class="card stat"><span>ME</span><b>{sm['me_mcal']:.1f} Mcal</b></div><div class="card stat"><span>Ca / P</span><b>{sm['ca_g']:.0f} / {sm['p_g']:.0f} g</b></div><div class="card stat metric orange"><span>Maliyet</span><b>{money(sm['cost'])}</b><small>baş/gün</small></div></div>
                         {ration_requirement_panel(rr,sm)}
+                        {sim_html}
+                        <div class="card" style="margin-top:14px"><details><summary><b>✏️ Rasyon Bilgilerini Düzenle</b></summary><form method="post" action="/ration/edit" class="form" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="full">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form></details></div>
+                        <div class="card" style="margin-top:14px;border:1px solid #d8e4ff"><h3>🧠 Akıllı Yem Adayları</h3><p class="mut">ÇiftlikPro mevcut açıkları, mevcut fazlalıkları ve yem kataloğunu birlikte tarar. Öneriler reçete değil, kaydetmeden denenebilen karar desteğidir.</p><div style="overflow:auto"><table><tr><th>Yem</th><th>Neden Öne Çıktı?</th><th>Güncel Fiyat</th><th>Deneme</th></tr>{rec_html}</table></div></div>
                         <form method="post" action="/ration/item" class="form" style="margin-top:14px"><input type="hidden" name="ration_id" value="{selected}"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{feed_opts}</select></label><label>kg / baş / gün<input type="number" step="0.01" min="0.01" name="kg_per_head_day" required></label><div><button class="btn">Yemi Rasyona Ekle / Güncelle</button></div></form>
                         <div style="overflow:auto;margin-top:14px"><table><tr><th>Yem</th><th>Miktar</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr>{item_rows}</table></div>
                         <div class="costbox"><b>Not:</b> ÇiftlikPro bu ekranda rasyonun besin içeriği ve maliyetini analiz eder. Nihai rasyon uygunluğu hayvanın canlı ağırlığı, yaş, sağlık ve hedef performansına göre veteriner/zooteknist tarafından değerlendirilmelidir.</div>
@@ -2779,6 +2840,32 @@ setTimeout(()=>setFinanceDrawer(false),0);
             if rid<=0 or not (150<=w<=900) or not (0.2<=adg<=2.2):return self.redirect('/rations?id='+str(rid),'Canlı ağırlık veya hedef artış aralık dışında.')
             with db() as c:c.execute('update rations set target_weight_kg=?,target_adg_kg=?,animal_type=? where id=?',(w,adg,(f.get('animal_type') or 'Besi Erkek').strip(),rid))
             return self.redirect('/rations?id='+str(rid),'Hedef hayvan profili güncellendi.')
+        if path=='/ration/edit':
+            try:rid=int(f.get('ration_id') or 0)
+            except:return self.redirect('/rations','Geçersiz rasyon.')
+            name=(f.get('name') or '').strip()
+            if not name:return self.redirect('/rations?id='+str(rid),'Rasyon adı zorunludur.')
+            with db() as c:c.execute('update rations set name=?,target_group=?,notes=? where id=?',(name,(f.get('target_group') or 'Besi').strip(),(f.get('notes') or '').strip(),rid))
+            return self.redirect('/rations?id='+str(rid),'Rasyon bilgileri güncellendi.')
+        if path=='/ration/item-adjust':
+            try:rid=int(f.get('ration_id') or 0);iid=int(f.get('item_id') or 0);delta=float(f.get('delta') or 0)
+            except:return self.redirect('/rations','Geçersiz rasyon kalemi.')
+            with db() as c:
+                row=c.execute('select kg_per_head_day from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
+                if not row:return self.redirect('/rations?id='+str(rid),'Yem kalemi bulunamadı.')
+                new=max(0,float(row['kg_per_head_day'] or 0)+delta)
+                if new<0.001:c.execute('delete from ration_items where id=?',(iid,))
+                else:c.execute('update ration_items set kg_per_head_day=? where id=?',(round(new,3),iid))
+            return self.redirect('/rations?id='+str(rid),'Rasyon miktarı güncellendi.')
+        if path=='/ration/apply-suggestion':
+            try:rid=int(f.get('ration_id') or 0);fid=int(f.get('feed_id') or 0);delta=float(f.get('delta') or 0)
+            except:return self.redirect('/rations','Öneri uygulanamadı.')
+            if delta<=0:return self.redirect('/rations?id='+str(rid),'Öneri miktarı geçersiz.')
+            with db() as c:
+                row=c.execute('select id,kg_per_head_day from ration_items where ration_id=? and feed_id=?',(rid,fid)).fetchone()
+                if row:c.execute('update ration_items set kg_per_head_day=? where id=?',(round(float(row['kg_per_head_day'])+delta,3),row['id']))
+                else:c.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(rid,fid,delta))
+            return self.redirect('/rations?id='+str(rid),'Simülasyondaki yem rasyona uygulandı.')
         if path=='/ration/item':
             try:rid=int(f.get('ration_id') or 0);fid=int(f.get('feed_id') or 0);kg=float(f.get('kg_per_head_day') or 0)
             except:return self.redirect('/rations','Rasyon kalemi geçersiz.')
