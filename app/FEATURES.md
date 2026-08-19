@@ -60,3 +60,11 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Eksik / uygun / fazla karar desteği eklendi.
 - Hedef profili rasyon bazında sonradan güncellenebilir.
 - Hesaplar ön değerlendirme/karar desteğidir; nihai rasyon uzman doğrulaması gerektirir.
+
+
+## V3.9.4 Akıllı Rasyon Dengeleme
+- Fazla HP/Ca/P/NDF için mevcut rasyondan azaltma adayları.
+- Tüm yem kataloğunda +0,50 kg simülasyonu ile eksik tamamlayan adayların çoklu-besin puanlaması.
+- Fiyatı olmayan yemlerde Fiyat girilmemiş gösterimi ve stok görünürlüğü.
+- Azalt + ekle kombine dengeleme fikirleri.
+- Negatif simülasyonun uygulanabilmesi ve rasyon miktar düzenleme UX hotfixleri korunur.
