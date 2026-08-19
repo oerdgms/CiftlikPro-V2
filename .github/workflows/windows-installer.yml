@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.9.2 Kizginlik Tohumlama Entegrasyonu Windows Kurulum
+name: CiftlikPro Enterprise V3.9.2 Akilli Rasyon Dengeleme Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -171,7 +171,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_7_3_Lisans_Key_Aktivasyonu_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_2_Akilli_Rasyon_Dengeleme_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -179,9 +179,9 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_7_3_Lisans_Key_Aktivasyonu_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_2_Akilli_Rasyon_Dengeleme_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_7_3_Lisans_Key_Aktivasyonu_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_9_2_Akilli_Rasyon_Dengeleme_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
@@ -189,7 +189,7 @@ jobs:
         with:
           name: CiftlikPro-Enterprise-V3.9.2-Lisans-Uygulama-Koruma-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_7_3_Lisans_Key_Aktivasyonu_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_2_Akilli_Rasyon_Dengeleme_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
