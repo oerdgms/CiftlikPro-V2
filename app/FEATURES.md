@@ -99,3 +99,11 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Yem kartında grup, KM, HP, NDF, fiyat, stok ve rasyondaki mevcut miktar görünür.
 - Seçilen yem için miktar doğrudan yazılabilir veya +/- 0,10 kg ile ayarlanabilir.
 - Rasyonda zaten bulunan yem seçilirse mevcut miktar otomatik gelir ve güncelleme yapılır.
+
+## V3.9.16 - NASEM Yem Kataloğu + Düzenle/Sil
+- Yem Kataloğu kaynak yaklaşımı NASEM 2016 Beef / NASEM 2021 Dairy referanslarına taşındı.
+- NASEM 2021 Table 19-1 ile birebir eşleştirilebilen temel yemlerde KM/HP/NDF/nişasta/mineral alanları güncellendi.
+- Kullanıcının daha önce elle değiştirdiği kayıtlar otomatik migrasyonda ezilmez.
+- Sistem kataloğundaki ve kullanıcı tarafından eklenen tüm aktif yemlere Düzenle özelliği eklendi.
+- Düzenleme ekranı: KM, HP, NDF, TDN, ME, NEm, NEg, nişasta, yağ, kül, Ca, P, Mg, K, Na, S ve kaynak.
+- Sil işlemi güvenli soft-delete yapar; geçmiş rasyon/fiyat/stok kayıtları korunur.

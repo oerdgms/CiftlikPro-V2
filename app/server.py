@@ -21,9 +21,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.15'
+APP_VERSION='3.9.16'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.15 · CANLI HEDEF + RASYON MASASI'
+APP_LABEL='ENTERPRISE V3.9.16 · NASEM YEM KATALOĞU + DÜZENLE/SİL'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -552,6 +552,18 @@ def init_db():
                                   (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','')))
                 except Exception as exc:
                     print('Yem kataloğu yüklenemedi:',exc)
+        # V3.9.16: NASEM ile birebir eşleştirilebilen temel yemleri mevcut kurulumlarda da güncelle.
+        # Kullanıcının daha önce elle/laboratuvar analiziyle değiştirdiği kayıtları ezmemek için yalnız eski Besi_V5.02 kaynaklı satırlar güncellenir.
+        try:
+            catalog_file=PROGRAM_DIR/'feed_catalog.json'
+            if catalog_file.exists():
+                modern_names={'ARPA, AĞIR','ARPA, HAFİF','ARPA SİLAJI','BUĞDAY, ÖĞÜTÜLMÜŞ','BUĞDAY SAMANI','MISIR SİLAJI, %33-40 KM'}
+                for x in json.loads(catalog_file.read_text(encoding='utf-8')):
+                    if x.get('name') not in modern_names: continue
+                    c.execute('''update feed_catalog set category=?,dm_pct=?,ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,source=? where name=? and (source is null or source='' or source like 'Besi_V5.02%')''',
+                              (x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source',''),x.get('name','')))
+        except Exception as exc:
+            print('NASEM yem kataloğu güncellemesi uygulanamadı:',exc)
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         n=c.execute('select count(*) from users').fetchone()[0]
@@ -2206,14 +2218,32 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                     for it in c.execute("select feed_id,kg_per_head_day from ration_items where ration_id=?",(pr['ration_id'],)).fetchall():
                         daily_use[it['feed_id']]=daily_use.get(it['feed_id'],0.0)+pop*float(it['kg_per_head_day'] or 0)
                 opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in allfeeds)
-                trs=''.join(f'''<tr><td><b>{h(r['name'])}</b><div class="mut">{h(r['category'])}</div></td><td>{float(r['dm_pct'] or 0):.1f}</td><td>{float(r['cp_pct'] or 0):.1f}</td><td>{float(r['ndf_pct'] or 0):.1f}</td><td>{float(r['me_mcal_kg'] or 0):.2f}</td><td>{float(r['ca_pct'] or 0):.2f}</td><td>{float(r['p_pct'] or 0):.2f}</td><td><b>{money(r['price'])}/kg</b></td><td>{float(r['stock'] or 0):,.1f} kg</td><td>{daily_use.get(r['id'],0):,.1f} kg</td><td>{(f"{float(r['stock'] or 0)/daily_use.get(r['id'],1):.0f} gün" if daily_use.get(r['id'],0)>0 else '-')}</td></tr>''' for r in feeds)
-            body=f'''<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">Besin değerleri Besi_V5.02 referansından taşındı. Eski fiyatlar aktarılmadı; fiyatı kendi gerçek alış değerinizle girin.</p>
+                trs=''.join(f'''<tr><td><b>{h(r['name'])}</b><div class="mut">{h(r['category'])}</div><small class="mut">{h(r['source']) or '-'}</small></td><td>{float(r['dm_pct'] or 0):.1f}</td><td>{float(r['cp_pct'] or 0):.1f}</td><td>{float(r['ndf_pct'] or 0):.1f}</td><td>{float(r['me_mcal_kg'] or 0):.2f}</td><td>{float(r['ca_pct'] or 0):.2f}</td><td>{float(r['p_pct'] or 0):.2f}</td><td><b>{money(r['price'])}/kg</b></td><td>{float(r['stock'] or 0):,.1f} kg</td><td>{daily_use.get(r['id'],0):,.1f} kg</td><td>{(f"{float(r['stock'] or 0)/daily_use.get(r['id'],1):.0f} gün" if daily_use.get(r['id'],0)>0 else '-')}</td><td><div class="actions" style="flex-wrap:nowrap"><a class="btn alt compact-btn" href="/feed-edit?id={r['id']}">✏️ Düzenle</a><form method="post" action="/feed/delete" style="margin:0" onsubmit="return confirm('Bu yemi katalogdan kaldırmak istediğinize emin misiniz? Geçmiş rasyon ve fiyat kayıtları korunur.')"><input type="hidden" name="feed_id" value="{r['id']}"><button class="btn red compact-btn">🗑 Sil</button></form></div></td></tr>''' for r in feeds)
+            body=f'''<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">Besin değerleri NASEM 2016 Beef + NASEM 2021 Dairy ile karşılaştırmalı güncelleniyor. Tam eşleşmeyen özel yemlerde mevcut referans korunur; kendi laboratuvar analizinizi Düzenle ile girebilirsiniz. Eski fiyatlar aktarılmadı.</p>
             <div class="grid"><div class="card stat metric"><span>Yem Kataloğu</span><b>{len(allfeeds)}</b></div><div class="card stat metric blue"><span>Gösterilen</span><b>{len(feeds)}</b></div><div class="card stat metric orange"><span>Fiyat Mantığı</span><b>Geçmişli</b><small>Her tarih kendi fiyatını korur</small></div></div>
             <div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2><form method="post" action="/feed/price" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tarih<input type="date" name="effective_date" value="{date.today().isoformat()}" required></label><label>₺ / kg<input type="number" step="0.0001" min="0" name="price_per_kg" required></label><label class="full">Not<input name="notes" placeholder="Tedarikçi / alım notu"></label><div class="full"><button class="btn">Fiyatı Kaydet</button></div></form></div>
             <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.1" min="0.01" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
             <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct"></label><label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" step="0.001" name="p_pct"></label><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
-            <div class="card" style="margin-top:14px;overflow:auto"><form class="actions"><input name="q" value="{h(search)}" placeholder="Yem ara..."><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a></form><table><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th></tr>{trs or '<tr><td colspan="11">Kayıt bulunamadı.</td></tr>'}</table></div>'''
+            <div class="card" style="margin-top:14px;overflow:auto"><form class="actions"><input name="q" value="{h(search)}" placeholder="Yem ara..."><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a></form><table><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th><th>İşlem</th></tr>{trs or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'}</table></div>'''
             return self.send_html(page('Yem Kataloğu',body,'/feeds',u,msg))
+        if path=='/feed-edit':
+            try: fid=int((q.get('id',['0'])[0] or 0))
+            except: fid=0
+            with db() as c: feed=c.execute('select * from feed_catalog where id=? and active=1',(fid,)).fetchone()
+            if not feed:return self.redirect('/feeds','Yem bulunamadı.')
+            def fv(k,dec=3):
+                try:return f"{float(feed[k] or 0):.{dec}f}"
+                except:return '0'
+            body=f'''<div class="pro-form-head"><div><h1>✏️ Yemi Düzenle</h1><div class="mut">Sistem kataloğundaki veya sizin eklediğiniz yemin besin değerlerini güncelleyebilirsiniz.</div></div><a class="btn alt" href="/feeds">← Yem Kataloğu</a></div>
+            <div class="card"><form method="post" action="/feed/edit" class="form">
+            <input type="hidden" name="feed_id" value="{fid}"><label>Yem Adı<input name="name" value="{h(feed['name'])}" required></label><label>Kategori<input name="category" value="{h(feed['category'])}"></label>
+            <label>KM %<input type="number" step="0.01" name="dm_pct" value="{fv('dm_pct',2)}"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct" value="{fv('cp_pct',2)}"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct" value="{fv('ndf_pct',2)}"></label><label>TDN % KM<input type="number" step="0.01" name="tdn_pct" value="{fv('tdn_pct',2)}"></label>
+            <label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg" value="{fv('me_mcal_kg')}"></label><label>NEm Mcal/kg KM<input type="number" step="0.001" name="nem_mcal_kg" value="{fv('nem_mcal_kg')}"></label><label>NEg Mcal/kg KM<input type="number" step="0.001" name="neg_mcal_kg" value="{fv('neg_mcal_kg')}"></label>
+            <label>Nişasta % KM<input type="number" step="0.01" name="starch_pct" value="{fv('starch_pct',2)}"></label><label>Yağ % KM<input type="number" step="0.01" name="fat_pct" value="{fv('fat_pct',2)}"></label><label>Kül % KM<input type="number" step="0.01" name="ash_pct" value="{fv('ash_pct',2)}"></label>
+            <label>Ca % KM<input type="number" step="0.001" name="ca_pct" value="{fv('ca_pct')}"></label><label>P % KM<input type="number" step="0.001" name="p_pct" value="{fv('p_pct')}"></label><label>Mg % KM<input type="number" step="0.001" name="mg_pct" value="{fv('mg_pct')}"></label><label>K % KM<input type="number" step="0.001" name="k_pct" value="{fv('k_pct')}"></label><label>Na % KM<input type="number" step="0.001" name="na_pct" value="{fv('na_pct')}"></label><label>S % KM<input type="number" step="0.001" name="s_pct" value="{fv('s_pct')}"></label>
+            <label class="full">Kaynak / Referans<input name="source" value="{h(feed['source'])}" placeholder="NASEM 2016 / NASEM 2021 / Laboratuvar analizi / Kullanıcı girişi"></label>
+            <div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/feeds">İptal</a></div></form></div>'''
+            return self.send_html(page('Yemi Düzenle',body,'/feeds',u,msg))
         if path=='/rations':
             selected=int((q.get('id',['0'])[0] or 0))
             with db() as c:
@@ -3244,6 +3274,31 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 with db() as c:c.execute('''insert into feed_catalog(name,category,dm_pct,ndf_pct,cp_pct,me_mcal_kg,ca_pct,p_pct,source,active) values(?,?,?,?,?,?,?,?,?,1)''',(name,(f.get('category') or 'Özel Yem').strip(),num('dm_pct'),num('ndf_pct'),num('cp_pct'),num('me_mcal_kg'),num('ca_pct'),num('p_pct'),'Kullanıcı girişi'))
             except sqlite3.IntegrityError:return self.redirect('/feeds','Bu yem zaten katalogda var.')
             audit(username,'Yem kataloğuna ekledi',name,self.client_ip());return self.redirect('/feeds','Özel yem kataloğa eklendi.')
+        if path=='/feed/edit':
+            try: fid=int(f.get('feed_id') or 0)
+            except:return self.redirect('/feeds','Geçersiz yem kaydı.')
+            name=(f.get('name') or '').strip()
+            if fid<=0 or not name:return self.redirect('/feeds','Yem adı zorunludur.')
+            def num(k):
+                try:return float(f.get(k) or 0)
+                except:return 0.0
+            cols=('dm_pct','ndf_pct','cp_pct','tdn_pct','me_mcal_kg','nem_mcal_kg','neg_mcal_kg','starch_pct','fat_pct','ash_pct','ca_pct','p_pct','mg_pct','k_pct','na_pct','s_pct')
+            vals=[num(k) for k in cols]
+            try:
+                with db() as c:
+                    old=c.execute('select name from feed_catalog where id=? and active=1',(fid,)).fetchone()
+                    if not old:return self.redirect('/feeds','Yem bulunamadı.')
+                    c.execute('''update feed_catalog set name=?,category=?,dm_pct=?,ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,source=? where id=?''',(name,(f.get('category') or 'Özel Yem').strip(),*vals,(f.get('source') or 'Kullanıcı tarafından güncellendi').strip(),fid))
+            except sqlite3.IntegrityError:return self.redirect('/feed-edit?id='+str(fid),'Bu yem adı başka bir kayıtta kullanılıyor.')
+            audit(username,'Yem kataloğunu düzenledi',f'{old["name"]} -> {name}',self.client_ip());return self.redirect('/feeds','Yem bilgileri güncellendi.')
+        if path=='/feed/delete':
+            try: fid=int(f.get('feed_id') or 0)
+            except:return self.redirect('/feeds','Geçersiz yem kaydı.')
+            with db() as c:
+                feed=c.execute('select name from feed_catalog where id=? and active=1',(fid,)).fetchone()
+                if not feed:return self.redirect('/feeds','Yem bulunamadı.')
+                c.execute('update feed_catalog set active=0 where id=?',(fid,))
+            audit(username,'Yemi katalogdan kaldırdı',feed['name'],self.client_ip());return self.redirect('/feeds','Yem katalogdan kaldırıldı. Geçmiş rasyon/fiyat/stok kayıtları korundu.')
         if path=='/feed/price':
             try:fid=int(f.get('feed_id') or 0);price=float(f.get('price_per_kg') or 0)
             except:return self.redirect('/feeds','Yem ve fiyat bilgisi geçersiz.')
