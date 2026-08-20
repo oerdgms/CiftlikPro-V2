@@ -107,3 +107,9 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Sistem kataloğundaki ve kullanıcı tarafından eklenen tüm aktif yemlere Düzenle özelliği eklendi.
 - Düzenleme ekranı: KM, HP, NDF, TDN, ME, NEm, NEg, nişasta, yağ, kül, Ca, P, Mg, K, Na, S ve kaynak.
 - Sil işlemi güvenli soft-delete yapar; geçmiş rasyon/fiyat/stok kayıtları korunur.
+
+
+## V3.9.18 - Kızgınlık Seçim Hotfix
+- Takma adı boş aktif dişilerde kızgınlık ekranı hayvan seçimi düzeltildi.
+- Kızgınlık seçicisinde görünen etiket ve hidden animal_id aynı normalize edilmiş veri üzerinden eşleştiriliyor.
+- Küpe numarası doğrudan yazıldığında da hayvan ID'si doğru atanıyor.

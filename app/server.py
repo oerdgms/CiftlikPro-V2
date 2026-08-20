@@ -21,9 +21,9 @@ PORT=8953
 SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.16'
+APP_VERSION='3.9.18'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.16 · NASEM YEM KATALOĞU + DÜZENLE/SİL'
+APP_LABEL='ENTERPRISE V3.9.18 · 4 FAZ BESİ + BİRLEŞİK HOTFIX'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -564,6 +564,79 @@ def init_db():
                               (x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source',''),x.get('name','')))
         except Exception as exc:
             print('NASEM yem kataloğu güncellemesi uygulanamadı:',exc)
+        # V3.9.18: ÇiftlikPro 4 Fazlı Besi reçeteleri.
+        # Reçeteler mevcut yem kataloğundaki kayıtları kullanır; besin değerlerini kopyalamaz.
+        # Böylece kullanıcı bir yemin KM/HP/NDF/ME vb. değerini düzenlediğinde rasyon hesabı anında yeni değeri kullanır.
+        try:
+            def _feed_key(txt):
+                txt=(txt or '').strip().upper()
+                tr=str.maketrans({'İ':'I','Ş':'S','Ğ':'G','Ü':'U','Ö':'O','Ç':'C'})
+                return ' '.join(txt.translate(tr).replace('_',' ').replace('-',' ').split())
+
+            active_feeds=c.execute("select id,name from feed_catalog where active=1 order by id").fetchall()
+            keyed=[(r['id'],r['name'],_feed_key(r['name'])) for r in active_feeds]
+
+            def _pick_feed(*aliases):
+                alias_keys=[_feed_key(a) for a in aliases if a]
+                for ak in alias_keys:
+                    for fid,name,k in keyed:
+                        if k==ak:return fid,name
+                for ak in alias_keys:
+                    toks=[t for t in ak.split() if len(t)>1]
+                    for fid,name,k in keyed:
+                        if toks and all(t in k for t in toks):return fid,name
+                return None,None
+
+            feed_refs={
+                'straw':_pick_feed('ARPA SAMANI'),
+                'barley':_pick_feed('ARPA EZMESİ','ARPA EZMESI','ARPA, AĞIR','ARPA, HAFİF'),
+                'wheat':_pick_feed('BUĞDAY EZMESİ','BUGDAY EZMESI','BUĞDAY, ÖĞÜTÜLMÜŞ'),
+                'alfalfa':_pick_feed('YONCA',"YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF","YONCA KURU OTU, KM'de %15-17 HP, %44-48 NDF"),
+                'cob_silage':_pick_feed('MISIR KOÇANI SİLAJI','MISIR KOCANI SILAJI'),
+                'beef15':_pick_feed('15 PROTEİN 2650 ME BESİ YEMİ','15 PROTEIN 2650 ME BESI YEMI','%15 BESİ YEMİ','15 BESİ YEMİ'),
+                'dairy19':_pick_feed('19 PROTEİN 2750 ME SÜT YEMİ','19 PROTEIN 2750 ME SUT YEMI','%19 SÜT YEMİ','19 SÜT YEMİ'),
+            }
+
+            phase_recipes=[
+                ('ÇiftlikPro Faz 1 · 250–350 kg Büyütme','250–350 kg · Büyütme',300,1.00,
+                 {'straw':1.50,'barley':1.50,'wheat':0.30,'alfalfa':2.00,'cob_silage':4.00,'beef15':1.50,'dairy19':1.20},
+                 'Hazır başlangıç reçetesi · hedef CAA yaklaşık 0,9–1,1 kg/gün. Kaba yem ve protein ağırlıklı büyütme fazı.'),
+                ('ÇiftlikPro Faz 2 · 350–450 kg Geliştirme','350–450 kg · Geliştirme',400,1.20,
+                 {'straw':1.30,'barley':2.50,'wheat':0.50,'alfalfa':1.80,'cob_silage':4.50,'beef15':2.00,'dairy19':0.80},
+                 'Hazır başlangıç reçetesi · hedef CAA yaklaşık 1,1–1,3 kg/gün. Enerji kademeli yükseltilir.'),
+                ('ÇiftlikPro Faz 3 · 450–550 kg Yoğun Besi','450–550 kg · Yoğun Besi',500,1.50,
+                 {'straw':1.00,'barley':4.00,'wheat':1.00,'alfalfa':1.50,'cob_silage':3.50,'beef15':2.80,'dairy19':0.50},
+                 'Hazır başlangıç reçetesi · hedef CAA yaklaşık 1,4–1,5 kg/gün. Buğday 1,0 kg/gün üst sınırında tutulur.'),
+                ('ÇiftlikPro Faz 4 · 550 kg+ Bitirme','550 kg+ · Bitirme',600,1.35,
+                 {'straw':0.80,'barley':4.50,'wheat':1.00,'alfalfa':1.20,'cob_silage':3.00,'beef15':3.00,'dairy19':0.30},
+                 'Hazır başlangıç reçetesi · hedef CAA yaklaşık 1,2–1,5 kg/gün. Ekonomik bitirme ve yüksek enerji yoğunluğu hedeflenir.'),
+            ]
+
+            now_iso=datetime.now().isoformat(timespec='seconds')
+            for rname,target_group,target_w,target_adg,items,rnote in phase_recipes:
+                rr=c.execute('select id from rations where name=?',(rname,)).fetchone()
+                if rr:
+                    continue  # Kullanıcının daha sonra yaptığı değişiklikleri asla ezme.
+                missing=[]
+                for key in items:
+                    if not feed_refs[key][0]:missing.append(key)
+                note=rnote+' Besin hesapları doğrudan aktif Yem Kataloğu değerlerinden yapılır.'
+                if missing:
+                    labels={'straw':'Arpa samanı','barley':'Arpa ezmesi','wheat':'Buğday ezmesi','alfalfa':'Yonca','cob_silage':'Mısır koçanı silajı','beef15':'%15 / 2650 ME besi yemi','dairy19':'%19 / 2750 ME süt yemi'}
+                    note+=' Eksik katalog eşleşmesi: '+', '.join(labels[x] for x in missing)+'. Bu yemleri katalogda ekledikten sonra reçeteye manuel ekleyebilirsiniz.'
+                cur=c.execute('''insert into rations(name,target_group,notes,active,created_at,target_weight_kg,target_adg_kg,animal_type,ration_type,target_milk_l,milk_fat_pct,milk_protein_pct)
+                                 values(?,?,?,1,?,?,?,?,?,?,?,?)''',
+                              (rname,target_group,note,now_iso,float(target_w),float(target_adg),'Besi Erkek','Besi',25,3.8,3.2))
+                rid=cur.lastrowid
+                for key,kg in items.items():
+                    fid,_fname=feed_refs[key]
+                    if not fid:continue
+                    c.execute('insert or ignore into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(rid,fid,float(kg)))
+                    c.execute('insert into ration_item_history(ration_id,feed_id,effective_date,kg_per_head_day,created_at,notes) values(?,?,?,?,?,?)',
+                              (rid,fid,date.today().isoformat(),float(kg),now_iso,'V3.9.18 hazır 4 fazlı besi reçetesi başlangıç değeri'))
+        except Exception as exc:
+            print('4 fazlı hazır besi reçeteleri oluşturulamadı:',exc)
+
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         n=c.execute('select count(*) from users').fetchone()[0]
@@ -1350,6 +1423,8 @@ def page(title,body,path='/',user='admin',flash=''):
 .target-card{{padding-bottom:8px}}.nutri-mini-grid{{grid-template-columns:repeat(8,minmax(108px,1fr));position:sticky;top:48px;z-index:18;background:#f4f7f5;padding:7px;border:1px solid #cfe3d5;border-radius:12px;box-shadow:0 6px 18px rgba(24,73,46,.08)}}.nutri-mini{{padding:6px 7px}}.nutri-mini b{{font-size:16px}}.nutri-mini small{{font-weight:900;color:#203c2d}}.target-live-note{{display:none}}#ration-workbench{{margin-top:8px!important}}.workbench-head{{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}}.workbench-actions{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.quick-feed-card:not([open]){{display:none}}.quick-feed-card[open]{{display:block}}
 @media(max-width:1350px){{.nutri-mini-grid{{grid-template-columns:repeat(4,minmax(120px,1fr));position:static}}}}
 @media(max-width:820px){{.nutri-mini-grid{{grid-template-columns:repeat(2,minmax(120px,1fr));position:static}}.workbench-actions{{width:100%}}.workbench-actions .btn{{flex:1}}}}
+/* V3.9.18 - Rasyon sayfası kompakt üst alan */
+.ration-page-title{{margin:8px 0 4px!important;font-size:25px!important;line-height:1.05}}.ration-page-subtitle{{margin:0 0 6px!important;font-size:13px}}.ration-page-steps{{display:flex;gap:10px;flex-wrap:wrap;margin:3px 0 8px!important;font-size:12px;color:#486457}}.ration-new-collapsed{{padding:8px 12px!important;margin-bottom:8px}}.ration-new-collapsed>details>summary{{display:flex;align-items:center;gap:7px;min-height:30px}}.ration-new-collapsed>details>summary h2{{font-size:18px!important;line-height:1.1}}.ration-new-collapsed>details>summary .mut{{font-size:11px!important;margin-left:2px!important}}.ration-create-grid{{gap:8px!important;margin-top:8px!important}}.ration-create-grid>.card{{padding:10px!important}}@media(max-width:700px){{.ration-page-title{{font-size:23px!important}}.ration-new-collapsed>details>summary{{flex-wrap:wrap}}}}
 .ration-picker-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,235px));gap:10px;margin-top:10px}}.ration-picker-card{{display:block;min-height:0;padding:12px 14px!important;border:1px solid #dce8df!important;text-decoration:none}}.ration-picker-card.active{{border:2px solid #176b3a!important;padding:11px 13px!important}}.ration-picker-head{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.ration-picker-head h3{{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.ration-picker-type{{font-size:12px;color:#60766a;white-space:nowrap}}.ration-picker-main{{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:14px}}.ration-picker-ratio{{margin-top:5px;font-size:12px;color:#526b5e}}@media(max-width:700px){{.ration-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ration-picker-card{{padding:10px!important}}.ration-picker-main{{font-size:13px;flex-wrap:wrap}}}}@media(max-width:430px){{.ration-picker-grid{{grid-template-columns:1fr}}}}</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><script>
 (function(){{
  const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
@@ -2024,7 +2099,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             estrus_upcoming=[]; today=date.today()
             for er in estrus_latest.values():
                 cycle=next_estrus_cycle(c,er,today)
-                if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=14):
+                if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):
                     estrus_upcoming.append((cycle['start'],cycle['center'],cycle['end'],er,cycle['cycle_no']))
             estrus_upcoming.sort(key=lambda x:x[1])
             estrus_dashboard_cards=[]
@@ -2035,7 +2110,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 else:
                     action=f'''<a class="btn orange" href="/inseminations?animal={er['animal_id']}&estrus={er['id']}">🌱 Tohumlamaya Gönder</a>'''
                 estrus_dashboard_cards.append(f'''<div class="alertitem {'estrus-window-now' if in_window else 'estrus-window-next'}"><b>🌸 <a class="taglink" href="/animal?id={er['animal_id']}">{h(er['tag'])} {h(er['nickname'])}</a></b><br><span class="mut">{fmt_date(es.isoformat())} – {fmt_date(ee.isoformat())} · En olası {fmt_date(ec.isoformat())}</span><div class="estrus-actions">{action}<form method="post" action="/estrus-skip" onsubmit="return confirm('Bu östrus dönemi atlandı olarak işaretlenecek. Emin misiniz?')"><input type="hidden" name="estrus_id" value="{er['id']}"><input type="hidden" name="cycle_no" value="{cycle_no}"><input type="hidden" name="return_to" value="/"><button class="btn alt">⏭️ Bu Östrusu Atla</button></form><a class="btn alt" href="/estrus">Kızgınlık Takibi</a></div></div>''')
-            estrus_dashboard_html=''.join(estrus_dashboard_cards) or '<p class="mut">Önümüzdeki 14 gün için beklenen kızgınlık yok.</p>'
+            estrus_dashboard_html=''.join(estrus_dashboard_cards) or '<p class="mut">Önümüzdeki 30 gün için beklenen kızgınlık yok.</p>'
             net=total_inc-total_exp; maxv=max([max(x[1],x[2]) for x in months]+[1])
             bars=''.join(f'<div class="mini-col"><b title="Gelir {money(i)}" style="height:{max(2,int(i/maxv*100))}%"></b><i title="Gider {money(e)}" style="height:{max(2,int(e/maxv*100))}%"></i><span>{h(m)}</span></div>' for m,i,e in months)
             due_html=''.join(f'<div class="alertitem">🐄 <a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])} {h(r["nickname"])}</a><br><span class="mut">Tahmini doğum: {fmt_date(r["due_date"])}</span></div>' for r in due_rows) or '<p class="mut">45 gün içinde beklenen doğum yok.</p>'
@@ -2309,7 +2384,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                         <div id="smart-balance" class="card ration-section-collapse" style="margin-top:14px;border:1px solid #d8e4ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><h3 style="margin:0">🧠 Akıllı Dengeleme</h3><span class="mut">Hedef kartları çalışma masasıyla canlı bağlıdır. Akıllı çözüm önerileri kaydettiğiniz son rasyona göre yenilenir.</span></div></div><div class="smart-solution-grid">{quick_solutions_html}</div><details style="margin-top:12px"><summary><b>🔬 Tüm önerileri ve teknik analizi göster</b></summary><div style="margin-top:12px"><h3>✂️ Fazlalıkları Azaltmak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Mevcut Yem</th><th>Deneme</th><th>Beklenen Etki</th><th>Yeni Maliyet</th><th></th></tr>{reduce_html}</table></div><h3 style="margin-top:18px">➕ Eksikleri Tamamlamak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_top_html}</table></div><details style="margin-top:12px"><summary><b>📚 Tüm uygun yem adayları ({len(add_recs)})</b></summary><div style="overflow:auto;margin-top:8px"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_all_html}</table></div></details><h3 style="margin-top:18px">⚖️ Kombine Dengeleme Fikirleri</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Azalt</th><th>Ekle</th><th>Beklenen Etki</th><th></th></tr>{combo_html}</table></div></div></details></div>
                         <div class="costbox"><b>Not:</b> ÇiftlikPro bu ekranda rasyonun besin içeriği ve maliyetini analiz eder. Nihai rasyon uygunluğu hayvanın canlı ağırlığı, yaş, sağlık ve hedef performansına göre veteriner/zooteknist tarafından değerlendirilmelidir.</div>
                         <details class="card" style="margin-top:14px"><summary><b>🏠 Padoka Ata</b></summary><form method="post" action="/ration/assign" class="actions" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select><input type="date" name="start_date" value="{date.today().isoformat()}" required><button class="btn orange">Padoka Ata</button></form></details></div>'''
-            body=f'''<h1>🥣 Rasyon Yönetimi</h1><p class="mut">Rasyon miktar, besin değeri ve gerçek yem fiyatlarını tek hesapta birleştirir.</p><div class="ration-page-steps"><span>1️⃣ Hedefi belirle</span><span>2️⃣ Yemleri düzenle</span><span>3️⃣ Dengeyi kontrol et</span></div><div class="card ration-new-collapsed"><details><summary><h2 style="display:inline;margin:0">➕ Yeni Rasyon Oluştur</h2><span class="mut" style="margin-left:8px">Yeni rasyon gerektiğinde açın</span></summary><div class="ration-create-grid" style="margin-top:14px"><details class="card"><summary><b>🥩 Besi Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Besi"><input type="hidden" name="target_group" value="Besi"><label>Rasyon Adı<input name="name" required placeholder="Besi 500 kg"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="150" max="900" step="1" name="target_weight_kg" value="450"></label><label>Hedef Günlük Artış (kg/gün)<input type="number" min="0.2" max="2.2" step="0.05" name="target_adg_kg" value="1.30"></label><label>Hayvan Tipi<select name="animal_type"><option>Besi Erkek</option><option>Düve</option><option>Genel Büyüyen Sığır</option></select></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Besi Rasyonunu Oluştur</button></div></form></details><details class="card"><summary><b>🥛 Süt Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Süt"><input type="hidden" name="target_group" value="Sağmal"><input type="hidden" name="animal_type" value="Sağmal İnek"><label>Rasyon Adı<input name="name" required placeholder="Süt 25 L"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="350" max="900" step="1" name="target_weight_kg" value="650"></label><label>Hedef Süt (L/gün)<input type="number" min="0" max="70" step="0.5" name="target_milk_l" value="25"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Süt Rasyonunu Oluştur</button></div></form></details></div></details></div><div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>{detail}'''
+            body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyon miktar, besin değeri ve gerçek yem fiyatlarını tek hesapta birleştirir.</p><div class="ration-page-steps"><span>1️⃣ Hedefi belirle</span><span>2️⃣ Yemleri düzenle</span><span>3️⃣ Dengeyi kontrol et</span></div><div class="card ration-new-collapsed"><details><summary><h2 style="display:inline;margin:0">➕ Yeni Rasyon Oluştur</h2><span class="mut" style="margin-left:8px">Yeni rasyon gerektiğinde açın</span></summary><div class="ration-create-grid" style="margin-top:14px"><details class="card"><summary><b>🥩 Besi Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Besi"><input type="hidden" name="target_group" value="Besi"><label>Rasyon Adı<input name="name" required placeholder="Besi 500 kg"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="150" max="900" step="1" name="target_weight_kg" value="450"></label><label>Hedef Günlük Artış (kg/gün)<input type="number" min="0.2" max="2.2" step="0.05" name="target_adg_kg" value="1.30"></label><label>Hayvan Tipi<select name="animal_type"><option>Besi Erkek</option><option>Düve</option><option>Genel Büyüyen Sığır</option></select></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Besi Rasyonunu Oluştur</button></div></form></details><details class="card"><summary><b>🥛 Süt Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Süt"><input type="hidden" name="target_group" value="Sağmal"><input type="hidden" name="animal_type" value="Sağmal İnek"><label>Rasyon Adı<input name="name" required placeholder="Süt 25 L"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="350" max="900" step="1" name="target_weight_kg" value="650"></label><label>Hedef Süt (L/gün)<input type="number" min="0" max="70" step="0.5" name="target_milk_l" value="25"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Süt Rasyonunu Oluştur</button></div></form></details></div></details></div><div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>{detail}'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
         if path=='/performance':
             status_filter=(q.get('status',[''])[0] or '').strip();scope=(q.get('scope',['all'])[0] or 'all').strip();search=(q.get('search',[''])[0] or '').strip()
@@ -2647,11 +2722,17 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 for aid,r in latest.items():
                     if is_currently_pregnant(c,aid):continue
                     cycle=next_estrus_cycle(c,r,today)
-                    if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=14):
+                    if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):
                         upcoming.append((cycle['start'],cycle['center'],cycle['end'],r,cycle['cycle_no']))
             upcoming.sort(key=lambda x:x[1])
-            opts=''.join(f'<option value="{h(r["tag"])} · {h(r["nickname"])}"></option>' for r in females)
-            estrus_picker_data=json.dumps([{'id':r['id'],'label':(str(r['tag'] or '')+' · '+str(r['nickname'] or '')).strip(' ·')} for r in females],ensure_ascii=False)
+            # V3.9.17: Kızgınlık seçicisinde takma adı boş hayvanlarda görünen etiket ile
+            # gizli animal_id eşleşmesi aynı kaynaktan üretilir. Böylece "KÜPE · " / "KÜPE"
+            # farkı nedeniyle geçerli dişinin reddedilmesi engellenir.
+            estrus_picker_rows=[{'id':r['id'],'tag':str(r['tag'] or ''),'nickname':str(r['nickname'] or '')} for r in females]
+            for x in estrus_picker_rows:
+                x['label']=x['tag'] + ((' · '+x['nickname']) if x['nickname'] else '')
+            opts=''.join(f'<option value="{h(x["label"])}"></option>' for x in estrus_picker_rows)
+            estrus_picker_data=json.dumps(estrus_picker_rows,ensure_ascii=False)
             cards=[]
             for a,center,e,r,cycle_no in upcoming:
                 color='#e27b1f' if a<=today<=e else '#238a50'
@@ -2687,7 +2768,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             body=f'''<h1>🌸 Kızgınlık Takibi</h1><p class="mut">Dişi hayvanların gözlenen kızgınlıklarını kaydedin. Sistem 18–24 günlük takip penceresini ve 21. günü merkez tahmin olarak gösterir. Tahminler gözlem planlaması içindir.</p>
             <div class="two"><div class="card"><h2>Yeni Kızgınlık Kaydı</h2><form method="post" action="/estrus" class="form" onsubmit="var b=this.querySelector('button[type=submit]');if(b.disabled)return false;b.disabled=true;b.textContent='Kaydediliyor…';return true;"><label>Dişi Hayvan<input id="estrusAnimalSearch" type="search" list="estrusAnimalOptions" placeholder="Küpe veya takma ad yazın..." autocomplete="off" required><input type="hidden" name="animal_id" id="estrusAnimalId"><datalist id="estrusAnimalOptions">{opts}</datalist><span class="mut">Gebe hayvanlar doğum ve buzağı kaydı tamamlanana kadar listelenmez.</span></label><label>Kızgınlık Tarihi<input type="date" name="estrus_date" max="{today.isoformat()}" value="{today.isoformat()}" required></label><label class="full">Gözlenen Belirtiler<input name="signs" placeholder="Örn. üzerine atlamaya izin verme, huzursuzluk, şeffaf akıntı"></label><label class="full">Not<textarea name="notes" rows="3" placeholder="Ek gözlemler..."></textarea></label><div class="full"><button class="btn">💾 Kızgınlığı Kaydet</button></div></form></div><div class="card"><h2>📅 Yaklaşan Kızgınlıklar</h2>{cards_html}</div></div>
             <div class="card" style="margin-top:14px"><h2>Kızgınlık Geçmişi</h2><div class="livebox"><input id="estrusLiveSearch" type="search" placeholder="Küpe, takma ad, belirti veya not ara..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('estrusLiveSearch').value='';document.getElementById('estrusLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="estrusEmpty" class="empty-state">Eşleşen kızgınlık kaydı bulunamadı.</div><div style="overflow:auto"><table id="estrusLiveTable" class="estrus-table"><tr><th>Hayvan</th><th>Gözlem Tarihi</th><th>Belirtiler</th><th>18–24 Gün Penceresi</th><th>21. Gün</th><th>Not</th><th>İşlem</th></tr>{history_html}</table></div></div>
-            <script>const estrusPicker={estrus_picker_data};const estrusSearch=document.getElementById('estrusAnimalSearch'),estrusId=document.getElementById('estrusAnimalId');function syncEstrusAnimal(){{const v=(estrusSearch.value||'').trim().toLocaleLowerCase('tr-TR');const m=estrusPicker.find(x=>x.label.trim().toLocaleLowerCase('tr-TR')===v);estrusId.value=m?m.id:'';}}estrusSearch.addEventListener('input',syncEstrusAnimal);estrusSearch.addEventListener('change',syncEstrusAnimal);document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('estrusLiveSearch','estrusLiveTable','estrusEmpty');}});</script>'''
+            <script>const estrusPicker={estrus_picker_data};const estrusSearch=document.getElementById('estrusAnimalSearch'),estrusId=document.getElementById('estrusAnimalId');function normEstrus(v){{return (v||'').trim().toLocaleLowerCase('tr-TR');}}function syncEstrusAnimal(){{const v=normEstrus(estrusSearch.value);const m=estrusPicker.find(x=>normEstrus(x.label)===v||normEstrus(x.tag)===v);estrusId.value=m?m.id:'';}}estrusSearch.addEventListener('input',syncEstrusAnimal);estrusSearch.addEventListener('change',syncEstrusAnimal);document.addEventListener('DOMContentLoaded',function(){{syncEstrusAnimal();liveTableFilter('estrusLiveSearch','estrusLiveTable','estrusEmpty');}});</script>'''
             return self.send_html(page('Kızgınlık Takibi',body,'/estrus',u,msg))
         if path=='/inseminations':
             aid=q.get('animal',[''])[0]
