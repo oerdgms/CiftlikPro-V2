@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.9.18 Birleşik Besi ve Kızgınlık Windows Kurulum
+name: CiftlikPro Enterprise V3.9.19 Dengeli 4 Faz ve Rasyon Silme Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m py_compile app/server.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.18'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.19'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Kaynak sunucuyu başlat ve sayfaları test et
         shell: pwsh
@@ -85,7 +85,7 @@ jobs:
               throw "Kaynak sunucu testi başarısız: $lastError"
             }
 
-            Write-Host "Kaynak sunucu ve V3.9.18 aktivasyon sayfası testi başarılı."
+            Write-Host "Kaynak sunucu ve V3.9.19 aktivasyon sayfası testi başarılı."
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             try { Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue } catch {}
@@ -146,7 +146,7 @@ jobs:
               throw "Paketlenmiş uygulama testi başarısız: $lastError"
             }
 
-            Write-Host "Paketlenmiş V3.9.18 uygulama testi başarılı."
+            Write-Host "Paketlenmiş V3.9.19 uygulama testi başarılı."
           } finally {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             try { Wait-Process -Id $process.Id -Timeout 15 -ErrorAction SilentlyContinue } catch {}
@@ -171,7 +171,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_9_18_Birlesik_Besi_Kizginlik_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_19_Dengeli_4_Faz_Rasyon_Silme_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -179,17 +179,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_18_Birlesik_Besi_Kizginlik_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_19_Dengeli_4_Faz_Rasyon_Silme_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_18_Birlesik_Besi_Kizginlik_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_9_19_Dengeli_4_Faz_Rasyon_Silme_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.18-Birlesik-Besi-Kizginlik-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.19-Dengeli-4-Faz-Rasyon-Silme-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_18_Birlesik_Besi_Kizginlik_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_19_Dengeli_4_Faz_Rasyon_Silme_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
