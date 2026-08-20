@@ -1,8 +1,0 @@
-ÇiftlikPro Enterprise V3.9.7 DEV - Protein Öneri + Bağlantı Hotfix
-
-1) DEV konsolunda görülen WinError 10053 / BrokenPipe / ConnectionReset, tarayıcı isteği iptal ettiğinde sessizce karşılanır.
-2) Amonyum sülfat / amonyum fosfat / üre-NPN / mineral katkılar artık ham protein açığı için gerçek protein yemi olarak önerilmez.
-3) HP açığında soya küspesi, kanola küspesi, ayçiçeği küspesi, pamuk tohumu/küspesi gibi gerçek protein hammaddeleri hedefli olarak öne çıkarılır.
-4) Protein önerisi yapılırken enerji zaten yüksekse ek enerji yükü puanda cezalandırılır; kombine dengeleme için daha uygun adaylar korunur.
-
-DEV_BASLAT.bat ile çalıştırın. Kararlı kurulum verisi değişmez.
