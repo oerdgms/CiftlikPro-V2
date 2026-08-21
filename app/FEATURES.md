@@ -113,3 +113,10 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Takma adı boş aktif dişilerde kızgınlık ekranı hayvan seçimi düzeltildi.
 - Kızgınlık seçicisinde görünen etiket ve hidden animal_id aynı normalize edilmiş veri üzerinden eşleştiriliyor.
 - Küpe numarası doğrudan yazıldığında da hayvan ID'si doğru atanıyor.
+
+## V3.9.20 Hotfix 2
+- Sağlıkta ilaç tedavisi için tedavi günü ve günlük uygulama sayısı planı.
+- Aşılarda 1-10 doz ve dozlar arası gün tanımlama; her doz ayrı Yapıldı takibi.
+- Padok bazında toplu aşı planlama; plan anındaki hayvan listesi sabitlenir.
+- Padok dozu tek butonla toplu Yapıldı; her hayvanın sağlık geçmişine ayrı kayıt işlenir.
+- Planlanan sağlık işlemleri mobil kart görünümüne geçirildi; gecikme durumu ve işlem butonları taşmadan görünür.
