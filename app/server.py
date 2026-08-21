@@ -1,4 +1,4 @@
-﻿import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl
 from email.parser import BytesParser
 from email.message import EmailMessage
 from email.policy import default
@@ -23,7 +23,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 2 · AKILLI TEDAVİ + TOPLU AŞI'
+APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 3 · AKILLI RASYON ÇÖZ PROTOTİPİ'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -993,12 +993,14 @@ def ration_summary(ration_id, con=None):
         sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
                  from ration_items ri join feed_catalog f on f.id=ri.feed_id where ri.ration_id=? order by f.name"""
         rows=c.execute(sql,(date.today().isoformat(),ration_id)).fetchall()
-        out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'tdn_kg':0.0,'me_mcal':0.0,'ca_g':0.0,'p_g':0.0,'cost':0.0,'roughage_dm_kg':0.0,'concentrate_dm_kg':0.0,'additive_dm_kg':0.0,'items':rows}
+        out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,'tdn_kg':0.0,'me_mcal':0.0,'ca_g':0.0,'p_g':0.0,'cost':0.0,'roughage_dm_kg':0.0,'concentrate_dm_kg':0.0,'additive_dm_kg':0.0,'items':rows}
         for r in rows:
             kg=float(r['kg_per_head_day'] or 0); dm=kg*float(r['dm_pct'] or 0)/100.0
             out['as_fed_kg']+=kg; out['dm_kg']+=dm
             out['cp_kg']+=dm*float(r['cp_pct'] or 0)/100.0
             out['ndf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0
+            out['endf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0*float(r['effective_ndf_pct'] or 0)/100.0
+            out['starch_kg']+=dm*float(r['starch_pct'] or 0)/100.0
             out['tdn_kg']+=dm*float(r['tdn_pct'] or 0)/100.0
             out['me_mcal']+=dm*float(r['me_mcal_kg'] or 0)
             out['ca_g']+=dm*float(r['ca_pct'] or 0)*10.0
@@ -1010,6 +1012,9 @@ def ration_summary(ration_id, con=None):
             else: out['additive_dm_kg']+=dm
         out['cp_pct_dm']=(out['cp_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
         out['ndf_pct_dm']=(out['ndf_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['endf_pct_dm']=(out['endf_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['starch_pct_dm']=(out['starch_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['rumen_ph']=min(6.46,5.425+0.04229*out['endf_pct_dm']) if out['endf_pct_dm']>0 else 0.0
         out['me_per_kg_dm']=(out['me_mcal']/out['dm_kg']) if out['dm_kg'] else 0.0
         rc_dm=out['roughage_dm_kg']+out['concentrate_dm_kg']
         out['roughage_pct_dm']=(out['roughage_dm_kg']/rc_dm*100) if rc_dm else 0.0
@@ -1026,6 +1031,63 @@ def ration_requirement_targets(weight_kg=450.0, target_adg=1.3, animal_type='Bes
     ca_pct=max(0.30,min(0.70,0.42+0.10*(adg-1.0))); p_pct=max(0.20,min(0.40,0.24+0.05*(adg-1.0)))
     rough_target=max(30.0,min(60.0,50.0-15.0*(adg-1.0))); rough_min=max(25.0,rough_target-10.0); rough_max=min(65.0,rough_target+10.0)
     return {'mode':'Besi','weight_kg':w,'adg':adg,'dmi_pct_bw':dmi_pct,'dmi_kg':dmi_kg,'cp_pct':cp_pct,'tdn_pct':tdn_pct,'me_mcal_kg':me_mcal_kg,'me_mcal_day':me_mcal_kg*dmi_kg,'ca_g':dmi_kg*ca_pct*10,'p_g':dmi_kg*p_pct*10,'ca_pct':ca_pct,'p_pct':p_pct,'ndf_min':25.0,'ndf_max':40.0,'roughage_min':rough_min,'roughage_max':rough_max}
+
+def smart_feed_bounds(feed, weight_kg, target_dm):
+    dm=max(float(feed['dm_pct'] or 0)/100.0,.05); grp=feed_group(feed); name=str(feed['name'] or '').upper(); starch=float(feed['starch_pct'] or 0)
+    if grp=='Katkı':
+        mx=0.25 if any(x in name for x in ('TUZ','FOSFAT','KİREÇ','KIREC','BİKARBONAT','BIKARBONAT')) else 0.40
+        return 0.0,mx
+    if grp=='Kaba':
+        return 0.0,max(0.5,min(weight_kg*0.035,target_dm*0.75/dm))
+    dm_cap=target_dm*(0.34 if starch>=45 else (0.42 if starch>=25 else 0.50))
+    return 0.0,max(0.4,min(weight_kg*(0.010 if starch>=45 else 0.014),dm_cap/dm))
+
+def smart_ration_metrics(feeds, qty):
+    z={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,'me_mcal':0.0,'ca_g':0.0,'p_g':0.0,'cost':0.0,'rough_dm':0.0,'conc_dm':0.0}
+    for f,kg in zip(feeds,qty):
+        dm=kg*float(f['dm_pct'] or 0)/100.0; z['as_fed_kg']+=kg; z['dm_kg']+=dm
+        z['cp_kg']+=dm*float(f['cp_pct'] or 0)/100; z['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100
+        z['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100; z['starch_kg']+=dm*float(f['starch_pct'] or 0)/100
+        z['me_mcal']+=dm*float(f['me_mcal_kg'] or 0); z['ca_g']+=dm*float(f['ca_pct'] or 0)*10; z['p_g']+=dm*float(f['p_pct'] or 0)*10; z['cost']+=kg*float(f['price'] or 0)
+        if feed_group(f)=='Kaba':z['rough_dm']+=dm
+        elif feed_group(f)=='Kesif':z['conc_dm']+=dm
+    dm=z['dm_kg']; rc=z['rough_dm']+z['conc_dm']; z['cp_pct_dm']=z['cp_kg']/dm*100 if dm else 0; z['ndf_pct_dm']=z['ndf_kg']/dm*100 if dm else 0
+    z['endf_pct_dm']=z['endf_kg']/dm*100 if dm else 0; z['starch_pct_dm']=z['starch_kg']/dm*100 if dm else 0; z['roughage_pct_dm']=z['rough_dm']/rc*100 if rc else 0; z['concentrate_pct_dm']=z['conc_dm']/rc*100 if rc else 0
+    z['rumen_ph']=min(6.46,5.425+0.04229*z['endf_pct_dm']) if z['endf_pct_dm']>0 else 0; return z
+
+def smart_ration_score(m,t):
+    def rel(v,x):return abs(v-x)/max(abs(x),.01)
+    score=5*rel(m['dm_kg'],t['dmi_kg'])+5*rel(m['cp_pct_dm'],t['cp_pct'])+6*rel(m['me_mcal'],t['me_mcal_day'])+2*rel(m['ca_g'],t['ca_g'])+2*rel(m['p_g'],t['p_g'])
+    if m['ndf_pct_dm']<t['ndf_min']:score+=4*(t['ndf_min']-m['ndf_pct_dm'])/t['ndf_min']
+    if m['ndf_pct_dm']>t['ndf_max']:score+=2*(m['ndf_pct_dm']-t['ndf_max'])/t['ndf_max']
+    if m['roughage_pct_dm']<t['roughage_min']:score+=6*(t['roughage_min']-m['roughage_pct_dm'])/t['roughage_min']
+    if m['rumen_ph'] and m['rumen_ph']<5.8:score+=15*(5.8-m['rumen_ph'])
+    if m['starch_pct_dm']>35:score+=5*(m['starch_pct_dm']-35)/35
+    return score+0.015*m['cost']
+
+def solve_smart_ration(feeds, weight_kg, target_adg):
+    t=ration_requirement_targets(weight_kg,target_adg,'Besi Erkek'); n=len(feeds)
+    if n<2:return None,t,'En az 2 yem seçin.'
+    bounds=[smart_feed_bounds(f,t['weight_kg'],t['dmi_kg']) for f in feeds]; rough=[i for i,f in enumerate(feeds) if feed_group(f)=='Kaba']; conc=[i for i,f in enumerate(feeds) if feed_group(f)=='Kesif']
+    if not rough or not conc:return None,t,'Güvenli çözüm için en az bir kaba ve bir kesif yem seçin.'
+    q=[0.0]*n
+    for inds,share in ((rough,.45),(conc,.55)):
+        per=t['dmi_kg']*share/max(len(inds),1)
+        for i in inds:q[i]=min(bounds[i][1],per/max(float(feeds[i]['dm_pct'] or 0)/100,.05))
+    best=q[:]; bm=smart_ration_metrics(feeds,best); bs=smart_ration_score(bm,t)
+    for step in (1.0,.50,.25,.10,.05):
+        improved=True; rounds=0
+        while improved and rounds<30:
+            improved=False; rounds+=1
+            for i in range(n):
+                for d in (-step,step):
+                    cand=best[:]; cand[i]=max(bounds[i][0],min(bounds[i][1],cand[i]+d)); cm=smart_ration_metrics(feeds,cand); cs=smart_ration_score(cm,t)
+                    if cs+1e-7<bs:best,bm,bs=cand,cm,cs;improved=True
+    best=[round(x,2) for x in best]; bm=smart_ration_metrics(feeds,best); warnings=[]
+    if bm['rumen_ph']<5.8:warnings.append('Tahmini rumen pH güvenlik hedefinin altında.')
+    if bm['roughage_pct_dm']<t['roughage_min']:warnings.append('Kaba yem oranı hedefin altında.')
+    if abs(bm['dm_kg']-t['dmi_kg'])/t['dmi_kg']>.15:warnings.append('KM tüketim hedefi tam yakalanamadı.')
+    return (best,bm,bounds),t,' '.join(warnings)
 
 def dairy_requirement_targets(weight_kg=650.0, target_milk_l=25.0, milk_fat_pct=3.8, milk_protein_pct=3.2):
     """Sağmal inek için kolay kullanımlı ön değerlendirme hedefi; reçete değildir."""
@@ -1082,17 +1144,24 @@ def ration_requirement_panel(rr,sm):
         d=float(actual)-float(target); pct=d/float(target)*100; sign='+' if d>0 else ''
         return f"{sign}{d:.{digits}f}{unit} ({sign}{pct:.0f}%)"
     def box(key,label,current,target,status,diff=''):
-        cls='ok' if 'Uygun' in status else 'warn'
-        return f"<div class='nutri-mini {cls}' id='target-mini-{key}'><span>{label}</span><b id='target-mini-{key}-current'>{current}</b><small>{target}</small><i class='nutri-diff' id='target-mini-{key}-diff'>{diff}</i><em id='target-mini-{key}-status'>{status}</em></div>"
+        cls='ok' if ('Uygun' in status or 'Canlı' in status) else 'warn'
+        return f"""<div class='nutri-mini nutri-compare-card {cls}' id='target-mini-{key}'>
+            <div class='nutri-card-title'>{label}</div>
+            <div class='nutri-compare-body'>
+                <div class='nutri-side nutri-target-side'><span>HEDEF</span><b>{target}</b></div>
+                <div class='nutri-side nutri-current-side'><span>RASYON</span><b id='target-mini-{key}-current'>{current}</b></div>
+            </div>
+            <div class='nutri-card-footer'><i class='nutri-diff' id='target-mini-{key}-diff'>{diff}</i><em id='target-mini-{key}-status'>{status}</em></div>
+        </div>"""
     mini=''.join([
-        box('dm','KM',f"{sm['dm_kg']:.2f} kg",f"Hedef {t['dmi_kg']:.2f}",dm_s,diff_text(sm['dm_kg'],t['dmi_kg'],' kg',2)),
-        box('cp','HP',f"%{sm['cp_pct_dm']:.1f}",f"Hedef %{t['cp_pct']:.1f}",cp_s,diff_text(sm['cp_pct_dm'],t['cp_pct'],' puan',1)),
-        box('me','ME',f"{sm['me_mcal']:.1f}",f"Hedef {t['me_mcal_day']:.1f} Mcal",me_s,diff_text(sm['me_mcal'],t['me_mcal_day'],' Mcal',1)),
-        box('ndf','NDF',f"%{ndf:.1f}",f"Hedef %{t['ndf_min']:.0f}–{t['ndf_max']:.0f}",ndf_s,'Aralık içi' if t['ndf_min']<=ndf<=t['ndf_max'] else ('Alt sınırın altında' if ndf<t['ndf_min'] else 'Üst sınırın üzerinde')),
-        box('ca','Ca',f"{sm['ca_g']:.0f} g",f"Hedef {t['ca_g']:.0f} g",ca_s,diff_text(sm['ca_g'],t['ca_g'],' g',0)),
-        box('p','P',f"{sm['p_g']:.0f} g",f"Hedef {t['p_g']:.0f} g",p_s,diff_text(sm['p_g'],t['p_g'],' g',0)),
+        box('dm','KM',f"{sm['dm_kg']:.2f} kg",f"{t['dmi_kg']:.2f} kg",dm_s,diff_text(sm['dm_kg'],t['dmi_kg'],' kg',2)),
+        box('cp','HP',f"%{sm['cp_pct_dm']:.1f}",f"%{t['cp_pct']:.1f}",cp_s,diff_text(sm['cp_pct_dm'],t['cp_pct'],' puan',1)),
+        box('me','ME',f"{sm['me_mcal']:.1f} Mcal",f"{t['me_mcal_day']:.1f} Mcal",me_s,diff_text(sm['me_mcal'],t['me_mcal_day'],' Mcal',1)),
+        box('ndf','NDF',f"%{ndf:.1f}",f"%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}",ndf_s,'Aralık içi' if t['ndf_min']<=ndf<=t['ndf_max'] else ('Alt sınırın altında' if ndf<t['ndf_min'] else 'Üst sınırın üzerinde')),
+        box('ca','Ca',f"{sm['ca_g']:.0f} g",f"{t['ca_g']:.0f} g",ca_s,diff_text(sm['ca_g'],t['ca_g'],' g',0)),
+        box('p','P',f"{sm['p_g']:.0f} g",f"{t['p_g']:.0f} g",p_s,diff_text(sm['p_g'],t['p_g'],' g',0)),
         box('rc','Kaba/Kesif',f"%{rough:.0f} / %{conc:.0f}",f"Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}",rc_s,'Aralık içi' if t['roughage_min']<=rough<=t['roughage_max'] else ('Kaba yem düşük' if rough<t['roughage_min'] else 'Kaba yem yüksek')),
-        box('cost','Maliyet',money(sm['cost']),f"Kaydedilmiş {money(sm['cost'])}",'💰 Canlı','Değişiklik yok'),
+        box('cost','Maliyet',money(sm['cost']),money(sm['cost']),'💰 Canlı','Değişiklik yok'),
     ])
     detail=f"""<details class='nutri-detail'><summary>📋 Besin detaylarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Besin</th><th>Hedef</th><th>Mevcut</th><th>Durum</th></tr></thead><tbody><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td>{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}</td><td>%{ndf:.1f}</td><td>{ndf_s}</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g</td><td>{sm['ca_g']:.0f} g</td><td>{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g</td><td>{sm['p_g']:.0f} g</td><td>{p_s}</td></tr><tr><td>Kaba/Kesif</td><td>Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}</td><td>%{rough:.0f} / %{conc:.0f}</td><td>{rc_s}</td></tr></tbody></table></div></details>"""
     return f"""<div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>{title}</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky'><div class='target-compare-title'><b>🎯 Hedef ↔ Mevcut</b><span id='target-live-note'>Çalışma masasıyla canlı bağlı</span></div><div class='nutri-mini-grid'>{mini}</div></div></div>"""
@@ -1437,9 +1506,25 @@ def page(title,body,path='/',user='admin',flash=''):
 .target-card{{padding-bottom:8px}}.nutri-mini-grid{{grid-template-columns:repeat(8,minmax(108px,1fr));position:sticky;top:48px;z-index:18;background:#f4f7f5;padding:7px;border:1px solid #cfe3d5;border-radius:12px;box-shadow:0 6px 18px rgba(24,73,46,.08)}}.nutri-mini{{padding:6px 7px}}.nutri-mini b{{font-size:16px}}.nutri-mini small{{font-weight:900;color:#203c2d}}.target-live-note{{display:none}}#ration-workbench{{margin-top:8px!important}}.workbench-head{{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}}.workbench-actions{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.quick-feed-card:not([open]){{display:none}}.quick-feed-card[open]{{display:block}}
 @media(max-width:1350px){{.nutri-mini-grid{{grid-template-columns:repeat(4,minmax(120px,1fr));position:static}}}}
 @media(max-width:820px){{.nutri-mini-grid{{grid-template-columns:repeat(2,minmax(120px,1fr));position:static}}.workbench-actions{{width:100%}}.workbench-actions .btn{{flex:1}}}}
+/* V3.9.20 Hotfix3 - Hedef/Mevcut okunabilir 4+4 karşılaştırma kartları */
+.nutri-mini-grid{{grid-template-columns:repeat(4,minmax(190px,1fr))!important;gap:10px!important;position:static!important;padding:10px!important}}
+.nutri-mini.nutri-compare-card{{padding:0!important;min-height:146px;border-radius:12px!important;overflow:hidden;background:#fff!important;display:flex;flex-direction:column}}
+.nutri-card-title{{padding:10px 12px 8px;font-size:16px;font-weight:900;color:#183d2a;border-bottom:1px solid #e1ebe4}}
+.nutri-compare-body{{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:72px}}
+.nutri-side{{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;padding:9px 7px;text-align:center;min-width:0}}
+.nutri-side+ .nutri-side{{border-left:1px solid #e1ebe4}}
+.nutri-side span{{font-size:11px!important;font-weight:900;letter-spacing:.35px;color:#3b7d58!important}}
+.nutri-side b{{font-size:20px!important;line-height:1.08!important;margin:0!important;color:#13271c;white-space:normal;overflow-wrap:anywhere}}
+.nutri-card-footer{{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:7px 10px;background:#eef8f1;border-top:1px solid #dcebe1}}
+.nutri-mini.warn .nutri-card-footer{{background:#fff7e9}}
+.nutri-card-footer .nutri-diff{{margin:0!important;font-size:11px!important;font-weight:900;line-height:1.2}}
+.nutri-card-footer em{{margin:0!important;font-size:11px!important;font-weight:900!important;text-align:right}}
+@media(max-width:1050px){{.nutri-mini-grid{{grid-template-columns:repeat(2,minmax(180px,1fr))!important}}}}
+@media(max-width:560px){{.nutri-mini-grid{{grid-template-columns:1fr!important}}.nutri-mini.nutri-compare-card{{min-height:136px}}.nutri-side b{{font-size:19px!important}}}}
 /* V3.9.18 - Rasyon sayfası kompakt üst alan */
 .ration-page-title{{margin:8px 0 4px!important;font-size:25px!important;line-height:1.05}}.ration-page-subtitle{{margin:0 0 6px!important;font-size:13px}}.ration-page-steps{{display:flex;gap:10px;flex-wrap:wrap;margin:3px 0 8px!important;font-size:12px;color:#486457}}.ration-new-collapsed{{padding:8px 12px!important;margin-bottom:8px}}.ration-new-collapsed>details>summary{{display:flex;align-items:center;gap:7px;min-height:30px}}.ration-new-collapsed>details>summary h2{{font-size:18px!important;line-height:1.1}}.ration-new-collapsed>details>summary .mut{{font-size:11px!important;margin-left:2px!important}}.ration-create-grid{{gap:8px!important;margin-top:8px!important}}.ration-create-grid>.card{{padding:10px!important}}@media(max-width:700px){{.ration-page-title{{font-size:23px!important}}.ration-new-collapsed>details>summary{{flex-wrap:wrap}}}}
-.ration-picker-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,235px));gap:10px;margin-top:10px}}.ration-picker-card{{display:block;min-height:0;padding:12px 14px!important;border:1px solid #dce8df!important;text-decoration:none}}.ration-picker-card.active{{border:2px solid #176b3a!important;padding:11px 13px!important}}.ration-picker-head{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.ration-picker-head h3{{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.ration-picker-type{{font-size:12px;color:#60766a;white-space:nowrap}}.ration-picker-main{{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:14px}}.ration-picker-ratio{{margin-top:5px;font-size:12px;color:#526b5e}}@media(max-width:700px){{.ration-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ration-picker-card{{padding:10px!important}}.ration-picker-main{{font-size:13px;flex-wrap:wrap}}}}@media(max-width:430px){{.ration-picker-grid{{grid-template-columns:1fr}}}}</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><script>
+.ration-picker-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,235px));gap:10px;margin-top:10px}}.ration-picker-card{{display:block;min-height:0;padding:12px 14px!important;border:1px solid #dce8df!important;text-decoration:none}}.ration-picker-card.active{{border:2px solid #176b3a!important;padding:11px 13px!important}}.ration-picker-head{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.ration-picker-head h3{{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.ration-picker-type{{font-size:12px;color:#60766a;white-space:nowrap}}.ration-picker-main{{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:14px}}.ration-picker-ratio{{margin-top:5px;font-size:12px;color:#526b5e}}@media(max-width:700px){{.ration-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ration-picker-card{{padding:10px!important}}.ration-picker-main{{font-size:13px;flex-wrap:wrap}}}}@media(max-width:430px){{.ration-picker-grid{{grid-template-columns:1fr}}}}.smart-solve-card{{margin:12px 0;border:1px solid #b9d8c4;background:linear-gradient(135deg,#f8fcf9,#eef8f1)}}.smart-solve-card summary{{cursor:pointer}}.solve-feed-grid{{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:8px;max-height:330px;overflow:auto;padding:6px}}.solve-feed{{display:flex!important;gap:9px;align-items:flex-start;padding:10px;border:1px solid #dce8df;border-radius:11px;background:#fff}}.solve-feed input{{width:auto!important;margin:3px 0!important}}.solve-feed span{{display:block}}.solve-feed small{{display:block;color:#607067;margin-top:3px}}@media(max-width:800px){{.solve-feed-grid{{grid-template-columns:1fr}}}}
+</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><span class="ver">{APP_LABEL}</span> &nbsp; {h(display)} · <a href="/logout">Çıkış</a></div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><script>
 (function(){{
  const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
  if(btn&&side){{btn.addEventListener("click",function(){{side.classList.toggle("mobile-open");}});side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{side.classList.remove("mobile-open");}});}});}}
@@ -2327,7 +2412,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             selected=int((q.get('id',['0'])[0] or 0))
             with db() as c:
                 rations=c.execute("select * from rations where active=1 order by name").fetchall()
-                feeds=c.execute("""select f.id,f.name,f.category,f.dm_pct,f.cp_pct,f.ndf_pct,f.me_mcal_kg,f.ca_pct,f.p_pct, coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price, coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 order by f.name""",(date.today().isoformat(),)).fetchall()
+                feeds=c.execute("""select f.id,f.name,f.category,f.dm_pct,f.cp_pct,f.ndf_pct,f.effective_ndf_pct,f.starch_pct,f.me_mcal_kg,f.ca_pct,f.p_pct, coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price, coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 order by f.name""",(date.today().isoformat(),)).fetchall()
                 paddocks=c.execute("select id,name from paddocks where active=1 order by name").fetchall()
                 cards=[]
                 for r in rations:
@@ -2388,7 +2473,8 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                         <div id="smart-balance" class="card ration-section-collapse" style="margin-top:14px;border:1px solid #d8e4ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><h3 style="margin:0">🧠 Akıllı Dengeleme</h3><span class="mut">Hedef kartları çalışma masasıyla canlı bağlıdır. Akıllı çözüm önerileri kaydettiğiniz son rasyona göre yenilenir.</span></div></div><div class="smart-solution-grid">{quick_solutions_html}</div><details style="margin-top:12px"><summary><b>🔬 Tüm önerileri ve teknik analizi göster</b></summary><div style="margin-top:12px"><h3>✂️ Fazlalıkları Azaltmak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Mevcut Yem</th><th>Deneme</th><th>Beklenen Etki</th><th>Yeni Maliyet</th><th></th></tr>{reduce_html}</table></div><h3 style="margin-top:18px">➕ Eksikleri Tamamlamak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_top_html}</table></div><details style="margin-top:12px"><summary><b>📚 Tüm uygun yem adayları ({len(add_recs)})</b></summary><div style="overflow:auto;margin-top:8px"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_all_html}</table></div></details><h3 style="margin-top:18px">⚖️ Kombine Dengeleme Fikirleri</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Azalt</th><th>Ekle</th><th>Beklenen Etki</th><th></th></tr>{combo_html}</table></div></div></details></div>
                         <div class="costbox"><b>Not:</b> ÇiftlikPro bu ekranda rasyonun besin içeriği ve maliyetini analiz eder. Nihai rasyon uygunluğu hayvanın canlı ağırlığı, yaş, sağlık ve hedef performansına göre veteriner/zooteknist tarafından değerlendirilmelidir.</div>
                         <details class="card" style="margin-top:14px"><summary><b>🏠 Padoka Ata</b></summary><form method="post" action="/ration/assign" class="actions" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select><input type="date" name="start_date" value="{date.today().isoformat()}" required><button class="btn orange">Padoka Ata</button></form></details></div>'''
-            body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyon miktar, besin değeri ve gerçek yem fiyatlarını tek hesapta birleştirir.</p><div class="ration-page-steps"><span>1️⃣ Hedefi belirle</span><span>2️⃣ Yemleri düzenle</span><span>3️⃣ Dengeyi kontrol et</span></div><div class="card ration-new-collapsed"><details><summary><h2 style="display:inline;margin:0">➕ Yeni Rasyon Oluştur</h2><span class="mut" style="margin-left:8px">Yeni rasyon gerektiğinde açın</span></summary><div class="ration-create-grid" style="margin-top:14px"><details class="card"><summary><b>🥩 Besi Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Besi"><input type="hidden" name="target_group" value="Besi"><label>Rasyon Adı<input name="name" required placeholder="Besi 500 kg"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="150" max="900" step="1" name="target_weight_kg" value="450"></label><label>Hedef Günlük Artış (kg/gün)<input type="number" min="0.2" max="2.2" step="0.05" name="target_adg_kg" value="1.30"></label><label>Hayvan Tipi<select name="animal_type"><option>Besi Erkek</option><option>Düve</option><option>Genel Büyüyen Sığır</option></select></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Besi Rasyonunu Oluştur</button></div></form></details><details class="card"><summary><b>🥛 Süt Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Süt"><input type="hidden" name="target_group" value="Sağmal"><input type="hidden" name="animal_type" value="Sağmal İnek"><label>Rasyon Adı<input name="name" required placeholder="Süt 25 L"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="350" max="900" step="1" name="target_weight_kg" value="650"></label><label>Hedef Süt (L/gün)<input type="number" min="0" max="70" step="0.5" name="target_milk_l" value="25"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Süt Rasyonunu Oluştur</button></div></form></details></div></details></div><div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>{detail}'''
+            solve_panel='''<div class="card smart-solve-card"><details%s><summary><h2 style="display:inline;margin:0">🧠 Rasyon Çöz</h2><span class="mut" style="margin-left:8px">Canlı ağırlık + hedef artış + elinizdeki yemler</span></summary><form method="post" action="/ration/solve" class="form" style="margin-top:14px"><label>Canlı Ağırlık (kg)<input type="number" name="target_weight_kg" min="150" max="900" step="1" value="450" required></label><label>Hedef Günlük Artış (kg/gün)<input type="number" name="target_adg_kg" min="0.2" max="2.2" step="0.05" value="1.30" required></label><div class="full"><b>Elimdeki Yemler</b><p class="mut">Min/max miktarları siz girmiyorsunuz; ÇiftlikPro otomatik sınır üretir.</p><div class="solve-feed-grid">%s</div></div><div class="full"><button class="btn blue">🧠 Rasyonu Çöz</button></div></form></details></div>''' % ((' open' if q.get('solve',['0'])[0]=='1' else ''), ''.join(f'''<label class="solve-feed"><input type="checkbox" name="feed_{x["id"]}" value="1"><span><b>{h(x["name"])}</b><small>{h(x["category"] or "")} · KM %{float(x["dm_pct"] or 0):.0f} · HP %{float(x["cp_pct"] or 0):.1f} · NDF %{float(x["ndf_pct"] or 0):.1f}</small></span></label>''' for x in feeds))
+            body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyon miktar, besin değeri ve gerçek yem fiyatlarını tek hesapta birleştirir.</p><div class="ration-page-steps"><span>1️⃣ Hedefi belirle</span><span>2️⃣ Yemleri düzenle</span><span>3️⃣ Dengeyi kontrol et</span></div>{solve_panel}<div class="card ration-new-collapsed"><details><summary><h2 style="display:inline;margin:0">➕ Yeni Rasyon Oluştur</h2><span class="mut" style="margin-left:8px">Yeni rasyon gerektiğinde açın</span></summary><div class="ration-create-grid" style="margin-top:14px"><details class="card"><summary><b>🥩 Besi Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Besi"><input type="hidden" name="target_group" value="Besi"><label>Rasyon Adı<input name="name" required placeholder="Besi 500 kg"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="150" max="900" step="1" name="target_weight_kg" value="450"></label><label>Hedef Günlük Artış (kg/gün)<input type="number" min="0.2" max="2.2" step="0.05" name="target_adg_kg" value="1.30"></label><label>Hayvan Tipi<select name="animal_type"><option>Besi Erkek</option><option>Düve</option><option>Genel Büyüyen Sığır</option></select></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Besi Rasyonunu Oluştur</button></div></form></details><details class="card"><summary><b>🥛 Süt Rasyonu Oluştur</b></summary><form method="post" action="/ration/create" class="form" style="margin-top:12px"><input type="hidden" name="ration_type" value="Süt"><input type="hidden" name="target_group" value="Sağmal"><input type="hidden" name="animal_type" value="Sağmal İnek"><label>Rasyon Adı<input name="name" required placeholder="Süt 25 L"></label><label>Ortalama Canlı Ağırlık (kg)<input type="number" min="350" max="900" step="1" name="target_weight_kg" value="650"></label><label>Hedef Süt (L/gün)<input type="number" min="0" max="70" step="0.5" name="target_milk_l" value="25"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Süt Rasyonunu Oluştur</button></div></form></details></div></details></div><div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>{detail}'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
         if path=='/performance':
             status_filter=(q.get('status',[''])[0] or '').strip();scope=(q.get('scope',['all'])[0] or 'all').strip();search=(q.get('search',[''])[0] or '').strip()
@@ -3383,6 +3469,25 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(fid,d,typ,qty,unit,(f.get('notes') or '').strip()))
                 if typ=='Giriş' and unit>0:c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,unit,'Stok girişinden otomatik fiyat'))
             audit(username,'Yem stok hareketi',f'{feed["name"]} {typ} {qty} kg',self.client_ip());return self.redirect('/feeds','Stok hareketi kaydedildi.')
+        if path=='/ration/solve':
+            try:w=float(f.get('target_weight_kg') or 450);adg=float(f.get('target_adg_kg') or 1.3)
+            except:return self.redirect('/rations?solve=1','Canlı ağırlık veya hedef artış geçersiz.')
+            if not (150<=w<=900 and .2<=adg<=2.2):return self.redirect('/rations?solve=1','Hedef değerleri izin verilen aralıkta değil.')
+            ids=[]
+            for k,v in f.items():
+                if k.startswith('feed_') and str(v)=='1':
+                    try:ids.append(int(k[5:]))
+                    except:pass
+            if len(ids)<2:return self.redirect('/rations?solve=1','Rasyon çözmek için en az 2 yem seçin.')
+            with db() as c:
+                marks=','.join('?'*len(ids)); rows=c.execute(f"select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1 and f.id in ({marks})",(date.today().isoformat(),*ids)).fetchall()
+                solved,t,warn=solve_smart_ration(rows,w,adg)
+                if not solved:return self.redirect('/rations?solve=1',warn or 'Seçilen yemlerle çözüm üretilemedi.')
+                qty,m,bounds=solved; stamp=datetime.now().strftime('%d%m-%H%M%S'); name=f'Akıllı Çözüm {w:.0f}kg {adg:.2f} GCAA {stamp}'; note=f'Rasyon Çöz prototipi · otomatik yem sınırları · Tahmini rumen pH {m["rumen_ph"]:.2f}' + ((' · '+warn) if warn else '')
+                cur=c.execute('insert into rations(name,target_group,notes,active,created_at,target_weight_kg,target_adg_kg,animal_type,ration_type,target_milk_l,milk_fat_pct,milk_protein_pct) values(?,?,?,1,?,?,?,?,?,?,?,?)',(name,'Besi',note,datetime.now().isoformat(timespec='seconds'),w,adg,'Besi Erkek','Besi',25,3.8,3.2));rid=cur.lastrowid
+                for feed,kg in zip(rows,qty):
+                    if kg>=.01:c.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(rid,int(feed['id']),kg));record_ration_item_history(c,rid,int(feed['id']),kg,notes='Akıllı Rasyon Çöz prototipi')
+            audit(username,'Akıllı rasyon çözdü',name,self.client_ip());return self.redirect('/rations?id='+str(rid),f'🧠 Rasyon çözüldü · Tahmini rumen pH {m["rumen_ph"]:.2f}. '+(warn or 'Otomatik sınırlar içinde çözüm üretildi.'))
         if path=='/ration/create':
             name=(f.get('name') or '').strip()
             if not name:return self.redirect('/rations','Rasyon adı zorunludur.')
