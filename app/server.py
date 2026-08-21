@@ -480,7 +480,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings(setting_key TEXT PRIMARY KEY, setting_value TEXT);
         CREATE TABLE IF NOT EXISTS paddocks(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,code TEXT,type TEXT,capacity INTEGER DEFAULT 0,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS paddock_history(id INTEGER PRIMARY KEY,animal_source TEXT NOT NULL,animal_id INTEGER NOT NULL,from_paddock_id INTEGER,to_paddock_id INTEGER,moved_at TEXT NOT NULL,notes TEXT);
-        CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,source TEXT,active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,effective_ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,source TEXT,active INTEGER DEFAULT 1);
         CREATE TABLE IF NOT EXISTS feed_prices(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,price_per_kg REAL NOT NULL,notes TEXT);
         CREATE TABLE IF NOT EXISTS feed_stock_transactions(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,tx_date TEXT NOT NULL,tx_type TEXT NOT NULL,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,notes TEXT);
         CREATE TABLE IF NOT EXISTS rations(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,target_group TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
@@ -494,6 +494,20 @@ def init_db():
             if col not in user_cols:c.execute(f'ALTER TABLE users ADD COLUMN {col} {typ}')
         c.execute("update users set active=1 where active is null")
         c.execute("update users set full_name=username where full_name is null or trim(full_name)=''")
+        feed_cols={r[1] for r in c.execute('pragma table_info(feed_catalog)').fetchall()}
+        endf_added=False
+        if 'effective_ndf_pct' not in feed_cols:
+            c.execute('ALTER TABLE feed_catalog ADD COLUMN effective_ndf_pct REAL DEFAULT 0'); endf_added=True
+        # Hotfix3 migrasyonu: mevcut kurulumda yeni eNDF sütununu katalogdaki Excel referans değerleriyle doldur.
+        # Diğer yem/besin alanlarına dokunulmaz; kullanıcının eski düzenlemeleri korunur.
+        if endf_added:
+            try:
+                catalog_file=PROGRAM_DIR/'feed_catalog.json'
+                if catalog_file.exists():
+                    for x in json.loads(catalog_file.read_text(encoding='utf-8')):
+                        c.execute('update feed_catalog set effective_ndf_pct=? where name=? and coalesce(effective_ndf_pct,0)=0',(float(x.get('effective_ndf_pct') or 0),x.get('name','')))
+            except Exception as exc:
+                print('eNDF migrasyonu uygulanamadı:',exc)
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_min_daily_gain','1.0')")
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_warning_ratio','0.90')")
         ration_cols={r[1] for r in c.execute('pragma table_info(rations)').fetchall()}
@@ -551,8 +565,8 @@ def init_db():
             if catalog_file.exists():
                 try:
                     for x in json.loads(catalog_file.read_text(encoding='utf-8')):
-                        c.execute('''insert or ignore into feed_catalog(name,category,dm_pct,ndf_pct,cp_pct,tdn_pct,me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,source,active) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
-                                  (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','')))
+                        c.execute('''insert or ignore into feed_catalog(name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,tdn_pct,me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,source,active) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
+                                  (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','')))
                 except Exception as exc:
                     print('Yem kataloğu yüklenemedi:',exc)
         # V3.9.16: NASEM ile birebir eşleştirilebilen temel yemleri mevcut kurulumlarda da güncelle.
@@ -563,8 +577,8 @@ def init_db():
                 modern_names={'ARPA, AĞIR','ARPA, HAFİF','ARPA SİLAJI','BUĞDAY, ÖĞÜTÜLMÜŞ','BUĞDAY SAMANI','MISIR SİLAJI, %33-40 KM'}
                 for x in json.loads(catalog_file.read_text(encoding='utf-8')):
                     if x.get('name') not in modern_names: continue
-                    c.execute('''update feed_catalog set category=?,dm_pct=?,ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,source=? where name=? and (source is null or source='' or source like 'Besi_V5.02%')''',
-                              (x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source',''),x.get('name','')))
+                    c.execute('''update feed_catalog set category=?,dm_pct=?,ndf_pct=?,effective_ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,source=? where name=? and (source is null or source='' or source like 'Besi_V5.02%')''',
+                              (x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source',''),x.get('name','')))
         except Exception as exc:
             print('NASEM yem kataloğu güncellemesi uygulanamadı:',exc)
         # V3.9.18: ÇiftlikPro 4 Fazlı Besi reçeteleri.
