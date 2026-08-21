@@ -1,4 +1,4 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl
+﻿import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl
 from email.parser import BytesParser
 from email.message import EmailMessage
 from email.policy import default
@@ -23,7 +23,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.20 · DASHBOARD + SAĞLIK DENEYİMİ'
+APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 1 · DASHBOARD + SAĞLIK DENEYİMİ'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1920,7 +1920,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
             .login-visual{{padding:54px;background:linear-gradient(145deg,#174a31,#23784b);color:#fff;display:flex;flex-direction:column;justify-content:space-between;min-height:510px}}
             .login-logo{{font-size:36px;font-weight:950;letter-spacing:-1px}}.login-visual h1{{font-size:42px;line-height:1.05;margin:24px 0 14px}}.login-visual p{{color:#dcece2;font-size:17px;line-height:1.6;max-width:430px}}.login-pills{{display:flex;flex-wrap:wrap;gap:8px}}.login-pills span{{padding:8px 11px;border-radius:999px;background:#ffffff17;border:1px solid #ffffff24;font-size:13px;font-weight:800}}
             .login-panel{{padding:54px 48px;display:flex;flex-direction:column;justify-content:center}}.login-panel h2{{font-size:30px;margin:0 0 8px;color:#173c29}}.login-sub{{color:#718276;margin-bottom:26px}}.login-version{{display:inline-flex;align-self:flex-start;background:#eef6f0;color:#557064;border-radius:999px;padding:7px 11px;font-weight:800;font-size:12px;margin-bottom:22px}}.login-form label{{display:block;font-size:13px;font-weight:850;margin:12px 0 6px;color:#263b30}}.login-form input{{width:100%;box-sizing:border-box;font-size:16px;padding:14px;border:1px solid #cfdcd2;border-radius:12px;background:#fbfdfb}}.password-wrap{{position:relative}}.password-wrap input{{padding-right:96px}}.password-toggle{{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:#edf5ef;color:#176b3a;border-radius:9px;padding:8px 10px;font-weight:800;cursor:pointer}}.login-submit{{width:100%;margin-top:20px;min-height:50px;font-size:16px;border-radius:12px}}.forgot{{display:block;text-align:center;margin-top:16px;color:#176b3a;font-weight:800;text-decoration:none}}
-            @media(max-width:760px){{body{{padding:14px}}.login-shell{{grid-template-columns:1fr;border-radius:22px}}.login-visual{{min-height:auto;padding:26px}}.login-visual h1{{font-size:30px;margin:14px 0 8px}}.login-visual p{{font-size:14px;margin:0 0 16px}}.login-panel{{padding:28px 22px}}}}
+            @media(max-width:760px){{body{{padding:8px;min-height:100dvh;align-items:start}}.login-shell{{grid-template-columns:1fr;border-radius:22px;margin:0 auto}}.login-visual{{min-height:auto;padding:20px 22px 18px}}.login-logo{{font-size:31px}}.login-visual h1{{font-size:28px;line-height:1.04;margin:12px 0 8px}}.login-visual p{{font-size:13.5px;line-height:1.45;margin:0 0 13px}}.login-pills{{gap:6px}}.login-pills span{{padding:6px 9px;font-size:11.5px}}.login-panel{{padding:22px 20px 24px}}.login-version{{margin-bottom:14px;padding:6px 9px;font-size:11px}}.login-panel h2{{font-size:27px}}.login-sub{{margin-bottom:17px;font-size:14px}}.login-form label{{margin:9px 0 5px}}.login-form input{{padding:12px;min-height:46px}}.password-wrap input{{padding-right:92px}}.password-toggle{{padding:7px 9px}}.login-submit{{margin-top:16px;min-height:48px}}.forgot{{margin-top:12px;padding-bottom:max(2px,env(safe-area-inset-bottom))}}}}
             </style></head><body><div class="login-shell"><section class="login-visual"><div><div class="login-logo">🐄 ÇiftlikPro</div><h1>Çiftliğinizin kontrol merkezi.</h1><p>Sürü, üreme, sağlık, besi ve finans yönetimini tek yerde güvenle takip edin.</p></div><div class="login-pills"><span>🐄 Sürü Yönetimi</span><span>💉 Sağlık</span><span>🌸 Üreme</span><span>📈 Besi</span><span>₺ Finans</span></div></section><section class="login-panel"><div class="login-version">ÇiftlikPro Enterprise • V{APP_VERSION}</div><h2>Hoş geldiniz</h2><div class="login-sub">Devam etmek için hesabınızla giriş yapın.</div>{login_msg}<form method="post" class="login-form"><label>Kullanıcı adı</label><input name="username" autocomplete="username" required autofocus><label>Şifre</label><div class="password-wrap"><input id="loginPassword" type="password" name="password" autocomplete="current-password" required><button class="password-toggle" type="button" onclick="toggleLoginPassword(this)">👁 Göster</button></div><button class="btn login-submit">Giriş Yap →</button><a class="forgot" href="/forgot-password">🔑 Şifremi Unuttum</a></form></section></div><script>function toggleLoginPassword(btn){{var p=document.getElementById('loginPassword');var show=p.type==='password';p.type=show?'text':'password';btn.textContent=show?'🙈 Gizle':'👁 Göster';}}</script></body></html>''')
         if path=='/forgot-password':
             step=(q.get('step',['request'])[0] or 'request');rid=(q.get('id',[''])[0] or '');token=(q.get('token',[''])[0] or '')
@@ -2105,7 +2105,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 if in_window:
                     action=f'''<form method="post" action="/estrus-inseminate" onsubmit="return confirm('Bu hayvan bugün tohumlandı olarak Tohumlama kayıtlarına aktarılsın mı?')"><input type="hidden" name="estrus_id" value="{er['id']}"><button class="btn orange">🌱 Bugün Tohumlandı</button></form>'''
                 else:
-                    action=f'''<a class="btn orange" href="/inseminations?animal={er['animal_id']}&estrus={er['id']}">🌱 Tohumlamaya Gönder</a>'''
+                    action=f'''<form method="post" action="/estrus-send" onsubmit="return confirm('Bu hayvan Tohumlama Takibi ekranına gönderilsin mi? Ana sayfadaki bu kızgınlık kartı kapanacaktır.')"><input type="hidden" name="estrus_id" value="{er['id']}"><input type="hidden" name="cycle_no" value="{cycle_no}"><button class="btn orange">🌱 Tohumlamaya Gönder</button></form>'''
                 estrus_dashboard_cards.append(f'''<div class="alertitem {'estrus-window-now' if in_window else 'estrus-window-next'}"><b>🌸 <a class="taglink" href="/animal?id={er['animal_id']}">{h(er['tag'])} {h(er['nickname'])}</a></b><br><span class="mut">{fmt_date(es.isoformat())} – {fmt_date(ee.isoformat())} · En olası {fmt_date(ec.isoformat())}</span><div class="estrus-actions">{action}<form method="post" action="/estrus-skip" onsubmit="return confirm('Bu östrus dönemi atlandı olarak işaretlenecek. Emin misiniz?')"><input type="hidden" name="estrus_id" value="{er['id']}"><input type="hidden" name="cycle_no" value="{cycle_no}"><input type="hidden" name="return_to" value="/"><button class="btn alt">⏭️ Bu Östrusu Atla</button></form><a class="btn alt" href="/estrus">Kızgınlık Takibi</a></div></div>''')
             estrus_dashboard_html=''.join(estrus_dashboard_cards) or '<p class="mut">Önümüzdeki 30 gün için beklenen kızgınlık yok.</p>'
             net=total_inc-total_exp; maxv=max([max(x[1],x[2]) for x in months]+[1])
@@ -2740,7 +2740,7 @@ var f=document.getElementById("license_file");if(f){f.addEventListener("change",
                 if a<=today<=e:
                     action=f'''<form method="post" action="/estrus-inseminate" onsubmit="return confirm('Bu hayvan bugün tohumlandı olarak Tohumlama kayıtlarına aktarılsın mı?')"><input type="hidden" name="estrus_id" value="{r['id']}"><button class="btn orange">🌱 Bugün Tohumlandı</button></form>'''
                 else:
-                    action=f'''<a class="btn orange" href="/inseminations?animal={r['animal_id']}&estrus={r['id']}">🌱 Tohumlamaya Gönder</a><span class="mut" style="align-self:center">Pencere {fmt_date(a.isoformat())} tarihinde başlıyor</span>'''
+                    action=f'''<form method="post" action="/estrus-send" onsubmit="return confirm('Bu hayvan Tohumlama Takibi ekranına gönderilsin mi? Bu kızgınlık kartı kapanacaktır.')"><input type="hidden" name="estrus_id" value="{r['id']}"><input type="hidden" name="cycle_no" value="{cycle_no}"><button class="btn orange">🌱 Tohumlamaya Gönder</button></form><span class="mut" style="align-self:center">Pencere {fmt_date(a.isoformat())} tarihinde başlıyor</span>'''
                 cards.append(f'''<div class="alertitem" style="border-left-color:{color}"><b>🐄 <a class="taglink" href="/animal?id={r['animal_id']}">{h(r['tag'])} {h(r['nickname'])}</a></b><br><span class="mut">Beklenen pencere: {fmt_date(a.isoformat())} – {fmt_date(e.isoformat())} · En olası: {fmt_date(center.isoformat())}</span><div class="estrus-actions">{action}<form method="post" action="/estrus-skip" onsubmit="return confirm('Bu östrus dönemi atlandı olarak işaretlenecek. Emin misiniz?')"><input type="hidden" name="estrus_id" value="{r['id']}"><input type="hidden" name="cycle_no" value="{cycle_no}"><input type="hidden" name="return_to" value="/estrus"><button class="btn alt">⏭️ Bu Östrusu Atla</button></form><a class="btn alt" href="/estrus-edit?id={r['id']}">✏️ Düzenle</a></div></div>''')
             cards_html=''.join(cards) or '<p class="mut">Önümüzdeki 14 gün için beklenen kızgınlık kaydı yok.</p>'
             history=[]
@@ -3960,6 +3960,19 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     c.execute('update estrus_records set estrus_date=?,signs=?,notes=? where id=?',(estrus_date,f.get('signs',''),f.get('notes',''),eid))
                     audit(username,'Kızgınlık kaydı güncellendi',f'{rec["tag"]} · {estrus_date}',self.client_ip())
                     return self.redirect('/estrus','Kızgınlık kaydı güncellendi.')
+                if path=='/estrus-send':
+                    eid=f.get('estrus_id','')
+                    try: cycle_no=int(f.get('cycle_no','1'))
+                    except Exception: cycle_no=1
+                    rec=c.execute('select e.*,a.tag from estrus_records e join animals a on a.id=e.animal_id where e.id=?',(eid,)).fetchone()
+                    if not rec:return self.redirect('/estrus','Kızgınlık kaydı bulunamadı.')
+                    if is_currently_pregnant(c,rec['animal_id']):return self.redirect('/estrus',f'{rec["tag"]} şu anda gebe görünüyor. Tohumlama takibine gönderilemedi.')
+                    current_cycle=next_estrus_cycle(c,rec,date.today())
+                    if not current_cycle or current_cycle['cycle_no']!=cycle_no:
+                        return self.redirect('/estrus','Bu östrus dönemi daha önce sonuçlandırılmış veya artık aktif değil.')
+                    c.execute("insert or replace into estrus_decisions(estrus_id,cycle_no,decision,decision_date,notes) values(?,?,?,?,?)",(eid,cycle_no,'Tohumlamaya Gönderildi',date.today().isoformat(),'Hayvan Tohumlama Takibi ekranına gönderildi; gerçek tohumlama kaydı bekleniyor.'))
+                    audit(username,'Kızgınlık tohumlama takibine gönderildi',f'{rec["tag"]} · {cycle_no}. tahmini döngü',self.client_ip())
+                    return self.redirect(f'/inseminations?animal={rec["animal_id"]}&estrus={rec["id"]}',f'{rec["tag"]} Tohumlama Takibi ekranına gönderildi. Kızgınlık kartı kapatıldı; tohumlama gerçekleştiğinde tarihi kaydedin.')
                 if path=='/estrus-skip':
                     eid=f.get('estrus_id','')
                     try: cycle_no=int(f.get('cycle_no','1'))

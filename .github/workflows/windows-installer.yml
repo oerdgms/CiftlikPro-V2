@@ -1,4 +1,4 @@
-name: CiftlikPro Enterprise V3.9.20 Dengeli 4 Faz ve Rasyon Silme Windows Kurulum
+﻿name: CiftlikPro Enterprise V3.9.20 Hotfix 1 Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -171,7 +171,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Dashboard_Saglik_Login_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix1_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -179,17 +179,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Dashboard_Saglik_Login_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix1_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_20_Dashboard_Saglik_Login_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_9_20_Hotfix1_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.20-Dashboard-Saglik-Login-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.20-Hotfix1-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_20_Dashboard_Saglik_Login_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_20_Hotfix1_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
