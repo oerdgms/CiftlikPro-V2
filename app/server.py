@@ -23,7 +23,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 4 · UX13 AYRI RASYON RAPORU DEV'
+APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 4 · UX14.4 PROFESSIONAL UI DEV'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -135,6 +135,8 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 
 @media(max-width:760px){.sort-head{padding:6px 2px;font-size:12px;white-space:normal;text-align:left}.sort-head span{font-size:11px}}
 
+/* UX14 Desktop Experience */
+.summary-grid{gap:9px!important;align-items:stretch!important}.summary-grid .card{padding:9px 13px!important;min-height:120px;height:120px;border-radius:12px!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important}.summary-grid .stat b{font-size:21px!important;margin:4px 0!important;line-height:1.05}.summary-grid .metric-icon{font-size:16px!important;margin-bottom:2px!important;flex:0 0 auto}.summary-grid .metric-title{display:block;font-size:14px;line-height:1.16;font-weight:500;min-height:2.32em;max-height:2.32em;overflow:hidden}.summary-grid .metric small{margin-top:auto!important;white-space:nowrap}.dashboard-section-title{margin:15px 0 7px!important}@media(max-width:700px){.summary-grid{grid-auto-rows:116px!important}.summary-grid .card{height:116px!important;min-height:116px!important;padding:10px 11px!important}.summary-grid .metric-title{font-size:13px!important;line-height:1.14;min-height:2.28em;max-height:2.28em}.summary-grid .stat b{font-size:21px!important;margin:3px 0!important}.summary-grid .metric small{font-size:11px!important}}@media(max-width:380px){.summary-grid .card{padding:9px!important}.summary-grid .metric-title{font-size:12.5px!important}}.taglink{text-decoration:none!important;border-bottom:1px dotted #7ba58a}.taglink:hover{border-bottom-style:solid}.animal-tag-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid #b9d4c2;border-radius:9px;background:#eef7f1;color:#086b35!important;font-weight:800;text-decoration:none!important;line-height:1;white-space:nowrap;box-shadow:0 1px 2px #173b2810;transition:.15s ease}.animal-tag-btn:hover{background:#dff1e5;border-color:#6fa985;transform:translateY(-1px);box-shadow:0 3px 8px #173b2818}.animal-tag-btn:before{content:"🐄";font-size:13px}.animal-tag-btn:after{content:"›";font-size:16px;line-height:10px;color:#4f8c67;margin-left:1px}.profile{grid-template-columns:140px 1fr!important;gap:16px!important;padding:16px!important;border:1px solid #dbe5de!important;border-radius:12px!important;box-shadow:0 5px 18px #173b2810!important;background:#fff!important}.profile .photo{width:140px!important;height:140px!important;border-radius:10px!important}.profile h1{font-size:25px!important;margin:0 0 2px!important}.profile h2{font-size:16px!important;margin:0 0 8px!important;color:#617168!important}.profile .pill{border-radius:7px!important;padding:5px 8px!important;margin:2px!important}.profile .quick-metrics{margin-top:8px!important}.profile .costbox{border-radius:10px!important}.profile~.two .card,.profile~.card{border:1px solid #dfe8e2!important;box-shadow:none!important;border-radius:11px!important}@media(max-width:850px){.profile{grid-template-columns:90px 1fr!important}.profile .photo{width:90px!important;height:90px!important}}
 @media(max-width:650px){.profile{grid-template-columns:1fr}.photo{width:100%;height:220px}}
 /* V3.7.6 Besi Kârlılık */
 .perf-hero{background:linear-gradient(135deg,#173f2b,#245f3e);color:#fff;border-radius:24px;padding:24px 26px;display:flex;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px rgba(22,72,45,.16)}
@@ -299,6 +301,52 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .finance-filter-actions{display:flex;gap:7px;align-items:center;white-space:nowrap}.export-btn{background:#2f74c7;color:#fff}
 @media(max-width:1100px){.finance-toolbar-modern{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-filter-actions{grid-column:1/-1}}
 @media(max-width:600px){.finance-filter-title{align-items:flex-start;flex-direction:column}.finance-toolbar-modern{grid-template-columns:1fr}.finance-filter-actions{grid-column:auto;display:grid;grid-template-columns:1fr 1fr}.finance-filter-actions .export-btn{grid-column:1/-1}.btn{min-height:44px}}
+
+/* UX14.4 — Professional Desktop UI polish */
+:root{--panel:#ffffff;--line:#dce6df;--line-strong:#c9d8ce;--soft:#f7faf8;--soft-green:#edf6f0;--shadow-soft:0 3px 12px rgba(20,55,35,.055);--shadow-hover:0 7px 18px rgba(20,55,35,.09)}
+body{background:#f2f5f3}
+.top{box-shadow:0 1px 0 rgba(255,255,255,.12),0 4px 16px rgba(14,55,32,.10)}
+.brand{letter-spacing:-.2px}.ver{border:1px solid #ffffff24;background:#ffffff1e;backdrop-filter:blur(5px)}
+.side{background:linear-gradient(180deg,#123e27 0%,#103721 100%);border-right:1px solid #0b2d1b;padding-top:14px}
+.side a,.nav-group summary{position:relative;transition:background .14s ease,color .14s ease,transform .14s ease}
+.side a:hover,.nav-group summary:hover{background:#ffffff12;transform:translateX(1px)}
+.side a.on,.side .nav-home.on{background:#ffffff17;color:#fff;box-shadow:inset 3px 0 0 #65c88e}
+.nav-group[open]>summary{background:#ffffff0d}.nav-children{border-left-color:#ffffff16}
+.main{background:linear-gradient(180deg,#f4f7f5 0,#f2f5f3 220px)}
+h1,h2,h3{letter-spacing:-.25px}h1{color:#173324}h2{color:#193727}
+.card{border:1px solid var(--line);box-shadow:var(--shadow-soft);border-radius:13px}
+.card:hover{border-color:#d2dfd6}.costbox,.setting-box,.alertitem{border-color:var(--line)}
+.summary-grid .card{box-shadow:0 2px 7px rgba(20,55,35,.045)!important;border:1px solid var(--line)!important;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease}
+.summary-grid .summary-link:hover .card{transform:translateY(-1px);box-shadow:var(--shadow-hover)!important;border-color:#c8dacf!important}
+.summary-grid .metric-title{font-weight:650;color:#213a2c}.summary-grid .stat b{font-weight:850;color:#102b1d}.summary-grid .metric small{color:#60736a;font-weight:650}
+.dashboard-section-title h2{font-size:22px}.dashboard-section-title span{font-size:12px}
+.btn{border:1px solid transparent;font-weight:750;box-shadow:0 1px 2px rgba(20,55,35,.08)}
+.btn:hover{filter:none;transform:translateY(-1px);box-shadow:0 5px 12px rgba(20,55,35,.11)}
+.btn:active{transform:translateY(0);box-shadow:0 1px 3px rgba(20,55,35,.08)}
+.btn.alt,.btn.secondary{background:#f1f6f3;color:#176b3a;border-color:#d7e5dc;box-shadow:none}.btn.alt:hover,.btn.secondary:hover{background:#e8f2ec;border-color:#c7d9ce}
+.btn.red,.btn.danger{background:#d94336;border-color:#cc3b30}.btn.red:hover,.btn.danger:hover{background:#ce3c31}
+.btn.blue{background:#316ebc;border-color:#2b63ac}.btn.orange{background:#e58a12;border-color:#d77f0b}
+.form input,.form select,.form textarea,.insem-search input,.livebox input{background:#fff;border-color:#cbd8cf;box-shadow:inset 0 1px 2px rgba(15,49,29,.025);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease}
+.form input:focus,.form select:focus,.form textarea:focus,.insem-search input:focus,.livebox input:focus{outline:none;border-color:#4c9a69;box-shadow:0 0 0 3px rgba(36,139,79,.11);background:#fff}
+.form label{color:#30483a}
+table{border:1px solid var(--line);box-shadow:0 2px 8px rgba(20,55,35,.035)}
+th{background:#edf4ef;color:#2a4535;font-weight:800;border-bottom:1px solid #d3e0d7}
+tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td{border-bottom-color:#e5ece7}
+.row-actions .btn,.mobile-animal-table .btn{white-space:nowrap}
+.animal-tag-btn{border-color:#b8d5c2;background:#f0f8f3;box-shadow:none}.animal-tag-btn:hover{background:#e3f2e8;border-color:#88b99a;box-shadow:0 3px 8px rgba(23,59,40,.09)}
+.pill,.status-badge,.perf-badge{border:1px solid rgba(23,107,58,.08)}
+.flash{border:1px solid #cce4d4;box-shadow:0 2px 8px rgba(20,55,35,.04)}.flash.err{border-color:#f0c9c5}
+.profile{box-shadow:var(--shadow-soft)!important}.profile~.two .card,.profile~.card{background:#fff!important}
+.dash-fold>summary{box-shadow:var(--shadow-soft);border-color:var(--line)}.dash-fold>summary:hover{background:#fbfdfb;border-color:#cfddd3}
+.menu-toggle{border:1px solid #ffffff1d}
+@media(max-width:900px){.side{border-right:0}.main{background:#f3f6f4}}
+@media(max-width:700px){
+  .summary-grid{gap:8px!important}.summary-grid .card{border-radius:11px!important;box-shadow:0 1px 5px rgba(20,55,35,.045)!important}
+  .summary-grid .metric-title{font-weight:700}.summary-grid .metric small{font-size:10.5px!important}
+  .mobile-animal-table tr.data-row,.insem-table tr.data-row,.estrus-table tr.data-row{border-radius:12px;box-shadow:0 2px 8px rgba(20,55,35,.05)}
+  .animal-tag-btn{min-height:40px;padding:8px 10px}
+}
+
 '''
 
 def db():
@@ -531,6 +579,8 @@ def init_db():
             attempts INTEGER DEFAULT 0,used INTEGER DEFAULT 0,reset_token_hash TEXT,reset_token_expires TEXT,created_at TEXT NOT NULL,ip_address TEXT)""")
         c.execute("""CREATE TABLE IF NOT EXISTS finance_animals(
             finance_id INTEGER NOT NULL,animal_id INTEGER NOT NULL,relation_type TEXT DEFAULT 'İlgili',PRIMARY KEY(finance_id,animal_id))""")
+        c.execute("""CREATE TABLE IF NOT EXISTS feed_finance_links(
+            id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,stock_tx_id INTEGER,finance_id INTEGER,quantity_kg REAL DEFAULT 0,unit_price REAL DEFAULT 0,created_at TEXT NOT NULL,UNIQUE(stock_tx_id),UNIQUE(finance_id))""")
         for k,v in [('smtp_host','smtp.gmail.com'),('smtp_port','587'),('smtp_security','starttls'),('smtp_username',''),('smtp_password',''),('smtp_sender','')]:
             c.execute("insert or ignore into settings(setting_key,setting_value) values(?,?)",(k,v))
         c.execute("""CREATE TABLE IF NOT EXISTS request_dedupe(
@@ -2731,17 +2781,17 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             target_profit_color='#c8392b' if male_target_profit is not None and male_target_profit<0 else '#176b3a'
             performance_warning_html=''.join(f'<div class="alertitem" style="border-left-color:#c8392b">⚠️ <a class="taglink" href="/animal?id={r[0]["id"]}">{h(r[0]["tag"])} {h(r[0]["nickname"])}</a><br><span class="mut">{r[1]["daily"]:.3f} kg/gün · Hedef {min_daily_gain:.2f} kg/gün</span></div>' for r in low_performance[:8]) or '<p class="mut">Kritik seviyede düşük kilo artışı olan erkek yok.</p>'
             dash_cards={
-                'active_total':f'<a class="card stat metric green summary-link" href="/all-animals"><span class="metric-icon">🐄</span>Toplam Aktif Hayvan<b>{active_total}</b><small>Tüm hayvanları aç →</small></a>',
-                'female':f'<a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐮</span>Dişi Hayvan<b>{animals}</b><small>Listeyi aç →</small></a>',
-                'male':f'<a class="card stat metric blue summary-link" href="/males"><span class="metric-icon">🐂</span>Erkek Hayvan<b>{males}</b><small>Listeyi aç →</small></a>',
-                'pregnant':f'<a class="card stat metric orange summary-link" href="/inseminations"><span class="metric-icon">🤰</span>Gebe Hayvan<b>{pregnant}</b><small>Gebelikleri aç →</small></a>',
-                'calves':f'<a class="card stat metric teal summary-link" href="/calves"><span class="metric-icon">🐮</span>Buzağı<b>{calves}</b><small>Listeyi aç →</small></a>',
-                'due':f'<a class="card stat metric purple summary-link" href="#approaching-births"><span class="metric-icon">📅</span>Yaklaşan Doğum<b>{len(due_rows)}</b><small>Detaya git ↓</small></a>',
-                'estrus':f'<a class="card stat metric green summary-link" href="#approaching-estrus"><span class="metric-icon">🌸</span>Yaklaşan Kızgınlık<b>{len(estrus_upcoming)}</b><small>Detaya git ↓</small></a>',
-                'health_due':f'<a class="card stat metric teal summary-link" href="/health"><span class="metric-icon">💉</span>Yaklaşan Sağlık İşlemleri<b>{len(health_rows)}</b><small>Sağlığı aç →</small></a>',
-                'income':f'<a class="card stat metric green summary-link" href="/finance?type=Gelir"><span class="metric-icon">📥</span>Toplam Gelir<b>{money(total_inc)}</b><small>Gelirleri aç →</small></a>',
-                'expense':f'<a class="card stat metric red summary-link" href="/finance?type=Gider"><span class="metric-icon">📤</span>Toplam Gider<b>{money(total_exp)}</b><small>Giderleri aç →</small></a>',
-                'net':f'<a class="card stat metric {"red" if net<0 else "green"} summary-link" href="/finance"><span class="metric-icon">⚖️</span>Net Durum<b>{money(net)}</b><small>Finansı aç →</small></a>',
+                'active_total':f'<a class="card stat metric green summary-link" href="/all-animals"><span class="metric-icon">🐄</span><span class="metric-title">Toplam Aktif Hayvan</span><b>{active_total}</b><small>Tüm hayvanları aç →</small></a>',
+                'female':f'<a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐮</span><span class="metric-title">Dişi Hayvan</span><b>{animals}</b><small>Listeyi aç →</small></a>',
+                'male':f'<a class="card stat metric blue summary-link" href="/males"><span class="metric-icon">🐂</span><span class="metric-title">Erkek Hayvan</span><b>{males}</b><small>Listeyi aç →</small></a>',
+                'pregnant':f'<a class="card stat metric orange summary-link" href="/inseminations"><span class="metric-icon">🤰</span><span class="metric-title">Gebe Hayvan</span><b>{pregnant}</b><small>Gebelikleri aç →</small></a>',
+                'calves':f'<a class="card stat metric teal summary-link" href="/calves"><span class="metric-icon">🐮</span><span class="metric-title">Buzağı</span><b>{calves}</b><small>Listeyi aç →</small></a>',
+                'due':f'<a class="card stat metric purple summary-link" href="#approaching-births"><span class="metric-icon">📅</span><span class="metric-title">Yaklaşan Doğum</span><b>{len(due_rows)}</b><small>Detaya git ↓</small></a>',
+                'estrus':f'<a class="card stat metric green summary-link" href="#approaching-estrus"><span class="metric-icon">🌸</span><span class="metric-title">Yaklaşan Kızgınlık</span><b>{len(estrus_upcoming)}</b><small>Detaya git ↓</small></a>',
+                'health_due':f'<a class="card stat metric teal summary-link" href="/health"><span class="metric-icon">💉</span><span class="metric-title">Yaklaşan Sağlık</span><b>{len(health_rows)}</b><small>Sağlığı aç →</small></a>',
+                'income':f'<a class="card stat metric green summary-link" href="/finance?type=Gelir"><span class="metric-icon">📥</span><span class="metric-title">Toplam Gelir</span><b>{money(total_inc)}</b><small>Gelirleri aç →</small></a>',
+                'expense':f'<a class="card stat metric red summary-link" href="/finance?type=Gider"><span class="metric-icon">📤</span><span class="metric-title">Toplam Gider</span><b>{money(total_exp)}</b><small>Giderleri aç →</small></a>',
+                'net':f'<a class="card stat metric {"red" if net<0 else "green"} summary-link" href="/finance"><span class="metric-icon">⚖️</span><span class="metric-title">Net Durum</span><b>{money(net)}</b><small>Finansı aç →</small></a>',
             }
             card_meta={
                 'active_total':('🐄','Toplam Aktif Hayvan','Sürüdeki toplam aktif kayıt'),
@@ -2826,7 +2876,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 end=(r['exit_date'] or '-') if is_cut else 'Bugün'
                 badge='<span class="perf-badge status-low">Kesildi</span>' if is_cut else '<span class="perf-badge status-good">Aktif</span>'
                 note='<br><span class="mut">Kesim tarihinde donduruldu</span>' if is_cut else ''
-                return f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a><br><span class="mut">{h(r["nickname"])}</span></td><td>{badge}</td><td>{fmt_date(start)}</td><td>{fmt_date(end)}</td><td><b>{days} gün</b>{note}</td><td>{money(purchase)}</td><td>{money(operating)}</td><td><b>{money(total)}</b></td></tr>'
+                return f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a><br><span class="mut">{h(r["nickname"])}</span></td><td>{badge}</td><td>{fmt_date(start)}</td><td>{fmt_date(end)}</td><td><b>{days} gün</b>{note}</td><td>{money(purchase)}</td><td>{money(operating)}</td><td><b>{money(total)}</b></td></tr>'
             detail_rows=''.join(cost_detail_tr(r) for r in shown) or '<tr><td colspan="8">Bu filtreye uygun hayvan bulunamadı.</td></tr>'
             active_rows=[r for r in filtered if str(r['status'] or '')=='Aktif']
             cut_rows=[r for r in filtered if str(r['status'] or '')=='Kesildi']
@@ -2893,7 +2943,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=f'''<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">Besin değerleri NASEM 2016 Beef + NASEM 2021 Dairy ile karşılaştırmalı güncelleniyor. Tam eşleşmeyen özel yemlerde mevcut referans korunur; kendi laboratuvar analizinizi Düzenle ile girebilirsiniz. Eski fiyatlar aktarılmadı.</p>
             <div class="grid"><div class="card stat metric"><span>Yem Kataloğu</span><b>{len(allfeeds)}</b></div><div class="card stat metric blue"><span>Gösterilen</span><b>{len(feeds)}</b></div><div class="card stat metric orange"><span>Fiyat Mantığı</span><b>Geçmişli</b><small>Her tarih kendi fiyatını korur</small></div></div>
             <div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2><form method="post" action="/feed/price" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tarih<input type="date" name="effective_date" value="{date.today().isoformat()}" required></label><label>₺ / kg<input type="number" step="0.0001" min="0" name="price_per_kg" required></label><label class="full">Not<input name="notes" placeholder="Tedarikçi / alım notu"></label><div class="full"><button class="btn">Fiyatı Kaydet</button></div></form></div>
-            <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" inputmode="decimal" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
+            <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form" id="feedStockForm"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type" id="feedStockType"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" inputmode="decimal" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="full" id="feedFinanceAsk" style="padding:10px;background:#edf7f0;border:1px solid #cfe3d5;border-radius:10px"><input type="checkbox" name="post_to_finance" value="yes" style="width:auto;margin-right:8px"> Bu stok girişini <b>Finans → Gider / Yem</b> olarak da kaydet</label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
             <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct"></label><label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" step="0.001" name="p_pct"></label><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
             <div class="card" style="margin-top:14px;overflow:auto"><form class="actions" id="feed-catalog-search-form"><input id="feed-catalog-search" name="q" value="{h(search)}" placeholder="Yem ara... yazdıkça filtrelenir" autocomplete="off"><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a><span class="mut" id="feed-search-count"></span></form><table id="feed-catalog-table"><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th><th>İşlem</th></tr>{trs or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'}</table></div><script>(()=>{{const i=document.getElementById('feed-catalog-search'),rows=[...document.querySelectorAll('.feed-catalog-row')],count=document.getElementById('feed-search-count');if(!i)return;const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');function run(){{const t=norm(i.value.trim());let n=0;rows.forEach(r=>{{const ok=!t||norm(r.dataset.search||r.textContent).includes(t);r.style.display=ok?'':'none';if(ok)n++;}});if(count)count.textContent=n+' yem gösteriliyor';}}i.addEventListener('input',run);run();}})();</script>'''
             return self.send_html(page('Yem Kataloğu',body,'/feeds',u,msg))
@@ -3112,10 +3162,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             combined=[]
             for r in adults:
                 kind='Dişi' if r['gender']=='Dişi' else 'Erkek'
-                row=f'<tr class="data-row" data-kind="{h(kind)}" data-paddock="{h(r["paddock"])}"><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"]) or "-"}</td><td>{h(kind)}</td><td>{h(r["breed"]) or "-"}</td><td>{h(r["paddock"]) or "-"}</td><td>{age_text(r["birth_date"])}</td></tr>'
+                row=f'<tr class="data-row" data-kind="{h(kind)}" data-paddock="{h(r["paddock"])}"><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"]) or "-"}</td><td>{h(kind)}</td><td>{h(r["breed"]) or "-"}</td><td>{h(r["paddock"]) or "-"}</td><td>{age_text(r["birth_date"])}</td></tr>'
                 combined.append((str(r['tag'] or '').casefold(),row))
             for r in calves_all:
-                row=f'<tr class="data-row" data-kind="Buzağı" data-paddock="{h(r["paddock"])}"><td><a class="taglink" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"]) or "-"}</td><td>Buzağı - {h(r["gender"])}</td><td>{h(r["breed"]) or "-"}</td><td>{h(r["paddock"]) or "-"}</td><td>{age_text(r["birth_date"])}</td></tr>'
+                row=f'<tr class="data-row" data-kind="Buzağı" data-paddock="{h(r["paddock"])}"><td><a class="animal-tag-btn" title="Buzağı kartını aç" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"]) or "-"}</td><td>Buzağı - {h(r["gender"])}</td><td>{h(r["breed"]) or "-"}</td><td>{h(r["paddock"]) or "-"}</td><td>{age_text(r["birth_date"])}</td></tr>'
                 combined.append((str(r['tag'] or '').casefold(),row))
             combined.sort(key=lambda x:x[0]); trs=''.join(x[1] for x in combined)
             paddock_options=''.join(f'<option value="{h(x)}">{h(x)}</option>' for x in paddocks)
@@ -3135,7 +3185,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 else:
                     rows=c.execute("select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 rec=c.execute('select * from animals where id=?',(edit,)).fetchone() if edit else None
-            trs=''.join('<tr><td><a class="taglink" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><a class="btn alt" href="/animal-edit?id={0}">Düzenle</a>{7}</td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['gender']),h(r['breed']),h(r['paddock']),age_text(r['birth_date']),(' <a class="btn" href="/inseminations?animal='+str(r['id'])+'">Tohumlama</a>' if r['gender']=='Dişi' else '')+' <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="'+str(r['id'])+'"><button class="btn red">Sil</button></form>') for r in rows)
+            trs=''.join('<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><a class="btn alt" href="/animal-edit?id={0}">Düzenle</a>{7}</td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['gender']),h(r['breed']),h(r['paddock']),age_text(r['birth_date']),(' <a class="btn" href="/inseminations?animal='+str(r['id'])+'">Tohumlama</a>' if r['gender']=='Dişi' else '')+' <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="'+str(r['id'])+'"><button class="btn red">Sil</button></form>') for r in rows)
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
             body=f'''<h1>Dişi Hayvanlar</h1><div class="livebox"><input id="femaleLiveSearch" type="search" placeholder="Küpe, takma ad, ırk veya padok yazın..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('femaleLiveSearch').value='';document.getElementById('femaleLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="femaleEmpty" class="empty-state">Eşleşen dişi hayvan bulunamadı.</div><div class="card"><table id="femaleLiveTable" class="mobile-animal-table female-table"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Padok</th><th>Yaş</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('femaleLiveSearch','femaleLiveTable','femaleEmpty');}});</script>'''
@@ -3156,7 +3206,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             male_rows=[]
             for r in rows:
                 days,daily,accumulated,current=animal_cost_values(r)
-                male_rows.append(f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"])}</td><td>{h(r["breed"])}</td><td>{h(r["paddock"])}</td><td>{days} gün</td><td>{money(r["purchase_price"])}</td><td><b>{money(current)}</b></td><td>{money(float(r['target_sale_price'] or 0)-current) if float(r['target_sale_price'] or 0)>0 else '-'}</td><td><a class="btn alt" href="/animal-edit?id={r["id"]}">Düzenle</a> <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form></td></tr>')
+                male_rows.append(f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"])}</td><td>{h(r["breed"])}</td><td>{h(r["paddock"])}</td><td>{days} gün</td><td>{money(r["purchase_price"])}</td><td><b>{money(current)}</b></td><td>{money(float(r['target_sale_price'] or 0)-current) if float(r['target_sale_price'] or 0)>0 else '-'}</td><td><a class="btn alt" href="/animal-edit?id={r["id"]}">Düzenle</a> <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form></td></tr>')
             trs=''.join(male_rows) or '<tr><td colspan=8>Erkek hayvan kaydı yok</td></tr>'
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
@@ -3168,7 +3218,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             with db() as c:
                 rows=c.execute("select * from animals where status=? order by exit_date desc,tag",(status,)).fetchall()
             trs=''.join(
-                f'<tr><td><a class="taglink" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td>'
+                f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td>'
                 f'<td>{h(r["nickname"])}</td><td>{h(r["gender"])}</td><td>{h(r["breed"])}</td>'
                 f'<td>{fmt_date(r["exit_date"])}</td><td>{h(r["exit_reason"])}</td><td>{money(r["sold_price"])}</td></tr>'
                 for r in rows
@@ -3328,7 +3378,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     ).fetchall()
                 rec=c.execute('select * from calves where id=?',(edit,)).fetchone() if edit else None
             opts=''.join(f'<option value="{m["id"]}" {"selected" if rec and rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
-            trs=''.join(f'<tr><td><a class="taglink" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["mother_tag"])} {h(r["mother_name"])}</td><td>{h(r["father_tag"])}</td><td>{h(fmt_date(r["birth_date"]))}</td><td>{age_text(r["birth_date"])}</td><td>{h(r["gender"])}</td><td><a class="btn alt" href="/calf-edit?id={r["id"]}">Düzenle</a> <form class="inline-form" method="post" action="/calf-delete" onsubmit="return confirm(\'Bu buzağı kaydını kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form></td></tr>' for r in rows)
+            trs=''.join(f'<tr><td><a class="animal-tag-btn" title="Buzağı kartını aç" href="/calf?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["mother_tag"])} {h(r["mother_name"])}</td><td>{h(r["father_tag"])}</td><td>{h(fmt_date(r["birth_date"]))}</td><td>{age_text(r["birth_date"])}</td><td>{h(r["gender"])}</td><td><a class="btn alt" href="/calf-edit?id={r["id"]}">Düzenle</a> <form class="inline-form" method="post" action="/calf-delete" onsubmit="return confirm(\'Bu buzağı kaydını kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form></td></tr>' for r in rows)
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["mother_tag"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
             body=f'''<h1>Buzağılar</h1><div class="livebox"><input id="calfLiveSearch" type="search" placeholder="Buzağı küpesi, anne küpesi veya anne adı yazın..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('calfLiveSearch').value='';document.getElementById('calfLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="calfEmpty" class="empty-state">Eşleşen buzağı bulunamadı.</div><div class="card"><table id="calfLiveTable" class="mobile-animal-table calf-table"><thead><tr><th>Küpe</th><th>Anne</th><th>Baba</th><th>Doğum</th><th>Yaş</th><th>Cinsiyet</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('calfLiveSearch','calfLiveTable','calfEmpty');}});</script>'''
@@ -3651,12 +3701,14 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 purchase_linked_ids={int(r['animal_id']) for r in c.execute("select distinct animal_id from finance where category='Hayvan Alımı' and animal_id is not null").fetchall()}
                 milk_females=[a for a in animals if str(a['gender'] or '')=='Dişi']
                 categories=c.execute("select distinct category from finance where coalesce(category,'')<>'' order by category").fetchall()
+                finance_feeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
                 rows=c.execute(sql,args).fetchall()
                 inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
             bulk_cards=''.join(f'''<label class="bulk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="bulk-check" value="{a["id"]}" onchange="syncBulkSelection()"><span class="tag">🐄 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in animals)
             milk_cards=''.join(f'''<label class="bulk-row milk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="milk-check" value="{a["id"]}" onchange="syncMilkSelection()"><span class="tag">🥛 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in milk_females)
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
+            finance_feed_opts=''.join(f'<option value="{r["id"]}">{h(r["name"])}</option>' for r in finance_feeds)
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
                     fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
@@ -3668,7 +3720,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 <label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option><option>Diğer</option></select></label>
 <label>Toplam Tutar<input type="number" step="0.01" min="0.01" name="amount" id="financeAmount" required></label>
 <label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
-<label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label>
+<label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label><div class="full" id="financeFeedBox" style="display:none;padding:12px;background:#f0f7f2;border:1px solid #d5e7da;border-radius:11px"><div class="form"><label>Yem Kataloğu<select name="feed_id" id="financeFeed"><option value="">Yem seçin…</option>{finance_feed_opts}</select></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" name="feed_quantity_kg" id="financeFeedQty"></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="feed_unit_price" id="financeFeedUnit"></label><div class="full mut">Gider / Yem kaydedildiğinde seçilen yem stoğuna otomatik giriş yapılır.</div></div></div>
 <input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
 <div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div><input type="hidden" name="milk_animal_ids" id="milkAnimalIds" value=""><div class="full bulk-animal-box" id="milkAnimalBox" style="display:none"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🥛 Süt Gelirine Dahil Dişi Hayvanlar</h3><div class="mut">Yalnızca aktif dişi hayvanlar gösterilir. Toplam süt geliri bölünmez; seçilen hayvanlar kayda ilişkilendirilir.</div></div><input class="bulk-search" id="milkSearch" placeholder="Dişi küpe veya takma ad ara…" oninput="filterMilkAnimals()"></div><div class="bulk-list" id="milkList">{milk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="milkCount">0</b> dişi</span><span class="pill">Toplam gelir <b id="milkTotal">₺0,00</b></span><button type="button" class="btn alt" onclick="clearMilkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="milkSelectedPreview">Henüz dişi hayvan seçilmedi.</div></div></div>
 <label class="full">Açıklama<input name="description"></label>
@@ -3681,6 +3733,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               return t==='Gelir' && (c==='Hayvan Satışı' || c==='Kesim Geliri');
             }}
             function isMilkFinance(){{return document.getElementById('tx').value==='Gelir' && document.getElementById('financeCategory').value==='Süt Satışı';}}
+            function refreshFinanceFeed(){{const on=document.getElementById('tx').value==='Gider'&&document.getElementById('financeCategory').value==='Yem';const b=document.getElementById('financeFeedBox'),ff=document.getElementById('financeFeed'),fq=document.getElementById('financeFeedQty');if(b)b.style.display=on?'block':'none';if(ff)ff.required=on;if(fq)fq.required=on;}}
             function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
             function selectedChecks(){{return Array.from(document.querySelectorAll('.bulk-check:checked'));}}
             function syncBulkSelection(){{
@@ -3736,8 +3789,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               const q=(document.getElementById('bulkSearch').value||'').toLocaleLowerCase('tr-TR').trim();
               document.querySelectorAll('.bulk-row').forEach(row=>{{row.style.display=!q||row.dataset.search.toLocaleLowerCase('tr-TR').includes(q)?'grid':'none';}});
             }}
-            document.getElementById('tx').addEventListener('change',refreshBulkFinance);
-            document.getElementById('financeCategory').addEventListener('change',refreshBulkFinance);
+            document.getElementById('tx').addEventListener('change',function(){{refreshBulkFinance();refreshFinanceFeed();}});
+            document.getElementById('financeCategory').addEventListener('change',function(){{refreshBulkFinance();refreshFinanceFeed();}});
             document.getElementById('financeAmount').addEventListener('input',function(){{syncBulkSelection();syncMilkSelection();}});
             document.getElementById('financeCreateForm').addEventListener('submit',function(e){{
               syncBulkSelection();
@@ -3763,7 +3816,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 submitBtn.textContent='⏳ Kaydediliyor…';
               }}
             }});
-            refreshBulkFinance();
+            refreshBulkFinance();refreshFinanceFeed();
             function setFinanceDrawer(open){{const d=document.getElementById('financeDrawer'),b=document.getElementById('financeDrawerBackdrop');if(!d||!b)return;d.classList.toggle('open',open);b.classList.toggle('open',open);d.setAttribute('aria-hidden',open?'false':'true');document.body.style.overflow=open?'hidden':'';}}
 function openFinanceDrawer(){{setFinanceDrawer(true);}}
 function closeFinanceDrawer(ev){{if(ev&&ev.target!==document.getElementById('financeDrawerBackdrop'))return;setFinanceDrawer(false);}}
@@ -4032,8 +4085,17 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 feed=c.execute('select name from feed_catalog where id=?',(fid,)).fetchone()
                 if not feed:return self.redirect('/feeds','Yem bulunamadı.')
                 c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(fid,d,typ,qty,unit,(f.get('notes') or '').strip()))
+                stock_id=c.execute('select last_insert_rowid()').fetchone()[0]
                 if typ=='Giriş' and unit>0:c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,unit,'Stok girişinden otomatik fiyat'))
-            audit(username,'Yem stok hareketi',f'{feed["name"]} {typ} {qty} kg',self.client_ip());return self.redirect('/feeds','Stok hareketi kaydedildi.')
+                finance_created=False
+                if typ=='Giriş' and (f.get('post_to_finance') or '')=='yes':
+                    if unit<=0:return self.redirect('/feeds','Finansa aktarım için alış ₺/kg 0’dan büyük olmalıdır.')
+                    amount=round(qty*unit,2);desc=(f.get('notes') or '').strip();desc=(desc+' · ' if desc else '')+f'Yem stok alımı: {feed["name"]} · {qty:g} kg × {unit:g} TL'
+                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(d,'Gider','Yem',amount,desc,f.get('payment_method') or 'Nakit',None,datetime.now().isoformat(),''))
+                    finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('insert into feed_finance_links(feed_id,stock_tx_id,finance_id,quantity_kg,unit_price,created_at) values(?,?,?,?,?,?)',(fid,stock_id,finance_id,qty,unit,datetime.now().isoformat()))
+                    finance_created=True
+            audit(username,'Yem stok hareketi',f'{feed["name"]} {typ} {qty} kg',self.client_ip());return self.redirect('/feeds','Stok hareketi kaydedildi.'+(' Finans gideri de otomatik oluşturuldu.' if finance_created else ''))
         if path=='/ration/solve':
             try:w=float(f.get('target_weight_kg') or 450);adg=float(f.get('target_adg_kg') or 1.3)
             except:return self.redirect('/rations?solve=1','Canlı ağırlık veya hedef artış geçersiz.')
@@ -4908,6 +4970,9 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     animal_id=old['animal_id']
+                    link=c.execute('select stock_tx_id from feed_finance_links where finance_id=?',(record_id,)).fetchone()
+                    if link and link['stock_tx_id']:c.execute('delete from feed_stock_transactions where id=?',(link['stock_tx_id'],))
+                    c.execute('delete from feed_finance_links where finance_id=?',(record_id,))
                     c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     c.execute('delete from finance where id=?',(record_id,))
                     if animal_id:recalculate_animal_exit_status(c,animal_id)
@@ -4976,8 +5041,21 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not claim_request_once(c,fingerprint,15):
                         return self.redirect('/finance','⚠️ Aynı finans kaydı ikinci kez gönderildi; mükerrer kayıt engellendi.')
                     c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,f.get('description'),f.get('payment_method'),animal_id,datetime.now().isoformat(),action))
+                    finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    stock_created=False
+                    if tx_type=='Gider' and category=='Yem' and (f.get('feed_id') or '').strip():
+                        try:feed_id=int(f.get('feed_id'));feed_qty=float(f.get('feed_quantity_kg') or 0);feed_unit=float(f.get('feed_unit_price') or 0)
+                        except:return self.redirect('/finance','Yem stok bilgisi geçersiz.')
+                        feedrow=c.execute('select name from feed_catalog where id=? and active=1',(feed_id,)).fetchone()
+                        if not feedrow or feed_qty<=0:return self.redirect('/finance','Yem ve miktar bilgisi zorunludur.')
+                        if feed_unit<=0:feed_unit=round(amount/feed_qty,4)
+                        c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(feed_id,f['tx_date'],'Giriş',feed_qty,feed_unit,'Finans giderinden otomatik stok girişi'))
+                        stock_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                        c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(feed_id,f['tx_date'],feed_unit,'Finans giderinden otomatik fiyat'))
+                        c.execute('insert into feed_finance_links(feed_id,stock_tx_id,finance_id,quantity_kg,unit_price,created_at) values(?,?,?,?,?,?)',(feed_id,stock_id,finance_id,feed_qty,feed_unit,datetime.now().isoformat()))
+                        stock_created=True
                     if action:c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,amount,animal_id))
-                    return self.redirect('/finance','Finans kaydı eklendi.' + (' Hayvan aktif sürüden çıkarıldı.' if action else ''))
+                    return self.redirect('/finance','Finans kaydı eklendi.' + (' Yem stoğu da otomatik artırıldı.' if stock_created else '') + (' Hayvan aktif sürüden çıkarıldı.' if action else ''))
         except sqlite3.IntegrityError as e:return self.redirect(path,'Aynı küpe numarası daha önce kaydedilmiş olabilir.')
         except Exception as e:
             if path in ('/finance/delete','/finance-delete'):
