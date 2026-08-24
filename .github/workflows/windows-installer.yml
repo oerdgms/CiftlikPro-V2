@@ -1,4 +1,4 @@
-﻿name: CiftlikPro Enterprise V3.9.20 Hotfix 2 Windows Kurulum
+﻿name: CiftlikPro Enterprise V3.9.20 Hotfix 6 Windows Kurulum
 
 on:
   workflow_dispatch:
@@ -171,7 +171,7 @@ jobs:
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
 
-          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix2_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix6_Setup.exe"
           if (!(Test-Path $setup)) {
             throw "Kurulum EXE dosyası oluşturulamadı."
           }
@@ -179,17 +179,17 @@ jobs:
       - name: SHA-256 özeti oluştur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix2_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_20_Hotfix6_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_20_Hotfix2_Setup.exe  SHA256: $hash" |
+          "CiftlikPro_Enterprise_V3_9_20_Hotfix6_Setup.exe  SHA256: $hash" |
             Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.20-Hotfix2-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.20-Hotfix6-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_20_Hotfix2_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_20_Hotfix6_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30

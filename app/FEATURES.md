@@ -120,3 +120,14 @@ Her yeni sürümde bu dosya kontrol listesi olarak kullanılmalıdır.
 - Padok bazında toplu aşı planlama; plan anındaki hayvan listesi sabitlenir.
 - Padok dozu tek butonla toplu Yapıldı; her hayvanın sağlık geçmişine ayrı kayıt işlenir.
 - Planlanan sağlık işlemleri mobil kart görünümüne geçirildi; gecikme durumu ve işlem butonları taşmadan görünür.
+
+
+## V3.9.20 Hotfix 6 — Besi Hayvanı İhtiyaç Motoru V1
+- Akıllı rasyon çözümünde enerji çekirdeği NASEM 2016 büyüyen/bitirilen sığır yaklaşımına taşındı.
+- Shrunk body weight (SBW), empty body weight/gain (EBW/EBG), bakım NEm ve büyüme NEg gereksinimleri ayrı hesaplanır.
+- NASEM 2016 Chapter 20 errata referanslarından MP bakım/büyüme hedefleri türetilir.
+- Yaş (ay) opsiyonel giriş olarak eklendi; ihtiyaç hesabını tek başına belirlemez, faz/tutarlılık kontrolünde kullanılır.
+- Solver yemlerin gerçek NEm/NEg yoğunluğuna göre gerekli KM'yi dinamik kontrol eder.
+- Tuz KM bazlı güvenlik rayında; BT-SACC 100 g/baş/gün sabit ürün dozu olarak korunur.
+- Nişasta, eNDF, kaba yem, Ca:P ve aşırı mineral için kritik güvenlik kapısı eklendi; sınırlar sağlanmazsa uygunsuz rasyon kaydedilmez.
+- Katalogda RDP/RUP olmadığı için MP arzı tam modellenmez; CP hedefi tarama katmanı olarak kalır.
