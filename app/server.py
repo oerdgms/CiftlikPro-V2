@@ -23,7 +23,7 @@ SESSIONS={}
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
 APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 4 · UX14.4 PROFESSIONAL UI DEV'
+APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 4 · UX15 PREMIUM DASHBOARD + STOK FİNANS DEV'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -346,6 +346,18 @@ tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td
   .mobile-animal-table tr.data-row,.insem-table tr.data-row,.estrus-table tr.data-row{border-radius:12px;box-shadow:0 2px 8px rgba(20,55,35,.05)}
   .animal-tag-btn{min-height:40px;padding:8px 10px}
 }
+
+/* UX15 — Premium Dashboard Cards + linked feed/finance safety */
+.summary-grid .summary-link.card{position:relative;isolation:isolate;background:linear-gradient(145deg,#fff 0%,#fbfdfc 68%,#f4f9f6 100%)!important;border-left-width:4px!important;padding:12px 14px!important}
+.summary-grid .summary-link.card:after{content:"";position:absolute;right:-22px;top:-30px;width:92px;height:92px;border-radius:50%;background:currentColor;opacity:.045;z-index:-1}
+.summary-grid .metric-icon{display:grid!important;place-items:center;width:31px;height:31px;border-radius:9px;background:#edf5f0;border:1px solid #dce9e0;font-size:17px!important;margin:0 0 5px!important}
+.summary-grid .metric-title{min-height:auto!important;height:auto!important;max-height:none!important;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;width:100%;font-size:13px!important;color:#425a4b!important}
+.summary-grid .stat b{font-size:24px!important;letter-spacing:-.6px;margin:4px 0 2px!important}
+.summary-grid .metric small{font-size:10.5px!important;opacity:.9}
+.summary-grid .metric.green{border-left-color:#2e9b5e!important}.summary-grid .metric.blue{border-left-color:#3479c8!important}.summary-grid .metric.orange{border-left-color:#e59622!important}.summary-grid .metric.teal{border-left-color:#23999b!important}.summary-grid .metric.purple{border-left-color:#8061cc!important}.summary-grid .metric.red{border-left-color:#d64b40!important}
+.summary-grid .metric.green .metric-icon{background:#edf8f1}.summary-grid .metric.blue .metric-icon{background:#eef5fd}.summary-grid .metric.orange .metric-icon{background:#fff6e8}.summary-grid .metric.teal .metric-icon{background:#eaf8f8}.summary-grid .metric.purple .metric-icon{background:#f3effd}.summary-grid .metric.red .metric-icon{background:#fff0ef}
+.linked-feed-box{grid-column:1/-1;border:1px solid #bddbc7;background:linear-gradient(180deg,#f3fbf6,#edf7f1);border-radius:12px;padding:13px 14px}.linked-feed-box h3{margin:0 0 5px;font-size:15px}.linked-feed-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;margin-top:10px}.linked-total{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid #d7e7dc;border-radius:10px;padding:10px 12px;margin-top:9px}.linked-total b{font-size:18px;color:#176b3a}
+@media(max-width:700px){.summary-grid .summary-link.card{height:116px!important;min-height:116px!important;padding:9px 10px!important}.summary-grid .metric-icon{width:27px;height:27px;font-size:15px!important;margin-bottom:3px!important}.summary-grid .stat b{font-size:21px!important}.summary-grid .metric-title{font-size:12px!important}.linked-feed-grid{grid-template-columns:1fr}.linked-total{align-items:flex-start;flex-direction:column}}
 
 '''
 
@@ -3665,6 +3677,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             with db() as c:
                 r=c.execute('select f.*,a.tag,a.nickname from finance f left join animals a on a.id=f.animal_id where f.id=?',(record_id,)).fetchone()
                 animals=c.execute('select id,tag,nickname,status from animals order by tag').fetchall()
+                linked=c.execute('''select l.*,fc.name feed_name,st.tx_date stock_date,st.notes stock_notes from feed_finance_links l join feed_catalog fc on fc.id=l.feed_id left join feed_stock_transactions st on st.id=l.stock_tx_id where l.finance_id=?''',(record_id,)).fetchone()
             if not r:return self.redirect('/finance','Finans kaydı bulunamadı.')
             animal_options='<option value="">Hayvan seçmeden kaydet</option>'+''.join(
                 '<option value="{0}" {1}>{2} · {3} · {4}</option>'.format(
@@ -3673,6 +3686,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             )
             categories=['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme','Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı','Diğer']
             category_options=''.join('<option {0}>{1}</option>'.format('selected' if r["category"]==x else '',h(x)) for x in categories)
+            linked_html=''
+            if linked:
+                linked_html=f'''<div class="linked-feed-box"><h3>🔗 Bağlı Yem Stok Hareketi</h3><div class="mut">Bu finans kaydı <b>{h(linked['feed_name'])}</b> stok girişiyle bağlıdır. Miktar veya birim fiyatı burada değiştirirseniz stok kaydı da birlikte güncellenir.</div><div class="linked-feed-grid"><label>Yem<input value="{h(linked['feed_name'])}" disabled></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" name="linked_feed_qty" id="linkedFeedQty" value="{linked['quantity_kg']}" required></label><label>Birim Fiyat (₺/kg)<input type="number" step="0.0001" min="0.0001" name="linked_feed_unit" id="linkedFeedUnit" value="{linked['unit_price']}" required></label></div><div class="linked-total"><span>Finansa kaydedilecek yeni toplam</span><b id="linkedFeedTotal">{money(float(linked['quantity_kg'])*float(linked['unit_price']))}</b></div><input type="hidden" name="linked_feed" value="yes"></div>'''
             body=f'''<h1>Finans Kaydını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form">
             <input type="hidden" name="id" value="{r["id"]}">
             <label>Tarih<input type="date" name="tx_date" value="{h(r["tx_date"])}" required></label>
@@ -3682,6 +3698,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <label>Ödeme<select name="payment_method"><option {"selected" if r["payment_method"]=="Nakit" else ""}>Nakit</option><option {"selected" if r["payment_method"]=="Banka" else ""}>Banka</option><option {"selected" if r["payment_method"]=="Kredi Kartı" else ""}>Kredi Kartı</option><option {"selected" if r["payment_method"]=="Vadeli" else ""}>Vadeli</option></select></label>
             <label>İlgili Hayvan<select name="animal_id" id="financeAnimal">{animal_options}</select></label>
             <label class="full">Açıklama<input name="description" value="{h(r["description"])}"></label>
+            {linked_html}
             <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Satış veya kesim seçilirse hayvan aktif sürüden çıkarılır. Kategori değiştirilirse durum yeniden hesaplanır.</div>
             <div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/finance">İptal</a></div>
             </form></div>'''
@@ -4956,15 +4973,26 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     if action and not animal_id:return self.redirect(f'/finance/edit?id={record_id}','Satış veya kesim için ilgili hayvan seçilmelidir.')
                     old_animal_id=old['animal_id']
+                    link=c.execute('select * from feed_finance_links where finance_id=?',(record_id,)).fetchone()
+                    new_amount=float(f['amount'])
+                    if link and (f.get('linked_feed') or '')=='yes':
+                        try:
+                            linked_qty=float(f.get('linked_feed_qty') or 0);linked_unit=float(f.get('linked_feed_unit') or 0)
+                        except:return self.redirect(f'/finance/edit?id={record_id}','Bağlı yem miktarı veya birim fiyatı geçersiz.')
+                        if linked_qty<=0 or linked_unit<=0:return self.redirect(f'/finance/edit?id={record_id}','Bağlı yem miktarı ve birim fiyatı 0’dan büyük olmalıdır.')
+                        new_amount=round(linked_qty*linked_unit,2)
+                        c.execute('update feed_stock_transactions set tx_date=?,quantity_kg=?,unit_price=? where id=?',(f['tx_date'],linked_qty,linked_unit,link['stock_tx_id']))
+                        c.execute('update feed_finance_links set quantity_kg=?,unit_price=? where finance_id=?',(linked_qty,linked_unit,record_id))
+                        c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(link['feed_id'],f['tx_date'],linked_unit,'Bağlı Finans/Stok düzenlemesinden güncellendi'))
                     c.execute(
                         'update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,payment_method=?,animal_id=?,animal_status_action=? where id=?',
-                        (f['tx_date'],f['tx_type'],category,float(f['amount']),f.get('description'),f.get('payment_method'),animal_id,action,record_id)
+                        (f['tx_date'],f['tx_type'],category,new_amount,f.get('description'),f.get('payment_method'),animal_id,action,record_id)
                     )
                     if category!='Süt Satışı':
                         c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     recalculate_animal_exit_status(c,old_animal_id)
                     if animal_id!=old_animal_id:recalculate_animal_exit_status(c,animal_id)
-                    return self.redirect('/finance','Finans kaydı güncellendi.')
+                    return self.redirect('/finance','Finans kaydı güncellendi.' + (' Bağlı yem stok hareketi de birlikte güncellendi.' if link else ''))
                 if path in ('/finance/delete','/finance-delete'):
                     record_id=int(f.get('id') or 0)
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
