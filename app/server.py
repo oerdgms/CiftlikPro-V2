@@ -2307,7 +2307,7 @@ DESKTOP_ERP_CSS = r'''
 :root{--erp-side:198px;--erp-top:34px;--erp-cmd:58px;--erp-tabs:36px;--erp-status:28px}
 html,body{height:100%}body{overflow-x:hidden;background:#f3f5f4}
 .top{height:var(--erp-top)!important;left:0!important;background:#fbfcfb!important;color:#16231b!important;border-bottom:1px solid #d9dfdb!important;padding:0 12px!important;box-shadow:none!important;z-index:60!important}
-.top .brand{color:#13271c!important;font-size:0!important}.top .brand:before{content:'▣';display:inline-grid;place-items:center;width:18px;height:18px;margin-right:7px;border-radius:4px;background:#087443;color:white;font-size:11px}.top .brand:after{content:'ÇiftlikPro Enterprise  |  v3.9.20';font-size:14px!important}
+.top .brand{display:none!important}
 .top-user{font-size:12px!important;color:#17251d!important}.top .ver{display:none!important}
 .erp-commandbar{position:fixed;left:var(--erp-side);right:0;top:var(--erp-top);height:var(--erp-cmd);z-index:55;background:#fff;border-bottom:1px solid #d9dfdb;display:flex;align-items:stretch;padding:0 14px}
 .erp-commandbar a{min-width:78px;padding:6px 13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid #e5e9e6;font-size:11px;font-weight:600;color:#17251d}.erp-commandbar a:hover{background:#f0f6f2}.erp-commandbar .ico{font-size:17px;line-height:18px}
@@ -2433,6 +2433,17 @@ body.erp-ration-reference .erp-secondary{margin-top:8px}.erp-ration-reference .e
 })();
 </script>
 """
+
+# FINAL5 UI polish
+FINAL5_UI_CSS = r"""
+.dashboard-tabs{display:none!important}
+.erp-side-brand{font-size:18px!important;padding:13px 12px!important;margin:0 0 12px!important;background:transparent!important;color:#fff!important;border-bottom:1px solid rgba(255,255,255,.14)!important;border-radius:0!important}
+.erp-side-brand:hover{background:rgba(255,255,255,.08)!important}
+.animal-tag-btn{border-radius:6px!important;background:#eef4ef!important;border:1px solid #cbdacf!important;padding:8px 12px!important;color:#126b3a!important;font-weight:800!important;box-shadow:none!important}
+.animal-tag-btn:hover{background:#e3eee6!important;border-color:#9ebda8!important;transform:none!important}
+.animal-tag-btn:before{display:none!important}.animal-tag-btn:after{content:'›'!important;margin-left:8px!important}
+.top-user a{color:inherit!important;text-decoration:none!important}.top-user a:hover{text-decoration:underline!important}
+"""
 def page(title,body,path='/',user='admin',flash=''):
     try:
         with db() as c:account=c.execute('select role,full_name from users where username=?',(user,)).fetchone()
@@ -2448,13 +2459,13 @@ def page(title,body,path='/',user='admin',flash=''):
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('📝 Sürüm Notları','/version-notes')]),
         ('⚙️ Yönetim',[('🔐 Şifremi Değiştir','/password-change')]+([('🏡 Çiftlik Profili','/farm-profile'),('🔐 Lisans Bilgileri','/license-info'),('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')] if role=='admin' else []))
     ]
-    nav=nav_link('🏠 Dashboard','/')
+    nav='<a class="erp-side-brand" href="/" title="Ana Sayfa">🌾 <b>ÇiftlikPro</b></a>'+nav_link('🏠 Dashboard','/')
     for label,items in groups:
         active=any(path==url or (url=='/performance' and path.startswith('/performance')) for _,url in items)
         children=''.join(nav_link(name,url) for name,url in items)
         nav+=f'<details class="nav-group {"open-group" if active else ""}" {"open" if active else ""}><summary>{label}</summary><div class="nav-children">{children}</div></details>'
     fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
-    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}{DESKTOP_ERP_CSS}{ERP_ALL_MODULES_FINAL_CSS}
+    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}{DESKTOP_ERP_CSS}{ERP_ALL_MODULES_FINAL_CSS}{FINAL5_UI_CSS}
 /* V3.7.8 Finance Drawer Hotfix */
 #financeDrawerBackdrop.finance-drawer-backdrop{{position:fixed!important;inset:0!important;z-index:2090!important;display:none!important;background:rgba(9,34,22,.42)!important;backdrop-filter:blur(2px)}}
 #financeDrawerBackdrop.finance-drawer-backdrop.open{{display:block!important}}
@@ -2823,7 +2834,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 .prep-report-table-wrap{{overflow:auto}}.prep-report-table{{width:100%;border-collapse:collapse}}.prep-report-table th,.prep-report-table td{{padding:8px 9px;border-bottom:1px solid #e1ebe4;text-align:left}}.prep-report-table th{{background:#eaf4ed;font-size:12px}}.prep-report-note{{margin-top:8px;font-size:11px}}
 @media(max-width:820px){{.prep-report-summary{{grid-template-columns:repeat(2,minmax(0,1fr))}}.prep-report-controls{{width:100%}}.prep-report-controls label{{flex:1}}.prep-report-controls input{{width:100%}}.prep-report-controls .btn{{flex:1}}}}
 @media(max-width:520px){{.prep-report-summary{{grid-template-columns:1fr}}.prep-report-table th:nth-child(4),.prep-report-table td:nth-child(4){{display:none}}}}
-</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user">🔔 Bildirimler &nbsp;&nbsp; ⚙ Ayarlar &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar"><a href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a href="/rations"><span class="ico">⚖</span>Rasyon</a><a href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a href="/finance"><span class="ico">₺</span>Finans</a><a href="/reports"><span class="ico">▥</span>Raporlar</a><a href="/data"><span class="ico">⇄</span>Veri</a></div><div class="erp-tabs"><div class="erp-tab">{h(title)}</div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">v3.9.20</span></div><script>
+</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar"><a href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a href="/rations"><span class="ico">⚖</span>Rasyon</a><a href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a href="/finance"><span class="ico">₺</span>Finans</a><a href="/reports"><span class="ico">▥</span>Raporlar</a><a href="/data"><span class="ico">⇄</span>Veri</a></div><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">v3.9.20</span></div><script>
 (function(){{
  const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
  if(btn&&side){{btn.addEventListener("click",function(){{side.classList.toggle("mobile-open");}});side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{side.classList.remove("mobile-open");}});}});}}
@@ -3516,7 +3527,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <label class="full">Notlar<textarea name="notes" rows="4">{h(p.get('notes'))}</textarea></label>
             <label class="full" style="display:flex;flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="remove_logo" value="1" style="width:auto"> Mevcut logoyu kaldır</label>
             <div class="full"><button class="btn">💾 Çiftlik Profilini Kaydet</button></div>
-            </form></div>'''
+            </form></div><div class="card" style="margin-top:14px"><h2>Dashboard Ayarları</h2><p class="mut">Ana ekranda görünen hızlı kartları düzenleyin.</p><a class="btn alt" href="/?edit=1">⚙️ Dashboard Kartlarını Düzenle</a></div>'''
             return self.send_html(page('Çiftlik Profili',body,'/farm-profile',u,msg))
         if path=='/smtp-settings':
             if not self.require_admin():return
@@ -3662,7 +3673,6 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             dashboard_picker_html=f'''<div class="dashboard-picker-backdrop" id="dashboardPicker" onclick="if(event.target===this)closeDashboardPicker()"><div class="dashboard-picker"><div class="dashboard-picker-head"><div><h2>Dashboard Kartı Seç</h2><p>Seçtiğiniz kart bu yuvaya anında yerleşir.</p></div><button type="button" class="dashboard-picker-close" onclick="closeDashboardPicker()">×</button></div><div class="dashboard-card-gallery">{gallery_choices}</div><div class="dashboard-picker-footer"><button type="button" class="btn red" onclick="chooseDashboardCard('')">Yuvayı Boşalt</button><span class="mut">Daha sonra tekrar ekleyebilirsiniz.</span></div><form id="dashboardPickerForm" method="post" action="/dashboard-layout"><input type="hidden" name="slot" id="dashboardPickerSlot"><input type="hidden" name="card_key" id="dashboardPickerKey"></form></div></div><script>function openDashboardPicker(slot,current){{document.getElementById('dashboardPickerSlot').value=slot;document.getElementById('dashboardPicker').classList.add('open');document.querySelectorAll('.dashboard-card-choice').forEach(function(b){{b.classList.toggle('active',b.dataset.key===current);}});}}function closeDashboardPicker(){{document.getElementById('dashboardPicker').classList.remove('open');}}function chooseDashboardCard(key){{document.getElementById('dashboardPickerKey').value=key;document.getElementById('dashboardPickerForm').submit();}}document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeDashboardPicker();}});</script>'''
             dashboard_logo=(f'<img class="farm-hero-logo" src="{h(profile.get("farm_logo"))}" alt="Çiftlik logosu">' if profile.get('farm_logo') else '')
             body=f'''<div class="hero"><div class="farm-hero">{dashboard_logo}<div><h1>{h(farm_name)}</h1><div>ÇiftlikPro · Bugünün sürü, sağlık ve finans görünümü</div></div></div><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div>
-            <div class="dashboard-editbar"><a class="btn alt" href="/{'?' if edit_dashboard else '?edit=1'}">{'✅ Düzenlemeyi Bitir' if edit_dashboard else '⚙️ Dashboard’u Düzenle'}</a></div>
             <div class="dashboard-section-title"><h2>Dashboard Kartlarım</h2><span>{'Kartın üzerindeki + işaretine dokunarak değiştirebilirsiniz' if edit_dashboard else 'Size özel hızlı görünüm'}</span></div>
             <div class="grid summary-grid">{dashboard_summary_html}</div>{dashboard_picker_html if edit_dashboard else ''}
             <div class="dashboard-section-title" id="approaching-estrus"><h2>🌸 Yaklaşan Kızgınlıklar</h2><span>Son kızgınlık kaydına göre 18–24 günlük takip penceresi</span></div><div class="card"><div class="alertlist">{estrus_dashboard_html}</div></div>
@@ -5942,3 +5952,4 @@ def local_ip():
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');ThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
+
