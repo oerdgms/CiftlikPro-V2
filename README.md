@@ -1,16 +1,28 @@
-# ÇiftlikPro Enterprise v3.9.20 — 6.19
+# ÇiftlikPro Enterprise v3.9.20 — GitHub Source
 
-GitHub/kurulum için temiz kaynak. 6.19 Desktop ERP UX sürümüdür.
+Temiz kaynak tabanı. Kullanıcı arayüzünde HOTFIX, DEV veya port bilgisi gösterilmez.
 
-## Çalıştırma
-- Masaüstü: `python app/desktop_launcher.py`
-- Kaynaktan test: `KAYNAKTAN_CALISTIR.bat`
+## Rasyon motoru
 
-Kurulum paketinde `desktop_launcher.py` giriş noktası önerilir; böylece tarayıcı adres çubuğu yerine uygulama penceresi kullanılır.
+Besi solverı, kullanıcının seçtiği yemlerin **kg/baş/gün miktarlarını karar değişkeni** olarak ele alır. `Besi_V5.02.xlsm` içindeki Solver davranışı incelenerek kısıt-öncelikli bir optimizasyon sırası uygulanmıştır:
 
-## Güvence
-6.19 değişiklikleri kullanıcı arayüzü/kabuk katmanındadır. 6.17/6.18 rasyon solver hesap mantığı korunmuştur.
+1. Rumen ve besleme güvenliği: NDF/eNDF, nişasta, pH ve mineral sınırları.
+2. Dört saha kartı birlikte: Kuru Madde, Ham Protein, Metabolik Enerji ve Kaba/Kesif oranı.
+3. Dört kart için yaklaşık ±%3,5 tolerans hedeflenir; tek kartı kusursuzlaştırıp diğerlerini bozmak avantaj sağlamaz.
+4. Seçilen normal yemler korunur; miktarları yemlerin günlük kullanım sınırları içinde otomatik değiştirilir.
+5. Maliyet yalnız besleme hedeflerinden sonra son seçim kriteridir.
 
+Akıllı Süt Rasyonu aynı `feed_catalog` verisini kullanır ve canlı ağırlık + hedef süt üzerinden ayrı süt ihtiyaç motoruyla çözülür.
 
-## 6.19.1 Ağ erişimi
-Masaüstü WebView yerel olarak `127.0.0.1` adresini kullanır; HTTP sunucusu ise `0.0.0.0` üzerinde dinler. Böylece aynı kurulum LAN IP ve Tailscale/VPN IP üzerinden de erişilebilir. Windows Güvenlik Duvarı ilk çalıştırmada Python/ÇiftlikPro için özel ağ erişimi sorarsa izin verilmelidir.
+## Kaynaklar
+
+- `app/server.py`
+- `app/feed_catalog.json`
+- `app/desktop_launcher.py`
+- `docs/BESI_SOLVER_REFERANS.md`
+- `docs/SUT_SOLVER_REFERANS.md`
+- `CHANGELOG.md`
+
+`KAYNAKTAN_CALISTIR.bat` kaynak koddan yerel çalıştırma içindir; kullanıcı arayüzünde port veya geliştirme etiketi gösterilmez.
+
+> Rasyon sonuçları karar-destek amaçlıdır. Gerçek yem laboratuvar analizleri katalog referanslarından önceliklidir.
