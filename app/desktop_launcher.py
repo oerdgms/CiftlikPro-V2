@@ -20,7 +20,7 @@ def start_server() -> None:
     server.init_db()
     server.ensure_archive_schema()
     server.promote_mature_calves()
-    httpd = ThreadingHTTPServer(("127.0.0.1", server.PORT), server.App)
+    httpd = ThreadingHTTPServer(("0.0.0.0", server.PORT), server.App)
     def background_backup() -> None:
         try: server.daily_backup()
         except Exception: pass

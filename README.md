@@ -1,17 +1,16 @@
-# ÇiftlikPro Enterprise v3.9.20 — Desktop UX Source
+# ÇiftlikPro Enterprise v3.9.20 — 6.19
 
-Bu kaynak, 6.17 rasyon motorunu **değiştirmeden** ÇiftlikPro'yu klasik web dashboard görünümünden modern masaüstü ERP / rasyon formülasyon yazılımı görünümüne taşır.
-
-## 6.18 Desktop UX
-- `pywebview` tabanlı gerçek uygulama penceresi; normal kurulumda tarayıcı adres çubuğu görünmez.
-- İnce uygulama başlık çubuğu ve kompakt komut araç çubuğu.
-- Sabit/kompakt sol navigasyon ve çalışma sekmesi görünümü.
-- Daha sıkı ERP tabloları, küçük köşe yarıçapları ve gölgesiz kartlar.
-- Alt durum çubuğu: sistem, veritabanı ve sürüm durumu.
-- Mobil görünüm mevcut responsive yapıya geri düşer.
-
-## Rasyon motoru
-6.17 besi ve süt solver matematiği değiştirilmeden korunmuştur. Bu sürüm görsel/masaüstü kabuk odaklıdır.
+GitHub/kurulum için temiz kaynak. 6.19 Desktop ERP UX sürümüdür.
 
 ## Çalıştırma
-`KAYNAKTAN_CALISTIR.bat` `.venv` oluşturur ve `requirements.txt` bağımlılıklarını kurar. Kurulum paketinde giriş noktası `app/desktop_launcher.py` olmalıdır.
+- Masaüstü: `python app/desktop_launcher.py`
+- Kaynaktan test: `KAYNAKTAN_CALISTIR.bat`
+
+Kurulum paketinde `desktop_launcher.py` giriş noktası önerilir; böylece tarayıcı adres çubuğu yerine uygulama penceresi kullanılır.
+
+## Güvence
+6.19 değişiklikleri kullanıcı arayüzü/kabuk katmanındadır. 6.17/6.18 rasyon solver hesap mantığı korunmuştur.
+
+
+## 6.19.1 Ağ erişimi
+Masaüstü WebView yerel olarak `127.0.0.1` adresini kullanır; HTTP sunucusu ise `0.0.0.0` üzerinde dinler. Böylece aynı kurulum LAN IP ve Tailscale/VPN IP üzerinden de erişilebilir. Windows Güvenlik Duvarı ilk çalıştırmada Python/ÇiftlikPro için özel ağ erişimi sorarsa izin verilmelidir.
