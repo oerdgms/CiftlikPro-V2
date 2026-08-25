@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "CIFTLIKPRO_PORT=8964"
+set "CIFTLIKPRO_PORT=8965"
 set "CIFTLIKPRO_DATA_DIR=%LOCALAPPDATA%\CiftlikPro_DEV"
 echo CiftlikPro DEV baslatiliyor...
 echo Veri: %CIFTLIKPRO_DATA_DIR%
