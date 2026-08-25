@@ -22,8 +22,8 @@ SESSIONS={}
 
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
-APP_CHANNEL='DEV'
-APP_LABEL='ENTERPRISE V3.9.20 HOTFIX 6.16 DEV · BESİ + SÜT AKILLI RASYON · UX DÜZELTMELERİ · PORT 8965'
+APP_CHANNEL='RELEASE'
+APP_LABEL='v3.9.20'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1121,7 +1121,7 @@ def feed_group(feed):
     """
     name=str(feed['name'] or '').upper()
     ndf=float(feed['ndf_pct'] or 0)
-    additive_words=('TUZ','FOSFAT','KİREÇ','KIREC','MERMER','KALSİYUM','KALSIYUM','PREMİKS','PREMIKS','MİNERAL','MINERAL','VİTAMİN','VITAMIN','VİTAMİN PREMİKS','VITAMIN PREMIX','SODYUM BİKARBONAT','SODYUM BIKARBONAT','AMONYUM','ÜRE','URE')
+    additive_words=('TUZ','FOSFAT','KİREÇ','KIREC','MERMER','KALSİYUM','KALSIYUM','PREMİKS','PREMIKS','MİNERAL','MINERAL','VİTAMİN','VITAMIN','VİTAMİN PREMİKS','VITAMIN PREMIX','VİT.','VIT.','VİT.-MİN','VIT.-MIN','KAVIMIX','SODYUM BİKARBONAT','SODYUM BIKARBONAT','AMONYUM','ÜRE','URE')
     if any(w in name for w in additive_words): return 'Katkı'
     # HOTFIX 6.12: pamuk tohumu / pamuk küspesi yüksek NDF içerdiği için eski
     # NDF>=35 geri dönüşü bunları yanlışlıkla kaba yem sayıyordu. Bunlar rasyonda
@@ -1276,7 +1276,7 @@ def ration_requirement_targets(weight_kg=450.0, target_adg=1.3, animal_type='Bes
     dmi_kg=nasem_dynamic_dmi(sbw,reference_nem,age,w)
     dmi_kg=max(w*.018,min(w*.035,dmi_kg))
     dmi_pct=dmi_kg/w*100.0
-    cp_pct=max(8.0,min(16.0,_interp(eval_sbw,sbw_grid,[_interp(adg,eval_adg[x],eval_cp[x]) for x in sbw_grid])))
+    cp_pct=max(8.0,min(16.0,_interp(eval_sbw,sbw_grid,[_interp(max(min(adg,max(eval_adg[x])),min(eval_adg[x])),eval_adg[x],eval_cp[x]) for x in sbw_grid])))
     phase,age_note=_beef_phase_from_weight_age(w,age)
     if w<300: ndf_min,ndf_max=28.0,42.0
     elif w<500: ndf_min,ndf_max=25.0,40.0
@@ -1284,8 +1284,15 @@ def ration_requirement_targets(weight_kg=450.0, target_adg=1.3, animal_type='Bes
     rough_target={'Başlangıç / Büyütme':50.0,'Gelişim':42.0,'İleri Besi':34.0,'Bitiriş':27.0}[phase]
     rough_min=max(18.0,rough_target-10.0); rough_max=min(65.0,rough_target+12.0)
 
-    # UI geriye uyumluluğu için ME ekran hedefi korunur; solver enerji kararını NEm/NEg ile verir.
-    me_mcal_day=(nem_req+neg_req)/0.65
+    # HOTFIX 6.17: Besi_V5.02 Excel'deki enerji dönüşüm mantığı.
+    # Eski tek katsayı ((NEm+NEg)/0.65) özellikle genç besi hayvanlarında ME hedefini
+    # yapay olarak düşük gösteriyor, solver da KM/HP'yi tuttururken ME kartını sürekli
+    # +%20-30 fazla gösteriyordu. Excel modelinde bakım ve büyüme için ayrı ME kullanım
+    # etkinlikleri, hedef ADG'ye bağlı referans ME yoğunluğundan türetiliyor.
+    me_conc_ref=(0.0857*adg**2 + 0.5357*adg + 1.6021) + (0 if w<=400 else (0.0000035*w**2 - 0.0016*w + 0.0539))
+    k_m=0.35*((me_conc_ref*4.184)/18.4)+0.503
+    k_g=0.78*((me_conc_ref*4.184)/18.4)+0.006
+    me_mcal_day=(nem_req/max(k_m,.01))+(neg_req/max(k_g,.01))
     return {'mode':'Besi','engine':'NASEM 2016 enerji + Chapter 20 referansları','weight_kg':w,'age_months':age,'adg':adg,
             'sbw_kg':sbw,'ebw_kg':ebw,'ebg_kg':ebg,'phase':phase,'age_note':age_note,
             'dmi_pct_bw':dmi_pct,'dmi_kg':dmi_kg,'dmi_reference_nem':reference_nem,'cp_pct':cp_pct,'mp_req_g':mp_req,'mp_maint_g':mp_maint,'mp_gain_g':mp_gain,
@@ -1544,291 +1551,237 @@ def smart_ration_score(m,t,lim):
     return score+0.002*m['cost']
 
 def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0):
-    """HOTFIX 6.14 - Hedef performans odakli otomatik rasyon optimizasyonu.
+    """HOTFIX 6.17 - Besi_V5.02 Excel Solver mantigindan turetilen kisit-oncelikli optimizer.
 
-    Temel ilke Besi_V5.02 / INRAtion calisma mantigindan alinir:
-      1) Kullanici hayvani ve elindeki yemleri tanimlar.
-      2) Yem miktarlari solver tarafindan otomatik degistirilir.
-      3) Her aday rasyonun izin verdigi GCAA yeniden hesaplanir.
-      4) Guvenlik raylari icinde hedef GCAA'ya en yakin rasyon aranir.
+    Excel dosyasindaki gercek Solver modeli incelendi: yem miktarlari karar degiskenidir,
+    hedef kartlari *ceza puani* degil toleransli kisitlardir ve uygun cozumler arasinda
+    maliyet dusurulur. CiftlikPro'da kullanicinin sectigi normal yemler korunur.
 
-    Bu surumde DMI'yi tam tutturmak basari kriteri degildir. Birincil optimizasyon
-    hedefi hedef GCAA'dir; DMI, HP ve rumen/mineral sinirlari bunun etrafindaki
-    biyolojik/pratik kisitlardir. Boylece hedef dusurulunce solverin kendisinin de
-    enerjiyi geri cekmesi ve surekli hedefin altinda kalmasi engellenir.
+    Ana saha kisitlari (varsayilan +/- %3.5):
+      - Kuru madde (kg/gun)
+      - Ham protein (% KM)
+      - Metabolik enerji (Mcal/gun)
+      - Kaba yem KM orani (hedefin +/- 3.5 yuzde puani)
+
+    NDF/eNDF, nisasta, rumen pH ve mineral pencereleri guvenlik raylaridir. Hicbir aday
+    dort hedefi tam kapatamasa bile en az ihlal eden rasyon geri dondurulur.
     """
-    import time as _time
+    import random as _random, time as _time
     t=ration_requirement_targets(weight_kg,target_adg,animal_type,age_months)
     lim=beef_phase_limits(t['weight_kg'],target_adg,t['dmi_kg'],age_months)
-    n=len(feeds)
     t['roughage_min'],t['roughage_max']=lim['roughage_min'],lim['roughage_max']
     t['endf_min']=lim['endf_min']; t['starch_max']=lim['starch_max']; t['phase']=lim['phase']
+    n=len(feeds)
     if n<2:return None,t,'En az 2 yem seçin.'
+
     bounds=[smart_feed_bounds(f,t['weight_kg'],t['dmi_kg'],target_adg,age_months) for f in feeds]
-    # HOTFIX 6.14.1: Kullanıcı tarafından seçilen normal yemler rasyondan sessizce çıkarılamaz.
-    # Kaba ve kesif yemler, biyolojik üst sınırları izin verdiği sürece sahada anlamlı
-    # asgari miktarla rasyonda tutulur. Katkı/mineral kaynakları ise gereksizse 0 olabilir;
-    # BT-SACC/tuz gibi özel dozlar smart_feed_bounds içinde ayrıca yönetilir.
-    _kept=[]
+    # Kullanici tarafindan secilen normal yemler rasyonda kalir. Excel'de min miktar E sutununda
+    # kullaniciya birakilir; CiftlikPro'da saha uygulanabilirligi icin pratik min otomatik atanir.
     for i,f in enumerate(feeds):
-        grp=feed_group(f); lo,hi=bounds[i]
-        if grp in ('Kaba','Kesif'):
-            pm=practical_feed_min(f,t['weight_kg'],t['dmi_kg'])
-            if hi >= pm:
-                lo=max(lo,pm)
-                bounds[i]=(lo,hi)
-                _kept.append(i)
+        if feed_group(f) in ('Kaba','Kesif'):
+            lo,hi=bounds[i]; pm=practical_feed_min(f,t['weight_kg'],t['dmi_kg'])
+            if hi>=pm: bounds[i]=(max(lo,pm),hi)
+
     rough=[i for i,f in enumerate(feeds) if feed_group(f)=='Kaba']
     conc=[i for i,f in enumerate(feeds) if feed_group(f)=='Kesif']
-    if not rough or not conc:return None,t,'Güvenli çözüm için en az bir kaba ve bir kesif yem seçin.'
+    if not rough or not conc:return None,t,'En az bir kaba ve bir kesif yem seçin.'
 
-    dmfrac=[max(float(_rowval(f,'dm_pct',0))/100.0,.05) for f in feeds]
-    fixed=[abs(hi-lo)<1e-9 for lo,hi in bounds]
+    dmfrac=[max(float(_rowval(f,'dm_pct',0))/100.0,.01) for f in feeds]
+    fixed=[abs(hi-lo)<1e-10 for lo,hi in bounds]
     movable=[i for i in range(n) if not fixed[i]]
+    rng=_random.Random(6172026)
+    tol=.035
+    rough_tol_pp=3.5
+    target_dm=float(t['dmi_kg'])
+    target_cp=float(t['cp_pct'])
+    target_me=float(t['me_mcal_day'])
+    target_rough=float(t.get('roughage_target') or 50.0)
 
     def clip(q):
         return [max(bounds[i][0],min(bounds[i][1],float(q[i] or 0))) for i in range(n)]
 
-    def dyn_dmi(m):
-        d=nasem_dynamic_dmi(t['sbw_kg'],m.get('nem_density') or t.get('dmi_reference_nem',1.6),t.get('age_months',0),t['weight_kg'])
-        return max(t['weight_kg']*.018,min(t['weight_kg']*.035,d))
-
     def achieved_adg(m):
         gain,reqdm,maint=_energy_balance(m,t)
-        if gain<=0:return 0.0,gain,reqdm,maint
+        if gain<=0:return 0.0
         ebg=(gain/max(0.0635*(t['ebw_kg']**0.75),1e-9))**(1/1.097)
         adg=max(0.0,ebg/0.956)
-        # Katalogda RDP/RUP olmadigindan MP'yi dogrudan hesaplayamiyoruz. HP hedefinin
-        # cok altina inen adaylarin teorik enerji GCAA'sini iyimser gostermemek icin
-        # yalniz eksiklik tarafinda yumusak bir protein kapasite katsayisi uygula.
-        cp_floor=max(9.0,t['cp_pct']*.95)
-        if m['cp_pct_dm']<cp_floor:
-            ratio=max(.70,m['cp_pct_dm']/max(cp_floor,.1))
-            adg*=ratio
-        return adg,gain,reqdm,maint
+        if m['cp_pct_dm']<target_cp*.95:
+            adg*=max(.70,m['cp_pct_dm']/max(target_cp*.95,.1))
+        return adg
 
-    def safety(m,dmi):
-        mw=_mineral_windows(t,dmi)
+    def safety_vector(m):
+        # Sert guvenlik ihlalleri. Pozitif deger ihlal miktaridir; 0 = uygun.
+        vals=[]
+        vals.append(max(0.0,(t['ndf_min']-m['ndf_pct_dm'])/max(t['ndf_min'],1)))
+        vals.append(max(0.0,(m['ndf_pct_dm']-t['ndf_max'])/max(t['ndf_max'],1)))
+        vals.append(max(0.0,(lim['endf_min']*.90-m['endf_pct_dm'])/max(lim['endf_min'],1)))
+        vals.append(max(0.0,(m['starch_pct_dm']-(lim['starch_max']+4.0))/max(lim['starch_max'],1)))
+        vals.append(max(0.0,(5.85-(m['rumen_ph'] or 0))/0.30) if m['rumen_ph'] else 1.0)
         cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99.0
-        # Sert raylar: saha toleransi var ama rumen/mineral guvenligi bozulamaz.
-        hard=0.0; reasons=[]
-        def add(cond,amount,label):
-            nonlocal hard
-            if cond:
-                hard+=amount; reasons.append(label)
-        add(m['dm_kg']<dmi*.86, ((dmi*.86-m['dm_kg'])/max(dmi,.1))**2*9000, 'KM düşük')
-        add(m['dm_kg']>dmi*1.14, ((m['dm_kg']-dmi*1.14)/max(dmi,.1))**2*9000, 'KM yüksek')
-        add(m['endf_pct_dm']<lim['endf_min']*.90, ((lim['endf_min']*.90-m['endf_pct_dm'])/max(lim['endf_min'],1))**2*15000, 'eNDF')
-        add(m['roughage_pct_dm']<lim['roughage_min']-5.0, ((lim['roughage_min']-5.0-m['roughage_pct_dm'])/max(lim['roughage_min'],1))**2*13000, 'kaba yem düşük')
-        add(m['roughage_pct_dm']>lim['roughage_max']+8.0, ((m['roughage_pct_dm']-lim['roughage_max']-8.0)/max(lim['roughage_max'],1))**2*5000, 'kaba yem yüksek')
-        add(m['starch_pct_dm']>lim['starch_max']+6.0, ((m['starch_pct_dm']-lim['starch_max']-6.0)/max(lim['starch_max'],1))**2*16000, 'nişasta')
-        add(bool(m['rumen_ph']) and m['rumen_ph']<5.78, ((5.78-m['rumen_ph'])/.2)**2*18000, 'rumen pH')
-        add(cap<1.10, ((1.10-cap)/1.10)**2*10000, 'Ca:P düşük')
-        add(cap>3.70, ((cap-3.70)/3.70)**2*9000, 'Ca:P yüksek')
-        add(m['ca_g']>mw['ca_hard']*1.10, ((m['ca_g']-mw['ca_hard']*1.10)/max(mw['ca_hard'],1))**2*8000, 'Ca yüksek')
-        add(m['p_g']>mw['p_hard']*1.10, ((m['p_g']-mw['p_hard']*1.10)/max(mw['p_hard'],1))**2*8000, 'P yüksek')
-        return hard,reasons,mw,cap
+        vals.append(max(0.0,(1.10-cap)/1.10)); vals.append(max(0.0,(cap-3.70)/3.70))
+        mw=_mineral_windows(t,target_dm)
+        vals.append(max(0.0,(m['ca_g']-mw['ca_hard'])/max(mw['ca_hard'],1)))
+        vals.append(max(0.0,(m['p_g']-mw['p_hard'])/max(mw['p_hard'],1)))
+        return vals
 
-    def evaluation(q):
-        q=clip(q); m=smart_ration_metrics(feeds,q); dmi=dyn_dmi(m)
-        adg,gain,reqdm,maint=achieved_adg(m)
-        hard,reasons,mw,cap=safety(m,dmi)
+    def target_devs(m):
+        dm=abs(m['dm_kg']-target_dm)/max(target_dm,.01)
+        cp=abs(m['cp_pct_dm']-target_cp)/max(target_cp,.01)
+        me=abs(m['me_mcal']-target_me)/max(target_me,.01)
+        rough=abs(m['roughage_pct_dm']-target_rough)  # yuzde puani
+        return dm,cp,me,rough
 
-        # HOTFIX 6.15 - Dört ana saha hedefi birlikte optimize edilir.
-        # Bir kartı kusursuz yapıp diğerlerini bozmak artık avantaj sağlamaz.
-        # ±%3.5 bandında ceza yoktur; bandın dışındaki sapma karesel büyür.
-        tol=.035
-        def band_dev(value,target):
-            target=max(abs(float(target)),.01)
-            r=abs(float(value)-float(target))/target
-            return max(0.0,r-tol),r
+    def rank(q):
+        q=clip(q); m=smart_ration_metrics(feeds,q)
+        dm,cp,me,rough=target_devs(m)
+        outs=[max(0.0,dm-tol)/tol,
+              max(0.0,cp-tol)/tol,
+              max(0.0,me-tol)/tol,
+              max(0.0,rough-rough_tol_pp)/rough_tol_pp]
+        sv=safety_vector(m)
+        safety_count=sum(v>1e-10 for v in sv)
+        target_count=sum(v>1e-10 for v in outs)
+        # Lexicographic mantik: Excel Solver gibi once fizibilite. Bir karti mukemmel yapip
+        # digerini bozmak, max ihlal nedeniyle asla avantaj saglamaz. Maliyet en son gelir.
+        key=(safety_count,
+             round(max(sv) if sv else 0.0,10),
+             target_count,
+             round(max(outs),10),
+             round(sum(v*v for v in outs),10),
+             round(dm+cp+me+rough/100.0,10),
+             round(_practical_qty_penalty(feeds,q,t['weight_kg'],target_dm),8),
+             round(m['cost'],6))
+        return key,m
 
-        dm_out,dm_raw=band_dev(m['dm_kg'],dmi)
-        cp_out,cp_raw=band_dev(m['cp_pct_dm'],t['cp_pct'])
-        me_out,me_raw=band_dev(m['me_mcal'],t['me_mcal_day'])
-        rough_target=float(t.get('roughage_target') or ((lim['roughage_min']+lim['roughage_max'])/2))
-        rough_out,rough_raw=band_dev(m['roughage_pct_dm'],rough_target)
+    def allocate_group(q, inds, dm_need, weights):
+        remaining=max(0.0,dm_need)
+        active=list(inds)
+        # alt sinirlardaki KM zaten q icinde; burada ilave KM dagitilir.
+        for _ in range(12):
+            if remaining<=1e-8 or not active:break
+            sw=sum(max(weights.get(i,1.0),1e-6) for i in active) or 1.0
+            used=0.0; nxt=[]
+            for i in active:
+                want=remaining*max(weights.get(i,1.0),1e-6)/sw
+                cap=max(0.0,(bounds[i][1]-q[i])*dmfrac[i])
+                take=min(want,cap)
+                if take>0:q[i]+=take/dmfrac[i]; used+=take
+                if cap-take>1e-7:nxt.append(i)
+            if used<=1e-10:break
+            remaining-=used; active=nxt
+        return remaining
 
-        # Dört hedef eşit önemdedir. En kötü kart ayrıca cezalandırılır; böylece
-        # örneğin KM tam iken ME +%30 veya HP -%10 olan çözümler seçilemez.
-        four=(dm_out*dm_out + cp_out*cp_out + me_out*me_out + rough_out*rough_out)
-        worst=max(dm_out,cp_out,me_out,rough_out)
-        balance=24000*four + 18000*worst*worst
-
-        # Hedef GCAA önemli fakat dört kartı ezemez; dengeli rasyon içindeki performans hedefidir.
-        target=float(target_adg)
-        adg_out=max(0.0,abs(adg-target)/max(target,.1)-.04)
-        perf=7000*adg_out*adg_out
-
-        # Güvenli bölgede NDF/eNDF/nişasta/pH ikincil kalite kontrolüdür.
-        quality=0.0
-        if m['ndf_pct_dm']<t['ndf_min']: quality+=1800*((t['ndf_min']-m['ndf_pct_dm'])/max(t['ndf_min'],1))**2
-        if m['ndf_pct_dm']>t['ndf_max']: quality+=900*((m['ndf_pct_dm']-t['ndf_max'])/max(t['ndf_max'],1))**2
-        if m['starch_pct_dm']>lim['starch_max']: quality+=1200*((m['starch_pct_dm']-lim['starch_max'])/max(lim['starch_max'],1))**2
-        if m['rumen_ph'] and m['rumen_ph']<5.9: quality+=2500*((5.9-m['rumen_ph'])/.25)**2
-
-        # Mineral fazlalığı ana dört kartı bozmadan azaltılsın; eksiklik daha ağırdır.
-        if m['ca_g']<t['ca_g']*.90: quality+=1200*((t['ca_g']*.90-m['ca_g'])/max(t['ca_g'],1))**2
-        elif m['ca_g']>t['ca_g']*1.35: quality+=500*((m['ca_g']-t['ca_g']*1.35)/max(t['ca_g'],1))**2
-        if m['p_g']<t['p_g']*.90: quality+=1200*((t['p_g']*.90-m['p_g'])/max(t['p_g'],1))**2
-        elif m['p_g']>t['p_g']*1.35: quality+=500*((m['p_g']-t['p_g']*1.35)/max(t['p_g'],1))**2
-
-        practical=_practical_qty_penalty(feeds,q,t['weight_kg'],dmi)
-        score=hard+balance+perf+quality+practical+0.0005*m['cost']
-        m['four_target_max_deviation_pct']=100*max(dm_raw,cp_raw,me_raw,rough_raw)
-        m['roughage_target_pct']=rough_target
-        return score,m,dmi,adg,gain,reqdm,maint,reasons
-
-    def scale_dm(q,target=None):
-        q=clip(q)
-        for _ in range(3):
-            m=smart_ration_metrics(feeds,q); wanted=float(target or dyn_dmi(m) or t['dmi_kg'])
-            fixed_dm=sum(q[i]*dmfrac[i] for i in range(n) if fixed[i])
-            move_dm=sum(q[i]*dmfrac[i] for i in movable)
-            if move_dm<=1e-9:break
-            fac=max(.75,min(1.25,(wanted-fixed_dm)/move_dm))
-            old=q[:]
-            for i in movable:q[i]=max(bounds[i][0],min(bounds[i][1],q[i]*fac))
-            if max(abs(a-b) for a,b in zip(old,q))<1e-8:break
+    def make_seed(rough_share, mode='balanced'):
+        q=[lo for lo,hi in bounds]
+        base_dm=sum(q[i]*dmfrac[i] for i in range(n))
+        need=max(0.0,target_dm-base_dm)
+        rcbase=sum(q[i]*dmfrac[i] for i in rough+conc)
+        roughbase=sum(q[i]*dmfrac[i] for i in rough)
+        target_rough_dm=max(0.0,target_dm*rough_share)
+        rneed=max(0.0,target_rough_dm-roughbase)
+        cneed=max(0.0,need-rneed)
+        # Feed weights: Excel'in min-maliyet mantigina ek olarak dengeli baslangiclar.
+        rw={}; cw={}
+        for i in rough:
+            f=feeds[i]; me=max(.05,_solver_nutrient(f,'me_mcal_kg')); cp=max(.1,_solver_nutrient(f,'cp_pct'))
+            endf=max(.1,_solver_nutrient(f,'ndf_pct')*_solver_nutrient(f,'effective_ndf_pct')/100.0)
+            price=max(.01,float(_rowval(f,'price',0) or .01))
+            if mode=='energy': val=me+.02*cp+.005*endf
+            elif mode=='cost': val=1.0/price
+            else: val=.55*me+.015*cp+.008*endf
+            rw[i]=max(.01,val)*(0.65+rng.random()*.70)
+        for i in conc:
+            f=feeds[i]; me=max(.05,_solver_nutrient(f,'me_mcal_kg')); cp=max(.1,_solver_nutrient(f,'cp_pct'))
+            starch=_solver_starch_pct(f); price=max(.01,float(_rowval(f,'price',0) or .01))
+            if mode=='protein': val=.10*cp+.35*me
+            elif mode=='cost': val=1.0/price
+            else: val=.65*me+.035*cp-.004*starch
+            cw[i]=max(.01,val)*(0.65+rng.random()*.70)
+        allocate_group(q,rough,rneed,rw)
+        allocate_group(q,conc,cneed,cw)
+        # kalan KM herhangi bir gruptaki kapasiteye dagitilir
+        cur=sum(q[i]*dmfrac[i] for i in range(n)); rem=max(0.0,target_dm-cur)
+        if rem>1e-8:
+            allw={**rw,**cw}; allocate_group(q,rough+conc,rem,allw)
         return clip(q)
 
-    def seed(rough_share,performance=False):
-        q=[lo for lo,hi in bounds]
-        target=max(t['dmi_kg'],t['weight_kg']*.020)
-        fixed_dm=sum(q[i]*dmfrac[i] for i in range(n)); avail=max(.2,target-fixed_dm)
-        for inds,share in ((rough,rough_share),(conc,1-rough_share)):
-            if not inds:continue
-            vals=[]
-            for i in inds:
-                f=feeds[i]; ne=max(.02,float(_rowval(f,'neg_mcal_kg',0) or 0)); cp=max(.01,float(_rowval(f,'cp_pct',0) or 0)/100)
-                endf=max(.01,float(_rowval(f,'ndf_pct',0) or 0)/100*float(_rowval(f,'effective_ndf_pct',0) or 0)/100)
-                starch=_solver_starch_pct(f)/100
-                if i in rough:
-                    # performans baslangicinda kaba yemler arasinda NEg'yi biraz daha agirlikla.
-                    val=(.55*endf+.45*ne) if performance else (.80*endf+.20*ne)
-                else:
-                    # enerji + protein yogun konsantreleri odullendir; nişasta yalniz risk sinirina yaklastikca onemli.
-                    val=(1.25*ne+.75*cp-.10*starch) if performance else (.80*ne+.70*cp-.08*starch)
-                vals.append(max(.01,val))
-            sv=sum(vals) or 1.0
-            for i,val in zip(inds,vals):
-                kg=avail*share*(val/sv)/dmfrac[i]
-                q[i]=max(bounds[i][0],min(bounds[i][1],kg))
-        return scale_dm(q)
-
-    rmin=max(.18,(lim['roughage_min']-4)/100.0); rmax=min(.68,(lim['roughage_max']+4)/100.0)
+    # Geniş, deterministik coklu baslangic. Hedef kaba oraninin cevresinde ve faz raylari icinde.
     shares=[]
-    for sh in (rmin, rmin+.04, rmin+.08, (rmin+rmax)/2, min(rmax,rmin+.16), rmax):
-        sh=max(rmin,min(rmax,sh))
-        if all(abs(sh-x)>.004 for x in shares):shares.append(sh)
-    pool=[]
+    for pp in (-10,-7,-4,-2,0,2,4,7,10):
+        sh=max(lim['roughage_min'],min(lim['roughage_max'],target_rough+pp))/100.0
+        if all(abs(sh-x)>.005 for x in shares): shares.append(sh)
+    seeds=[]
     for sh in shares:
-        pool.append(seed(sh,True)); pool.append(seed(sh,False))
-    pool.sort(key=lambda q:evaluation(q)[0])
-    starts=pool[:6]
+        for mode in ('balanced','energy','protein','cost'):
+            for _ in range(2):seeds.append(make_seed(sh,mode))
+
+    # Rastgele fizibilite taramasi: karar degiskenleri yem miktarlaridir; DMI ve kaba hedefi
+    # etrafinda farkli dagilimlar olusturulur. Sabit RNG nedeniyle sonuc tekrarlanabilirdir.
+    for _ in range(450):
+        sh=max(lim['roughage_min'],min(lim['roughage_max'],target_rough+rng.uniform(-12,12)))/100.0
+        seeds.append(make_seed(sh,rng.choice(('balanced','energy','protein','cost'))))
+
+    scored=[]
+    for q in seeds:
+        k,m=rank(q); scored.append((k,q))
+    scored.sort(key=lambda x:x[0])
+    starts=[q for k,q in scored[:18]]
 
     def local_opt(q,deadline):
-        q=scale_dm(q); score=evaluation(q)[0]
-        # Toplam KM'yi koruyan yemler-arasi DM transferi, INRAtion/Excel'deki yem ikamesi
-        # mantigina en yakin pratik aramadir. Her adimda GCAA hedefi yeniden hesaplanir.
-        for dmstep in (.60,.40,.25,.15,.09,.05,.03,.015):
-            rounds=0
-            while rounds<10 and _time.perf_counter()<deadline:
-                rounds+=1; bestq=q; bests=score
-                # Pairwise transfer: bir yem artarken digeri ayni KM kadar azalir.
-                for i in movable:
-                    for j in movable:
+        q=clip(q); k,_=rank(q)
+        # Excel Solver'in karar degiskeni mantigina yakin: iki yem arasinda ayni KM'yi takas et,
+        # sonra tek yem koordinatinda toplam KM'yi ince ayarla. Buyuk adimdan kucuge iner.
+        for dmstep in (.80,.55,.35,.22,.14,.09,.055,.035,.020,.010):
+            improved=True; rounds=0
+            while improved and rounds<8 and _time.perf_counter()<deadline:
+                improved=False; rounds+=1; bestq=q; bestk=k
+                # once tum pairwise KM takaslari
+                order=list(movable); rng.shuffle(order)
+                for i in order:
+                    for j in order:
                         if i==j:continue
                         cand=q[:]; cand[i]+=dmstep/dmfrac[i]; cand[j]-=dmstep/dmfrac[j]; cand=clip(cand)
-                        ns=evaluation(cand)[0]
-                        if ns+1e-9<bests:bestq,bests=cand,ns
-                # DMI penceresi icinde toplam miktari da gerekirse ayarla.
-                for i in movable:
+                        ck,_=rank(cand)
+                        if ck<bestk:bestq,bestk=cand,ck
+                # sonra DMI acigini/kacagini duzeltecek tek koordinat adimlari
+                for i in order:
                     for sign in (-1,1):
                         cand=q[:]; cand[i]+=sign*dmstep/dmfrac[i]; cand=clip(cand)
-                        ns=evaluation(cand)[0]
-                        if ns+1e-9<bests:bestq,bests=cand,ns
-                if bests+1e-8<score:
-                    q,score=bestq,bests
-                else:break
-        return q,score
+                        ck,_=rank(cand)
+                        if ck<bestk:bestq,bestk=cand,ck
+                if bestk<k:q,k=bestq,bestk; improved=True
+        return q,k
 
-    started=_time.perf_counter(); deadline=started+3.5
-    best=None; best_score=1e99
+    started=_time.perf_counter(); deadline=started+4.5
+    best=None; bestk=None
     for st in starts:
-        if _time.perf_counter()>=deadline and best is not None:break
-        q,sc=local_opt(st,deadline)
-        if sc<best_score:best,best_score=q,sc
-
-    # Performans son gecisi: hedef GCAA altindaysa, guvenli marj oldugu surece enerji/protein
-    # yogun konsantreleri kaba/dusuk enerjili yemlerle otomatik takas etmeyi ozellikle dene.
-    if best is not None:
-        for dmstep in (.20,.10,.05,.025):
-            for _ in range(8):
-                if _time.perf_counter()>started+4.2:break
-                cur=evaluation(best); cur_adg=cur[3]; cur_score=cur[0]
-                if cur_adg>=float(target_adg)*.985:break
-                chosen=None; chosen_score=cur_score
-                for i in conc:
-                    for j in rough+conc:
-                        if i==j or fixed[i] or fixed[j]:continue
-                        fi,fj=feeds[i],feeds[j]
-                        # Artirilan yemin enerji/protein yogunlugu azaltılandan daha iyi olmali.
-                        vi=float(_rowval(fi,'neg_mcal_kg',0) or 0)+.025*float(_rowval(fi,'cp_pct',0) or 0)
-                        vj=float(_rowval(fj,'neg_mcal_kg',0) or 0)+.025*float(_rowval(fj,'cp_pct',0) or 0)
-                        if vi<=vj+.02:continue
-                        cand=best[:]; cand[i]+=dmstep/dmfrac[i]; cand[j]-=dmstep/dmfrac[j]; cand=clip(cand)
-                        ev=evaluation(cand)
-                        # yalniz skor iyilesiyorsa kabul; safety cezasi skorun icinde zaten baskin.
-                        if ev[0]+1e-8<chosen_score:chosen,chosen_score=cand,ev[0]
-                if chosen is None:break
-                best=chosen
+        if _time.perf_counter()>deadline and best is not None:break
+        q,k=local_opt(st,deadline)
+        if bestk is None or k<bestk:best,bestk=q,k
 
     if best is None:return None,t,'Rasyon optimizasyonu başlatılamadı.'
-
-    # Pratiklestir: gramlik yemler disinda anlamsiz mikro miktarlari sifirla ve kisa son optimizasyon yap.
-    for i,f in enumerate(feeds):
-        if fixed[i]:continue
-        mn=practical_feed_min(f,t['weight_kg'],t['dmi_kg'])
-        if 0.001<best[i]<mn*.80:best[i]=0.0
-    best=scale_dm(best)
-    if _time.perf_counter()<started+4.4:best,best_score=local_opt(best,started+4.4)
-
+    # Kullanici sectigi normal yemleri kaybetmesin; katkilar kendi doz sinirinda kalir.
     best=[round(max(bounds[i][0],min(bounds[i][1],x)),3 if feed_group(feeds[i])=='Katkı' else 2) for i,x in enumerate(best)]
-    ev=evaluation(best); _,bm,dynamic_dmi,ach,gain_supply,energy_required_dm,maint_dm,reasons=ev
-    bm['predicted_dmi_kg']=dynamic_dmi; bm['gain_energy_supply_mcal']=gain_supply
-    bm['energy_required_dm_kg']=energy_required_dm; bm['maintenance_dm_kg']=maint_dm
-    bm['achievable_adg_kg']=ach; bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='6.14.1 Excel/INRA hedef GCAA · seçilen kaba/kesif yemleri koruyan otomatik yem ikamesi'
+    finalk,bm=rank(best)
+    bm['predicted_dmi_kg']=target_dm
+    bm['achievable_adg_kg']=achieved_adg(bm)
+    bm['solver_seconds']=_time.perf_counter()-started
+    bm['solver_engine']='6.17 · Besi_V5.02 Excel Solver kısıt önceliği · 4 saha kartı ±%3,5 · maliyet son kriter'
+    bm['roughage_target_pct']=target_rough
 
     warnings=[]
-    if bm['starch_pct_dm']>lim['starch_max']:warnings.append(f'Nişasta %{bm["starch_pct_dm"]:.1f}; faz referansı %{lim["starch_max"]:.0f}, eNDF/pH ile birlikte değerlendirildi.')
-    if t.get('age_note'):warnings.append(t['age_note'])
     warnings.extend(_feed_data_warnings(feeds))
-
-    # Basari: saha toleransi. Hedef GCAA +/- %5, HP'nin en az %92'si ve rumen/mineral sert raylari.
-    # DMI'nin tam esit olmasi gerekmez.
-    hard,reasons,mw,cap=safety(bm,dynamic_dmi)
-    critical=[]
-    if hard>1e-6:critical.extend(reasons)
-    if ach < float(target_adg)*.95:critical.append('hedef GCAA')
-    if bm['cp_pct_dm']<max(9.0,t['cp_pct']*.92):critical.append('ham protein')
-
-    # HOTFIX 6.15: Solver her durumda en iyi uygulanabilir rasyonu döndürür.
-    # Hedeflerden biri kapanmadıysa çözümü silmek yerine kullanıcıya sapmayı açıkça bildirir.
-    four=[]
-    for label,val,target in (('KM',bm['dm_kg'],dynamic_dmi),('HP',bm['cp_pct_dm'],t['cp_pct']),('ME',bm['me_mcal'],t['me_mcal_day']),('Kaba',bm['roughage_pct_dm'],bm.get('roughage_target_pct') or t.get('roughage_target',50))):
-        pct=(float(val)-float(target))/max(abs(float(target)),.01)*100
-        if abs(pct)>3.5: four.append(f'{label} {pct:+.1f}%')
-    if critical or four:
-        msg='En iyi saha rasyonu oluşturuldu.'
-        if four: msg+=' ±%3,5 hedef bandı dışında kalan kartlar: '+', '.join(four)+'.'
-        if critical: msg+=' Güvenlik/performans notu: '+', '.join(dict.fromkeys(critical))+'.'
-        msg+=f' Tahmini GCAA {ach:.2f}/{float(target_adg):.2f} kg/gün; NDF %{bm["ndf_pct_dm"]:.1f}, eNDF %{bm["endf_pct_dm"]:.1f}, pH {bm["rumen_ph"]:.2f}.'
-        warnings.insert(0,msg)
-    elif abs(ach-float(target_adg))/max(float(target_adg),.1)>.02:
-        warnings.insert(0,f'Hedef GCAA {float(target_adg):.2f}; rasyonun tahmini GCAA değeri {ach:.2f} kg/gün.')
-    bm['solver_engine']='6.15 · KM + HP + ME + kaba/kesif ±%3,5 çok hedefli saha optimizasyonu'
+    dm,cp,me,rough=target_devs(bm)
+    residual=[]
+    if dm>tol:residual.append(f'KM {(bm["dm_kg"]-target_dm)/target_dm*100:+.1f}%')
+    if cp>tol:residual.append(f'HP {(bm["cp_pct_dm"]-target_cp)/target_cp*100:+.1f}%')
+    if me>tol:residual.append(f'ME {(bm["me_mcal"]-target_me)/target_me*100:+.1f}%')
+    if rough>rough_tol_pp:residual.append(f'Kaba {bm["roughage_pct_dm"]-target_rough:+.1f} puan')
+    sv=safety_vector(bm)
+    if residual:
+        warnings.insert(0,'En iyi saha çözümü üretildi; ±%3,5 bandı dışında kalan kartlar: '+', '.join(residual)+'.')
+    if any(x>1e-10 for x in sv):
+        warnings.append('Güvenlik raylarından biri sınırda; NDF/eNDF, nişasta, pH ve mineral kartlarını kontrol edin.')
     return (best,bm,bounds),t,' '.join(warnings)
 
 def dairy_requirement_targets(weight_kg=650.0, target_milk_l=25.0, milk_fat_pct=3.7, milk_protein_pct=3.1):
@@ -4603,7 +4556,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
             b=json.dumps(export_payload(),ensure_ascii=False,indent=2).encode('utf-8');name=f'ciftlik_json_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
             self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/version-notes':
-            body='''<h1>📝 Sürüm Notları</h1><div class="card"><h2>V3.9.20 · HOTFIX 6.16 DEV</h2><p class="mut">HOTFIX 6.15 Clean Source tabanı korunarak hazırlanmıştır.</p><ul><li><b>Finans:</b> Uzun satırlarda Düzenle / Sil butonları kompakt ve tek hizada.</li><li><b>Akıllı Süt Rasyonu:</b> Aynı Yem Kataloğu ve aynı veritabanı ile canlı ağırlık + hedef süt miktarından otomatik çözüm.</li><li><b>Hayvan tabloları:</b> Aktif, satılan ve kesilen hayvanlarda standart küpe butonu görünümü.</li><li><b>Besi Solver:</b> 6.15 saha dengesi korunmuştur; bu paket besi matematiğini değiştirmez.</li></ul><p class="mut">Kaynak geçmişi ayrıca CHANGELOG.md içinde tutulur.</p></div>'''
+            body='''<h1>📝 Sürüm Notları</h1><div class="card"><h2>ÇiftlikPro Enterprise · v3.9.20</h2><p class="mut">Rasyon motoru Besi_V5.02.xlsm içindeki Solver yaklaşımı incelenerek kısıt-öncelikli yapıya taşındı.</p><ul><li><b>Besi Rasyonu:</b> Seçilen yemlerin miktarları aynı anda optimize edilir; KM, HP, ME ve kaba/kesif hedefleri yaklaşık ±%3,5 saha toleransıyla birlikte değerlendirilir.</li><li><b>Güvenlik:</b> NDF/eNDF, nişasta, rumen pH ve mineral sınırları hedef puanından önce kontrol edilir.</li><li><b>Maliyet:</b> Besleme ve güvenlik hedeflerinden sonra son seçim kriteridir.</li><li><b>Akıllı Süt Rasyonu:</b> Aynı Yem Kataloğu ve veritabanı ile canlı ağırlık + hedef süt miktarından çözüm üretir.</li><li><b>Arayüz:</b> Kullanıcıya HOTFIX / DEV / PORT gibi teknik etiketler gösterilmez.</li></ul><p class="mut">Kaynak geçmişi CHANGELOG.md içinde tutulur.</p></div>'''
             return self.send_html(page('Sürüm Notları',body,'/version-notes',u,msg))
         if path=='/backups':
             if not self.require_admin():return

@@ -1,24 +1,28 @@
-# ÇiftlikPro Enterprise V3.9.20 · HOTFIX 6.16 DEV
+# ÇiftlikPro Enterprise v3.9.20 — GitHub Source
 
-GitHub temiz kaynak paketi. HOTFIX 6.15 Clean Source tabanı üzerine hazırlanmıştır.
+Temiz kaynak tabanı. Kullanıcı arayüzünde HOTFIX, DEV veya port bilgisi gösterilmez.
 
-## Bu sürümde
+## Rasyon motoru
 
-1. Sürüm notları / kaynak geçmişi sabitlendi (`CHANGELOG.md`).
-2. Finans tablosu işlem butonları kompakt ve tek hizada.
-3. Akıllı Rasyon Çöz içinde **Besi / Süt** seçimi var. Süt rasyonu aynı `feed_catalog` veritabanını kullanır; kullanıcı canlı ağırlık + hedef süt miktarı girer ve seçtiği yemlerin miktarları otomatik dengelenir.
-4. Aktif, satılan ve kesilen hayvanlarda küpe numarası aynı buton görünümünde gösterilir.
+Besi solverı, kullanıcının seçtiği yemlerin **kg/baş/gün miktarlarını karar değişkeni** olarak ele alır. `Besi_V5.02.xlsm` içindeki Solver davranışı incelenerek kısıt-öncelikli bir optimizasyon sırası uygulanmıştır:
 
-## Çalıştırma
+1. Rumen ve besleme güvenliği: NDF/eNDF, nişasta, pH ve mineral sınırları.
+2. Dört saha kartı birlikte: Kuru Madde, Ham Protein, Metabolik Enerji ve Kaba/Kesif oranı.
+3. Dört kart için yaklaşık ±%3,5 tolerans hedeflenir; tek kartı kusursuzlaştırıp diğerlerini bozmak avantaj sağlamaz.
+4. Seçilen normal yemler korunur; miktarları yemlerin günlük kullanım sınırları içinde otomatik değiştirilir.
+5. Maliyet yalnız besleme hedeflerinden sonra son seçim kriteridir.
 
-`DEV_BASLAT.bat` ile DEV ortamı başlar. Varsayılan DEV portu: **8965**.
+Akıllı Süt Rasyonu aynı `feed_catalog` verisini kullanır ve canlı ağırlık + hedef süt üzerinden ayrı süt ihtiyaç motoruyla çözülür.
 
-## Ana kaynaklar
+## Kaynaklar
 
 - `app/server.py`
 - `app/feed_catalog.json`
 - `app/desktop_launcher.py`
-- `DEV_BASLAT.bat`
+- `docs/BESI_SOLVER_REFERANS.md`
+- `docs/SUT_SOLVER_REFERANS.md`
 - `CHANGELOG.md`
 
-> Not: Süt Solver V1 karar-destek amaçlıdır. Gerçek yem laboratuvar analizleri katalogdaki referans değerlerden önceliklidir.
+`KAYNAKTAN_CALISTIR.bat` kaynak koddan yerel çalıştırma içindir; kullanıcı arayüzünde port veya geliştirme etiketi gösterilmez.
+
+> Rasyon sonuçları karar-destek amaçlıdır. Gerçek yem laboratuvar analizleri katalog referanslarından önceliklidir.
