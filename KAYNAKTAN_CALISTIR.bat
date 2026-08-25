@@ -5,7 +5,7 @@ if not exist ".venv\Scripts\python.exe" (
   py -3.12 -m venv .venv 2>nul || python -m venv .venv
   if errorlevel 1 goto :fail
 )
-".venv\Scripts\python.exe" -c "import PIL, cryptography" >nul 2>&1
+".venv\Scripts\python.exe" -c "import PIL, cryptography, webview" >nul 2>&1
 if errorlevel 1 (
   ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
   if errorlevel 1 goto :fail

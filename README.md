@@ -1,28 +1,17 @@
-# ÇiftlikPro Enterprise v3.9.20 — GitHub Source
+# ÇiftlikPro Enterprise v3.9.20 — Desktop UX Source
 
-Temiz kaynak tabanı. Kullanıcı arayüzünde HOTFIX, DEV veya port bilgisi gösterilmez.
+Bu kaynak, 6.17 rasyon motorunu **değiştirmeden** ÇiftlikPro'yu klasik web dashboard görünümünden modern masaüstü ERP / rasyon formülasyon yazılımı görünümüne taşır.
+
+## 6.18 Desktop UX
+- `pywebview` tabanlı gerçek uygulama penceresi; normal kurulumda tarayıcı adres çubuğu görünmez.
+- İnce uygulama başlık çubuğu ve kompakt komut araç çubuğu.
+- Sabit/kompakt sol navigasyon ve çalışma sekmesi görünümü.
+- Daha sıkı ERP tabloları, küçük köşe yarıçapları ve gölgesiz kartlar.
+- Alt durum çubuğu: sistem, veritabanı ve sürüm durumu.
+- Mobil görünüm mevcut responsive yapıya geri düşer.
 
 ## Rasyon motoru
+6.17 besi ve süt solver matematiği değiştirilmeden korunmuştur. Bu sürüm görsel/masaüstü kabuk odaklıdır.
 
-Besi solverı, kullanıcının seçtiği yemlerin **kg/baş/gün miktarlarını karar değişkeni** olarak ele alır. `Besi_V5.02.xlsm` içindeki Solver davranışı incelenerek kısıt-öncelikli bir optimizasyon sırası uygulanmıştır:
-
-1. Rumen ve besleme güvenliği: NDF/eNDF, nişasta, pH ve mineral sınırları.
-2. Dört saha kartı birlikte: Kuru Madde, Ham Protein, Metabolik Enerji ve Kaba/Kesif oranı.
-3. Dört kart için yaklaşık ±%3,5 tolerans hedeflenir; tek kartı kusursuzlaştırıp diğerlerini bozmak avantaj sağlamaz.
-4. Seçilen normal yemler korunur; miktarları yemlerin günlük kullanım sınırları içinde otomatik değiştirilir.
-5. Maliyet yalnız besleme hedeflerinden sonra son seçim kriteridir.
-
-Akıllı Süt Rasyonu aynı `feed_catalog` verisini kullanır ve canlı ağırlık + hedef süt üzerinden ayrı süt ihtiyaç motoruyla çözülür.
-
-## Kaynaklar
-
-- `app/server.py`
-- `app/feed_catalog.json`
-- `app/desktop_launcher.py`
-- `docs/BESI_SOLVER_REFERANS.md`
-- `docs/SUT_SOLVER_REFERANS.md`
-- `CHANGELOG.md`
-
-`KAYNAKTAN_CALISTIR.bat` kaynak koddan yerel çalıştırma içindir; kullanıcı arayüzünde port veya geliştirme etiketi gösterilmez.
-
-> Rasyon sonuçları karar-destek amaçlıdır. Gerçek yem laboratuvar analizleri katalog referanslarından önceliklidir.
+## Çalıştırma
+`KAYNAKTAN_CALISTIR.bat` `.venv` oluşturur ve `requirements.txt` bağımlılıklarını kurar. Kurulum paketinde giriş noktası `app/desktop_launcher.py` olmalıdır.
