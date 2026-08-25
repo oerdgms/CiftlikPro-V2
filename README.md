@@ -1,28 +1,27 @@
-# ÇiftlikPro Enterprise v3.9.20 — GitHub Source
+# ÇiftlikPro Enterprise v3.9.20 — Desktop ERP
 
-Temiz kaynak tabanı. Kullanıcı arayüzünde HOTFIX, DEV veya port bilgisi gösterilmez.
+ÇiftlikPro; hayvan, besi, rasyon, üreme-sağlık, finans, rapor ve veri yönetimini tek arayüzde birleştiren yerel ağ odaklı çiftlik yönetim uygulamasıdır.
 
-## Rasyon motoru
+## Bu paket
+- Desktop ERP arayüzü
+- Dashboard / Bugünün İşleri
+- Hayvan yönetimi
+- Besi ve rasyon çalışma masası
+- Üreme, kızgınlık ve tohumlama takibi
+- Sağlık ve finans modülleri
+- Veri / yedekleme araçları
+- Yerel çalışma yapısı korunmuştur
 
-Besi solverı, kullanıcının seçtiği yemlerin **kg/baş/gün miktarlarını karar değişkeni** olarak ele alır. `Besi_V5.02.xlsm` içindeki Solver davranışı incelenerek kısıt-öncelikli bir optimizasyon sırası uygulanmıştır:
+## Kaynaktan çalıştırma
+Windows'ta `KAYNAKTAN_CALISTIR.bat` dosyasını çalıştırın.
 
-1. Rumen ve besleme güvenliği: NDF/eNDF, nişasta, pH ve mineral sınırları.
-2. Dört saha kartı birlikte: Kuru Madde, Ham Protein, Metabolik Enerji ve Kaba/Kesif oranı.
-3. Dört kart için yaklaşık ±%3,5 tolerans hedeflenir; tek kartı kusursuzlaştırıp diğerlerini bozmak avantaj sağlamaz.
-4. Seçilen normal yemler korunur; miktarları yemlerin günlük kullanım sınırları içinde otomatik değiştirilir.
-5. Maliyet yalnız besleme hedeflerinden sonra son seçim kriteridir.
+Python ile manuel çalıştırma için önce bağımlılıkları yükleyin:
 
-Akıllı Süt Rasyonu aynı `feed_catalog` verisini kullanır ve canlı ağırlık + hedef süt üzerinden ayrı süt ihtiyaç motoruyla çözülür.
+```bash
+pip install -r requirements.txt
+```
 
-## Kaynaklar
+Ardından uygulamayı proje yapısına uygun biçimde başlatın.
 
-- `app/server.py`
-- `app/feed_catalog.json`
-- `app/desktop_launcher.py`
-- `docs/BESI_SOLVER_REFERANS.md`
-- `docs/SUT_SOLVER_REFERANS.md`
-- `CHANGELOG.md`
-
-`KAYNAKTAN_CALISTIR.bat` kaynak koddan yerel çalıştırma içindir; kullanıcı arayüzünde port veya geliştirme etiketi gösterilmez.
-
-> Rasyon sonuçları karar-destek amaçlıdır. Gerçek yem laboratuvar analizleri katalog referanslarından önceliklidir.
+## Not
+Bu GitHub paketi geliştirme sırasında oluşan `__pycache__`, `.pyc` ve geçici DEV dokümanlarından temizlenmiştir. Uygulama veritabanı / kullanıcı verileri bu kaynak paketine eklenmemelidir.
