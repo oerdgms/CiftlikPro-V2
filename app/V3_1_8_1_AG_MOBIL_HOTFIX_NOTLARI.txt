@@ -1,9 +1,0 @@
-ÇiftlikPro Enterprise V3.1.8.1 — Ağ + Mobil Hotfix
-
-- Windows masaüstü başlatıcısındaki sunucu bağlama adresi 127.0.0.1 yerine 0.0.0.0 yapıldı.
-- Aynı özel ağdaki telefon, tablet ve bilgisayarlar ana makinenin IP adresi üzerinden 8953 portuna bağlanabilir.
-- Kurulum özel (Private) ağ profili için TCP 8953 Windows Güvenlik Duvarı kuralını ekler; kaldırırken kural silinir.
-- Tohumlama hayvan seçimi tarayıcı datalist davranışına bağlı olmaktan çıkarıldı; yazarken özel öneri listesi açılır.
-- Mobilde üst bar, menü, formlar, butonlar, tohumlama kartları ve geniş tablolar için dokunmatik/taşma iyileştirmeleri yapıldı.
-- Telefon girişlerinde 16px alan yazısı kullanılarak iOS/Android otomatik zoom sorunları azaltıldı.
-- Masaüstü görünümü korunmuştur.

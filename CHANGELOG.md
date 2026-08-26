@@ -17,17 +17,11 @@
 - Tablo, form, filtre, kart ve araç çubuğu yoğunluğu ERP kullanımına göre standardize edildi.
 - Solver, DB, login, LAN/Tailscale ve sunucu başlatma davranışına dokunulmadı.
 
-## Desktop ERP DEV — Bugünün İşleri + Merkezi Ayarlar
-- Dashboard: 8 durum kartı korunur; alt bölüm `Bugünün İşleri` (Kızgınlık / Gebelik Aşı / Finans) olarak sadeleştirildi.
-- Ayarlar: üst menü `/settings` merkezine bağlandı; işletme, dashboard, kullanıcı, SMTP, veri/yedek, lisans ve besi ayarları tek merkezde toplandı.
-- Sol menüde ikinci ÇiftlikPro yazısı kaldırıldı; ana ÇiftlikPro logosu Dashboard bağlantısı olarak kaldı.
-- Dashboard sekme başlığı kaldırıldı.
-- Hayvan küpe bağlantıları tüm listelerde standart ERP buton diline yaklaştırıldı.
-- Finans toplu satış/kesim seçiminde `Toplam Tutar` ve `Hayvan Başı Gelir` ayrı gösterilir.
-- Solver, DB, LAN/Tailscale ve 8953 başlatma altyapısı değiştirilmedi.
-
-## GitHub final temizlik
-- Python cache/bytecode dosyaları paketten çıkarıldı.
-- Geçici DEV README dosyaları kaldırıldı.
-- GitHub için sade README oluşturuldu.
-- Çalışan uygulama kaynakları ve solver referans dokümanları korundu.
+## Desktop ERP DEV6 · 2026-08-26
+- Mobilde alt sayfalardan Dashboard'a dönüş için üst ÇiftlikPro ana sayfa bağlantısı görünür hale getirildi ve hamburger menü korundu.
+- Mobil hızlı işlem şeridi yatay kullanılabilir tutuldu; finans filtre/arama/Temizle taşmaları responsive düzeltildi.
+- Hayvan satış/kesim çoklu seçim özetinde "Hayvan Başı Gelir" ifadesi netleştirildi; küpe butonları standart ERP stilinde korunuyor.
+- Dashboard'daki tekrar eden küçük ÇiftlikPro metni kaldırıldı; çiftlik logosu/başlığı ana sayfa bağlantısı oldu.
+- Ayarlar, yalnız Çiftlik Profili yerine program genelindeki ayarlara giriş sağlayan Ayarlar Merkezi olarak düzenlendi.
+- Dashboard'un 8 özet kartı korundu; alt alan kompakt "Bugünün İşleri" (kızgınlık, gebelik/aşı, finans) panellerine dönüştürüldü.
+- Solver, veritabanı, LAN/Tailscale ve 8953 ağ başlatma davranışı değiştirilmedi.

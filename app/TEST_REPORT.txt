@@ -1,8 +1,0 @@
-ÇiftlikPro Enterprise V2.1.0 Test Raporu
-
-PASS: Sunucu ve giriş
-PASS: Yönetici menüleri
-PASS: Kullanıcı oluşturma
-PASS: ZIP yedek oluşturma
-PASS: Şifre değiştirme
-PASS: İşlem günlüğü

@@ -1,27 +1,21 @@
-# ÇiftlikPro Enterprise v3.9.20 — Desktop ERP
+# ÇiftlikPro Enterprise
 
-ÇiftlikPro; hayvan, besi, rasyon, üreme-sağlık, finans, rapor ve veri yönetimini tek arayüzde birleştiren yerel ağ odaklı çiftlik yönetim uygulamasıdır.
-
-## Bu paket
-- Desktop ERP arayüzü
-- Dashboard / Bugünün İşleri
-- Hayvan yönetimi
-- Besi ve rasyon çalışma masası
-- Üreme, kızgınlık ve tohumlama takibi
-- Sağlık ve finans modülleri
-- Veri / yedekleme araçları
-- Yerel çalışma yapısı korunmuştur
+ÇiftlikPro Enterprise masaüstü ERP kaynak paketi.
 
 ## Kaynaktan çalıştırma
-Windows'ta `KAYNAKTAN_CALISTIR.bat` dosyasını çalıştırın.
 
-Python ile manuel çalıştırma için önce bağımlılıkları yükleyin:
+Windows'ta `KAYNAKTAN_CALISTIR.bat` dosyasını çalıştırın. Gerekli Python bağımlılıkları `requirements.txt` içindedir.
 
-```bash
-pip install -r requirements.txt
-```
+## Kaynak yapısı
 
-Ardından uygulamayı proje yapısına uygun biçimde başlatın.
+- `app/server.py` — uygulama sunucusu ve arayüz
+- `app/desktop_launcher.py` — masaüstü başlatıcı
+- `app/feed_catalog.json` — yem kataloğu
+- `docs/` — solver referans/doğrulama notları
+- `requirements.txt` — Python bağımlılıkları
 
-## Not
-Bu GitHub paketi geliştirme sırasında oluşan `__pycache__`, `.pyc` ve geçici DEV dokümanlarından temizlenmiştir. Uygulama veritabanı / kullanıcı verileri bu kaynak paketine eklenmemelidir.
+## Sürüm
+
+Kullanıcı arayüzü: **ÇiftlikPro Enterprise · v3.9.20**
+
+Bu paket GitHub için geliştirme ara paketleri, eski DEV README dosyaları, cache/build/log ve yerel çalışma artıklarından temizlenmiştir.

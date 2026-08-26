@@ -6,3 +6,20 @@ __pycache__/
 app/ciftlik.db
 app/uploads/
 app/backups/
+
+# Local/runtime artifacts
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.bak
+.venv/
+venv/
+build/
+dist/
+*.sqlite
+*.sqlite3
+*.db
+backups/
+.env
+.env.*
