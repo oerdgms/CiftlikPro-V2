@@ -2490,6 +2490,153 @@ body.erp-ration-reference .erp-secondary{margin-top:8px}.erp-ration-reference .e
 </script>
 """
 
+# DEV12 — Mobil Rasyon Çalışma Masası V1
+MOBILE_RATION_UX_V1 = r"""
+<style id="mobile-ration-workbench-v1">
+.mobile-ration-toolbar,.mobile-ration-status{display:none}
+@media(max-width:820px){
+  body.erp-ration-reference .main{padding:7px 7px 88px!important;overflow-x:hidden!important}
+  body.erp-ration-reference .workbench-shell>.erp-ration-titlebar{display:flex!important;align-items:center!important;padding:9px 10px!important;margin-bottom:7px!important;border-radius:10px!important;position:relative!important}
+  body.erp-ration-reference .erp-ration-titlebar h2{font-size:16px!important;line-height:1.15!important}
+  body.erp-ration-reference .erp-ration-titlebar .mut{display:block!important;font-size:10px!important;line-height:1.25!important;margin-top:3px!important}
+  body.erp-ration-reference .erp-ration-titlebar>details{max-width:42%!important}
+  body.erp-ration-reference .erp-ration-titlebar>details>summary{font-size:11px!important;text-align:right!important}
+
+  body.erp-ration-reference .erp-ration-layout{display:block!important;min-width:0!important}
+  body.erp-ration-reference .erp-ration-left{display:contents!important}
+  body.erp-ration-reference .erp-ration-left>.erp-panel-head{display:none!important}
+  body.erp-ration-reference .erp-ration-left>.erp-panel-body{display:contents!important;padding:0!important}
+  body.erp-ration-reference .erp-ration-center{display:block!important;width:100%!important;min-width:0!important}
+
+  .mobile-ration-toolbar{display:grid!important;grid-template-columns:1fr 1fr;gap:7px;margin:0 0 7px}
+  .mobile-ration-toolbar button,.mobile-ration-toolbar a{min-height:42px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;font-size:12px!important;padding:7px 8px!important}
+  .mobile-ration-toolbar .mobile-target-toggle{grid-column:1/-1;background:#eef6f0!important;color:#12683a!important;border:1px solid #cfe0d4!important}
+
+  body.erp-ration-reference .target-controlbar{display:none!important;margin:0 0 7px!important;padding:9px!important;border-radius:10px!important}
+  body.erp-ration-reference.mobile-targets-open .target-controlbar{display:block!important}
+  body.erp-ration-reference .target-controlbar .target-form{display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important}
+  body.erp-ration-reference .target-controlbar .target-form label{font-size:10px!important;min-width:0!important}
+  body.erp-ration-reference .target-controlbar .target-form input,
+  body.erp-ration-reference .target-controlbar .target-form select{width:100%!important;min-height:40px!important;font-size:14px!important;box-sizing:border-box!important}
+  body.erp-ration-reference .target-controlbar .target-form .compact-target-btn{grid-column:1/-1!important;width:100%!important;min-height:42px!important}
+
+  body.erp-ration-reference .target-compare-sticky{position:sticky!important;top:64px!important;z-index:28!important;padding:6px!important;margin:0 0 7px!important;border-radius:10px!important;background:rgba(249,252,250,.98)!important;box-shadow:0 4px 14px rgba(20,68,42,.10)!important;overflow:hidden!important}
+  body.erp-ration-reference .target-compare-title{margin:0 1px 5px!important;font-size:11px!important}
+  body.erp-ration-reference .target-compare-title span{display:none!important}
+  body.erp-ration-reference .nutri-mini-grid{display:flex!important;grid-template-columns:none!important;gap:6px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:0 0 3px!important;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+  body.erp-ration-reference .nutri-mini.nutri-compare-card{display:grid!important;flex:0 0 132px!important;width:132px!important;min-width:132px!important;height:88px!important;min-height:88px!important;grid-template-rows:22px 1fr 27px!important;border-radius:9px!important;scroll-snap-align:start!important;padding:0!important}
+  body.erp-ration-reference .nutri-card-title{height:22px!important;min-height:22px!important;padding:5px 6px!important;font-size:11px!important;line-height:12px!important}
+  body.erp-ration-reference .nutri-side{padding:3px 2px!important}
+  body.erp-ration-reference .nutri-side span{font-size:7.5px!important}
+  body.erp-ration-reference .nutri-side b{font-size:13px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body.erp-ration-reference .nutri-card-footer{height:27px!important;min-height:27px!important;padding:2px 4px!important}
+  body.erp-ration-reference .nutri-card-footer em{font-size:9px!important;white-space:nowrap!important}
+  body.erp-ration-reference .nutri-card-footer .nutri-diff{display:none!important}
+  body.erp-ration-reference #target-mini-ndf,
+  body.erp-ration-reference #target-mini-mineral,
+  body.erp-ration-reference #target-mini-ph,
+  body.erp-ration-reference #target-mini-cost{display:none!important}
+
+  .mobile-ration-status{display:grid!important;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 7px}
+  .mobile-ration-status>div{background:#fff;border:1px solid #dce7df;border-radius:10px;padding:8px 9px;min-width:0}
+  .mobile-ration-status span{display:block;font-size:9px;color:#68776f;font-weight:800;text-transform:uppercase;letter-spacing:.02em}
+  .mobile-ration-status b{display:block;margin-top:2px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-ration-status small{display:block;margin-top:2px;font-size:9.5px;color:#63736a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobile-ration-status .safe b{color:#16713e}.mobile-ration-status .warn b{color:#ad6900}.mobile-ration-status .risk b{color:#b33a2e}
+
+  body.erp-ration-reference #ration-workbench{padding:0!important;margin:0!important;border-radius:10px!important;overflow:visible!important;border:0!important;background:transparent!important}
+  body.erp-ration-reference #ration-workbench .workbench-head{display:block!important;padding:9px!important;margin:0 0 7px!important;background:#fff!important;border:1px solid #dfe7e2!important;border-radius:10px!important}
+  body.erp-ration-reference #ration-workbench .workbench-head h3{font-size:15px!important}
+  body.erp-ration-reference #ration-workbench .workbench-head .mut{display:block!important;font-size:10.5px!important;line-height:1.3!important;margin-top:3px!important}
+  body.erp-ration-reference #ration-workbench .workbench-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:6px!important;width:100%!important;margin-top:8px!important}
+  body.erp-ration-reference #ration-workbench .workbench-actions .btn{width:100%!important;min-height:40px!important;font-size:11px!important;padding:6px!important}
+  body.erp-ration-reference #ration-workbench form{padding:0!important}
+  body.erp-ration-reference #ration-workbench form>div[style*="overflow:auto"]{overflow:visible!important;margin-top:0!important}
+  body.erp-ration-reference .ration-workbench-table,
+  body.erp-ration-reference .ration-workbench-table tbody{display:block!important;width:100%!important;min-width:0!important}
+  body.erp-ration-reference .ration-workbench-table thead{display:none!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row{display:grid!important;grid-template-columns:1fr 1fr!important;grid-template-areas:'name name' 'qty qty' 'price daily' 'remove remove'!important;gap:7px!important;width:100%!important;margin:0 0 7px!important;padding:10px!important;border:1px solid #dce8df!important;border-radius:11px!important;background:#fff!important;box-shadow:0 2px 8px rgba(20,65,40,.05)!important;box-sizing:border-box!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td{display:none!important;border:0!important;padding:0!important;width:auto!important;min-width:0!important;font-size:11px!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(1){display:block!important;grid-area:name!important;font-size:13px!important;line-height:1.25!important;padding-bottom:6px!important;border-bottom:1px solid #e8eeea!important;overflow-wrap:anywhere!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(2){display:block!important;grid-area:qty!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(6){display:flex!important;grid-area:price!important;align-items:center!important;justify-content:space-between!important;padding:6px 7px!important;background:#f2f7f3!important;border-radius:8px!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(6)::before{content:'Fiyat';font-size:9px;font-weight:800;color:#6e7d74}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(7){display:flex!important;grid-area:daily!important;align-items:center!important;justify-content:space-between!important;padding:6px 7px!important;background:#f2f7f3!important;border-radius:8px!important}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(7)::before{content:'Günlük';font-size:9px;font-weight:800;color:#6e7d74}
+  body.erp-ration-reference .ration-workbench-table tr.ration-row td:nth-child(8){display:block!important;grid-area:remove!important}
+  body.erp-ration-reference .ration-workbench-table .ration-stepper{display:grid!important;grid-template-columns:48px minmax(0,1fr) 48px!important;gap:7px!important;width:100%!important}
+  body.erp-ration-reference .ration-workbench-table .ration-stepper .btn{width:48px!important;height:44px!important;min-height:44px!important;padding:0!important;font-size:20px!important;border-radius:9px!important}
+  body.erp-ration-reference .ration-workbench-table .ration-qty{width:100%!important;height:44px!important;min-width:0!important;font-size:18px!important;padding:6px!important;box-sizing:border-box!important;border-radius:9px!important}
+  body.erp-ration-reference .ration-workbench-table .qty-delta{display:block!important;text-align:center!important;margin-top:3px!important;font-size:10px!important}
+  body.erp-ration-reference .ration-workbench-table .qty-zero{width:100%!important;min-height:38px!important;font-size:11px!important}
+  body.erp-ration-reference .ration-changebar{display:block!important;margin:0 0 6px!important;padding:0 2px!important}
+  body.erp-ration-reference .ration-changebar #dirty-status{display:block!important;margin:0 0 5px!important;font-size:10px!important}
+  body.erp-ration-reference .ration-changebar #ration-reset{width:100%!important;min-height:36px!important}
+  body.erp-ration-reference .ration-savebar{position:fixed!important;left:7px!important;right:7px!important;bottom:29px!important;z-index:120!important;padding:7px!important;margin:0!important;background:rgba(255,255,255,.97)!important;border:1px solid #d7e3db!important;border-radius:11px!important;box-shadow:0 -5px 18px rgba(18,60,37,.13)!important}
+  body.erp-ration-reference .ration-savebar .btn{width:100%!important;min-height:46px!important;font-size:14px!important;border-radius:8px!important}
+
+  body.erp-ration-reference #quick-feed-add:not([open]){display:none!important}
+  body.erp-ration-reference #quick-feed-add[open]{display:block!important;position:fixed!important;left:6px!important;right:6px!important;top:58px!important;bottom:8px!important;inset:auto 6px 8px 6px!important;max-height:none!important;margin:0!important;padding:10px!important;z-index:2300!important;border:1px solid #bfd6c7!important;border-radius:13px!important;box-shadow:0 18px 60px rgba(0,0,0,.30)!important;background:#fff!important;overflow:auto!important}
+  body.erp-ration-reference #quick-feed-add[open]::before{display:block!important;content:''!important;position:fixed!important;inset:0!important;background:rgba(13,32,20,.48)!important;z-index:-1!important}
+  body.erp-ration-reference #quick-feed-add>summary{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;position:sticky!important;top:-10px!important;z-index:3!important;background:#fff!important;padding:10px 2px 8px!important;border-bottom:1px solid #e5ece7!important}
+  body.erp-ration-reference #quick-feed-add>summary h3{font-size:16px!important}
+  body.erp-ration-reference #quick-feed-add>summary .mut{display:none!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-body{display:block!important;padding:8px 0 0!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-tools{position:sticky!important;top:43px!important;z-index:2!important;background:#fff!important;padding:3px 0 7px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-tools>input{width:100%!important;min-height:44px!important;padding:9px 10px!important;font-size:14px!important;border-radius:9px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-shortcuts{display:flex!important;gap:5px!important;overflow-x:auto!important;margin-top:6px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-shortcuts .btn{flex:0 0 auto!important;min-height:34px!important;font-size:10px!important;padding:5px 9px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-results{display:grid!important;grid-template-columns:1fr!important;max-height:none!important;overflow:visible!important;border:0!important;gap:5px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-result{display:flex!important;border:1px solid #dce7df!important;border-radius:9px!important;padding:9px!important;min-height:54px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-result b{font-size:12px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-result small{font-size:9px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-selected{position:sticky!important;bottom:0!important;z-index:3!important;display:grid!important;grid-template-columns:1fr!important;gap:6px!important;margin:8px 0 0!important;padding:8px!important;background:#f7faf8!important;border:1px solid #cfdfd4!important;border-radius:10px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-selected .ration-stepper{display:grid!important;grid-template-columns:46px 1fr 46px!important;gap:6px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-selected .ration-stepper button{min-height:42px!important;font-size:18px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-selected .ration-stepper input{width:100%!important;min-height:42px!important;font-size:17px!important;text-align:center!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-selected .btn{min-height:42px!important}
+  body.erp-ration-reference #quick-feed-add #quick-feed-close{display:block!important;width:100%!important;min-height:42px!important;margin-top:2px!important}
+
+  body.erp-ration-reference .erp-secondary{margin-top:8px!important}
+  body.erp-ration-reference .erp-secondary>.card,body.erp-ration-reference .erp-secondary>details{padding:10px!important;border-radius:10px!important}
+}
+@media(max-width:420px){
+  body.erp-ration-reference .nutri-mini.nutri-compare-card{flex-basis:120px!important;width:120px!important;min-width:120px!important}
+  body.erp-ration-reference .target-controlbar .target-form{grid-template-columns:1fr!important}
+  body.erp-ration-reference .target-controlbar .target-form .compact-target-btn{grid-column:1!important}
+}
+</style>
+<script id="mobile-ration-workbench-v1-script">
+(()=>{
+ const body=document.body, shell=document.querySelector('.workbench-shell');
+ if(!shell||!matchMedia('(max-width:820px)').matches)return;
+ const feed=document.getElementById('quick-feed-add'), target=document.querySelector('.target-workspace'), table=document.getElementById('ration-workbench');
+ if(feed) feed.open=false;
+ const toolbar=document.createElement('div'); toolbar.className='mobile-ration-toolbar';
+ toolbar.innerHTML='<button type="button" class="btn alt mobile-target-toggle">🎯 Hedef Bilgilerini Göster</button><button type="button" class="btn mobile-feed-open">➕ Yem Ekle</button><a class="btn alt" href="'+(table?.querySelector('.workbench-actions a')?.getAttribute('href')||'#')+'">🧾 Yazdır</a>';
+ if(target) target.before(toolbar);
+ const toggle=toolbar.querySelector('.mobile-target-toggle');
+ toggle?.addEventListener('click',()=>{const on=body.classList.toggle('mobile-targets-open');toggle.textContent=on?'🎯 Hedef Bilgilerini Gizle':'🎯 Hedef Bilgilerini Göster';});
+ toolbar.querySelector('.mobile-feed-open')?.addEventListener('click',()=>{if(feed){feed.open=true;setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)}});
+ const status=document.createElement('div'); status.className='mobile-ration-status'; status.innerHTML='<div id="mobile-rumen-box"><span>Rumen Güvenliği</span><b id="mobile-rumen-state">—</b><small id="mobile-rumen-detail">—</small></div><div><span>Günlük Maliyet</span><b id="mobile-ration-cost">—</b><small>baş / gün</small></div>';
+ if(target) target.after(status);
+ function syncMobile(){
+   const ph=(document.getElementById('target-mini-ph-current')?.textContent||'—').trim();
+   const phStatus=(document.getElementById('target-mini-ph-status')?.textContent||'').trim();
+   const phDiff=(document.getElementById('target-mini-ph-diff')?.textContent||'').trim();
+   const cost=(document.getElementById('target-mini-cost-current')?.textContent||'—').trim();
+   const box=document.getElementById('mobile-rumen-box'), state=document.getElementById('mobile-rumen-state');
+   if(state) state.textContent=(phStatus.includes('Uygun')?'🟢 Güvenli':phStatus.includes('Dikkat')?'🟡 Dikkat':'🔴 Riskli')+' · pH '+ph;
+   if(box){box.classList.remove('safe','warn','risk');box.classList.add(phStatus.includes('Uygun')?'safe':phStatus.includes('Dikkat')?'warn':'risk');}
+   const detail=document.getElementById('mobile-rumen-detail'); if(detail) detail.textContent=phDiff||'Rumen değerlendirmesi';
+   const c=document.getElementById('mobile-ration-cost'); if(c)c.textContent=cost;
+ }
+ syncMobile();
+ const obs=new MutationObserver(syncMobile); ['target-mini-ph-current','target-mini-ph-status','target-mini-ph-diff','target-mini-cost-current'].forEach(id=>{const e=document.getElementById(id);if(e)obs.observe(e,{subtree:true,childList:true,characterData:true})});
+})();
+</script>
+"""
+
 # FINAL5 UI polish
 FINAL5_UI_CSS = r"""
 .dashboard-tabs{display:none!important}
@@ -4034,7 +4181,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if is_workbench:
                 if not selected or not detail:
                     return self.redirect('/rations','Rasyon bulunamadı veya seçilmedi.')
-                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası</h1><p class="mut">Bu ekran yalnızca seçili rasyon üzerinde çalışmak içindir. Hedef, yem miktarları, rumen pH ve maliyet burada birlikte değerlendirilir.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}'''
+                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası</h1><p class="mut">Bu ekran yalnızca seçili rasyon üzerinde çalışmak içindir. Hedef, yem miktarları, rumen pH ve maliyet burada birlikte değerlendirilir.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}{MOBILE_RATION_UX_V1}'''
                 return self.send_html(page('Rasyon Çalışma Masası',body,'/rations',u,msg))
             body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyonlarınızı oluşturun, çözün ve yönetin. Bir rasyona tıklayınca ayrı Çalışma Masası açılır.</p><div class="ration-page-steps"><span>1️⃣ Rasyon oluştur / çöz</span><span>2️⃣ Rasyonu seç</span><span>3️⃣ Ayrı çalışma masasında düzenle</span></div>{action_cards}{new_ration_panel}{solve_panel}{drawer_script}<div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
