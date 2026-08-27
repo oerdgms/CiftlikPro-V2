@@ -2539,6 +2539,8 @@ body.erp-ration-reference .erp-secondary{margin-top:8px}.erp-ration-reference .e
 </style>
 <script id="workbench-reference-ui-v3-script">
 (()=>{
+ // DEV4.7: masaüstü ERP DOM dönüşümü yalnız geniş ekranda. Mobil, yerel mobil kokpiti kullanır.
+ if(window.matchMedia && window.matchMedia('(max-width: 900px)').matches) return;
  const shell=document.querySelector('.workbench-shell'); if(!shell||document.querySelector('.erp-ration-layout')) return;
  document.body.classList.add('erp-ration-reference');
  const original=[...shell.children];
@@ -6153,13 +6155,13 @@ if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');ThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
 
 
-# DEV4.4 — desktop-only ration polish + mobile restore + logo lock; solver logic untouched
-DEV44_DESKTOP_RATION_CSS = r'''
-<style id="dev44-desktop-ration-polish">
+# DEV4.3 — desktop-only ration workbench refinement; solver logic untouched
+DEV43_DESKTOP_RATION_CSS = r'''
+<style id="dev43-desktop-ration-polish">
 @media(min-width:901px){
   /* FINAL/LOCKED brand placement: old cow wordmark, just above Dashboard, left-biased */
   .side{padding-top:0!important}
-  .erp-side-brand{height:64px!important;min-height:64px!important;margin:0 0 4px!important;padding:0 12px 0 18px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;gap:8px!important;font-size:18px!important;line-height:1!important;box-sizing:border-box!important;background:linear-gradient(180deg,#087643,#066739)!important;border-bottom:1px solid rgba(255,255,255,.18)!important}
+  .erp-side-brand{height:58px!important;min-height:58px!important;margin:0 0 4px!important;padding:0 12px 0 18px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;font-size:18px!important;line-height:1!important;box-sizing:border-box!important;background:transparent!important;border-bottom:1px solid rgba(255,255,255,.14)!important}
 
   body.erp-ration-reference .main{background:#f3f6f4!important;padding:10px 12px 34px!important}
   body.erp-ration-reference .erp-ration-layout{grid-template-columns:226px minmax(0,1fr)!important;gap:10px!important;align-items:start!important}
@@ -6184,8 +6186,14 @@ DEV44_DESKTOP_RATION_CSS = r'''
   body.erp-ration-reference #ration-bulk-form{padding:0 9px 9px!important}
   body.erp-ration-reference .ration-changebar{margin:0 -9px 0!important;padding:7px 9px!important;border-bottom:1px solid #edf1ee!important;background:#fff!important}
 
-  /* Hedef / Mevcut kartları yeterli; ek masaüstü rasyon özeti yok. */
-  body.erp-ration-reference .desktop-ration-summary{display:none!important}
+  /* Executive desktop summary: visible before table, not buried at page bottom */
+  body.erp-ration-reference .desktop-ration-summary{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;margin:0 -9px 7px!important;border-bottom:1px solid #d6e2d9!important;background:#edf4ef!important}
+  body.erp-ration-reference .desktop-ration-summary>div{background:#f8fbf9;padding:7px 9px;min-width:0;border-right:1px solid #dbe5de!important}
+  body.erp-ration-reference .desktop-ration-summary>div:last-child{border-right:0!important}
+  body.erp-ration-reference .desktop-ration-summary span{display:block;font-size:8px;color:#6a7a70;text-transform:uppercase;letter-spacing:.35px;font-weight:900}
+  body.erp-ration-reference .desktop-ration-summary b{display:block;margin-top:2px;font-size:12px;color:#173d28;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.erp-ration-reference .desktop-ration-summary .rumen-ok b{color:#16864a}
+  body.erp-ration-reference .desktop-ration-summary .rumen-warn b{color:#b76b00}
 
   body.erp-ration-reference .ration-workbench-table{font-size:10.5px!important;border-collapse:separate!important;border-spacing:0!important;width:100%!important}
   body.erp-ration-reference .ration-workbench-table thead th{position:sticky;top:0;z-index:4;background:#eaf2ec!important;color:#294a37!important;font-weight:900!important;border-top:1px solid #d4dfd7!important;border-bottom:1px solid #cbd8cf!important;padding:6px 5px!important;white-space:nowrap!important}
@@ -6208,15 +6216,117 @@ DEV44_DESKTOP_RATION_CSS = r'''
   body.erp-ration-reference .smart-solution .effect{background:#f0f7f2!important;border:1px solid #dce9df!important}
 }
 @media(max-width:1200px) and (min-width:901px){
+ body.erp-ration-reference .desktop-ration-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important}
  body.erp-ration-reference .smart-solution-grid{grid-template-columns:1fr!important}
 }
 </style>
-
+<script id="dev43-desktop-ration-polish-script">/* DEV4.5: redundant desktop ration summary removed; Hedef ↔ Mevcut cards are authoritative. */</script>
 '''
 
-_old_page_dev44 = page
+_old_page_dev43 = page
 
 def page(title, body, path='/', user='admin', flash=''):
-    html = _old_page_dev44(title, body, path, user, flash)
-    # Pure CSS; all DEV4.4 overrides are desktop-only (>=901px), so mobile keeps the proven layout.
-    return html.replace('</body>', DEV44_DESKTOP_RATION_CSS + '</body>')
+    html = _old_page_dev43(title, body, path, user, flash)
+    # Apply desktop ration polish only on the ration module; brand placement is global desktop.
+    if path == '/rations':
+        return html.replace('</body>', DEV43_DESKTOP_RATION_CSS + '</body>')
+    brand_only = DEV43_DESKTOP_RATION_CSS.split('<script id="dev43-desktop-ration-polish-script">')[0]
+    return html.replace('</body>', brand_only + '</body>')
+
+
+
+# DEV4.8 — mobile stable + visible desktop logo; solver logic untouched
+DEV47_UI_FIX = r"""
+<style id="dev47-mobile-ration-authoritative">
+/* Desktop logo: Dashboard üstündeki ayrılmış yeşil alanda görünür ve sabit. */
+@media(min-width:901px){
+  #sideMenu.side{padding-top:0!important}
+  #sideMenu.side > .erp-side-brand{position:relative!important;top:auto!important;left:auto!important;right:auto!important;z-index:1!important;height:46px!important;min-height:46px!important;margin:0 0 2px!important;padding:0 10px 0 16px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;text-align:left!important;font-size:14px!important;line-height:1!important;box-sizing:border-box!important;background:transparent!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.14)!important;color:#fff!important;visibility:visible!important;opacity:1!important;overflow:visible!important;transform:none!important}
+  #sideMenu.side > .erp-side-brand b{display:inline!important;color:#fff!important;font-size:14px!important;line-height:1!important;white-space:nowrap!important}
+  #sideMenu.side > .erp-side-brand + a{margin-top:2px!important}
+}
+
+@media(max-width:900px){
+  /* Masaüstü kokpit kurallarını mobilde kesin olarak sıfırla. */
+  body:has(.workbench-shell) .workbench-shell{display:block!important;grid-template-columns:none!important;grid-template-rows:none!important;padding:8px!important;gap:0!important;overflow:visible!important;position:relative!important}
+  body:has(.workbench-shell) .workbench-shell>.target-workspace{display:block!important}
+  body:has(.workbench-shell) .workbench-shell>#ration-workbench,
+  body:has(.workbench-shell) .workbench-shell>#ration-workbench~*:not(script){display:block!important;grid-column:auto!important;grid-row:auto!important;min-width:0!important;width:100%!important}
+
+  /* Mobilde hedef ayar formu yer kaplamaz; düzenleme Rasyon Bilgileri alanından yapılır. */
+  body:has(.workbench-shell) .mobile-target-toggle{display:none!important}
+  body:has(.workbench-shell) .target-controlbar{display:none!important;position:static!important;width:100%!important;margin:0!important;padding:0!important;grid-column:auto!important;grid-row:auto!important}
+  body:has(.workbench-shell) .target-controlbar .target-head{display:block!important;margin:0 0 9px!important}
+  body:has(.workbench-shell) .target-controlbar .target-head h3{font-size:16px!important;white-space:normal!important;margin:0 0 5px!important}
+  body:has(.workbench-shell) .target-controlbar .target-context{display:block!important;white-space:normal!important;overflow-wrap:anywhere!important;margin:0!important;padding:7px 8px!important;font-size:12px!important;line-height:1.35!important}
+  body:has(.workbench-shell) .target-controlbar .target-form{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;width:100%!important;margin-top:9px!important}
+  body:has(.workbench-shell) .target-controlbar .target-form label{min-width:0!important;width:100%!important;font-size:11px!important}
+  body:has(.workbench-shell) .target-controlbar .target-form input,
+  body:has(.workbench-shell) .target-controlbar .target-form select{width:100%!important;min-width:0!important;box-sizing:border-box!important;min-height:42px!important;height:auto!important;font-size:14px!important;padding:8px!important}
+  body:has(.workbench-shell) .target-controlbar .compact-target-btn{grid-column:1/-1!important;width:100%!important;min-height:44px!important;height:auto!important}
+
+  /* Hedef ↔ Mevcut: telefonda yatay kart şeridi, metinler sıkışmaz. */
+  body:has(.workbench-shell) .target-compare-sticky,
+  body:has(.workbench-shell) .target-compare-sticky.is-floating{position:static!important;left:auto!important;top:auto!important;width:100%!important;height:auto!important;max-height:none!important;overflow:hidden!important;margin:8px 0 12px!important;padding:9px!important;background:#f8fbf9!important;border:1px solid #cfe3d5!important;border-radius:14px!important;box-shadow:none!important;backdrop-filter:none!important;z-index:auto!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) .target-compare-title{height:auto!important;min-height:24px!important;margin:0 2px 7px!important;padding:0!important;display:flex!important;align-items:center!important;font-size:14px!important}
+  body:has(.workbench-shell) .target-compare-title>b{font-size:15px!important}
+  body:has(.workbench-shell) .target-compare-title span{display:none!important}
+  body:has(.workbench-shell) .nutri-mini-grid{display:flex!important;grid-template-columns:none!important;grid-template-rows:none!important;grid-auto-rows:auto!important;gap:7px!important;width:100%!important;height:auto!important;padding:0 0 4px!important;margin:0!important;overflow-x:auto!important;overflow-y:hidden!important;scroll-snap-type:x proximity;scrollbar-width:thin!important}
+  body:has(.workbench-shell) .nutri-mini.nutri-compare-card,
+  body:has(.workbench-shell) .nutri-mini{flex:0 0 150px!important;width:150px!important;height:116px!important;min-height:116px!important;min-width:150px!important;display:grid!important;grid-template-rows:26px 1fr 36px!important;padding:0!important;border-radius:12px!important;overflow:hidden!important;scroll-snap-align:start;background:#fff!important}
+  body:has(.workbench-shell) .nutri-card-title{height:26px!important;min-height:26px!important;padding:6px 8px!important;font-size:13px!important;line-height:1!important}
+  body:has(.workbench-shell) .nutri-compare-body{display:grid!important;grid-template-columns:1fr 1fr!important;min-height:0!important}
+  body:has(.workbench-shell) .nutri-side{padding:4px 3px!important;min-width:0!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;text-align:center!important}
+  body:has(.workbench-shell) .nutri-side span{font-size:9px!important;white-space:nowrap!important}
+  body:has(.workbench-shell) .nutri-side b{font-size:18px!important;line-height:1.05!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
+  body:has(.workbench-shell) .nutri-card-footer{height:36px!important;min-height:36px!important;padding:4px!important;display:grid!important;grid-template-rows:auto auto!important;align-content:center!important;justify-items:center!important}
+  body:has(.workbench-shell) .nutri-card-footer em{font-size:11px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
+  body:has(.workbench-shell) .nutri-card-footer .nutri-diff{font-size:9px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
+  body:has(.workbench-shell) #target-mini-cost{grid-column:auto!important}
+
+  /* Çalışma masası mobil kart listesi. */
+  body:has(.workbench-shell) #ration-workbench{display:block!important;width:100%!important;margin:0!important;padding:12px!important;border-radius:14px!important;overflow:visible!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head{display:block!important;padding:0 0 10px!important;background:transparent!important;border:0!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head h3{font-size:22px!important;line-height:1.1!important;margin:0!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head .mut{display:block!important;font-size:13px!important;line-height:1.35!important;margin-top:4px!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;width:100%!important;margin-top:10px!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-actions .btn{width:100%!important;min-height:46px!important;font-size:14px!important;padding:9px!important}
+  body:has(.workbench-shell) #ration-workbench form{padding:0!important}
+  body:has(.workbench-shell) #ration-workbench form>div[style*="overflow:auto"]{overflow:visible!important;margin-top:7px!important}
+  body:has(.workbench-shell) .ration-workbench-table,
+  body:has(.workbench-shell) .ration-workbench-table tbody{display:block!important;width:100%!important;min-width:0!important}
+  body:has(.workbench-shell) .ration-workbench-table thead{display:none!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row{display:grid!important;grid-template-columns:1fr 1fr!important;grid-template-areas:'name name' 'qty qty' 'price daily' 'remove remove'!important;gap:8px 10px!important;width:100%!important;min-width:0!important;margin:0 0 10px!important;padding:12px!important;border:1px solid #dce8df!important;border-radius:14px!important;background:#fff!important;box-shadow:none!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td{display:none!important;position:static!important;left:auto!important;border:0!important;padding:0!important;width:auto!important;min-width:0!important;max-width:none!important;background:transparent!important;font-size:12px!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){display:block!important;grid-area:name!important;font-size:15px!important;line-height:1.25!important;padding-bottom:7px!important;border-bottom:1px solid #e6eee8!important;overflow-wrap:anywhere!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2){display:block!important;grid-area:qty!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(6){display:flex!important;grid-area:price!important;align-items:center!important;padding:8px!important;background:#f1f6f2!important;border-radius:9px!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(6)::before{content:'Fiyat';display:block;margin-right:auto;color:#718077;font-size:11px;font-weight:800}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(7){display:flex!important;grid-area:daily!important;align-items:center!important;justify-content:flex-end!important;padding:8px!important;background:#f1f6f2!important;border-radius:9px!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(7)::before{content:'Günlük';display:block;margin-right:auto;color:#718077;font-size:11px;font-weight:800}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8){display:block!important;grid-area:remove!important;text-align:right!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper{display:grid!important;grid-template-columns:52px minmax(100px,1fr) 52px!important;gap:8px!important;width:100%!important;align-items:center!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper .btn{width:52px!important;height:48px!important;min-height:48px!important;padding:0!important;font-size:22px!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-qty{width:100%!important;height:48px!important;min-width:0!important;font-size:20px!important;padding:8px!important;text-align:center!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) .ration-workbench-table .qty-zero{width:100%!important;min-height:44px!important;font-size:14px!important}
+  body:has(.workbench-shell) .ration-savebar{position:sticky!important;bottom:34px!important;z-index:45!important;width:100%!important;margin:8px 0 0!important;padding:8px!important;background:rgba(255,255,255,.96)!important;border-radius:12px!important;box-shadow:0 -5px 18px rgba(18,60,37,.09)!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) .ration-savebar .btn{width:100%!important;min-height:50px!important;font-size:16px!important}
+
+  /* Mobilde yem havuzu çalışma alanını işgal etmez; Yem Ekle düğmesi mevcut drawer/details alanını açar. */
+  body:has(.workbench-shell) .erp-ration-layout{display:block!important;grid-template-columns:none!important}
+  body:has(.workbench-shell) .erp-ration-left{display:none!important}
+}
+@media(max-width:520px){
+  body:has(.workbench-shell) .target-controlbar .target-form{grid-template-columns:1fr!important}
+  body:has(.workbench-shell) .nutri-mini.nutri-compare-card,
+  body:has(.workbench-shell) .nutri-mini{flex-basis:142px!important;width:142px!important;min-width:142px!important}
+}
+</style>
+
+"""
+
+_old_page_dev47 = page
+
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_dev47(title, body, path, user, flash)
+    return html.replace('</body>', DEV47_UI_FIX + '</body>')

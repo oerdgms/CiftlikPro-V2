@@ -1,3 +1,10 @@
+# v3.9.20 DEV4.8 — Mobile Stable / Logo Final
+
+- Mobilde işlevsiz hedef göster/gizle düğmesi kaldırıldı.
+- Masaüstü sidebar ÇiftlikPro logosu Dashboard satırının hemen üstünde görünür hale getirildi.
+- GitHub Windows installer workflow korundu.
+- Solver mantığına dokunulmadı.
+
 ## v3.9.20 Solver DEV4.1
 - Sidebar `🐄 ÇiftlikPro` marka alanı yatay+dikey merkezlendi.
 - Otomatik canlı ağırlık → besi dönemi seçimine manuel override eklendi.
@@ -51,4 +58,26 @@
 - Mobil rasyon görünümüne dokunulmadı.
 - Kilitli ÇiftlikPro logo konumu korundu.
 
-- DEV4.4: Mobil rasyon görünümü geri alındı; masaüstü ek rasyon özeti kaldırıldı; logo konumu kilitlendi. Solver değişmedi.
+## Solver DEV4.5 — Mobile Restore / Logo Lock
+- Solver mantığına dokunulmadı.
+- Mobil rasyon görünümü masaüstü ERP dönüşümünden ayrıldı ve eski tek-kolon mobil akış korundu.
+- Masaüstündeki tekrarlı rasyon özet şeridi kaldırıldı; Hedef ↔ Mevcut kartları korundu.
+- Sidebar logo konumu Dashboard üstünde dikey ortalı ve sola yakın olarak kilitlendi.
+
+## Solver DEV4.6 — Mobile DEV1 UI Restore
+- Güncel DEV4.x solver korunarak DEV1 mobil rasyon çalışma masası responsive davranışı geri getirildi.
+- Mobilde DEV4.5'teki native iki-kolon taşması kaldırıldı.
+- Solver hesapları ve besi fazı kuralları değiştirilmedi.
+
+## Solver DEV4.7 — Mobile Authoritative Restore
+- Güncel DEV4.x solver ve besi fazı motoru aynen korundu.
+- Masaüstü ERP DOM dönüşümü mobilde kapatıldı.
+- Rasyon hedef ayarları mobilde aç/kapa paneline alındı.
+- Hedef↔Mevcut kartları yatay mobil şerit haline getirildi.
+- Rasyon çalışma tablosu tekrar büyük mobil yem kartlarına dönüştürüldü.
+- Masaüstü ÇiftlikPro sidebar logosu Dashboard üstünde sticky/sabit konuma alındı.
+
+## DEV4.7 GitHub Workflow Restore
+- DEV4.7 current solver/mobile UI/logo fix preserved.
+- `.github/workflows/windows-installer.yml` restored from the previously working GitHub workflow package.
+- No solver calculation logic changed in this merge.

@@ -1,3 +1,13 @@
+# ÇiftlikPro v3.9.20 — Saha Test Paketi
+
+Bu paket güncel Solver DEV4.x mantığını korur. Son düzeltmeler yalnız arayüz ve GitHub paket yapısındadır:
+
+- Mobil rasyon görünümü korunmuştur.
+- İşlevsiz “Hedef Bilgilerini Göster/Gizle” düğmesi kaldırılmıştır.
+- Masaüstünde 🐄 ÇiftlikPro logosu sol menüde Dashboard satırının hemen üzerinde görünür konuma sabitlenmiştir.
+- `.github/workflows/windows-installer.yml` dahildir.
+- Solver hesap/optimizasyon mantığı değiştirilmemiştir.
+
 # ÇiftlikPro v3.9.20 — Solver DEV4
 
 Bu geliştirme sürümü, besi rasyonu solverında **canlı ağırlık → besi dönemi → faz kaba/kesif koridoru → rumen güvenliği → besin hedefleri → kalite/maliyet** sırasını uygular.
