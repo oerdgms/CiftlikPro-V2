@@ -1,3 +1,10 @@
+## v3.9.20 Solver DEV4.1
+- Sidebar `🐄 ÇiftlikPro` marka alanı yatay+dikey merkezlendi.
+- Otomatik canlı ağırlık → besi dönemi seçimine manuel override eklendi.
+- Faz kaba/kesif koridorları manuel seçimde de solver sınırlarına uygulanıyor.
+- Ca/P aşım cezası güçlendirildi.
+- GitHub/Windows installer dosyaları korundu.
+
 # ÇiftlikPro Sürüm Notları
 
 ## v3.9.20 — 6.17 kaynak tabanı
@@ -25,3 +32,11 @@
 - Ayarlar, yalnız Çiftlik Profili yerine program genelindeki ayarlara giriş sağlayan Ayarlar Merkezi olarak düzenlendi.
 - Dashboard'un 8 özet kartı korundu; alt alan kompakt "Bugünün İşleri" (kızgınlık, gebelik/aşı, finans) panellerine dönüştürüldü.
 - Solver, veritabanı, LAN/Tailscale ve 8953 ağ başlatma davranışı değiştirilmedi.
+
+
+## Solver DEV4
+- Canlı ağırlığa göre otomatik besi dönemi seçimi korunup faz oranları saha standardına göre revize edildi.
+- Başlangıç: %50/%50; Geliştirme: %40/%60; Bitirme: %30–40/%60–70 (KM bazında).
+- Faz kaba/kesif koridoru eNDF/pH güvenlik raylarından önce uygulanıyor.
+- Kaba/kesif kartında sınırdaki yuvarlama kaynaklı yanlış “yüksek/düşük” uyarısı için tolerans eklendi.
+- Hedef bağlamında besi dönemi ve faz kaba/kesif koridoru gösteriliyor.
