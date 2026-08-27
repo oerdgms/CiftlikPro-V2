@@ -40,3 +40,15 @@
 - Faz kaba/kesif koridoru eNDF/pH güvenlik raylarından önce uygulanıyor.
 - Kaba/kesif kartında sınırdaki yuvarlama kaynaklı yanlış “yüksek/düşük” uyarısı için tolerans eklendi.
 - Hedef bağlamında besi dönemi ve faz kaba/kesif koridoru gösteriliyor.
+
+## v3.9.20 Solver DEV4.3 — Desktop Rasyon UI
+- Solver matematiğine ve dönem kurallarına dokunulmadı.
+- Masaüstünde Yem Havuzu daraltıldı; ana çalışma alanına daha fazla yatay alan ayrıldı.
+- KM / ME / HP / Kaba-Kesif / Günlük Maliyet / Rumen özeti tablonun hemen üstüne taşındı.
+- Rasyon tablosu daha sıkı ERP satır yapısı, sabit başlık ve sabit yem adı sütunu ile yenilendi.
+- Kaydet çubuğu masaüstünde görünür/sticky hale getirildi.
+- Akıllı Dengeleme masaüstünde 3 kolon karar kartı olarak sıkılaştırıldı.
+- Mobil rasyon görünümüne dokunulmadı.
+- Kilitli ÇiftlikPro logo konumu korundu.
+
+- DEV4.4: Mobil rasyon görünümü geri alındı; masaüstü ek rasyon özeti kaldırıldı; logo konumu kilitlendi. Solver değişmedi.

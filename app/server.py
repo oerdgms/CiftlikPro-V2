@@ -6152,3 +6152,71 @@ def local_ip():
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');ThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
 
+
+# DEV4.4 — desktop-only ration polish + mobile restore + logo lock; solver logic untouched
+DEV44_DESKTOP_RATION_CSS = r'''
+<style id="dev44-desktop-ration-polish">
+@media(min-width:901px){
+  /* FINAL/LOCKED brand placement: old cow wordmark, just above Dashboard, left-biased */
+  .side{padding-top:0!important}
+  .erp-side-brand{height:64px!important;min-height:64px!important;margin:0 0 4px!important;padding:0 12px 0 18px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;gap:8px!important;font-size:18px!important;line-height:1!important;box-sizing:border-box!important;background:linear-gradient(180deg,#087643,#066739)!important;border-bottom:1px solid rgba(255,255,255,.18)!important}
+
+  body.erp-ration-reference .main{background:#f3f6f4!important;padding:10px 12px 34px!important}
+  body.erp-ration-reference .erp-ration-layout{grid-template-columns:226px minmax(0,1fr)!important;gap:10px!important;align-items:start!important}
+  body.erp-ration-reference .erp-ration-left{position:sticky!important;top:116px!important;max-height:calc(100vh - 146px)!important}
+  body.erp-ration-reference .erp-panel,body.erp-ration-reference #ration-workbench,body.erp-ration-reference .target-compare-sticky{border:1px solid #d4e0d7!important;box-shadow:0 2px 8px rgba(21,61,40,.045)!important;border-radius:8px!important}
+  body.erp-ration-reference .erp-panel-head{min-height:32px!important;padding:6px 9px!important;background:#f7faf8!important;border-bottom:1px solid #dde7e0!important}
+  body.erp-ration-reference .erp-panel-body{padding:8px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-results{max-height:500px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-result{padding:7px 8px!important}
+  body.erp-ration-reference #quick-feed-add .quick-feed-result:hover{background:#edf7f0!important}
+
+  body.erp-ration-reference .target-compare-sticky{margin-top:8px!important;overflow:hidden!important}
+  body.erp-ration-reference .target-mini-grid{gap:5px!important}
+  body.erp-ration-reference .target-mini-card{min-height:88px!important;border-radius:7px!important}
+
+  body.erp-ration-reference #ration-workbench{margin-top:9px!important;padding:0!important;overflow:hidden!important;background:#fff!important}
+  body.erp-ration-reference #ration-workbench .workbench-head{min-height:42px!important;padding:8px 10px!important;margin:0!important;background:#f8fbf9!important;border-bottom:1px solid #dbe6de!important}
+  body.erp-ration-reference #ration-workbench .workbench-head h3{font-size:14px!important}
+  body.erp-ration-reference #ration-workbench .workbench-head .mut{font-size:10px!important}
+  body.erp-ration-reference #ration-workbench .workbench-actions{gap:6px!important}
+  body.erp-ration-reference #ration-workbench .workbench-actions .btn{padding:7px 10px!important;font-size:10px!important;border-radius:6px!important}
+  body.erp-ration-reference #ration-bulk-form{padding:0 9px 9px!important}
+  body.erp-ration-reference .ration-changebar{margin:0 -9px 0!important;padding:7px 9px!important;border-bottom:1px solid #edf1ee!important;background:#fff!important}
+
+  /* Hedef / Mevcut kartları yeterli; ek masaüstü rasyon özeti yok. */
+  body.erp-ration-reference .desktop-ration-summary{display:none!important}
+
+  body.erp-ration-reference .ration-workbench-table{font-size:10.5px!important;border-collapse:separate!important;border-spacing:0!important;width:100%!important}
+  body.erp-ration-reference .ration-workbench-table thead th{position:sticky;top:0;z-index:4;background:#eaf2ec!important;color:#294a37!important;font-weight:900!important;border-top:1px solid #d4dfd7!important;border-bottom:1px solid #cbd8cf!important;padding:6px 5px!important;white-space:nowrap!important}
+  body.erp-ration-reference .ration-workbench-table thead th:first-child{left:0;z-index:6!important}
+  body.erp-ration-reference .ration-workbench-table tbody td{padding:5px 5px!important;border-bottom:1px solid #e4ebe6!important;vertical-align:middle!important}
+  body.erp-ration-reference .ration-workbench-table tbody tr:nth-child(even){background:#f7faf8!important}
+  body.erp-ration-reference .ration-workbench-table tbody tr:hover{background:#e9f4ed!important}
+  body.erp-ration-reference .ration-workbench-table tbody td:first-child{position:sticky;left:0;z-index:2;background:inherit!important;font-weight:800!important;min-width:210px!important;max-width:280px!important}
+  body.erp-ration-reference .ration-workbench-table .ration-qty{width:54px!important;height:28px!important;padding:2px 4px!important;text-align:center!important;font-weight:900!important}
+  body.erp-ration-reference .ration-workbench-table .qty-step{width:25px!important;height:28px!important;padding:0!important}
+  body.erp-ration-reference .ration-workbench-table .qty-zero{padding:5px 8px!important}
+  body.erp-ration-reference .ration-savebar{position:sticky!important;bottom:26px!important;z-index:8!important;display:flex!important;justify-content:flex-end!important;background:rgba(255,255,255,.96)!important;border-top:1px solid #dce6df!important;margin:6px -9px -9px!important;padding:7px 9px!important;backdrop-filter:blur(5px)!important}
+  body.erp-ration-reference .ration-savebar .btn{padding:8px 12px!important;border-radius:6px!important}
+
+  body.erp-ration-reference #smart-balance{margin-top:10px!important;padding:12px!important;border-color:#d4e0d7!important;background:#fff!important}
+  body.erp-ration-reference #smart-balance h3{font-size:14px!important}
+  body.erp-ration-reference #smart-balance .mut{font-size:10px!important}
+  body.erp-ration-reference .smart-solution-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;margin-top:8px!important}
+  body.erp-ration-reference .smart-solution{border-left:3px solid #218a50!important;border-radius:7px!important;padding:9px!important}
+  body.erp-ration-reference .smart-solution .effect{background:#f0f7f2!important;border:1px solid #dce9df!important}
+}
+@media(max-width:1200px) and (min-width:901px){
+ body.erp-ration-reference .smart-solution-grid{grid-template-columns:1fr!important}
+}
+</style>
+
+'''
+
+_old_page_dev44 = page
+
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_dev44(title, body, path, user, flash)
+    # Pure CSS; all DEV4.4 overrides are desktop-only (>=901px), so mobile keeps the proven layout.
+    return html.replace('</body>', DEV44_DESKTOP_RATION_CSS + '</body>')
