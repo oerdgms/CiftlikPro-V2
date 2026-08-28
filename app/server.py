@@ -1,4 +1,4 @@
-import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl, random
+import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl, random, re, unicodedata
 from email.parser import BytesParser
 from email.message import EmailMessage
 from email.policy import default
@@ -19,6 +19,8 @@ BACKUPS=DATA_ROOT/'backups'
 UPLOADS=DATA_ROOT/'uploads'
 PORT=int(os.environ.get('CIFTLIKPRO_PORT','8953'))
 SESSIONS={}
+ANIMAL_IMPORT_PREVIEWS={}
+ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.20'
@@ -830,6 +832,203 @@ def farm_profile():
 def farm_display_name(profile=None):
     p=profile or farm_profile()
     return (p.get('farm_name') or '').strip() or 'ÇiftlikPro'
+
+
+ANIMAL_IMPORT_ALIASES={
+    'tag':('kupe no','kupe numarasi','kupe','tag','ear tag'),
+    'herd_no':('suru no','suru numarasi','herd no'),
+    'species':('tur','hayvan turu','species'),
+    'breed':('irk','breed'),
+    'gender':('cinsiyet','gender'),
+    'birth_date':('dogum tarihi','dogum','birth date'),
+    'mother_tag':('ana no','anne no','anne kupe no','ana kupe no','mother tag'),
+    'arrival_date':('gelis tarihi','alis tarihi','isletmeye gelis tarihi','arrival date'),
+    'nickname':('takma ad','hayvan adi','nickname'),
+    'paddock':('padok','ahir','padok ahir'),
+    'notes':('not','notlar','aciklama','notes'),
+}
+
+def normalized_heading(value):
+    text=unicodedata.normalize('NFD',str(value or '').strip().lower())
+    text=''.join(ch for ch in text if unicodedata.category(ch)!='Mn').replace('ı','i')
+    return re.sub(r'[^a-z0-9]+',' ',text).strip()
+
+def normalize_animal_tag(value):
+    if value is None:return ''
+    if isinstance(value,float) and value.is_integer():value=int(value)
+    return re.sub(r'\s+','',str(value).strip()).upper()
+
+def parse_import_date(value):
+    if value is None or value=='':return ''
+    if isinstance(value,datetime):return value.date().isoformat()
+    if isinstance(value,date):return value.isoformat()
+    text=str(value).strip()
+    for fmt in ('%Y-%m-%d','%d/%m/%Y','%d.%m.%Y','%d-%m-%Y','%d/%m/%y','%d.%m.%y'):
+        try:return datetime.strptime(text[:10],fmt).date().isoformat()
+        except Exception:pass
+    return None
+
+def _tabular_import_rows(matrix):
+    matrix=[list(r) for r in matrix if any(str(v or '').strip() for v in r)]
+    if not matrix:raise ValueError('Dosyada okunabilir satır bulunamadı.')
+    aliases={alias:key for key,values in ANIMAL_IMPORT_ALIASES.items() for alias in values}
+    header_index=-1; mapping={}
+    for idx,row in enumerate(matrix[:30]):
+        candidate={}
+        for col,value in enumerate(row):
+            key=aliases.get(normalized_heading(value))
+            if key and key not in candidate:candidate[key]=col
+        if 'tag' in candidate and len(candidate)>=3:
+            header_index=idx;mapping=candidate;break
+    if header_index<0:raise ValueError('Küpe No başlığını içeren hayvan tablosu bulunamadı.')
+    rows=[]
+    for row in matrix[header_index+1:]:
+        item={key:(row[col] if col<len(row) else '') for key,col in mapping.items()}
+        if any(str(v or '').strip() for v in item.values()):rows.append(item)
+    if not rows:raise ValueError('Başlık bulundu ancak hayvan satırı bulunamadı.')
+    return rows
+
+def _official_pdf_rows(text):
+    rows=[]
+    tag=r'(?:[A-Z]{1,3})?\d{8,15}'
+    date_rx=r'\d{2}[./-]\d{2}[./-]\d{2,4}'
+    pattern=re.compile(
+        rf'^\s*(?P<tag>{tag})\s+(?P<herd_no>\d+)\s+(?P<species>SIĞIR|SIGIR|MANDA)\s+'
+        rf'(?P<breed>.*?)\s+(?P<gender>DİŞİ|DIŞI|DISI|ERKEK)\s+(?P<birth_date>{date_rx})'
+        rf'(?:\s+(?P<mother_tag>{tag}|-))?\s+(?P<arrival_date>{date_rx})\s*$',re.I)
+    for raw in str(text or '').splitlines():
+        line=re.sub(r'\s+',' ',raw).strip()
+        match=pattern.match(line)
+        if match:rows.append(match.groupdict())
+    return rows
+
+def parse_animal_import_file(filename,content):
+    name=str(filename or '').lower(); raw_rows=[]
+    if len(content)>12*1024*1024:raise ValueError('Dosya 12 MB sınırını aşıyor.')
+    if name.endswith('.xlsx'):
+        from openpyxl import load_workbook
+        wb=load_workbook(io.BytesIO(content),read_only=True,data_only=True)
+        ws=wb.active
+        try:raw_rows=_tabular_import_rows(ws.iter_rows(values_only=True))
+        finally:wb.close()
+    elif name.endswith('.csv'):
+        decoded=None
+        for enc in ('utf-8-sig','cp1254','latin-1'):
+            try:decoded=content.decode(enc);break
+            except UnicodeDecodeError:pass
+        if decoded is None:raise ValueError('CSV metin kodlaması okunamadı.')
+        try:
+            dialect=csv.Sniffer().sniff(decoded[:4096],delimiters=';,\t,')
+            matrix=csv.reader(io.StringIO(decoded),dialect)
+        except Exception:matrix=csv.reader(io.StringIO(decoded),delimiter=';')
+        raw_rows=_tabular_import_rows(matrix)
+    elif name.endswith('.pdf'):
+        from pypdf import PdfReader
+        reader=PdfReader(io.BytesIO(content));parts=[]
+        for pdf_page in reader.pages:
+            try:parts.append(pdf_page.extract_text(extraction_mode='layout') or '')
+            except TypeError:parts.append(pdf_page.extract_text() or '')
+        text='\n'.join(parts)
+        if not text.strip():raise ValueError('PDF taranmış görüntü biçiminde. Orijinal dijital PDF veya Excel kullanın.')
+        raw_rows=_official_pdf_rows(text)
+        if not raw_rows:raise ValueError('PDF içindeki hayvan tablosu güvenli biçimde ayrıştırılamadı. Excel dosyasını kullanın veya PDF örneğini kontrol edin.')
+    else:raise ValueError('Yalnızca XLSX, CSV veya PDF dosyası desteklenir.')
+    if len(raw_rows)>5000:raise ValueError('Tek seferde en fazla 5.000 hayvan aktarılabilir.')
+    return raw_rows
+
+def prepare_animal_import(filename,raw_rows):
+    with db() as c:
+        existing={normalize_animal_tag(r['tag']) for r in c.execute('select tag from animals').fetchall()}
+        existing.update(normalize_animal_tag(r['tag']) for r in c.execute('select tag from calves').fetchall())
+        existing_females={normalize_animal_tag(r['tag']) for r in c.execute("select tag from animals where gender='Dişi'").fetchall()}
+    incoming_females=set()
+    for raw in raw_rows:
+        if normalized_heading(raw.get('gender')) in ('disi','female','f'):
+            incoming_females.add(normalize_animal_tag(raw.get('tag')))
+    known_females=existing_females|incoming_females
+    prepared=[];seen=set()
+    for index,raw in enumerate(raw_rows,1):
+        tag=normalize_animal_tag(raw.get('tag'));mother=normalize_animal_tag(raw.get('mother_tag'))
+        gender_raw=normalized_heading(raw.get('gender'))
+        gender='Dişi' if gender_raw in ('disi','female','f') else 'Erkek' if gender_raw in ('erkek','male','m') else ''
+        birth=parse_import_date(raw.get('birth_date'));arrival=parse_import_date(raw.get('arrival_date'))
+        issues=[];errors=[]
+        if not tag:errors.append('Küpe numarası boş')
+        elif len(tag)<6:errors.append('Küpe numarası çok kısa')
+        if tag in seen:errors.append('Dosya içinde mükerrer küpe')
+        if tag:seen.add(tag)
+        if tag in existing:errors.append('Küpe sistemde zaten kayıtlı')
+        if not gender:errors.append('Cinsiyet okunamadı')
+        if raw.get('birth_date') not in (None,'') and birth is None:errors.append('Doğum tarihi geçersiz')
+        if raw.get('arrival_date') not in (None,'') and arrival is None:issues.append('Geliş tarihi okunamadı')
+        record_type=gender or 'Dişi'
+        if birth and 0<=months_old(birth)<10:
+            if mother and mother in known_females:
+                record_type='Buzağı'
+            else:issues.append('10 aydan küçük; anne kaydı bulunamadığı için cinsiyet listesine aktarılacak')
+        if not str(raw.get('breed') or '').strip():issues.append('Irk boş')
+        state='error' if errors else ('warning' if issues else 'ready')
+        prepared.append({
+            'row_no':index,'tag':tag,'herd_no':clean_text(raw.get('herd_no')),
+            'species':clean_text(raw.get('species')) or 'Sığır','breed':clean_text(raw.get('breed')),
+            'gender':gender,'birth_date':birth or '','mother_tag':mother,'arrival_date':arrival or '',
+            'nickname':clean_text(raw.get('nickname')),'paddock':clean_text(raw.get('paddock')),
+            'notes':clean_text(raw.get('notes')),'record_type':record_type,'state':state,
+            'issues':errors+issues,'valid':not errors,
+        })
+    return prepared
+
+def animal_report_rows(group='all',status='Aktif',search='',paddock=''):
+    with db() as c:
+        adults=c.execute('''select a.*,
+            (select m.tag from calves oldc join animals m on m.id=oldc.mother_id where oldc.promoted_animal_id=a.id limit 1) mother_tag
+            from animals a order by a.tag''').fetchall()
+        calves=c.execute('''select ca.*,m.tag mother_tag from calves ca join animals m on m.id=ca.mother_id
+                            where ca.promoted_animal_id is null order by ca.tag''').fetchall()
+    result=[]
+    for r in adults:
+        rec_status=str(r['status'] or 'Aktif'); rec_group='Dişi' if r['gender']=='Dişi' else 'Erkek'
+        if status!='Tümü' and rec_status!=status:continue
+        result.append({'tag':r['tag'],'nickname':r['nickname'] or '','group':rec_group,'species':'Sığır','breed':r['breed'] or '',
+                       'gender':r['gender'] or '','birth_date':r['birth_date'] or '','mother_tag':r['mother_tag'] or '',
+                       'arrival_date':r['purchase_date'] or '','paddock':r['paddock'] or '','status':rec_status})
+    if status in ('Aktif','Tümü'):
+        for r in calves:
+            result.append({'tag':r['tag'],'nickname':r['nickname'] or '','group':'Buzağı','species':'Sığır','breed':r['breed'] or '',
+                           'gender':r['gender'] or '','birth_date':r['birth_date'] or '','mother_tag':r['mother_tag'] or '',
+                           'arrival_date':r['purchase_date'] or '','paddock':r['paddock'] or '','status':'Aktif'})
+    wanted={'female':'Dişi','male':'Erkek','calves':'Buzağı'}.get(group)
+    if wanted:result=[r for r in result if r['group']==wanted]
+    if paddock:result=[r for r in result if str(r['paddock']).strip()==paddock]
+    term=normalized_heading(search)
+    if term:
+        result=[r for r in result if term in normalized_heading(' '.join(str(r.get(k,'')) for k in ('tag','nickname','breed','gender','mother_tag','paddock')))]
+    return sorted(result,key=lambda r:(r['group'],r['tag']))
+
+def animal_report_xlsx(rows,profile):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font,PatternFill,Border,Side,Alignment
+    wb=Workbook();ws=wb.active;ws.title='Hayvanlar'
+    ws.merge_cells('A1:L1');ws['A1']=farm_display_name(profile)+' · Tüm Hayvanlar Raporu';ws['A1'].font=Font(size=16,bold=True,color='176B3A')
+    ws.merge_cells('A2:L2');ws['A2']=f"İşletme No: {profile.get('business_no') or '-'}   |   Rapor Tarihi: {date.today().strftime('%d/%m/%Y')}   |   Toplam: {len(rows)}"
+    headers=['Sıra','Küpe No','Takma Ad','Grup','Tür','Irk','Cinsiyet','Doğum Tarihi','Ana No','Geliş Tarihi','Padok','Durum']
+    for col,value in enumerate(headers,1):
+        cell=ws.cell(4,col,value);cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='176B3A');cell.alignment=Alignment(horizontal='center')
+    for idx,row in enumerate(rows,1):
+        values=[idx,row['tag'],row['nickname'],row['group'],row['species'],row['breed'],row['gender'],None,row['mother_tag'],None,row['paddock'],row['status']]
+        for col,value in enumerate(values,1):ws.cell(idx+4,col,value)
+        for col,key in ((8,'birth_date'),(10,'arrival_date')):
+            if row[key]:
+                try:ws.cell(idx+4,col,date.fromisoformat(row[key]));ws.cell(idx+4,col).number_format='dd/mm/yyyy'
+                except Exception:ws.cell(idx+4,col,row[key])
+    widths=[7,20,18,12,10,24,12,15,20,15,18,12]
+    for idx,width in enumerate(widths,1):ws.column_dimensions[chr(64+idx)].width=width
+    thin=Side(style='thin',color='D9E5DD')
+    for row in ws.iter_rows(min_row=4,max_row=4+len(rows),min_col=1,max_col=12):
+        for cell in row:cell.border=Border(bottom=thin);cell.alignment=Alignment(vertical='center',wrap_text=True)
+    ws.freeze_panes='A5';ws.auto_filter.ref=f'A4:L{max(4,4+len(rows))}';ws.print_title_rows='1:4';ws.sheet_properties.pageSetUpPr.fitToPage=True
+    ws.page_setup.orientation='landscape';ws.page_setup.fitToWidth=1;ws.page_setup.fitToHeight=0
+    output=io.BytesIO();wb.save(output);wb.close();return output.getvalue()
 
 
 DASHBOARD_CARD_OPTIONS = [
@@ -4023,15 +4222,18 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if not rr:
                     return self.redirect('/rations','Rasyon bulunamadı.')
                 sm=ration_summary(selected,c)
+            profile=farm_profile();logo=f'<img src="{h(profile.get("farm_logo"))}" alt="İşletme logosu">' if profile.get('farm_logo') else '<span class="prep-print-logo">🐄</span>'
             rows=''.join(f'''<tr class="prep-separate-row" data-kg="{float(x['kg_per_head_day'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}"><td><b>{h(x['name'])}</b></td><td>{float(x['kg_per_head_day'] or 0):.2f} kg</td><td class="prep-day">0,00 kg</td><td class="prep-period">0,00 kg</td><td class="prep-cost">₺0,00</td></tr>''' for x in sm['items']) or '<tr><td colspan="5">Rasyonda yem bulunmuyor.</td></tr>'
             body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/ration-workbench?id={selected}">← Çalışma Masasına Dön</a><h1 style="margin:10px 0 4px">🧾 Rasyon Hazırlama / Toplam Yem Raporu</h1><p class="mut">Kaç hayvan ve kaç günlük yem hazırlayacağınızı girin; toplam ihtiyaç otomatik hesaplanır.</p></div></div>
             <div class="card ration-prep-report prep-separate-page">
+              <div class="prep-print-header print-only"><div class="prep-print-brand">{logo}<div><h1>{h(farm_display_name(profile))}</h1><b>Rasyon Hazırlama / Toplam Yem Raporu</b></div></div><div><b>Rapor Tarihi</b><br>{date.today().strftime('%d/%m/%Y')}<br><b>İşletme No</b><br>{h(profile.get('business_no') or '-')}</div></div>
               <div class="prep-report-head"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Kaydedilmiş rasyon miktarları kullanılır.</span></div><div class="prep-report-controls no-print"><label>Hayvan Sayısı<input id="ration-animal-count" type="number" min="1" step="1" value="1" inputmode="numeric"></label><label>Dönem<select id="ration-period-days"><option value="1">1 Gün</option><option value="7">7 Gün</option><option value="30">30 Gün</option></select></label><button type="button" class="btn blue" id="ration-prep-print">🖨 Yazdır / PDF</button></div></div>
               <div class="prep-report-summary"><div><span>Hayvan Sayısı</span><b id="prep-headcount">1</b></div><div><span>Dönem</span><b id="prep-period-label">1 Gün</b></div><div><span>Toplam Yem</span><b id="prep-total-kg">{sm['as_fed_kg']:.2f} kg</b></div><div><span>Toplam Maliyet</span><b id="prep-total-cost">{money(sm['cost'])}</b></div></div>
               <div class="prep-report-table-wrap"><table class="prep-report-table"><thead><tr><th>Yem</th><th>kg/baş/gün</th><th>Toplam kg/gün</th><th>Dönem Toplamı</th><th>Dönem Maliyeti</th></tr></thead><tbody id="ration-prep-body">{rows}</tbody></table></div>
               <div class="mut prep-report-note">Rapor, kaydedilmiş rasyon reçetesine göre hazırlanır. Çalışma masasındaki kaydedilmemiş değişiklikleri raporlamadan önce kaydedin.</div>
+              <div class="prep-print-footer print-only"><span>ÇiftlikPro Enterprise · {h(farm_display_name(profile))}</span><span>{date.today().strftime('%d/%m/%Y')}</span></div>
             </div>
-            <style>@media print{{.top,.side,.no-print,.workbench-page-head a{{display:none!important}}.main{{margin:0!important;padding:0!important}}body{{background:#fff!important}}.card{{box-shadow:none!important}}.prep-separate-page{{border:0!important;padding:0!important}}}}</style>
+            <style>.print-only{{display:none}}@page{{size:A4 portrait;margin:10mm}}@media print{{html,body{{height:auto!important;overflow:visible!important;background:#fff!important}}.top,.side,.erp-commandbar,.erp-tabs,.erp-statusbar,.no-print,.workbench-page-head{{display:none!important}}.layout{{display:block!important;min-height:0!important;padding:0!important}}.main{{margin:0!important;padding:0!important;min-height:0!important;background:#fff!important}}.card{{box-shadow:none!important}}.prep-separate-page{{border:0!important;padding:0!important;margin:0!important}}.print-only{{display:flex!important}}.prep-print-header{{align-items:center;justify-content:space-between;gap:20px;border-bottom:2px solid #176b3a;padding-bottom:9px;margin-bottom:12px;font-size:11px;text-align:right}}.prep-print-brand{{display:flex;align-items:center;gap:10px;text-align:left}}.prep-print-brand img,.prep-print-logo{{width:54px;height:54px;object-fit:contain;border-radius:7px}}.prep-print-logo{{display:grid!important;place-items:center;background:#edf6f0;font-size:28px}}.prep-print-brand h1{{font-size:19px;margin:0 0 3px}}.prep-report-summary{{grid-template-columns:repeat(4,1fr)!important;break-inside:avoid}}.prep-report-table-wrap{{overflow:visible!important}}.prep-report-table{{font-size:10px!important}}.prep-report-table thead{{display:table-header-group}}.prep-report-table tr{{break-inside:avoid;page-break-inside:avoid}}.prep-report-table th,.prep-report-table td{{padding:5px 6px!important}}.prep-print-footer{{justify-content:space-between;border-top:1px solid #d8e3db;margin-top:10px;padding-top:7px;font-size:9px;color:#68766d}}body{{print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}</style>
             <script>(()=>{{const count=document.getElementById('ration-animal-count'),period=document.getElementById('ration-period-days'),rows=[...document.querySelectorAll('.prep-separate-row')];if(!count||!period)return;const nf=(n,d=2)=>Number(n||0).toLocaleString('tr-TR',{{minimumFractionDigits:d,maximumFractionDigits:d}}),money=n=>'₺'+nf(n,2);function update(){{const n=Math.max(1,parseInt(count.value||'1',10)||1),days=Math.max(1,parseInt(period.value||'1',10)||1);count.value=String(n);let totalKg=0,totalCost=0;rows.forEach(r=>{{const kg=parseFloat(r.dataset.kg||0)||0,price=parseFloat(r.dataset.price||0)||0,dayKg=kg*n,periodKg=dayKg*days,cost=periodKg*price;totalKg+=periodKg;totalCost+=cost;r.querySelector('.prep-day').textContent=nf(dayKg)+' kg';r.querySelector('.prep-period').textContent=nf(periodKg)+' kg';r.querySelector('.prep-cost').textContent=money(cost);}});document.getElementById('prep-headcount').textContent=String(n);document.getElementById('prep-period-label').textContent=days+' Gün';document.getElementById('prep-total-kg').textContent=nf(totalKg)+' kg';document.getElementById('prep-total-cost').textContent=money(totalCost);localStorage.setItem('cp-ration-headcount-{selected}',String(n));localStorage.setItem('cp-ration-period-{selected}',String(days));}}const savedN=parseInt(localStorage.getItem('cp-ration-headcount-{selected}')||'1',10),savedD=parseInt(localStorage.getItem('cp-ration-period-{selected}')||'1',10);if(savedN>0)count.value=String(savedN);if([1,7,30].includes(savedD))period.value=String(savedD);count.addEventListener('input',update);period.addEventListener('change',update);document.getElementById('ration-prep-print').addEventListener('click',()=>{{update();window.print();}});update();}})();</script>'''
             return self.send_html(page('Rasyon Hazırlama Raporu',body,'/rations',u,msg))
         if path in ('/rations','/ration-workbench'):
@@ -4885,13 +5087,57 @@ setTimeout(()=>setFinanceDrawer(false),0);
         if path=='/reports':
             profile=farm_profile(); farm_name=farm_display_name(profile)
             start=q.get('start',[(date.today()-timedelta(days=365)).isoformat()])[0]; end=q.get('end',[date.today().isoformat()])[0]
+            animal_group=q.get('animal_group',['all'])[0];animal_status=q.get('animal_status',['Aktif'])[0]
+            animal_search=q.get('animal_search',[''])[0].strip();animal_paddock=q.get('animal_paddock',[''])[0].strip()
+            report_rows=animal_report_rows(animal_group,animal_status,animal_search,animal_paddock)
+            report_query=urllib.parse.urlencode({'animal_group':animal_group,'animal_status':animal_status,'animal_search':animal_search,'animal_paddock':animal_paddock})
             with db() as c:
-                sums=c.execute('select tx_type,category,sum(amount) total,count(*) cnt from finance where tx_date between ? and ? group by tx_type,category order by tx_type, total desc',(start,end)).fetchall(); monthly=c.execute("select substr(tx_date,1,7) m, sum(case when tx_type='Gelir' then amount else 0 end) inc, sum(case when tx_type='Gider' then amount else 0 end) exp from finance where tx_date between ? and ? group by m order by m",(start,end)).fetchall()
+                sums=c.execute('select tx_type,category,sum(amount) total,count(*) cnt from finance where tx_date between ? and ? group by tx_type,category order by tx_type, total desc',(start,end)).fetchall(); monthly=c.execute("select substr(tx_date,1,7) m, sum(case when tx_type='Gelir' then amount else 0 end) inc, sum(case when tx_type='Gider' then amount else 0 end) exp from finance where tx_date between ? and ? group by m order by m",(start,end)).fetchall();paddocks=[r['name'] for r in c.execute("select name from paddocks where active=1 order by name").fetchall()]
             inc=sum(r['total'] for r in sums if r['tx_type']=='Gelir');exp=sum(r['total'] for r in sums if r['tx_type']=='Gider'); maxv=max([max(r['inc'],r['exp']) for r in monthly] or [1])
             bars=''.join(f'<div style="flex:1;display:flex;align-items:end;gap:2px;height:170px"><div class="bar" style="height:{max(2,r["inc"]/maxv*150)}px"><i>{int(r["inc"])}</i></div><div class="bar" style="height:{max(2,r["exp"]/maxv*150)}px;background:linear-gradient(#e76d5b,#b9382b)"><i>{int(r["exp"])}</i></div><span style="position:absolute"></span><small style="position:absolute;margin-top:175px">{h(r["m"])}</small></div>' for r in monthly)
             trs=''.join(f'<tr><td>{h(r["tx_type"])}</td><td>{h(r["category"])}</td><td>{r["cnt"]}</td><td>{money(r["total"])}</td></tr>' for r in sums)
-            body=f'''<h1>{h(farm_name)} · Finans Raporları</h1><div class="card"><form class="actions"><label>Başlangıç <input type="date" name="start" value="{start}"></label><label>Bitiş <input type="date" name="end" value="{end}"></label><button class="btn">Raporla</button><a class="btn blue" href="/reports/export?start={start}&end={end}">Rapor CSV</a></form></div><div class="grid" style="margin-top:14px"><div class="card stat">Toplam Gelir<b>{money(inc)}</b></div><div class="card stat">Toplam Gider<b>{money(exp)}</b></div><div class="card stat">Net Sonuç<b>{money(inc-exp)}</b></div><div class="card stat">Gider/Gelir Oranı<b>{(exp/inc*100 if inc else 0):.1f}%</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Aylık Gelir / Gider</h2><p class="mut">Yeşil: gelir · Kırmızı: gider</p><div class="chart">{bars or '<p>Kayıt yok</p>'}</div></div><div class="card"><h2>Kategori Özeti</h2><table><tr><th>Tür</th><th>Kategori</th><th>Adet</th><th>Toplam</th></tr>{trs}</table></div></div>'''
+            animal_trs=''.join(f'''<tr><td>{i}</td><td><b>{h(r['tag'])}</b></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['group'])}</td><td>{h(r['breed']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['birth_date']) or '-'}</td><td>{h(r['mother_tag']) or '-'}</td><td>{h(r['paddock']) or '-'}</td><td>{h(r['status'])}</td></tr>''' for i,r in enumerate(report_rows,1)) or '<tr><td colspan="10">Seçilen filtrelerde hayvan bulunamadı.</td></tr>'
+            paddock_options='<option value="">Tüm Padoklar</option>'+''.join(f'<option value="{h(x)}" {"selected" if x==animal_paddock else ""}>{h(x)}</option>' for x in paddocks)
+            female_count=sum(1 for r in report_rows if r['group']=='Dişi');male_count=sum(1 for r in report_rows if r['group']=='Erkek');calf_count=sum(1 for r in report_rows if r['group']=='Buzağı')
+            body=f'''<h1>{h(farm_name)} · Raporlar</h1>
+            <div class="card" id="animal-report"><div class="filter-title"><div><h2 style="margin:0">🐄 Tüm Hayvanlar Raporu</h2><p class="mut" style="margin:4px 0 0">Ekrandaki filtrelenmiş listeyi yazdırın, PDF kaydedin veya Excel'e aktarın.</p></div><span class="pill">{len(report_rows)} kayıt</span></div>
+              <form class="finance-toolbar-modern" style="margin-top:14px">
+                <input type="hidden" name="start" value="{h(start)}"><input type="hidden" name="end" value="{h(end)}">
+                <label><span>Hayvan Grubu</span><select name="animal_group"><option value="all" {"selected" if animal_group=='all' else ""}>Tüm Hayvanlar</option><option value="female" {"selected" if animal_group=='female' else ""}>Dişi Hayvanlar</option><option value="male" {"selected" if animal_group=='male' else ""}>Erkek Hayvanlar</option><option value="calves" {"selected" if animal_group=='calves' else ""}>Buzağılar</option></select></label>
+                <label><span>Durum</span><select name="animal_status"><option {"selected" if animal_status=='Aktif' else ""}>Aktif</option><option {"selected" if animal_status=='Satıldı' else ""}>Satıldı</option><option {"selected" if animal_status=='Kesildi' else ""}>Kesildi</option><option {"selected" if animal_status=='Tümü' else ""}>Tümü</option></select></label>
+                <label><span>Padok</span><select name="animal_paddock">{paddock_options}</select></label>
+                <label><span>Arama</span><input name="animal_search" value="{h(animal_search)}" placeholder="Küpe, ırk, anne, padok..."></label>
+                <div class="finance-filter-actions"><button class="btn">Listele</button><a class="btn alt" href="/reports#animal-report">Temizle</a></div>
+              </form>
+              <div class="grid" style="margin-top:12px"><div class="card stat metric green">Listelenen Toplam<b>{len(report_rows)}</b></div><div class="card stat metric blue">Dişi<b>{female_count}</b></div><div class="card stat metric orange">Erkek<b>{male_count}</b></div><div class="card stat metric teal">Buzağı<b>{calf_count}</b></div></div>
+              <div class="actions"><a class="btn blue" target="_blank" href="/reports/animals/print?{report_query}">🖨 Yazdır / PDF</a><a class="btn" href="/reports/animals.xlsx?{report_query}">📊 Excel'e Aktar</a></div>
+              <div class="tablewrap" style="max-height:520px;overflow:auto"><table><thead><tr><th>#</th><th>Küpe</th><th>Takma Ad</th><th>Grup</th><th>Irk</th><th>Cinsiyet</th><th>Doğum</th><th>Ana No</th><th>Padok</th><th>Durum</th></tr></thead><tbody>{animal_trs}</tbody></table></div>
+            </div>
+            <div class="card" style="margin-top:14px" id="animal-import"><h2>📥 Excel / PDF'den Hayvan İçe Aktar</h2><p class="mut">Tarım ve Orman Bakanlığı “İşletmede Bulunan Sığır ve Manda Türü Hayvan Raporu” PDF'leri ile XLSX/CSV tabloları desteklenir. Kayıttan önce önizleme açılır; mükerrer küpeler aktarılmaz.</p><form method="post" action="/animals/import-preview" enctype="multipart/form-data" class="form"><label class="full">Hayvan listesi<input type="file" name="animal_file" accept=".xlsx,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label><div class="full"><button class="btn blue">Dosyayı Oku ve Önizle</button></div></form><p class="mut" style="font-size:12px">Taranmış fotoğraf PDF yerine mümkünse sistemden alınmış orijinal PDF veya Excel kullanın.</p></div>
+            <h2 style="margin-top:22px">💰 Finans Raporları</h2><div class="card"><form class="actions"><label>Başlangıç <input type="date" name="start" value="{start}"></label><label>Bitiş <input type="date" name="end" value="{end}"></label><button class="btn">Raporla</button><a class="btn blue" href="/reports/export?start={start}&end={end}">Rapor CSV</a></form></div><div class="grid" style="margin-top:14px"><div class="card stat">Toplam Gelir<b>{money(inc)}</b></div><div class="card stat">Toplam Gider<b>{money(exp)}</b></div><div class="card stat">Net Sonuç<b>{money(inc-exp)}</b></div><div class="card stat">Gider/Gelir Oranı<b>{(exp/inc*100 if inc else 0):.1f}%</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Aylık Gelir / Gider</h2><p class="mut">Yeşil: gelir · Kırmızı: gider</p><div class="chart">{bars or '<p>Kayıt yok</p>'}</div></div><div class="card"><h2>Kategori Özeti</h2><table><tr><th>Tür</th><th>Kategori</th><th>Adet</th><th>Toplam</th></tr>{trs}</table></div></div>'''
             return self.send_html(page('Raporlar',body,'/reports',u,msg))
+        if path=='/reports/animals.xlsx':
+            profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0]
+            rows=animal_report_rows(group,status,search,paddock);b=animal_report_xlsx(rows,profile);name=f'hayvan_raporu_{date.today().strftime("%Y%m%d")}.xlsx'
+            self.send_response(200);self.send_header('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
+        if path=='/reports/animals/print':
+            profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0];rows=animal_report_rows(group,status,search,paddock)
+            logo=f'<img src="{h(profile.get("farm_logo"))}" alt="İşletme logosu">' if profile.get('farm_logo') else '<div class="logo-mark">🐄</div>'
+            trs=''.join(f'''<tr><td>{i}</td><td><b>{h(r['tag'])}</b></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['group'])}</td><td>{h(r['species'])}</td><td>{h(r['breed']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['birth_date']) or '-'}</td><td>{h(r['mother_tag']) or '-'}</td><td>{fmt_date(r['arrival_date']) or '-'}</td><td>{h(r['paddock']) or '-'}</td><td>{h(r['status'])}</td></tr>''' for i,r in enumerate(rows,1)) or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'
+            subtitle=' · '.join(x for x in [status+' Kayıtlar',{'female':'Dişi','male':'Erkek','calves':'Buzağı'}.get(group,'Tüm Hayvanlar'),('Padok: '+paddock if paddock else '')] if x)
+            html=f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tüm Hayvanlar Raporu</title><style>
+            *{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;color:#183025;margin:0;background:#eef3ef}}.toolbar{{max-width:1400px;margin:12px auto;display:flex;gap:8px}}button,a{{border:0;border-radius:8px;padding:10px 14px;background:#176b3a;color:white;text-decoration:none;font-weight:700;cursor:pointer}}.sheet{{max-width:1400px;margin:0 auto 20px;background:#fff;padding:22px;box-shadow:0 8px 25px #0002}}.head{{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #176b3a;padding-bottom:12px;margin-bottom:12px}}.brand{{display:flex;gap:14px;align-items:center}}.brand img,.logo-mark{{width:70px;height:70px;object-fit:contain;border-radius:8px}}.logo-mark{{display:grid;place-items:center;background:#edf6f0;font-size:36px}}h1{{font-size:22px;margin:0 0 5px}}.mut{{color:#617168;font-size:12px}}.meta{{text-align:right;font-size:12px;line-height:1.6}}.summary{{display:flex;gap:18px;margin:8px 0 12px;font-size:12px}}table{{width:100%;border-collapse:collapse;font-size:10px}}th,td{{border:1px solid #d8e3db;padding:5px 6px;text-align:left}}th{{background:#e9f3ec}}tbody tr:nth-child(even){{background:#f8faf8}}.foot{{margin-top:10px;font-size:10px;color:#68766d;display:flex;justify-content:space-between}}@page{{size:A4 landscape;margin:9mm}}@media print{{body{{background:#fff}}.toolbar{{display:none}}.sheet{{max-width:none;margin:0;padding:0;box-shadow:none}}thead{{display:table-header-group}}tr{{break-inside:avoid;page-break-inside:avoid}}.head{{break-after:avoid}}}}
+            </style></head><body><div class="toolbar"><button onclick="window.print()">🖨 Yazdır / PDF Kaydet</button><a href="/reports">← Raporlara Dön</a></div><main class="sheet"><header class="head"><div class="brand">{logo}<div><h1>{h(farm_display_name(profile))}</h1><b>İşletmede Bulunan Hayvanlar Raporu</b><div class="mut">{h(subtitle)}</div></div></div><div class="meta"><b>Rapor Tarihi:</b> {date.today().strftime('%d/%m/%Y')}<br><b>İşletme No:</b> {h(profile.get('business_no') or '-')}<br><b>İşletme Sahibi:</b> {h(profile.get('owner_name') or '-')}<br>{h(profile.get('province') or '')}{' / '+h(profile.get('district')) if profile.get('district') else ''}</div></header><div class="summary"><b>Toplam Hayvan: {len(rows)}</b><span>Dişi: {sum(1 for r in rows if r['group']=='Dişi')}</span><span>Erkek: {sum(1 for r in rows if r['group']=='Erkek')}</span><span>Buzağı: {sum(1 for r in rows if r['group']=='Buzağı')}</span></div><table><thead><tr><th>#</th><th>Küpe No</th><th>Takma Ad</th><th>Grup</th><th>Tür</th><th>Irk</th><th>Cinsiyet</th><th>Doğum Tarihi</th><th>Ana No</th><th>Geliş Tarihi</th><th>Padok</th><th>Durum</th></tr></thead><tbody>{trs}</tbody></table><footer class="foot"><span>ÇiftlikPro Enterprise · {h(farm_display_name(profile))}</span><span>{len(rows)} kayıt</span></footer></main></body></html>'''
+            return self.send_html(html)
+        if path=='/animals/import-preview':
+            token=q.get('token',[''])[0]
+            with ANIMAL_IMPORT_LOCK:preview=ANIMAL_IMPORT_PREVIEWS.get(token)
+            if not preview or preview.get('username')!=u:return self.redirect('/reports#animal-import','İçe aktarma önizlemesi bulunamadı veya süresi doldu.')
+            rows=preview['rows'];ready=sum(1 for r in rows if r['valid']);errors=len(rows)-ready;warnings=sum(1 for r in rows if r['state']=='warning')
+            trs=''.join(f'''<tr class="import-{r['state']}"><td>{r['row_no']}</td><td><b>{h(r['tag']) or '-'}</b></td><td>{h(r['record_type'])}</td><td>{h(r['breed']) or '-'}</td><td>{h(r['gender']) or '-'}</td><td>{fmt_date(r['birth_date']) or '-'}</td><td>{h(r['mother_tag']) or '-'}</td><td>{' · '.join(h(x) for x in r['issues']) or 'Hazır'}</td></tr>''' for r in rows[:500])
+            more=f'<p class="mut">İlk 500 satır gösteriliyor; toplam {len(rows)} satır doğrulandı.</p>' if len(rows)>500 else ''
+            body=f'''<h1>📥 Hayvan İçe Aktarma Önizlemesi</h1><div class="grid"><div class="card stat metric blue">Dosya Satırı<b>{len(rows)}</b></div><div class="card stat metric green">Aktarılabilir<b>{ready}</b></div><div class="card stat metric orange">Uyarılı<b>{warnings}</b></div><div class="card stat metric red">Atlanacak<b>{errors}</b></div></div><div class="card" style="margin-top:14px"><h2>{h(preview['filename'])}</h2><p class="mut">Yeşil satırlar hazır, sarı satırlar uyarılı fakat aktarılabilir, kırmızı satırlar aktarılmaz. Mevcut kayıtların üzerine yazılmaz.</p><style>.import-ready{{background:#eef9f1!important}}.import-warning{{background:#fff7df!important}}.import-error{{background:#fdebea!important}}.import-preview-table td{{font-size:12px}}</style><div class="tablewrap" style="max-height:58vh;overflow:auto"><table class="import-preview-table"><thead><tr><th>Satır</th><th>Küpe</th><th>Kayıt Grubu</th><th>Irk</th><th>Cinsiyet</th><th>Doğum</th><th>Ana No</th><th>Kontrol</th></tr></thead><tbody>{trs}</tbody></table></div>{more}<div class="actions"><form method="post" action="/animals/import-confirm" onsubmit="return confirm('{ready} geçerli hayvan kaydı içe aktarılsın mı?')"><input type="hidden" name="token" value="{h(token)}"><button class="btn blue" {"" if ready else "disabled"}>✅ {ready} Geçerli Kaydı İçe Aktar</button></form><a class="btn alt" href="/reports#animal-import">İptal</a></div></div>'''
+            return self.send_html(page('Hayvan İçe Aktarma',body,'/reports',u,msg))
         if path=='/data':
             body="""<h1>Veri Aktarımı</h1><div class='two'><div class='card'><h2>JSON'dan İçe Aktar</h2><p class='mut'>Eski sistem yedeklerini ve V0.6 dışa aktarımlarını destekler. İçe aktarmadan önce otomatik veritabanı yedeği alınır.</p><form method='post' action='/data/import' enctype='multipart/form-data' class='form'><label class='full'>JSON dosyası<input type='file' name='json_file' accept='.json,application/json' required></label><label>Çakışan küpeler<select name='strategy'><option value='skip'>Atla (önerilen)</option><option value='update'>Mevcut kaydı güncelle</option></select></label><div class='full'><button class='btn'>İçe Aktar</button></div></form></div><div class='card'><h2>Dışa Aktar</h2><p>Tüm hayvan, tohumlama, buzağı, sağlık ve finans kayıtlarını tek JSON dosyasına aktarır.</p><div class='actions'><a class='btn blue' href='/data/export'>JSON Yedeğini İndir</a><a class='btn alt' href='/backups'>SQLite Yedekleri</a></div><hr><p class='mut'>JSON taşınabilir veri yedeğidir. SQLite yedeği uygulamanın birebir veritabanı kopyasıdır.</p></div></div>"""
             return self.send_html(page('Veri Aktarımı',body,'/data',u,msg))
@@ -5068,6 +5314,57 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path=='/animals/import-preview':
+            upload=f.get('animal_file')
+            if not isinstance(upload,dict) or not upload.get('filename') or not upload.get('content'):
+                return self.redirect('/reports#animal-import','Lütfen XLSX, CSV veya PDF hayvan listesi seçin.')
+            try:
+                raw_rows=parse_animal_import_file(upload['filename'],upload['content'])
+                rows=prepare_animal_import(upload['filename'],raw_rows)
+            except Exception as exc:
+                return self.redirect('/reports#animal-import','Dosya okunamadı: '+str(exc))
+            token=secrets.token_urlsafe(24);now=time.time()
+            with ANIMAL_IMPORT_LOCK:
+                for old_token,item in list(ANIMAL_IMPORT_PREVIEWS.items()):
+                    if now-float(item.get('created_at') or 0)>7200:ANIMAL_IMPORT_PREVIEWS.pop(old_token,None)
+                ANIMAL_IMPORT_PREVIEWS[token]={'username':username,'filename':os.path.basename(upload['filename']),'created_at':now,'rows':rows}
+            audit(username,'Hayvan içe aktarma önizlemesi',f'{os.path.basename(upload["filename"])} · {len(rows)} satır',self.client_ip())
+            return self.redirect('/animals/import-preview?token='+urllib.parse.quote(token))
+        if path=='/animals/import-confirm':
+            token=(f.get('token') or '').strip()
+            with ANIMAL_IMPORT_LOCK:preview=ANIMAL_IMPORT_PREVIEWS.get(token)
+            if not preview or preview.get('username')!=username:return self.redirect('/reports#animal-import','İçe aktarma önizlemesi bulunamadı veya süresi doldu.')
+            valid=[r for r in preview['rows'] if r.get('valid')]
+            if not valid:return self.redirect('/reports#animal-import','Aktarılabilir hayvan kaydı bulunamadı.')
+            try:create_backup('hayvan_aktarim_oncesi')
+            except Exception as exc:return self.redirect('/animals/import-preview?token='+urllib.parse.quote(token),'Güvenlik yedeği alınamadığı için aktarım başlatılmadı: '+str(exc))
+            imported=0;skipped=0;calf_rows=[]
+            try:
+                with db() as c:
+                    for row in valid:
+                        if row['record_type']=='Buzağı':calf_rows.append(row);continue
+                        if c.execute('select 1 from animals where tag=?',(row['tag'],)).fetchone() or c.execute('select 1 from calves where tag=?',(row['tag'],)).fetchone():skipped+=1;continue
+                        paddock_id=None
+                        if row['paddock']:
+                            pd=c.execute('select id from paddocks where name=? and active=1',(row['paddock'],)).fetchone();paddock_id=pd['id'] if pd else None
+                        c.execute('''insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,paddock_id,photo_url,sold_price,status,purchase_date,purchase_price)
+                                     values(?,?,?,?,?,?,?,?,?,0,'Aktif',?,0)''',(row['tag'],row['nickname'],row['gender'],row['breed'],row['birth_date'],row['notes'],row['paddock'],paddock_id,'',row['arrival_date']))
+                        imported+=1
+                    for row in calf_rows:
+                        if c.execute('select 1 from animals where tag=?',(row['tag'],)).fetchone() or c.execute('select 1 from calves where tag=?',(row['tag'],)).fetchone():skipped+=1;continue
+                        mother=c.execute("select id from animals where tag=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(row['mother_tag'],)).fetchone()
+                        if not mother:skipped+=1;continue
+                        paddock_id=None
+                        if row['paddock']:
+                            pd=c.execute('select id from paddocks where name=? and active=1',(row['paddock'],)).fetchone();paddock_id=pd['id'] if pd else None
+                        c.execute('''insert into calves(tag,nickname,mother_id,father_tag,birth_date,gender,breed,paddock,paddock_id,photo_url,purchase_date,purchase_price,purchase_payment_method,notes)
+                                     values(?,?,?,?,?,?,?,?,?,?,?,0,'Nakit',?)''',(row['tag'],row['nickname'],mother['id'],'',row['birth_date'],row['gender'],row['breed'],row['paddock'],paddock_id,'',row['arrival_date'],row['notes']))
+                        imported+=1
+            except Exception as exc:
+                return self.redirect('/animals/import-preview?token='+urllib.parse.quote(token),'Aktarım tamamlanamadı; veritabanı değişiklikleri geri alındı: '+str(exc))
+            with ANIMAL_IMPORT_LOCK:ANIMAL_IMPORT_PREVIEWS.pop(token,None)
+            audit(username,'Dosyadan hayvan aktardı',f'{preview["filename"]} · {imported} aktarıldı · {skipped} atlandı',self.client_ip())
+            return self.redirect('/reports#animal-report',f'✅ {imported} hayvan başarıyla aktarıldı. {skipped} mükerrer veya ilişkisiz kayıt atlandı.')
         if path=='/paddock/create':
             name=(f.get('name') or '').strip()
             if not name:return self.redirect('/paddocks','Padok adı zorunludur.')
