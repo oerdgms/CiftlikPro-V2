@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
+from pypdf import PdfReader
 
 
 TEST_DATA = tempfile.TemporaryDirectory(prefix="ciftlikpro-report-test-")
@@ -58,6 +59,33 @@ class ReportImportTests(unittest.TestCase):
         tags = {row["tag"] for row in rows}
         self.assertIn("TR580000000201", tags)
         self.assertIn("TR580000000202", tags)
+
+    def test_direct_pdf_is_landscape_and_repeats_table_header(self):
+        sample=[]
+        for index in range(75):
+            sample.append({'tag':f'TR5800{index:08d}','nickname':'Örnek Hayvan','group':'Dişi','species':'Sığır','breed':'Simental','gender':'Dişi','birth_date':'2024-01-01','mother_tag':'TR580000000001','arrival_date':'2024-02-01','paddock':'SA1','status':'Aktif'})
+        content=server.animal_report_pdf(sample,{'farm_name':'Test Çiftliği','business_no':'TR1','owner_name':'Osman','province':'Sivas','district':'Şarkışla'},'Aktif Kayıtlar · Tüm Hayvanlar')
+        reader=PdfReader(io.BytesIO(content))
+        self.assertGreater(len(reader.pages),1)
+        for page in reader.pages:
+            self.assertGreater(float(page.mediabox.width),float(page.mediabox.height))
+            self.assertIn('Küpe No',page.extract_text())
+
+    def test_selected_columns_apply_to_xlsx_and_pdf(self):
+        sample=[{'tag':'TR580000000301','nickname':'Kara','group':'Dişi','species':'Sığır','breed':'Simental','gender':'Dişi','birth_date':'2024-01-01','mother_tag':'','arrival_date':'2024-02-01','paddock':'SA1','status':'Aktif'}]
+        query={'columns_mode':['custom'],'columns':['tag','nickname','paddock']}
+        columns=server.animal_report_selected_columns(query)
+        self.assertEqual([item[0] for item in columns],['tag','nickname','paddock'])
+
+        content=server.animal_report_xlsx(sample,{'farm_name':'Test Çiftliği','business_no':'TR1'},columns)
+        book=load_workbook(io.BytesIO(content),read_only=True);sheet=book.active
+        self.assertEqual([sheet.cell(4,index).value for index in range(1,4)],['Küpe No','Takma Ad','Padok'])
+        self.assertIsNone(sheet.cell(4,4).value);book.close()
+
+        pdf=server.animal_report_pdf(sample,{'farm_name':'Test Çiftliği','business_no':'TR1'},'Aktif Kayıtlar',columns)
+        text='\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(pdf)).pages)
+        self.assertIn('Küpe No',text);self.assertIn('Takma Ad',text);self.assertIn('Padok',text)
+        self.assertNotIn('Doğum Tarihi',text)
 
 
 if __name__ == "__main__":

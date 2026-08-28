@@ -98,3 +98,8 @@
 - XLSX, CSV ve Tarım ve Orman Bakanlığı işletme hayvan raporu biçimindeki dijital PDF dosyalarından önizlemeli hayvan içe aktarma eklendi.
 - İçe aktarmada mükerrer küpe engeli, tarih/cinsiyet doğrulaması, 10 aylık buzağı kuralı ve işlem öncesi otomatik güvenlik yedeği eklendi.
 - Rasyon hazırlama çıktısında uygulama menüsü, sekme ve durum çubuğunun kâğıda taşınması engellendi; işletme başlığı ve sayfa kırılma kuralları düzeltildi.
+- iPhone/Safari baskısında oluşan URL altbilgisi ve ikinci sayfada kaybolan tablo başlığı için doğrudan PDF üretimi eklendi; PDF artık yatay A4, tekrarlanan sütun başlıkları ve kontrollü sayfa numarası kullanır.
+- Mobil Tüm Hayvanlar ekranı, geniş tablonun telefona sıkıştırılması yerine kart tabanlı iki kolonlu bilgi düzenine geçirildi.
+- Mobil web önizlemeye temiz PDF'yi doğrudan açma düğmesi ve kart görünümü eklendi; yazdırmada masaüstü tablo düzeni korunur.
+- Excel/PDF hayvan içe aktarma alanı uzun listenin altından Raporlar sayfasının üstüne taşındı; Veri Aktarımı ekranına da kısayol eklendi.
+- Kullanıcının tiklerle belirlediği rapor sütunları ekran, mobil kart, web önizleme, PDF ve XLSX çıktılarında ortak kullanılmaya başlandı.

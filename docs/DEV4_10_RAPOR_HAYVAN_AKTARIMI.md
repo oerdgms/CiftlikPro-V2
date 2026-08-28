@@ -4,8 +4,13 @@
 
 - Raporlar ekranında aktif hayvanlar varsayılan olarak listelenir.
 - Dişi, erkek, buzağı, durum, padok ve metin araması filtreleri desteklenir.
-- Yazdır/PDF görünümü uygulama menülerinden bağımsız A4 yatay rapordur.
+- Ana PDF düğmesi tarayıcı üstbilgi/URL alanlarından bağımsız, doğrudan üretilen A4 yatay raporu açar.
+- Çok sayfalı PDF'de sütun başlıkları her sayfada tekrarlanır ve uygulama kontrollü sayfa numarası kullanılır.
+- Web Önizleme düğmesi tarayıcı baskısı için ayrıca korunur.
 - Excel çıktısı XLSX biçimindedir ve ekrandaki filtreleri aynen kullanır.
+- Mobil rapor ekranı ve web önizleme, geniş tabloyu daraltmak yerine her hayvanı okunaklı bir kartta gösterir.
+- Kullanıcı “Raporda Gösterilecek Sütunlar” bölümündeki tiklerle bilgi alanlarını açıp kapatabilir.
+- Sütun seçimi ekran, mobil kart, web önizleme, doğrudan PDF ve XLSX çıktısında aynıdır; Küpe No her zaman korunur.
 
 ## Hayvan İçe Aktarma
 
@@ -15,6 +20,7 @@
 - Mevcut veya dosya içindeki mükerrer küpeler aktarılmaz.
 - 10 aydan küçük hayvan, anne küpesi aktif dişi kayda bağlanabiliyorsa Buzağı olarak kaydedilir.
 - Onaydan hemen önce tam güvenlik yedeği alınır.
+- Dosya seçme alanı Raporlar sayfasının en üstündedir; Veri Aktarımı sayfasında da aynı işleme giden belirgin bir kısayol vardır.
 
 ## Rasyon Yazdırma
 

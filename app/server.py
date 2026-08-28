@@ -1005,30 +1005,122 @@ def animal_report_rows(group='all',status='Aktif',search='',paddock=''):
         result=[r for r in result if term in normalized_heading(' '.join(str(r.get(k,'')) for k in ('tag','nickname','breed','gender','mother_tag','paddock')))]
     return sorted(result,key=lambda r:(r['group'],r['tag']))
 
-def animal_report_xlsx(rows,profile):
+ANIMAL_REPORT_COLUMNS = [
+    ('row_no','Sıra',7,7),
+    ('tag','Küpe No',20,31),
+    ('nickname','Takma Ad',18,32),
+    ('group','Grup',12,16),
+    ('species','Tür',10,13),
+    ('breed','Irk',24,29),
+    ('gender','Cinsiyet',12,18),
+    ('birth_date','Doğum Tarihi',15,23),
+    ('mother_tag','Ana No',20,31),
+    ('arrival_date','Geliş Tarihi',15,23),
+    ('paddock','Padok',18,17),
+    ('status','Durum',12,17),
+]
+ANIMAL_REPORT_COLUMN_KEYS = {x[0] for x in ANIMAL_REPORT_COLUMNS}
+ANIMAL_REPORT_DEFAULT_COLUMNS = [x[0] for x in ANIMAL_REPORT_COLUMNS]
+
+def animal_report_selected_columns(query=None):
+    """Sütun sırasını sabit tutar ve geçersiz sorgu değerlerini dışarıda bırakır."""
+    query=query or {}
+    requested=query.get('columns',[]) if query.get('columns_mode',[''])[0]=='custom' else ANIMAL_REPORT_DEFAULT_COLUMNS
+    requested={str(x) for x in requested if str(x) in ANIMAL_REPORT_COLUMN_KEYS}
+    requested.add('tag')  # Küpe numarası her raporda kaydı ayırt etmek için bulunur.
+    return [x for x in ANIMAL_REPORT_COLUMNS if x[0] in requested]
+
+def animal_report_display_value(row,key,index):
+    if key=='row_no':return str(index)
+    if key in ('birth_date','arrival_date'):return fmt_date(row.get(key)) or '-'
+    return str(row.get(key) or '-')
+
+def animal_report_xlsx(rows,profile,columns=None):
     from openpyxl import Workbook
     from openpyxl.styles import Font,PatternFill,Border,Side,Alignment
+    columns=columns or ANIMAL_REPORT_COLUMNS
+    last_col=max(1,len(columns));last_letter=''
+    n=last_col
+    while n:
+        n,rem=divmod(n-1,26);last_letter=chr(65+rem)+last_letter
     wb=Workbook();ws=wb.active;ws.title='Hayvanlar'
-    ws.merge_cells('A1:L1');ws['A1']=farm_display_name(profile)+' · Tüm Hayvanlar Raporu';ws['A1'].font=Font(size=16,bold=True,color='176B3A')
-    ws.merge_cells('A2:L2');ws['A2']=f"İşletme No: {profile.get('business_no') or '-'}   |   Rapor Tarihi: {date.today().strftime('%d/%m/%Y')}   |   Toplam: {len(rows)}"
-    headers=['Sıra','Küpe No','Takma Ad','Grup','Tür','Irk','Cinsiyet','Doğum Tarihi','Ana No','Geliş Tarihi','Padok','Durum']
-    for col,value in enumerate(headers,1):
+    ws.merge_cells(start_row=1,start_column=1,end_row=1,end_column=last_col);ws['A1']=farm_display_name(profile)+' · Tüm Hayvanlar Raporu';ws['A1'].font=Font(size=16,bold=True,color='176B3A')
+    ws.merge_cells(start_row=2,start_column=1,end_row=2,end_column=last_col);ws['A2']=f"İşletme No: {profile.get('business_no') or '-'}   |   Rapor Tarihi: {date.today().strftime('%d/%m/%Y')}   |   Toplam: {len(rows)}"
+    for col,(_,value,_,_) in enumerate(columns,1):
         cell=ws.cell(4,col,value);cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='176B3A');cell.alignment=Alignment(horizontal='center')
     for idx,row in enumerate(rows,1):
-        values=[idx,row['tag'],row['nickname'],row['group'],row['species'],row['breed'],row['gender'],None,row['mother_tag'],None,row['paddock'],row['status']]
-        for col,value in enumerate(values,1):ws.cell(idx+4,col,value)
-        for col,key in ((8,'birth_date'),(10,'arrival_date')):
-            if row[key]:
-                try:ws.cell(idx+4,col,date.fromisoformat(row[key]));ws.cell(idx+4,col).number_format='dd/mm/yyyy'
-                except Exception:ws.cell(idx+4,col,row[key])
-    widths=[7,20,18,12,10,24,12,15,20,15,18,12]
-    for idx,width in enumerate(widths,1):ws.column_dimensions[chr(64+idx)].width=width
+        for col,(key,_,_,_) in enumerate(columns,1):
+            value=idx if key=='row_no' else row.get(key) or ''
+            if key in ('birth_date','arrival_date') and value:
+                try:value=date.fromisoformat(value);ws.cell(idx+4,col).number_format='dd/mm/yyyy'
+                except Exception:pass
+            ws.cell(idx+4,col,value)
+    for idx,(_,_,width,_) in enumerate(columns,1):
+        col_letter='';n=idx
+        while n:n,rem=divmod(n-1,26);col_letter=chr(65+rem)+col_letter
+        ws.column_dimensions[col_letter].width=width
     thin=Side(style='thin',color='D9E5DD')
-    for row in ws.iter_rows(min_row=4,max_row=4+len(rows),min_col=1,max_col=12):
+    for row in ws.iter_rows(min_row=4,max_row=4+len(rows),min_col=1,max_col=last_col):
         for cell in row:cell.border=Border(bottom=thin);cell.alignment=Alignment(vertical='center',wrap_text=True)
-    ws.freeze_panes='A5';ws.auto_filter.ref=f'A4:L{max(4,4+len(rows))}';ws.print_title_rows='1:4';ws.sheet_properties.pageSetUpPr.fitToPage=True
+    ws.freeze_panes='A5';ws.auto_filter.ref=f'A4:{last_letter}{max(4,4+len(rows))}';ws.print_title_rows='1:4';ws.sheet_properties.pageSetUpPr.fitToPage=True
     ws.page_setup.orientation='landscape';ws.page_setup.fitToWidth=1;ws.page_setup.fitToHeight=0
     output=io.BytesIO();wb.save(output);wb.close();return output.getvalue()
+
+def animal_report_pdf(rows,profile,subtitle='Aktif Kayıtlar · Tüm Hayvanlar',columns=None):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT,TA_RIGHT
+    from reportlab.lib.pagesizes import A4,landscape
+    from reportlab.lib.styles import ParagraphStyle,getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import SimpleDocTemplate,Table,TableStyle,Paragraph,Spacer,Image as PdfImage
+    import reportlab
+    fonts_dir=Path(reportlab.__file__).resolve().parent/'fonts'
+    regular=fonts_dir/'Vera.ttf';bold=fonts_dir/'VeraBd.ttf'
+    try:
+        if 'CiftlikVera' not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont('CiftlikVera',str(regular)))
+        if 'CiftlikVeraBold' not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont('CiftlikVeraBold',str(bold)))
+        font_name='CiftlikVera';bold_name='CiftlikVeraBold'
+    except Exception:
+        font_name='Helvetica';bold_name='Helvetica-Bold'
+    columns=columns or ANIMAL_REPORT_COLUMNS
+    output=io.BytesIO();page_size=landscape(A4)
+    doc=SimpleDocTemplate(output,pagesize=page_size,leftMargin=9*mm,rightMargin=9*mm,topMargin=9*mm,bottomMargin=12*mm,
+                          title='Tüm Hayvanlar Raporu',author='ÇiftlikPro Enterprise')
+    styles=getSampleStyleSheet()
+    title=ParagraphStyle('ReportTitle',parent=styles['Title'],fontName=bold_name,fontSize=17,leading=20,textColor=colors.HexColor('#173b28'),alignment=TA_LEFT,spaceAfter=2)
+    subtitle_style=ParagraphStyle('ReportSubtitle',parent=styles['Normal'],fontName=font_name,fontSize=8.5,leading=11,textColor=colors.HexColor('#607168'))
+    meta_style=ParagraphStyle('ReportMeta',parent=styles['Normal'],fontName=font_name,fontSize=8.2,leading=12,alignment=TA_RIGHT,textColor=colors.HexColor('#243d30'))
+    cell_style=ParagraphStyle('ReportCell',parent=styles['Normal'],fontName=font_name,fontSize=6.7,leading=8,textColor=colors.HexColor('#1c3427'))
+    cell_bold=ParagraphStyle('ReportCellBold',parent=cell_style,fontName=bold_name)
+    head_style=ParagraphStyle('ReportHead',parent=cell_style,fontName=bold_name,fontSize=6.7,leading=8,textColor=colors.white)
+    brand_parts=[]
+    logo_url=(profile.get('farm_logo') or '').strip();logo_path=UPLOADS/os.path.basename(logo_url) if logo_url.startswith('/uploads/') else None
+    if logo_path and logo_path.exists():
+        try:brand_parts.append(PdfImage(str(logo_path),width=18*mm,height=18*mm,kind='proportional'))
+        except Exception:pass
+    title_block=[Paragraph(h(farm_display_name(profile)),title),Paragraph('İşletmede Bulunan Hayvanlar Raporu',ParagraphStyle('ReportName',parent=title,fontSize=12,leading=14,spaceAfter=1)),Paragraph(h(subtitle),subtitle_style)]
+    title_table=Table([[brand_parts[0] if brand_parts else Paragraph('CP',ParagraphStyle('LogoFallback',parent=title,fontSize=18,textColor=colors.HexColor('#176b3a'))),title_block]],colWidths=[21*mm,115*mm])
+    title_table.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(0,0),3*mm),('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),0)]))
+    location=' / '.join(x for x in ((profile.get('province') or '').strip(),(profile.get('district') or '').strip()) if x) or '-'
+    meta=Paragraph(f"<b>Rapor Tarihi:</b> {date.today().strftime('%d/%m/%Y')}<br/><b>İşletme No:</b> {h(profile.get('business_no') or '-')}<br/><b>İşletme Sahibi:</b> {h(profile.get('owner_name') or '-')}<br/>{h(location)}",meta_style)
+    header=Table([[title_table,meta]],colWidths=[doc.width*.68,doc.width*.32])
+    header.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(-1,-1),0),('TOPPADDING',(0,0),(-1,-1),0),('BOTTOMPADDING',(0,0),(-1,-1),3*mm),('LINEBELOW',(0,0),(-1,-1),1.5,colors.HexColor('#176b3a'))]))
+    female=sum(1 for r in rows if r['group']=='Dişi');male=sum(1 for r in rows if r['group']=='Erkek');calf=sum(1 for r in rows if r['group']=='Buzağı')
+    summary=Paragraph(f'<b>Toplam Hayvan: {len(rows)}</b> &nbsp;&nbsp;&nbsp; Dişi: {female} &nbsp;&nbsp;&nbsp; Erkek: {male} &nbsp;&nbsp;&nbsp; Buzağı: {calf}',ParagraphStyle('Summary',parent=subtitle_style,fontSize=8.5,textColor=colors.HexColor('#173b28')))
+    data=[[Paragraph(h(label),head_style) for _,label,_,_ in columns]]
+    for idx,row in enumerate(rows,1):
+        data.append([Paragraph(h(animal_report_display_value(row,key,idx)),cell_bold if key=='tag' else cell_style) for key,_,_,_ in columns])
+    raw_widths=[pdf_width for _,_,_,pdf_width in columns];scale=doc.width/sum(raw_widths)
+    widths=[value*scale for value in raw_widths]
+    table=Table(data,colWidths=widths,repeatRows=1,splitByRow=1,hAlign='LEFT')
+    table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#176b3a')),('VALIGN',(0,0),(-1,-1),'MIDDLE'),('GRID',(0,0),(-1,-1),0.35,colors.HexColor('#cfded4')),('LEFTPADDING',(0,0),(-1,-1),2.4),('RIGHTPADDING',(0,0),(-1,-1),2.4),('TOPPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),3),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#f5f8f6')])]))
+    def footer(canvas,document):
+        canvas.saveState();canvas.setStrokeColor(colors.HexColor('#d2ded6'));canvas.line(document.leftMargin,8*mm,page_size[0]-document.rightMargin,8*mm)
+        canvas.setFont(font_name,6.7);canvas.setFillColor(colors.HexColor('#68776e'));canvas.drawString(document.leftMargin,4.8*mm,'ÇiftlikPro Enterprise · '+farm_display_name(profile));canvas.drawRightString(page_size[0]-document.rightMargin,4.8*mm,f'Sayfa {canvas.getPageNumber()} · {len(rows)} kayıt');canvas.restoreState()
+    doc.build([header,Spacer(1,3*mm),summary,Spacer(1,2.5*mm),table],onFirstPage=footer,onLaterPages=footer)
+    return output.getvalue()
 
 
 DASHBOARD_CARD_OPTIONS = [
@@ -5090,44 +5182,62 @@ setTimeout(()=>setFinanceDrawer(false),0);
             animal_group=q.get('animal_group',['all'])[0];animal_status=q.get('animal_status',['Aktif'])[0]
             animal_search=q.get('animal_search',[''])[0].strip();animal_paddock=q.get('animal_paddock',[''])[0].strip()
             report_rows=animal_report_rows(animal_group,animal_status,animal_search,animal_paddock)
-            report_query=urllib.parse.urlencode({'animal_group':animal_group,'animal_status':animal_status,'animal_search':animal_search,'animal_paddock':animal_paddock})
+            report_columns=animal_report_selected_columns(q);report_column_keys=[x[0] for x in report_columns]
+            report_query=urllib.parse.urlencode({'animal_group':animal_group,'animal_status':animal_status,'animal_search':animal_search,'animal_paddock':animal_paddock,'columns_mode':'custom','columns':report_column_keys},doseq=True)
             with db() as c:
                 sums=c.execute('select tx_type,category,sum(amount) total,count(*) cnt from finance where tx_date between ? and ? group by tx_type,category order by tx_type, total desc',(start,end)).fetchall(); monthly=c.execute("select substr(tx_date,1,7) m, sum(case when tx_type='Gelir' then amount else 0 end) inc, sum(case when tx_type='Gider' then amount else 0 end) exp from finance where tx_date between ? and ? group by m order by m",(start,end)).fetchall();paddocks=[r['name'] for r in c.execute("select name from paddocks where active=1 order by name").fetchall()]
             inc=sum(r['total'] for r in sums if r['tx_type']=='Gelir');exp=sum(r['total'] for r in sums if r['tx_type']=='Gider'); maxv=max([max(r['inc'],r['exp']) for r in monthly] or [1])
             bars=''.join(f'<div style="flex:1;display:flex;align-items:end;gap:2px;height:170px"><div class="bar" style="height:{max(2,r["inc"]/maxv*150)}px"><i>{int(r["inc"])}</i></div><div class="bar" style="height:{max(2,r["exp"]/maxv*150)}px;background:linear-gradient(#e76d5b,#b9382b)"><i>{int(r["exp"])}</i></div><span style="position:absolute"></span><small style="position:absolute;margin-top:175px">{h(r["m"])}</small></div>' for r in monthly)
             trs=''.join(f'<tr><td>{h(r["tx_type"])}</td><td>{h(r["category"])}</td><td>{r["cnt"]}</td><td>{money(r["total"])}</td></tr>' for r in sums)
-            animal_trs=''.join(f'''<tr><td>{i}</td><td><b>{h(r['tag'])}</b></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['group'])}</td><td>{h(r['breed']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['birth_date']) or '-'}</td><td>{h(r['mother_tag']) or '-'}</td><td>{h(r['paddock']) or '-'}</td><td>{h(r['status'])}</td></tr>''' for i,r in enumerate(report_rows,1)) or '<tr><td colspan="10">Seçilen filtrelerde hayvan bulunamadı.</td></tr>'
+            animal_ths=''.join(f'<th>{h(label)}</th>' for _,label,_,_ in report_columns)
+            animal_trs=''.join('<tr>'+''.join(f'<td>{"<b>" if key=="tag" else ""}{h(animal_report_display_value(r,key,i))}{"</b>" if key=="tag" else ""}</td>' for key,_,_,_ in report_columns)+'</tr>' for i,r in enumerate(report_rows,1)) or f'<tr><td colspan="{len(report_columns)}">Seçilen filtrelerde hayvan bulunamadı.</td></tr>'
+            animal_mobile_cards=''.join(f'''<article class="animal-mobile-card"><div class="animal-mobile-head">{'<span class="animal-mobile-index">#'+str(i)+'</span>' if 'row_no' in report_column_keys else ''}<strong>{h(r['tag'])}</strong>{'<span class="animal-mobile-group">'+h(r['group'])+'</span>' if 'group' in report_column_keys else ''}</div><div class="animal-mobile-fields">{''.join(f'<div><small>{h(label)}</small><span>{h(animal_report_display_value(r,key,i))}</span></div>' for key,label,_,_ in report_columns if key not in ('row_no','tag','group'))}</div></article>''' for i,r in enumerate(report_rows,1)) or '<div class="animal-mobile-empty">Seçilen filtrelerde hayvan bulunamadı.</div>'
+            column_checks=''.join((f'<label class="report-column-check locked"><input type="hidden" name="columns" value="tag"><input type="checkbox" checked disabled><span>{h(label)}</span></label>' if key=='tag' else f'<label class="report-column-check"><input type="checkbox" name="columns" value="{h(key)}" {"checked" if key in report_column_keys else ""}><span>{h(label)}</span></label>') for key,label,_,_ in ANIMAL_REPORT_COLUMNS)
             paddock_options='<option value="">Tüm Padoklar</option>'+''.join(f'<option value="{h(x)}" {"selected" if x==animal_paddock else ""}>{h(x)}</option>' for x in paddocks)
             female_count=sum(1 for r in report_rows if r['group']=='Dişi');male_count=sum(1 for r in report_rows if r['group']=='Erkek');calf_count=sum(1 for r in report_rows if r['group']=='Buzağı')
-            body=f'''<h1>{h(farm_name)} · Raporlar</h1>
-            <div class="card" id="animal-report"><div class="filter-title"><div><h2 style="margin:0">🐄 Tüm Hayvanlar Raporu</h2><p class="mut" style="margin:4px 0 0">Ekrandaki filtrelenmiş listeyi yazdırın, PDF kaydedin veya Excel'e aktarın.</p></div><span class="pill">{len(report_rows)} kayıt</span></div>
+            body=f'''<style>
+            .report-quick-actions{{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}}.animal-import-callout{{border-left:5px solid #176b3a!important;background:linear-gradient(135deg,#f4fbf6,#fff)!important}}.animal-import-callout h2{{margin:0 0 5px}}.report-column-picker{{margin-top:12px;border:1px solid #cfe0d5;border-radius:7px;background:#f8fbf9}}.report-column-picker>summary{{cursor:pointer;padding:11px 12px;font-weight:800;color:#173b28;display:flex;justify-content:space-between;gap:8px}}.report-column-content{{padding:0 12px 12px}}.report-column-grid{{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:7px}}.report-column-check{{display:flex;align-items:center;gap:7px;border:1px solid #dce6df;background:#fff;padding:8px;border-radius:6px;cursor:pointer}}.report-column-check input{{width:17px;height:17px;margin:0}}.report-column-check.locked{{background:#edf4ef;color:#516359;cursor:default}}.animal-mobile-list{{display:none}}.animal-mobile-card{{border:1px solid #d6e2da;border-radius:9px;background:#fff;padding:11px;box-shadow:0 1px 3px #1232}}.animal-mobile-head{{display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid #e3ebe5}}.animal-mobile-head strong{{font-size:15px;color:#143d28;overflow-wrap:anywhere}}.animal-mobile-index{{font-size:11px;color:#64746a}}.animal-mobile-group{{margin-left:auto;background:#e8f4ec;color:#176b3a;border-radius:99px;padding:4px 8px;font-size:11px;font-weight:800}}.animal-mobile-fields{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px;padding-top:9px}}.animal-mobile-fields div{{min-width:0}}.animal-mobile-fields small{{display:block;color:#6c7b72;font-size:10px;margin-bottom:2px}}.animal-mobile-fields span{{display:block;font-size:12px;font-weight:700;color:#263c30;overflow-wrap:anywhere}}.animal-mobile-empty{{padding:20px;text-align:center;color:#68786f;background:#fff;border:1px dashed #ccd9d0;border-radius:8px}}
+            @media(max-width:700px){{.main>h1:first-of-type{{font-size:20px!important}}.report-quick-actions{{display:grid;grid-template-columns:1fr 1fr}}.report-quick-actions .btn{{text-align:center;padding:10px 7px!important}}.animal-import-callout{{padding:13px!important}}.animal-import-callout .form{{display:block!important}}.animal-import-callout label,.animal-import-callout button{{width:100%}}#animal-report .finance-toolbar-modern{{display:grid!important;grid-template-columns:1fr!important;gap:9px!important}}#animal-report .finance-filter-actions{{display:grid!important;grid-template-columns:1fr 1fr!important}}.report-column-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.report-column-check{{padding:9px 7px;font-size:12px}}#animal-report>.grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important}}#animal-report>.grid .stat{{min-height:74px!important;padding:9px!important}}.report-actions{{display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important}}.report-actions .btn{{text-align:center;white-space:normal;padding:10px 6px!important}}.report-screen-table{{display:none!important}}.animal-mobile-list{{display:grid;gap:9px;margin-top:10px}}}}
+            </style><h1>{h(farm_name)} · Raporlar</h1>
+            <div class="report-quick-actions"><a class="btn blue" href="#animal-import">📥 Excel/PDF'den Hayvan Aktar</a><a class="btn" href="#animal-report">🐄 Tüm Hayvanlar Raporu</a><a class="btn alt" target="_blank" href="/reports/animals.pdf?{report_query}">📄 Hızlı PDF</a></div>
+            <div class="card animal-import-callout" id="animal-import"><h2>📥 Excel / PDF'den Hayvan İçe Aktar</h2><p class="mut">Bakanlık “İşletmede Bulunan Sığır ve Manda Türü Hayvan Raporu” PDF'leri ile XLSX/CSV tabloları desteklenir. Önce güvenli önizleme açılır; mükerrer küpeler aktarılmaz.</p><form method="post" action="/animals/import-preview" enctype="multipart/form-data" class="form"><label class="full">Hayvan listesi seçin<input type="file" name="animal_file" accept=".xlsx,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label><div class="full"><button class="btn blue">📂 Dosyayı Oku ve Önizle</button></div></form><p class="mut" style="font-size:12px">Taranmış fotoğraf PDF yerine mümkünse sistemden alınmış orijinal PDF veya Excel kullanın.</p></div>
+            <div class="card" id="animal-report" style="margin-top:14px"><div class="filter-title"><div><h2 style="margin:0">🐄 Tüm Hayvanlar Raporu</h2><p class="mut" style="margin:4px 0 0">Filtreleri ve görünecek sütunları seçin; aynı görünümü PDF veya Excel'e aktarın.</p></div><span class="pill">{len(report_rows)} kayıt</span></div>
               <form class="finance-toolbar-modern" style="margin-top:14px">
-                <input type="hidden" name="start" value="{h(start)}"><input type="hidden" name="end" value="{h(end)}">
+                <input type="hidden" name="start" value="{h(start)}"><input type="hidden" name="end" value="{h(end)}"><input type="hidden" name="columns_mode" value="custom">
                 <label><span>Hayvan Grubu</span><select name="animal_group"><option value="all" {"selected" if animal_group=='all' else ""}>Tüm Hayvanlar</option><option value="female" {"selected" if animal_group=='female' else ""}>Dişi Hayvanlar</option><option value="male" {"selected" if animal_group=='male' else ""}>Erkek Hayvanlar</option><option value="calves" {"selected" if animal_group=='calves' else ""}>Buzağılar</option></select></label>
                 <label><span>Durum</span><select name="animal_status"><option {"selected" if animal_status=='Aktif' else ""}>Aktif</option><option {"selected" if animal_status=='Satıldı' else ""}>Satıldı</option><option {"selected" if animal_status=='Kesildi' else ""}>Kesildi</option><option {"selected" if animal_status=='Tümü' else ""}>Tümü</option></select></label>
                 <label><span>Padok</span><select name="animal_paddock">{paddock_options}</select></label>
                 <label><span>Arama</span><input name="animal_search" value="{h(animal_search)}" placeholder="Küpe, ırk, anne, padok..."></label>
-                <div class="finance-filter-actions"><button class="btn">Listele</button><a class="btn alt" href="/reports#animal-report">Temizle</a></div>
+                <details class="report-column-picker full" open><summary><span>☑ Raporda Gösterilecek Sütunlar</span><span>{len(report_columns)} seçili</span></summary><div class="report-column-content"><div class="report-column-grid">{column_checks}</div><p class="mut" style="margin:8px 0 0">Küpe No zorunludur. Seçiminiz ekran, mobil kartlar, PDF, web önizleme ve Excel'e birlikte uygulanır.</p></div></details>
+                <div class="finance-filter-actions"><button class="btn">Seçimleri Uygula</button><a class="btn alt" href="/reports#animal-report">Varsayılana Dön</a></div>
               </form>
               <div class="grid" style="margin-top:12px"><div class="card stat metric green">Listelenen Toplam<b>{len(report_rows)}</b></div><div class="card stat metric blue">Dişi<b>{female_count}</b></div><div class="card stat metric orange">Erkek<b>{male_count}</b></div><div class="card stat metric teal">Buzağı<b>{calf_count}</b></div></div>
-              <div class="actions"><a class="btn blue" target="_blank" href="/reports/animals/print?{report_query}">🖨 Yazdır / PDF</a><a class="btn" href="/reports/animals.xlsx?{report_query}">📊 Excel'e Aktar</a></div>
-              <div class="tablewrap" style="max-height:520px;overflow:auto"><table><thead><tr><th>#</th><th>Küpe</th><th>Takma Ad</th><th>Grup</th><th>Irk</th><th>Cinsiyet</th><th>Doğum</th><th>Ana No</th><th>Padok</th><th>Durum</th></tr></thead><tbody>{animal_trs}</tbody></table></div>
+              <div class="actions report-actions"><a class="btn blue" target="_blank" href="/reports/animals.pdf?{report_query}">📄 Temiz PDF</a><a class="btn alt web-preview-btn" target="_blank" href="/reports/animals/print?{report_query}">👁 Web Önizleme</a><a class="btn" href="/reports/animals.xlsx?{report_query}">📊 Excel'e Aktar</a><a class="btn orange" href="#animal-import">📥 Hayvan Aktar</a></div>
+              <div class="tablewrap report-screen-table" style="max-height:520px;overflow:auto"><table><thead><tr>{animal_ths}</tr></thead><tbody>{animal_trs}</tbody></table></div><div class="animal-mobile-list">{animal_mobile_cards}</div>
             </div>
-            <div class="card" style="margin-top:14px" id="animal-import"><h2>📥 Excel / PDF'den Hayvan İçe Aktar</h2><p class="mut">Tarım ve Orman Bakanlığı “İşletmede Bulunan Sığır ve Manda Türü Hayvan Raporu” PDF'leri ile XLSX/CSV tabloları desteklenir. Kayıttan önce önizleme açılır; mükerrer küpeler aktarılmaz.</p><form method="post" action="/animals/import-preview" enctype="multipart/form-data" class="form"><label class="full">Hayvan listesi<input type="file" name="animal_file" accept=".xlsx,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required></label><div class="full"><button class="btn blue">Dosyayı Oku ve Önizle</button></div></form><p class="mut" style="font-size:12px">Taranmış fotoğraf PDF yerine mümkünse sistemden alınmış orijinal PDF veya Excel kullanın.</p></div>
             <h2 style="margin-top:22px">💰 Finans Raporları</h2><div class="card"><form class="actions"><label>Başlangıç <input type="date" name="start" value="{start}"></label><label>Bitiş <input type="date" name="end" value="{end}"></label><button class="btn">Raporla</button><a class="btn blue" href="/reports/export?start={start}&end={end}">Rapor CSV</a></form></div><div class="grid" style="margin-top:14px"><div class="card stat">Toplam Gelir<b>{money(inc)}</b></div><div class="card stat">Toplam Gider<b>{money(exp)}</b></div><div class="card stat">Net Sonuç<b>{money(inc-exp)}</b></div><div class="card stat">Gider/Gelir Oranı<b>{(exp/inc*100 if inc else 0):.1f}%</b></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Aylık Gelir / Gider</h2><p class="mut">Yeşil: gelir · Kırmızı: gider</p><div class="chart">{bars or '<p>Kayıt yok</p>'}</div></div><div class="card"><h2>Kategori Özeti</h2><table><tr><th>Tür</th><th>Kategori</th><th>Adet</th><th>Toplam</th></tr>{trs}</table></div></div>'''
             return self.send_html(page('Raporlar',body,'/reports',u,msg))
         if path=='/reports/animals.xlsx':
             profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0]
-            rows=animal_report_rows(group,status,search,paddock);b=animal_report_xlsx(rows,profile);name=f'hayvan_raporu_{date.today().strftime("%Y%m%d")}.xlsx'
+            columns=animal_report_selected_columns(q);rows=animal_report_rows(group,status,search,paddock);b=animal_report_xlsx(rows,profile,columns);name=f'hayvan_raporu_{date.today().strftime("%Y%m%d")}.xlsx'
             self.send_response(200);self.send_header('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
+        if path=='/reports/animals.pdf':
+            profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0]
+            columns=animal_report_selected_columns(q);rows=animal_report_rows(group,status,search,paddock);subtitle=' · '.join(x for x in [status+' Kayıtlar',{'female':'Dişi Hayvanlar','male':'Erkek Hayvanlar','calves':'Buzağılar'}.get(group,'Tüm Hayvanlar'),('Padok: '+paddock if paddock else '')] if x);b=animal_report_pdf(rows,profile,subtitle,columns);name=f'hayvan_raporu_{date.today().strftime("%Y%m%d")}.pdf'
+            self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition',f'inline; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/reports/animals/print':
-            profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0];rows=animal_report_rows(group,status,search,paddock)
+            profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0];columns=animal_report_selected_columns(q);rows=animal_report_rows(group,status,search,paddock)
             logo=f'<img src="{h(profile.get("farm_logo"))}" alt="İşletme logosu">' if profile.get('farm_logo') else '<div class="logo-mark">🐄</div>'
-            trs=''.join(f'''<tr><td>{i}</td><td><b>{h(r['tag'])}</b></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['group'])}</td><td>{h(r['species'])}</td><td>{h(r['breed']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['birth_date']) or '-'}</td><td>{h(r['mother_tag']) or '-'}</td><td>{fmt_date(r['arrival_date']) or '-'}</td><td>{h(r['paddock']) or '-'}</td><td>{h(r['status'])}</td></tr>''' for i,r in enumerate(rows,1)) or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'
+            column_keys=[x[0] for x in columns];ths=''.join(f'<th>{h(label)}</th>' for _,label,_,_ in columns)
+            trs=''.join('<tr>'+''.join(f'<td>{"<b>" if key=="tag" else ""}{h(animal_report_display_value(r,key,i))}{"</b>" if key=="tag" else ""}</td>' for key,_,_,_ in columns)+'</tr>' for i,r in enumerate(rows,1)) or f'<tr><td colspan="{len(columns)}">Kayıt bulunamadı.</td></tr>'
+            mobile_cards=''.join(f'''<article class="mobile-report-card"><div class="mobile-report-head">{'<span>#'+str(i)+'</span>' if 'row_no' in column_keys else ''}<strong>{h(r['tag'])}</strong>{'<em>'+h(r['group'])+'</em>' if 'group' in column_keys else ''}</div><div class="mobile-report-fields">{''.join(f'<div><small>{h(label)}</small><b>{h(animal_report_display_value(r,key,i))}</b></div>' for key,label,_,_ in columns if key not in ('row_no','tag','group'))}</div></article>''' for i,r in enumerate(rows,1)) or '<p class="mobile-empty">Kayıt bulunamadı.</p>'
+            clean_query=urllib.parse.urlencode({'animal_group':group,'animal_status':status,'animal_search':search,'animal_paddock':paddock,'columns_mode':'custom','columns':column_keys},doseq=True)
             subtitle=' · '.join(x for x in [status+' Kayıtlar',{'female':'Dişi','male':'Erkek','calves':'Buzağı'}.get(group,'Tüm Hayvanlar'),('Padok: '+paddock if paddock else '')] if x)
             html=f'''<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tüm Hayvanlar Raporu</title><style>
-            *{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;color:#183025;margin:0;background:#eef3ef}}.toolbar{{max-width:1400px;margin:12px auto;display:flex;gap:8px}}button,a{{border:0;border-radius:8px;padding:10px 14px;background:#176b3a;color:white;text-decoration:none;font-weight:700;cursor:pointer}}.sheet{{max-width:1400px;margin:0 auto 20px;background:#fff;padding:22px;box-shadow:0 8px 25px #0002}}.head{{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #176b3a;padding-bottom:12px;margin-bottom:12px}}.brand{{display:flex;gap:14px;align-items:center}}.brand img,.logo-mark{{width:70px;height:70px;object-fit:contain;border-radius:8px}}.logo-mark{{display:grid;place-items:center;background:#edf6f0;font-size:36px}}h1{{font-size:22px;margin:0 0 5px}}.mut{{color:#617168;font-size:12px}}.meta{{text-align:right;font-size:12px;line-height:1.6}}.summary{{display:flex;gap:18px;margin:8px 0 12px;font-size:12px}}table{{width:100%;border-collapse:collapse;font-size:10px}}th,td{{border:1px solid #d8e3db;padding:5px 6px;text-align:left}}th{{background:#e9f3ec}}tbody tr:nth-child(even){{background:#f8faf8}}.foot{{margin-top:10px;font-size:10px;color:#68766d;display:flex;justify-content:space-between}}@page{{size:A4 landscape;margin:9mm}}@media print{{body{{background:#fff}}.toolbar{{display:none}}.sheet{{max-width:none;margin:0;padding:0;box-shadow:none}}thead{{display:table-header-group}}tr{{break-inside:avoid;page-break-inside:avoid}}.head{{break-after:avoid}}}}
-            </style></head><body><div class="toolbar"><button onclick="window.print()">🖨 Yazdır / PDF Kaydet</button><a href="/reports">← Raporlara Dön</a></div><main class="sheet"><header class="head"><div class="brand">{logo}<div><h1>{h(farm_display_name(profile))}</h1><b>İşletmede Bulunan Hayvanlar Raporu</b><div class="mut">{h(subtitle)}</div></div></div><div class="meta"><b>Rapor Tarihi:</b> {date.today().strftime('%d/%m/%Y')}<br><b>İşletme No:</b> {h(profile.get('business_no') or '-')}<br><b>İşletme Sahibi:</b> {h(profile.get('owner_name') or '-')}<br>{h(profile.get('province') or '')}{' / '+h(profile.get('district')) if profile.get('district') else ''}</div></header><div class="summary"><b>Toplam Hayvan: {len(rows)}</b><span>Dişi: {sum(1 for r in rows if r['group']=='Dişi')}</span><span>Erkek: {sum(1 for r in rows if r['group']=='Erkek')}</span><span>Buzağı: {sum(1 for r in rows if r['group']=='Buzağı')}</span></div><table><thead><tr><th>#</th><th>Küpe No</th><th>Takma Ad</th><th>Grup</th><th>Tür</th><th>Irk</th><th>Cinsiyet</th><th>Doğum Tarihi</th><th>Ana No</th><th>Geliş Tarihi</th><th>Padok</th><th>Durum</th></tr></thead><tbody>{trs}</tbody></table><footer class="foot"><span>ÇiftlikPro Enterprise · {h(farm_display_name(profile))}</span><span>{len(rows)} kayıt</span></footer></main></body></html>'''
+            *{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;color:#183025;margin:0;background:#eef3ef}}.toolbar{{max-width:1400px;margin:12px auto;display:flex;gap:8px}}button,.toolbar a{{border:0;border-radius:8px;padding:10px 14px;background:#176b3a;color:white;text-decoration:none;font-weight:700;cursor:pointer;text-align:center}}.toolbar a:first-child{{background:#1468a0}}.sheet{{max-width:1400px;margin:0 auto 20px;background:#fff;padding:22px;box-shadow:0 8px 25px #0002}}.head{{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #176b3a;padding-bottom:12px;margin-bottom:12px}}.brand{{display:flex;gap:14px;align-items:center}}.brand img,.logo-mark{{width:70px;height:70px;object-fit:contain;border-radius:8px}}.logo-mark{{display:grid;place-items:center;background:#edf6f0;font-size:36px}}h1{{font-size:22px;margin:0 0 5px}}.mut{{color:#617168;font-size:12px}}.meta{{text-align:right;font-size:12px;line-height:1.6}}.summary{{display:flex;gap:18px;margin:8px 0 12px;font-size:12px}}table{{width:100%;border-collapse:collapse;font-size:10px}}th,td{{border:1px solid #d8e3db;padding:5px 6px;text-align:left}}th{{background:#e9f3ec}}tbody tr:nth-child(even){{background:#f8faf8}}.foot{{margin-top:10px;font-size:10px;color:#68766d;display:flex;justify-content:space-between}}.mobile-report-list{{display:none}}@page{{size:A4 landscape;margin:9mm}}
+            @media screen and (max-width:700px){{body{{background:#f2f5f3}}.toolbar{{position:sticky;top:0;z-index:10;margin:0;padding:8px;background:#fff;box-shadow:0 2px 10px #0002;display:grid;grid-template-columns:1fr 1fr}}.toolbar a,.toolbar button{{padding:11px 6px;font-size:12px}}.toolbar a:last-child{{grid-column:1/-1}}.sheet{{margin:0;padding:14px 12px 22px;box-shadow:none}}.head{{display:grid;grid-template-columns:1fr;gap:10px}}.brand{{align-items:flex-start}}.brand img,.logo-mark{{width:54px;height:54px;font-size:28px;flex:0 0 54px}}h1{{font-size:19px}}.brand b{{font-size:13px}}.meta{{text-align:left;background:#f3f7f4;border-radius:7px;padding:9px;display:grid;grid-template-columns:1fr 1fr;gap:3px 8px}}.summary{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0}}.summary>*{{background:#eef5f0;border-radius:6px;padding:8px}}table{{display:none}}.mobile-report-list{{display:grid;gap:9px}}.mobile-report-card{{background:#fff;border:1px solid #d4e1d8;border-radius:9px;padding:11px;box-shadow:0 1px 3px #00000012}}.mobile-report-head{{display:flex;align-items:center;gap:7px;padding-bottom:8px;border-bottom:1px solid #e3eae5}}.mobile-report-head span{{color:#6a786f;font-size:11px}}.mobile-report-head strong{{font-size:15px;overflow-wrap:anywhere}}.mobile-report-head em{{margin-left:auto;background:#e7f4eb;color:#176b3a;border-radius:99px;padding:4px 8px;font-style:normal;font-size:10px;font-weight:700}}.mobile-report-fields{{display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;padding-top:9px}}.mobile-report-fields div{{min-width:0}}.mobile-report-fields small{{display:block;color:#6a786f;font-size:10px;margin-bottom:2px}}.mobile-report-fields b{{display:block;font-size:12px;overflow-wrap:anywhere}}.mobile-empty{{padding:20px;text-align:center;background:#f7f9f7;border-radius:8px}}.foot{{gap:10px;flex-wrap:wrap}}}}
+            @media print{{body{{background:#fff}}.toolbar,.mobile-report-list{{display:none!important}}.sheet{{max-width:none;margin:0;padding:0;box-shadow:none}}table{{display:table!important}}thead{{display:table-header-group}}tr{{break-inside:avoid;page-break-inside:avoid}}.head{{break-after:avoid}}}}
+            </style></head><body><div class="toolbar"><a href="/reports/animals.pdf?{clean_query}">📄 Temiz PDF'yi Aç</a><button onclick="window.print()">🖨 Yazdır</button><a href="/reports#animal-report">← Raporlara Dön</a></div><main class="sheet"><header class="head"><div class="brand">{logo}<div><h1>{h(farm_display_name(profile))}</h1><b>İşletmede Bulunan Hayvanlar Raporu</b><div class="mut">{h(subtitle)}</div></div></div><div class="meta"><span><b>Rapor Tarihi:</b> {date.today().strftime('%d/%m/%Y')}</span><span><b>İşletme No:</b> {h(profile.get('business_no') or '-')}</span><span><b>İşletme Sahibi:</b> {h(profile.get('owner_name') or '-')}</span><span>{h(profile.get('province') or '')}{' / '+h(profile.get('district')) if profile.get('district') else ''}</span></div></header><div class="summary"><b>Toplam Hayvan: {len(rows)}</b><span>Dişi: {sum(1 for r in rows if r['group']=='Dişi')}</span><span>Erkek: {sum(1 for r in rows if r['group']=='Erkek')}</span><span>Buzağı: {sum(1 for r in rows if r['group']=='Buzağı')}</span></div><div class="mobile-report-list">{mobile_cards}</div><table><thead><tr>{ths}</tr></thead><tbody>{trs}</tbody></table><footer class="foot"><span>ÇiftlikPro Enterprise · {h(farm_display_name(profile))}</span><span>{len(rows)} kayıt</span></footer></main></body></html>'''
             return self.send_html(html)
         if path=='/animals/import-preview':
             token=q.get('token',[''])[0]
@@ -5139,7 +5249,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
             body=f'''<h1>📥 Hayvan İçe Aktarma Önizlemesi</h1><div class="grid"><div class="card stat metric blue">Dosya Satırı<b>{len(rows)}</b></div><div class="card stat metric green">Aktarılabilir<b>{ready}</b></div><div class="card stat metric orange">Uyarılı<b>{warnings}</b></div><div class="card stat metric red">Atlanacak<b>{errors}</b></div></div><div class="card" style="margin-top:14px"><h2>{h(preview['filename'])}</h2><p class="mut">Yeşil satırlar hazır, sarı satırlar uyarılı fakat aktarılabilir, kırmızı satırlar aktarılmaz. Mevcut kayıtların üzerine yazılmaz.</p><style>.import-ready{{background:#eef9f1!important}}.import-warning{{background:#fff7df!important}}.import-error{{background:#fdebea!important}}.import-preview-table td{{font-size:12px}}</style><div class="tablewrap" style="max-height:58vh;overflow:auto"><table class="import-preview-table"><thead><tr><th>Satır</th><th>Küpe</th><th>Kayıt Grubu</th><th>Irk</th><th>Cinsiyet</th><th>Doğum</th><th>Ana No</th><th>Kontrol</th></tr></thead><tbody>{trs}</tbody></table></div>{more}<div class="actions"><form method="post" action="/animals/import-confirm" onsubmit="return confirm('{ready} geçerli hayvan kaydı içe aktarılsın mı?')"><input type="hidden" name="token" value="{h(token)}"><button class="btn blue" {"" if ready else "disabled"}>✅ {ready} Geçerli Kaydı İçe Aktar</button></form><a class="btn alt" href="/reports#animal-import">İptal</a></div></div>'''
             return self.send_html(page('Hayvan İçe Aktarma',body,'/reports',u,msg))
         if path=='/data':
-            body="""<h1>Veri Aktarımı</h1><div class='two'><div class='card'><h2>JSON'dan İçe Aktar</h2><p class='mut'>Eski sistem yedeklerini ve V0.6 dışa aktarımlarını destekler. İçe aktarmadan önce otomatik veritabanı yedeği alınır.</p><form method='post' action='/data/import' enctype='multipart/form-data' class='form'><label class='full'>JSON dosyası<input type='file' name='json_file' accept='.json,application/json' required></label><label>Çakışan küpeler<select name='strategy'><option value='skip'>Atla (önerilen)</option><option value='update'>Mevcut kaydı güncelle</option></select></label><div class='full'><button class='btn'>İçe Aktar</button></div></form></div><div class='card'><h2>Dışa Aktar</h2><p>Tüm hayvan, tohumlama, buzağı, sağlık ve finans kayıtlarını tek JSON dosyasına aktarır.</p><div class='actions'><a class='btn blue' href='/data/export'>JSON Yedeğini İndir</a><a class='btn alt' href='/backups'>SQLite Yedekleri</a></div><hr><p class='mut'>JSON taşınabilir veri yedeğidir. SQLite yedeği uygulamanın birebir veritabanı kopyasıdır.</p></div></div>"""
+            body="""<h1>Veri Aktarımı</h1><div class='card' style='margin-bottom:14px;border-left:5px solid #176b3a;background:linear-gradient(135deg,#f2faf4,#fff)'><h2 style='margin-top:0'>📥 Excel / PDF'den Hayvan Aktar</h2><p class='mut'>Bakanlık hayvan raporu PDF'sini, Excel (.xlsx) veya CSV listesini okuyup güvenli önizleme ile toplu hayvan kaydı oluşturur.</p><div class='actions'><a class='btn blue' href='/reports#animal-import'>Dosya Seçme Ekranını Aç</a></div></div><div class='two'><div class='card'><h2>JSON'dan İçe Aktar</h2><p class='mut'>Eski sistem yedeklerini ve V0.6 dışa aktarımlarını destekler. İçe aktarmadan önce otomatik veritabanı yedeği alınır.</p><form method='post' action='/data/import' enctype='multipart/form-data' class='form'><label class='full'>JSON dosyası<input type='file' name='json_file' accept='.json,application/json' required></label><label>Çakışan küpeler<select name='strategy'><option value='skip'>Atla (önerilen)</option><option value='update'>Mevcut kaydı güncelle</option></select></label><div class='full'><button class='btn'>İçe Aktar</button></div></form></div><div class='card'><h2>Dışa Aktar</h2><p>Tüm hayvan, tohumlama, buzağı, sağlık ve finans kayıtlarını tek JSON dosyasına aktarır.</p><div class='actions'><a class='btn blue' href='/data/export'>JSON Yedeğini İndir</a><a class='btn alt' href='/backups'>SQLite Yedekleri</a></div><hr><p class='mut'>JSON taşınabilir veri yedeğidir. SQLite yedeği uygulamanın birebir veritabanı kopyasıdır.</p></div></div>"""
             return self.send_html(page('Veri Aktarımı',body,'/data',u,msg))
         if path=='/data/export':
             b=json.dumps(export_payload(),ensure_ascii=False,indent=2).encode('utf-8');name=f'ciftlik_json_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'

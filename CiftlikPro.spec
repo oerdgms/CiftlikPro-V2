@@ -1,10 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files
 
 project_root = Path(SPECPATH)
 app_root = project_root / "app"
 
 datas = []
+datas += collect_data_files("reportlab", includes=["fonts/Vera*.ttf"])
 for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md", "feed_catalog.json"):
     optional_file = app_root / optional_name
     if optional_file.exists():
@@ -15,7 +17,7 @@ a = Analysis(
     pathex=[str(app_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=["openpyxl", "pypdf"],
+    hiddenimports=["openpyxl", "pypdf", "reportlab"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
