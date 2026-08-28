@@ -6235,15 +6235,16 @@ def page(title, body, path='/', user='admin', flash=''):
 
 
 
-# DEV4.8 — mobile stable + visible desktop logo; solver logic untouched
+# DEV4.9 — mobile toggle removed + desktop logo lowered; solver logic untouched
 DEV47_UI_FIX = r"""
 <style id="dev47-mobile-ration-authoritative">
 /* Desktop logo: Dashboard üstündeki ayrılmış yeşil alanda görünür ve sabit. */
 @media(min-width:901px){
-  #sideMenu.side{padding-top:0!important}
-  #sideMenu.side > .erp-side-brand{position:relative!important;top:auto!important;left:auto!important;right:auto!important;z-index:1!important;height:46px!important;min-height:46px!important;margin:0 0 2px!important;padding:0 10px 0 16px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;text-align:left!important;font-size:14px!important;line-height:1!important;box-sizing:border-box!important;background:transparent!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.14)!important;color:#fff!important;visibility:visible!important;opacity:1!important;overflow:visible!important;transform:none!important}
+  /* Brandı üst komut çubuğunun altına indir: Dashboard satırının hemen üstünde tam görünür. */
+  #sideMenu.side{padding-top:0!important;overflow:visible!important}
+  #sideMenu.side > .erp-side-brand{position:relative!important;top:auto!important;left:auto!important;right:auto!important;z-index:2!important;height:38px!important;min-height:38px!important;margin:14px 0 2px!important;padding:0 10px 0 18px!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;text-align:left!important;font-size:14px!important;line-height:1!important;box-sizing:border-box!important;background:transparent!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.14)!important;color:#fff!important;visibility:visible!important;opacity:1!important;overflow:visible!important;transform:none!important}
   #sideMenu.side > .erp-side-brand b{display:inline!important;color:#fff!important;font-size:14px!important;line-height:1!important;white-space:nowrap!important}
-  #sideMenu.side > .erp-side-brand + a{margin-top:2px!important}
+  #sideMenu.side > .erp-side-brand + a{margin-top:0!important}
 }
 
 @media(max-width:900px){
@@ -6254,7 +6255,7 @@ DEV47_UI_FIX = r"""
   body:has(.workbench-shell) .workbench-shell>#ration-workbench~*:not(script){display:block!important;grid-column:auto!important;grid-row:auto!important;min-width:0!important;width:100%!important}
 
   /* Mobilde hedef ayar formu yer kaplamaz; düzenleme Rasyon Bilgileri alanından yapılır. */
-  body:has(.workbench-shell) .mobile-target-toggle{display:none!important}
+  .mobile-target-toggle{display:none!important}
   body:has(.workbench-shell) .target-controlbar{display:none!important;position:static!important;width:100%!important;margin:0!important;padding:0!important;grid-column:auto!important;grid-row:auto!important}
   body:has(.workbench-shell) .target-controlbar .target-head{display:block!important;margin:0 0 9px!important}
   body:has(.workbench-shell) .target-controlbar .target-head h3{font-size:16px!important;white-space:normal!important;margin:0 0 5px!important}
@@ -6322,6 +6323,15 @@ DEV47_UI_FIX = r"""
   body:has(.workbench-shell) .nutri-mini{flex-basis:142px!important;width:142px!important;min-width:142px!important}
 }
 </style>
+<script id="dev49-mobile-toggle-cleanup">
+(function(){
+  function clean(){
+    document.querySelectorAll('.mobile-target-toggle').forEach(function(el){ el.remove(); });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',clean);}else{clean();}
+  setTimeout(clean,250);
+})();
+</script>
 
 """
 
@@ -6330,3 +6340,60 @@ _old_page_dev47 = page
 def page(title, body, path='/', user='admin', flash=''):
     html = _old_page_dev47(title, body, path, user, flash)
     return html.replace('</body>', DEV47_UI_FIX + '</body>')
+
+
+# DEV4.10 — desktop sidebar/header alignment only; solver/mobile ration untouched
+DEV410_SIDEBAR_BRAND_FIX = r"""
+<style id="dev410-sidebar-brand-final">
+@media(min-width:901px){
+  /* Keep the 34px utility header above everything, then start the green sidebar below it. */
+  #sideMenu.side{
+    top:var(--erp-top)!important;
+    bottom:var(--erp-status)!important;
+    padding-top:0!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+  }
+  /* Brand occupies the same vertical band as the desktop command bar, so it can never sit under the white header. */
+  #sideMenu.side > .erp-side-brand{
+    position:relative!important;
+    inset:auto!important;
+    height:var(--erp-cmd)!important;
+    min-height:var(--erp-cmd)!important;
+    margin:0 0 4px!important;
+    padding:0 18px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    gap:7px!important;
+    box-sizing:border-box!important;
+    background:transparent!important;
+    border:0!important;
+    border-bottom:1px solid rgba(255,255,255,.14)!important;
+    color:#fff!important;
+    font-size:17px!important;
+    line-height:1!important;
+    text-align:left!important;
+    visibility:visible!important;
+    opacity:1!important;
+    transform:none!important;
+    overflow:visible!important;
+    white-space:nowrap!important;
+  }
+  #sideMenu.side > .erp-side-brand b{
+    display:inline!important;
+    color:#fff!important;
+    font-size:17px!important;
+    line-height:1!important;
+    white-space:nowrap!important;
+  }
+  #sideMenu.side > .erp-side-brand + a{margin-top:0!important}
+}
+</style>
+"""
+
+_old_page_dev410 = page
+
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_dev410(title, body, path, user, flash)
+    return html.replace('</body>', DEV410_SIDEBAR_BRAND_FIX + '</body>')

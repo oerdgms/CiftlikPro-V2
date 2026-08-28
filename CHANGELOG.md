@@ -81,3 +81,13 @@
 - DEV4.7 current solver/mobile UI/logo fix preserved.
 - `.github/workflows/windows-installer.yml` restored from the previously working GitHub workflow package.
 - No solver calculation logic changed in this merge.
+
+## DEV4.9 UI düzeltmesi
+- Solver/optimizasyon mantığı değiştirilmedi.
+- Masaüstü ÇiftlikPro markası Dashboard satırının hemen üstüne aşağı alındı ve kırpılma önlendi.
+- Mobilde işlevsiz Hedef Bilgilerini Göster/Gizle düğmesi hem CSS hem DOM seviyesinde kaldırıldı.
+
+## DEV4.10 — Desktop Sidebar Brand Final
+- Masaüstü sol menü üst beyaz çubuğun altına alındı; ÇiftlikPro logosunun kırpılması giderildi.
+- Logo Dashboard satırının hemen üstündeki ayrılmış alana sabitlendi.
+- Solver ve mobil rasyon akışı değiştirilmedi.
