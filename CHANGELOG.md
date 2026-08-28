@@ -93,6 +93,12 @@
 - Solver ve mobil rasyon akışı değiştirilmedi.
 # DEV4.10 Rapor ve Hayvan Aktarımı Güncellemesi
 
+- Besi rasyonlarına dönem bazlı nişasta hedefleri eklendi: başlangıç %20–24, geliştirme %23–27, bitirme %25–29 KM; üst güvenlik sınırları sırasıyla %28, %30 ve %31.
+- Solver, ideal nişasta bandını yumuşak hedef; üst sınırı güçlendirilmiş güvenlik cezası olarak değerlendirir.
+- Rasyon hedef ekranında “Nişasta + Rumen” kartı, kg/baş/gün hesabı ve uyarı durumu gösterilir.
+- Rasyon Hazırlama / Toplam Yem çıktısına KM, nişasta yüzdesi, nişasta miktarı ve hedef/üst sınır eklendi.
+- Kullanıcı tarafından eklenen özel yemlerde nişasta değeri veritabanına kaydedilir.
+
 - Raporlar sayfasına aktif/tüm, grup, padok ve arama filtreli Tüm Hayvanlar Raporu eklendi.
 - Ekrandaki hayvan listesi için temiz A4 yatay Yazdır/PDF görünümü ve gerçek XLSX dışa aktarımı eklendi.
 - XLSX, CSV ve Tarım ve Orman Bakanlığı işletme hayvan raporu biçimindeki dijital PDF dosyalarından önizlemeli hayvan içe aktarma eklendi.

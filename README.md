@@ -40,6 +40,8 @@ Bu paket DEV4.8 solver davranışını aynen korur. Değişiklik yalnız masaüs
 
 ## DEV4.10 rapor ve hayvan aktarımı
 
+Rasyon modülünde besi dönemine göre nişasta hedefi, üst güvenlik sınırı, rumenle birlikte canlı hedef kartı ve yazdırılabilir besin özeti bulunur. Solver nişastayı enerji, NDF/eNDF ve kaba/kesif dengesiyle birlikte değerlendirir.
+
 - Tüm Hayvanlar raporu mobilde sıkışık geniş tablo yerine okunaklı hayvan kartları olarak gösterilir; web önizlemede de telefona özel kart düzeni ve doğrudan temiz PDF düğmesi bulunur.
 - “Excel / PDF'den Hayvan İçe Aktar” alanı Raporlar sayfasının en üstündedir ve Veri Aktarımı sayfasında ayrıca belirgin bir kısayolu vardır.
 - “Raporda Gösterilecek Sütunlar” seçimleri ekrandaki listeye, mobil kartlara, web önizlemeye, doğrudan PDF'ye ve Excel çıktısına birlikte uygulanır.

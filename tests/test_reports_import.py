@@ -87,6 +87,30 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('Küpe No',text);self.assertIn('Takma Ad',text);self.assertIn('Padok',text)
         self.assertNotIn('Doğum Tarihi',text)
 
+    def test_beef_starch_targets_follow_finishing_phase(self):
+        expected={
+            'Besi Başlangıç':(20.0,24.0,28.0),
+            'Besi Geliştirme':(23.0,27.0,30.0),
+            'Besi Bitirme':(25.0,29.0,31.0),
+        }
+        for phase,values in expected.items():
+            target=server.beef_starch_targets(phase)
+            self.assertEqual((target['starch_min'],target['starch_ideal_max'],target['starch_max']),values)
+
+    def test_manual_phase_override_controls_all_solver_limits(self):
+        limits=server.beef_phase_limits(250,1.4,6.5,0,'Besi Bitirme')
+        self.assertEqual(limits['phase'],'Besi Bitirme')
+        self.assertEqual((limits['starch_min'],limits['starch_ideal_max'],limits['starch_max']),(25.0,29.0,31.0))
+        self.assertEqual((limits['roughage_min'],limits['roughage_max']),(30.0,40.0))
+
+    def test_ration_target_panel_contains_combined_starch_rumen_card(self):
+        rr={'id':1,'ration_type':'Besi','target_weight_kg':500,'target_adg_kg':1.5,'animal_type':'Besi Erkek','target_age_months':0,'target_beef_phase':'Besi Bitirme'}
+        sm={'dm_kg':12.0,'cp_pct_dm':13.0,'me_mcal':30.0,'ndf_pct_dm':29.0,'endf_pct_dm':15.0,'rumen_ph':6.05,'ca_g':60.0,'p_g':35.0,'roughage_pct_dm':35.0,'concentrate_pct_dm':65.0,'cost':100.0,'starch_pct_dm':27.0,'starch_kg':3.24}
+        html=server.ration_requirement_panel(rr,sm)
+        self.assertIn('Nişasta + Rumen',html)
+        self.assertIn('target-mini-starch-current',html)
+        self.assertIn('%25–29',html)
+
 
 if __name__ == "__main__":
     unittest.main()
