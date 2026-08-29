@@ -1,12 +1,42 @@
-# ÇiftlikPro v3.9.20 — Saha Test Paketi
+# ÇiftlikPro v3.9.20 — Solver DEV4.17 Sert Güvenlik
 
-Bu paket güncel Solver DEV4.x mantığını korur. Son düzeltmeler yalnız arayüz ve GitHub paket yapısındadır:
+DEV4.17, faz nişasta üst sınırını kayıt kapısı yapar; besi yemi varken süt
+yemini çözümden çıkarır ve enerjiye göre GCAA kapasitesini hedefin `%1`
+çevresinde tutar. Güvenli ve hedefe yakın bir aday bulunamazsa yanlış rasyonu
+kaydetmek yerine sınırlayan kısıtları kullanıcıya bildirir.
 
-- Mobil rasyon görünümü korunmuştur.
-- İşlevsiz “Hedef Bilgilerini Göster/Gizle” düğmesi kaldırılmıştır.
-- Masaüstünde 🐄 ÇiftlikPro logosu sol menüde Dashboard satırının hemen üzerinde görünür konuma sabitlenmiştir.
-- `.github/workflows/windows-installer.yml` dahildir.
-- Solver hesap/optimizasyon mantığı değiştirilmemiştir.
+DEV4.16, hedefleri karşılayan adaylar arasında nişasta ideal bandını,
+buğday/tahıl KM dengesini ve hayvan profiline uygun ticari yem kullanımını
+maliyet ve genel çeşitlilikten önce değerlendirir. DEV4.15 Sunar yem profilleri
+ve etiket alanları korunmuştur.
+
+Bu paket, DEV4.14 rasyon güvenlik düzeltmelerine ek olarak kullanıcının gerçek
+Çukoyem 15/2650 etiketini, Sunar Kardelen 19/2700 Süt Yemi'ni ve Sunar Buzağı
+Büyütme Özel Dönem Yemi'ni Yem Kataloğu'na geçirir. Üreticinin yayımlamadığı
+analiz alanları tahmin olarak açıkça işaretlenir; kesin etiket değeri gibi sunulmaz.
+Ürün etiketindeki değerler ayrı alanlarda aynen saklanır; solverın kullandığı
+besin alanları ise kuru madde bazındadır.
+
+Sunar Kardelen için resmi 2020 katalogdaki 25-35 kg süt verimine yönelik
+7-12 kg/baş/gün örnek program; Buzağı Büyütme için 60-120 gün ve serbest tüketim
+bilgisi kaynak notunda yer alır. Mevcut kullanıcı/laboratuvar analizleri korunur.
+
+## DEV4.13 Bilimsel Hedef Kartları
+
+Bu paket, besi hedef kartları ile solverın aynı bilimsel hesap kaynağını kullanmasını sağlar:
+
+- DEV4.13 Hotfix 1, saha testinde görülen 1,24/1,30 GCAA kartının yanlış yeşil görünmesini düzeltir; minimumun altındaki anlamlı her sapma açıkça gösterilir.
+- eNDF ile kaba yem KM payı ayrı yorumlanır; %24,0 ideal sınırının en çok 0,5 puan üzeri ölçüm/yuvarlama tamponunda “Sınırda” olarak değerlendirilir.
+- Mobilde uzun çözüm açıklaması kısa özet halinde başlar; bilimsel ayrıntılar kullanıcı isterse açılır.
+- “Besi Erkek” seçimi NASEM Chapter 20 Table 20-2 büyüyen tosun/boğa profiline; düve ve kastre erkek seçimi Table 20-1 profiline bağlanır.
+- Kuru madde hedefi, rasyonun gerçek NEm yoğunluğundan canlı hesaplanır; kart ve solver aynı değeri kullanır.
+- HP, Ca ve P kartları eşitlik hedefi değil **minimum gereksinim** olarak değerlendirilir. Makul hedef üstü arz yanlış “fazla” hatası üretmez.
+- Toplam ME kartı ana karar kartından çıkarılmıştır. Enerji yeterliliği, NEm/NEg’den hesaplanan **GCAA kapasitesi** ile gösterilir.
+- INRA 2018 yem alanları NASEM değerlerine karıştırılmaz; yalnız veri kapsamı ve fermantasyon doğrulamasında kullanılır.
+- Tek bir eNDF denkleminden “tahmini rumen pH” üretilmez. Toplam nişasta, bilinen nişasta yıkılabilirliği ve eNDF ile göreli asidoz riski gösterilir.
+- Evrensel tahıl, buğday veya fabrika yemi yüzdesi sert kısıt değildir. Ürün etiketi/uzman dozu girilmişse kesin sınırdır.
+- Güvensiz, GCAA hedefini ciddi kaçıran veya KM ile hedef büyümeyi yapay biçimde telafi eden reçete kaydedilmez; sınırlayan kısıt açıklanır.
+- Mobil/masaüstü rasyon görünümü, raporlar, hayvan aktarımı ve GitHub kurulum iş akışı korunmuştur.
 
 # ÇiftlikPro v3.9.20 — Solver DEV4
 
@@ -22,9 +52,23 @@ Saman zorunlu değildir. Kaliteli kaba yem (yonca, silaj, uygun kuru ot) kaba ye
 
 ## DEV4 test planı
 
-Aynı yem havuzuyla 250 kg, 350 kg ve 500 kg canlı ağırlıkta çözüm alın. Kaba/kesif oranı, eNDF, rumen pH, KM, HP, ME, Ca/P ve yem dağılımını karşılaştırın.
+Aynı yem havuzuyla 250 kg, 350 kg ve 500 kg canlı ağırlıkta çözüm alın. Kaba/kesif oranı, NDF/eNDF, toplam ve etkin nişasta, göreli asidoz riski, KM, HP, ME, NEm/NEg’den GCAA kapasitesi, Ca/P ve yem dağılımını karşılaştırın.
 
 Ana program sürümü değişmedi: **v3.9.20**.
+
+## DEV4.12–DEV4.13 yem sınırı ilkesi
+
+Rasyon içindeki paylar KM bazında izlenir:
+`(kg/baş/gün × KM oranı) / toplam rasyon KM`.
+
+- DEV4.11’deki toplam tahıl, ticari yem ve buğday payı kuralları evrensel bilimsel sınır olmadıkları için kaldırılmıştır.
+- Başlangıç/geliştirme/bitirme nişasta rakamları muhafazakâr çalışma ve dikkat bantlarıdır; tek başlarına klinik tanı veya evrensel fizyolojik üst sınır değildir.
+- Yüksek nişasta ancak hızlı yıkılabilir nişasta ve etkili lif yetersizliğiyle birlikte ciddi güvenlik kapısına dönüşür.
+- Yem Kataloğu → Düzenle ekranındaki etiket alt/üst dozları solver tarafından kesin uygulanır.
+- Buğdayın tahıl KM payı %50’yi geçtiğinde işleme, adaptasyon, TMR ve kaba yem yönetimi için açık uyarı verilir; uygulama kendiliğinden %40 gibi bir oran uydurmaz.
+
+Ayrıntılı hedef kartı düzeltmesi: `docs/SOLVER_DEV4_13_HEDEF_KARTLARI.md`.
+Bilimsel veri katmanı ve model sınırları: `docs/SOLVER_DEV4_12_BILIMSEL_KATMAN.md`.
 
 
 ## v3.9.20 Solver DEV4.1 saha paketi

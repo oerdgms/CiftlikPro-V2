@@ -1,3 +1,85 @@
+# v3.9.20 Solver DEV4.17 — Sert Güvenlik ve Net GCAA
+
+- Fazın nişasta sert üst sınırını aşan aday artık kaydedilmiyor.
+- Besi yemi seçiliyse aynı besi çözümünde süt yeminin üst sınırı sıfırlanıyor.
+- GCAA hedefi aday sıralamasında `%1` iki yönlü toleransla değerlendiriliyor;
+  `%3` eksik büyüme kapasitesi artık başarılı çözüm sayılmıyor.
+- Gönderilen `270 kg / 1,40 kg / 13 ay` senaryosu için nişasta, ticari yem
+  profili ve GCAA regresyon kapıları eklendi.
+- 40 otomatik test başarıyla tamamlandı.
+
+# v3.9.20 Solver DEV4.16 — Net Rasyon Seçim Öncelikleri
+
+- Nişasta ideal bandı ve buğday/tahıl KM oranı genel kalite ve maliyet
+  sıralamasının önüne alındı.
+- Buğday için `%30` hedef, `%30–40` dikkat bandı ve `%40` sert güvenlik sınırı
+  birlikte uygulanıyor.
+- Besi profilinde süt yemi, süt profilinde besi yemi ancak uygun profilli
+  yemlerle ana hedef kapanmıyorsa kullanılabiliyor.
+- Solver motor etiketi ve regresyon testleri DEV4.16 olarak güncellendi.
+
+# v3.9.20 Solver DEV4.15 — Sunar Ticari Yem Profilleri
+
+- Kullanıcının 08.04.2025 tarihli Çukoyem Geliştirme Besi Yemi etiketi kataloğa
+  15 HP, 2650 ME, %3 ham yağ, %8,86 ham selüloz, %7,60 ham kül, %0,31 sodyum
+  ve 10 kg/baş/gün etiket üst dozu kaynağıyla işlendi.
+- Çuval/üretici değerleri için ayrı “ürün bazında etiket” alanları eklendi. Solverın
+  kullandığı HP, yağ, kül, sodyum ve enerji değerleri referans KM'ye dönüştürülerek
+  saklanır; böylece ürün etiketi ile KM hesabı birbirine karıştırılmaz.
+- Eski `SIĞIR SÜT YEMİ` kaydı, Sunar'ın resmi ürün adıyla
+  `SUNAR KARDELEN SÜT YEMİ,19,2700` olarak geçirildi. 19 HP ve 2700 kcal/kg
+  ürün bilgisi doğrulandı; KM bazlı ME/NEm/NEg değerleri açıkça türetildi.
+- Eski `BUZAĞI BÜYÜTME YEMİ` kaydı
+  `SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ` olarak geçirildi. Sunar'ın 60-120 gün
+  ve serbest tüketim programı eklendi.
+- Sunar'ın yayımlamadığı NDF, nişasta ve mineral değerleri üretici analizi gibi
+  gösterilmedi; mevcut tam profil açıkça “ÇiftlikPro/Besi_V5.02 referans tahmini”
+  olarak işaretlendi ve etiket/laboratuvar doğrulama notu korundu.
+- Mevcut veritabanlarında standart eski kayıtların kimliği ve rasyon geçmişi
+  korunarak ad/veri geçişi yapılır; kullanıcı/laboratuvar kaynaklı satırlar ezilmez.
+- 36 otomatik test başarıyla tamamlandı.
+
+# v3.9.20 Solver DEV4.13 — Bilimsel Hedef Kartları
+
+- **Hotfix 1:** GCAA arzı asgari hedefin %0,5'ten fazla altındaysa kart artık yanlış yeşil görünmez; gerçek açık yüzdesiyle uyarı verir.
+- **Hotfix 1:** eNDF yeterliyken yalnız kaba yem KM payı düşükse öneri, “etkili lif düşük” demek yerine kaba/kesif faz dağılımını açıklar.
+- **Hotfix 1:** Nişasta ideal bandının ilk 0,5 puan üzeri ölçüm/yuvarlama tamponu olarak “Sınırda” gösterilir ve tek başına göreli rumen riskini yükseltmez.
+- **Hotfix 1:** Etiket üst dozu girilmemiş ticari yem için “güvenli üst sınıra ulaştı” varsayımı kaldırıldı.
+- **Hotfix 1:** Uzun rasyon çözüm mesajı mobilde kısa özet + açılır “Ayrıntılar” biçiminde gösterilir.
+- Önceki sürümde kaydedilen `animal_type` alanının hedef hesabında kullanılmaması düzeltildi.
+- “Besi Erkek” artık kastre edilmemiş tosun/boğa (NASEM Chapter 20 Table 20-2), düve ve kastre erkek ise Table 20-1 profiliyle hesaplanır.
+- Kart, solver, fizibilite ve akıllı öneriler tek dinamik KM hedefini kullanır.
+- HP, Ca ve P değerleri minimum gereksinim olarak gösterilir; makul üst arz hedef sapması sayılmaz.
+- Toplam ME yerine NEm/NEg arzından GCAA kapasitesi ana enerji göstergesi yapıldı.
+- Dört sütunlu bilimsel özet; 1366 ve 1920 masaüstünde eşit kolon, mobilde yatay kaydırmalı kart düzeni kullanır.
+- Eski kesin “tahmini rumen pH” kaldırılmıştır; yalnız veri kapsamı belirtilen göreli asidoz riski gösterilir.
+- 500 kg / 1,30 kg-gün tosun/boğa kontrol noktası ve kart anlam testleri eklendi.
+
+# v3.9.20 Solver DEV4.12 — Bilimsel Veri ve Fizibilite Kapısı
+
+- DEV4.11’deki evrensel olmayan sert toplam tahıl, ticari yem ve buğday-pay kısıtları kaldırıldı.
+- Yem bazında etiket/uzman alt ve üst doz alanları eklendi; tanımlı üst doz kesin solver sınırıdır.
+- Nişasta rumen yıkılabilirliği, NDF sindirilebilirliği, RDP/RUP ve INRA UFV/PDI/PDIA/RPB/doluluk alanları veritabanı ile Yem Kataloğu düzenleme ekranına eklendi.
+- Açıkça eşleşen arpa, buğday ve mısır kayıtlarına INRA 2018 referans alanları kullanıcı verisini ezmeden eklendi.
+- eNDF’den tek sayı “rumen pH” türetimi kaldırıldı; toplam nişasta + bilinen yıkılabilir nişasta + eNDF veri kapsamlı göreli asidoz riskine dönüştürüldü.
+- NASEM NEm/NEg arzından karşılanabilir GCAA hesaplandı ve temel fizibilite kriteri yapıldı.
+- Ciddi KM/HP/ME/GCAA sapması, birden çok temel engel veya birleşik rumen güvenlik riski varsa reçete artık kaydedilmez; sınırlayan kısıt ve düzeltme önerisi gösterilir.
+- Ticari yem etiketi veya nişasta yıkılabilirliği verisi eksikse kullanıcıya veri-kapsam uyarısı verilir.
+- Birim testleri yeni bilimsel sınır ve fizibilite davranışına göre genişletildi.
+
+# v3.9.20 Solver DEV4.11 — KM Bazlı Tahıl / Fabrika Yemi Dengesi
+
+> Tarihsel not: Bu bölümdeki evrensel grup yüzdeleri DEV4.12’de kaldırılmıştır.
+
+- `SIĞIR SÜT YEMİ` besi solverında ticari karma yem olarak tanındı; eski yanlış kategori ve %79,92 nişasta kaydı güvenli katalog değerine geçirildi.
+- Ana sıralama ciddi güvenlik → KM/HP/ME/kaba fizibilitesi → diğer rumen rayları → kalite/maliyet olarak düzeltildi.
+- Arpa, buğday ve diğer tahıllar yaş kg ile değil rasyon KM payıyla sınırlandırılır.
+- Toplam tahıl KM üst sınırı başlangıç/geliştirme/bitirmede sırasıyla %24/%30/%34'tür.
+- Tüm seçili fabrika yemleri ortak bir KM bütçesini paylaşır; grup üst sınırı sırasıyla %30/%35/%40'tır.
+- Buğday, tahıl karışımı KM'sinin en çok %40'ıdır; yalnız arpa+buğday kullanılıyorsa arpa payı en az %60 kalır.
+- HP ve ME eksikleri sıkı korunurken %10'a kadar makul fazlalık yanlış “hedef kaçtı” uyarısı üretmez.
+- 11 otomatik test başarıyla tamamlandı.
+
 # v3.9.20 DEV4.8 — Mobile Stable / Logo Final
 
 - Mobilde işlevsiz hedef göster/gizle düğmesi kaldırıldı.
@@ -109,3 +191,16 @@
 - Mobil web önizlemeye temiz PDF'yi doğrudan açma düğmesi ve kart görünümü eklendi; yazdırmada masaüstü tablo düzeni korunur.
 - Excel/PDF hayvan içe aktarma alanı uzun listenin altından Raporlar sayfasının üstüne taşındı; Veri Aktarımı ekranına da kısayol eklendi.
 - Kullanıcının tiklerle belirlediği rapor sütunları ekran, mobil kart, web önizleme, PDF ve XLSX çıktılarında ortak kullanılmaya başlandı.
+# DEV4.14 — Rasyon satırı, tahıl güvenliği ve ticari yem profilleri
+
+- Masaüstünde son yem satırını örten sabit kayıt çubuğu normal akışa alındı.
+- Buğday için toplam rasyon KM'sinin %30'u sert üst sınır; tahıl KM'sinde %50 üzeri
+  buğday dominansı ise solver kalite sıralamasında yumuşak ceza oldu.
+- Yedi jenerik ticari yem temel KM, lif, protein, enerji, nişasta ve mineral
+  profilleriyle normalize edildi; ürün etiketi/laboratuvar isteyen ileri alanlar
+  bilinmiyor olarak korundu.
+- HP'nin hedefin %20 üstü ve enerjiye göre GCAA kapasitesinin hedefin %5 üstü,
+  fizibiliteyi bozmayacak biçimde maliyetten önce yumuşakça cezalandırıldı.
+- Kart adı “Enerjiye göre GCAA kapasitesi” oldu; gerçekleşen büyüme tahmini olmadığı
+  ve yüksek protein/enerji kapasitesi durumları açıkça gösterildi.
+- 31 otomatik test başarıyla tamamlandı.

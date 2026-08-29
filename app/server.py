@@ -567,7 +567,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings(setting_key TEXT PRIMARY KEY, setting_value TEXT);
         CREATE TABLE IF NOT EXISTS paddocks(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,code TEXT,type TEXT,capacity INTEGER DEFAULT 0,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS paddock_history(id INTEGER PRIMARY KEY,animal_source TEXT NOT NULL,animal_id INTEGER NOT NULL,from_paddock_id INTEGER,to_paddock_id INTEGER,moved_at TEXT NOT NULL,notes TEXT);
-        CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,effective_ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,source TEXT,active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,effective_ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,label_cp_pct_as_fed REAL DEFAULT 0,label_me_kcal_kg_as_fed REAL DEFAULT 0,label_crude_fiber_pct_as_fed REAL DEFAULT 0,label_fat_pct_as_fed REAL DEFAULT 0,label_ash_pct_as_fed REAL DEFAULT 0,label_sodium_pct_as_fed REAL DEFAULT 0,starch_degradability_pct REAL DEFAULT 0,ndf_digestibility_pct REAL DEFAULT 0,rdp_pct_cp REAL DEFAULT 0,rup_pct_cp REAL DEFAULT 0,inra_ufv REAL DEFAULT 0,inra_pdi_g_kg_dm REAL DEFAULT 0,inra_pdia_g_kg_dm REAL DEFAULT 0,inra_rpb_g_kg_dm REAL DEFAULT 0,inra_fill_unit REAL DEFAULT 0,processing_method TEXT,solver_min_kg_day REAL DEFAULT 0,solver_max_kg_day REAL DEFAULT 0,constraint_source TEXT,source TEXT,active INTEGER DEFAULT 1);
         CREATE TABLE IF NOT EXISTS feed_prices(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,price_per_kg REAL NOT NULL,notes TEXT);
         CREATE TABLE IF NOT EXISTS feed_stock_transactions(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,tx_date TEXT NOT NULL,tx_type TEXT NOT NULL,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,notes TEXT);
         CREATE TABLE IF NOT EXISTS rations(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,target_group TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
@@ -588,6 +588,22 @@ def init_db():
         endf_added=False
         if 'effective_ndf_pct' not in feed_cols:
             c.execute('ALTER TABLE feed_catalog ADD COLUMN effective_ndf_pct REAL DEFAULT 0'); endf_added=True
+        # DEV4.12 bilimsel veri katmanı. Bu alanlar NASEM çekirdeğini INRA/CNCPS
+        # değerleriyle karıştırmaz; veri mevcut olduğunda ayrı doğrulama ve güvenlik
+        # hesabına temel olur. Sıfır değer "bilinmiyor" anlamındadır.
+        advanced_feed_cols=(
+            ('starch_degradability_pct','REAL DEFAULT 0'),('ndf_digestibility_pct','REAL DEFAULT 0'),
+            ('rdp_pct_cp','REAL DEFAULT 0'),('rup_pct_cp','REAL DEFAULT 0'),
+            ('inra_ufv','REAL DEFAULT 0'),('inra_pdi_g_kg_dm','REAL DEFAULT 0'),
+            ('inra_pdia_g_kg_dm','REAL DEFAULT 0'),('inra_rpb_g_kg_dm','REAL DEFAULT 0'),
+            ('inra_fill_unit','REAL DEFAULT 0'),('processing_method','TEXT'),
+            ('solver_min_kg_day','REAL DEFAULT 0'),('solver_max_kg_day','REAL DEFAULT 0'),
+            ('constraint_source','TEXT'),
+            ('label_cp_pct_as_fed','REAL DEFAULT 0'),('label_me_kcal_kg_as_fed','REAL DEFAULT 0'),
+            ('label_crude_fiber_pct_as_fed','REAL DEFAULT 0'),('label_fat_pct_as_fed','REAL DEFAULT 0'),
+            ('label_ash_pct_as_fed','REAL DEFAULT 0'),('label_sodium_pct_as_fed','REAL DEFAULT 0'))
+        for col,typ in advanced_feed_cols:
+            if col not in feed_cols:c.execute(f'ALTER TABLE feed_catalog ADD COLUMN {col} {typ}')
         # Hotfix3 migrasyonu: mevcut kurulumda yeni eNDF sütununu katalogdaki Excel referans değerleriyle doldur.
         # Diğer yem/besin alanlarına dokunulmaz; kullanıcının eski düzenlemeleri korunur.
         if endf_added:
@@ -682,7 +698,7 @@ def init_db():
                 row=c.execute("select id,source,starch_pct from feed_catalog where upper(name)=upper(?)",(name,)).fetchone()
                 if not row: return
                 src=(row['source'] or '')
-                old_source=(not src) or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 6.12')
+                old_source=(not src) or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 4.11') or src.startswith('ÇiftlikPro 6.12') or src.startswith('ÇiftlikPro 6.13') or src.startswith('ÇiftlikPro DEV4.14')
                 suspicious=bool(suspicious_sql and c.execute('select 1 from feed_catalog where id=? and '+suspicious_sql,(row['id'],*suspicious_args)).fetchone())
                 if not (old_source or suspicious): return
                 cols=list(values)
@@ -699,13 +715,87 @@ def init_db():
                 'source':'ÇiftlikPro 6.13 · Feedipedia wheat bran referansı'
             },'starch_pct>45')
             _patch_feed('BUZAĞI BÜYÜTME YEMİ',{
-                'category':'Ticari Karma Yem','starch_pct':32.0,
-                'source':'ÇiftlikPro 6.13 · ticari büyütme yemi eski nişasta kolon hatası temizlendi'
+                'name':'SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ','category':'Ticari Karma Yem','starch_pct':32.0,
+                'processing_method':'Ticari buzağı büyütme yemi',
+                'constraint_source':'Sunar 2020 katalog: 61-120 gün serbest; sayısal etiket alt/üst dozu yayımlanmamış',
+                'source':'Sunar resmi ürün sayfası ve 2020 katalog: 60-120 gün, serbest tüketim; besin profili ÇiftlikPro/Besi_V5.02 referans tahminidir, ürün etiketi veya laboratuvar analiziyle doğrulanmalı'
             },'starch_pct>55')
             _patch_feed('SIĞIR BESİ YEMİ,15,2700',{
-                'category':'Ticari Karma Yem','cp_pct':15.0,'me_mcal_kg':3.06,'nem_mcal_kg':2.04,'neg_mcal_kg':1.40,'starch_pct':35.0,
-                'source':'ÇiftlikPro 6.13 · 15 HP / 2700 ME ürün etiketi normalizasyonu'
+                'name':'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','category':'Ticari Karma Yem',
+                'cp_pct':16.978,'me_mcal_kg':3.00,'nem_mcal_kg':2.00,'neg_mcal_kg':1.37,
+                'starch_pct':35.0,'fat_pct':3.396,'ash_pct':8.602,'na_pct':0.351,
+                'label_cp_pct_as_fed':15.0,'label_me_kcal_kg_as_fed':2650.0,
+                'label_crude_fiber_pct_as_fed':8.86,'label_fat_pct_as_fed':3.0,
+                'label_ash_pct_as_fed':7.60,'label_sodium_pct_as_fed':0.31,
+                'solver_max_kg_day':10.0,'processing_method':'Ticari karma yem',
+                'constraint_source':'Çukoyem etiketi: üst doz 10 kg/baş/gün; fotoğrafta alt doz kapalı',
+                'source':'Sunar/Çukoyem ürün etiketi 08/04/2025: ürün bazında 15 HP, %3 yağ, %8,86 ham selüloz, %7,60 kül, %0,31 sodyum; kullanıcı doğrulaması 2650 ME. Solver alanları %88,35 referans KM ile dönüştürülmüştür; NDF-nişasta-mineraller referans tahminidir'
             },'starch_pct>55 OR category like ?',('Sulu Kaba%',))
+            _patch_feed('SIĞIR SÜT YEMİ',{
+                'name':'SUNAR KARDELEN SÜT YEMİ,19,2700','category':'Ticari Karma Yem',
+                'cp_pct':21.505,'me_mcal_kg':3.056,'nem_mcal_kg':2.08,'neg_mcal_kg':1.41,
+                'starch_pct':32.0,'processing_method':'Ticari süt yemi',
+                'label_cp_pct_as_fed':19.0,'label_me_kcal_kg_as_fed':2700.0,
+                'constraint_source':'Sunar 2020 katalog besleme örnekleri: 25-35 kg süt için kaba yem programına göre 7-12 kg/baş/gün; mutlak etiket üst dozu değildir',
+                'source':'Sunar resmi ürün adı ve 2020 katalog: 19 HP / 2700 ME ürün bazında; solver HP/ME değerleri %88,35 referans KM ile dönüştürülmüştür. NDF-nişasta-mineraller ÇiftlikPro/Besi_V5.02 referans tahminidir'
+            },'starch_pct>55 OR category like ?',('Sulu Kaba%',))
+            # DEV4.14: Katalogdaki bütün jenerik ticari yemlerin mevcut kurulumlara
+            # temel besin profilini eksiksiz taşı. Bunlar marka/parti analizi değildir;
+            # ileri rumen/INRA ve etiket doz alanları bilinmiyorsa sıfır bırakılır.
+            # Kullanıcı veya laboratuvar kaynaklı bir satır kesinlikle ezilmez.
+            commercial_names={
+                'BUZAĞI BAŞLANGIÇ YEMİ','SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
+                'SUNAR KARDELEN SÜT YEMİ,19,2700',
+                'SIĞIR BESİ YEMİ,13,2700','SIĞIR BESİ YEMİ,14,2800',
+                'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','SIĞIR BESİ YEMİ,14,2600'}
+            catalog_rows={x.get('name'):x for x in json.loads(catalog_file.read_text(encoding='utf-8')) if x.get('name') in commercial_names}
+            basic_cols=('category','dm_pct','ndf_pct','effective_ndf_pct','cp_pct','tdn_pct',
+                        'me_mcal_kg','nem_mcal_kg','neg_mcal_kg','starch_pct','fat_pct','ash_pct',
+                        'ca_pct','p_pct','mg_pct','k_pct','na_pct','s_pct',
+                        'label_cp_pct_as_fed','label_me_kcal_kg_as_fed',
+                        'label_crude_fiber_pct_as_fed','label_fat_pct_as_fed',
+                        'label_ash_pct_as_fed','label_sodium_pct_as_fed','source')
+            for commercial_name,x in catalog_rows.items():
+                current=c.execute('select id,source from feed_catalog where upper(name)=upper(?)',(commercial_name,)).fetchone()
+                if not current:
+                    c.execute('''insert or ignore into feed_catalog(
+                        name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,tdn_pct,
+                        me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,
+                        ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,processing_method,
+                        label_cp_pct_as_fed,label_me_kcal_kg_as_fed,
+                        label_crude_fiber_pct_as_fed,label_fat_pct_as_fed,
+                        label_ash_pct_as_fed,label_sodium_pct_as_fed,
+                        solver_min_kg_day,solver_max_kg_day,constraint_source,source,active
+                    ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',(
+                        x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),
+                        x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),
+                        x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),
+                        x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),
+                        x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),
+                        x.get('s_pct',0),x.get('processing_method') or 'Ticari karma yem',
+                        x.get('label_cp_pct_as_fed',0),x.get('label_me_kcal_kg_as_fed',0),
+                        x.get('label_crude_fiber_pct_as_fed',0),x.get('label_fat_pct_as_fed',0),
+                        x.get('label_ash_pct_as_fed',0),x.get('label_sodium_pct_as_fed',0),
+                        x.get('solver_min_kg_day',0),x.get('solver_max_kg_day',0),
+                        x.get('constraint_source') or 'Ürün etiketi veya laboratuvar analizi gerekli',
+                        x.get('source','')
+                    ))
+                    current=c.execute('select id,source from feed_catalog where upper(name)=upper(?)',(commercial_name,)).fetchone()
+                if not current:continue
+                src=str(current['source'] or '')
+                reference_source=(not src or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 4.11')
+                                  or src.startswith('ÇiftlikPro 6.12') or src.startswith('ÇiftlikPro 6.13')
+                                  or src.startswith('ÇiftlikPro DEV4.14') or src.startswith('Sunar/Çukoyem')
+                                  or src.startswith('Sunar resmi'))
+                if not reference_source:continue
+                values={k:x.get(k,0) for k in basic_cols}
+                values.update({'processing_method':'Ticari karma yem',
+                               'constraint_source':x.get('constraint_source') or 'Ürün etiketi veya laboratuvar analizi gerekli'})
+                if float(x.get('solver_max_kg_day') or 0)>0:
+                    values['solver_max_kg_day']=float(x['solver_max_kg_day'])
+                cols=list(values)
+                c.execute('update feed_catalog set '+','.join(k+'=?' for k in cols)+' where id=?',
+                          tuple(values[k] for k in cols)+(current['id'],))
             print('HOTFIX 6.13 yem kataloğu gerçek DB migrasyonu kontrol edildi.')
         except Exception as exc:
             print('HOTFIX 6.13 yem kataloğu migrasyonu uygulanamadı:',exc)
@@ -721,6 +811,33 @@ def init_db():
                     c.execute(sql_alias,(x.get('name',''),'Kesif Yemler',x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','ÇiftlikPro katalog adı eşlemesi')))
         except Exception as exc:
             print('DEV10 ezme yemleri DB migrasyonu uygulanamadı:',exc)
+        # DEV4.12: INRA 2018 değerleri NASEM gereksinim hesabına eklenmez. Yalnız
+        # ayrı bir veri-kapsama ve rumen fermantasyon kontrolünde kullanılmak üzere,
+        # açıkça eşleşen standart tanelere referans alanları doldurulur. Kullanıcının
+        # girdiği değer (sıfırdan büyükse) hiçbir zaman ezilmez.
+        try:
+            scientific_refs={
+                'ARPA, AĞIR':(86.0,68.0,1.11,87.0,30.0,-23.0,0.194,'Tane'),
+                'ARPA, HAFİF':(86.0,68.0,1.11,87.0,30.0,-23.0,0.194,'Tane'),
+                'ARPA EZMESİ':(86.0,68.0,1.11,87.0,30.0,-23.0,0.194,'Ezme'),
+                'BUĞDAY, ÖĞÜTÜLMÜŞ':(90.0,68.0,1.22,89.0,28.0,-13.0,0.153,'Öğütülmüş'),
+                'BUĞDAY EZMESİ':(90.0,68.0,1.22,89.0,28.0,-13.0,0.153,'Ezme'),
+                'MISIR, 72 kg/hektolitre':(61.0,79.0,1.33,95.0,42.0,-55.0,0.336,'Tane'),
+                'MISIR EZMESİ':(61.0,79.0,1.33,95.0,42.0,-55.0,0.336,'Ezme'),
+            }
+            for name,(sd,ndfd,ufv,pdi,pdia,rpb,fill,processing) in scientific_refs.items():
+                c.execute('''update feed_catalog set
+                    starch_degradability_pct=case when coalesce(starch_degradability_pct,0)=0 then ? else starch_degradability_pct end,
+                    ndf_digestibility_pct=case when coalesce(ndf_digestibility_pct,0)=0 then ? else ndf_digestibility_pct end,
+                    inra_ufv=case when coalesce(inra_ufv,0)=0 then ? else inra_ufv end,
+                    inra_pdi_g_kg_dm=case when coalesce(inra_pdi_g_kg_dm,0)=0 then ? else inra_pdi_g_kg_dm end,
+                    inra_pdia_g_kg_dm=case when coalesce(inra_pdia_g_kg_dm,0)=0 then ? else inra_pdia_g_kg_dm end,
+                    inra_rpb_g_kg_dm=case when coalesce(inra_rpb_g_kg_dm,0)=0 then ? else inra_rpb_g_kg_dm end,
+                    inra_fill_unit=case when coalesce(inra_fill_unit,0)=0 then ? else inra_fill_unit end,
+                    processing_method=case when trim(coalesce(processing_method,''))='' then ? else processing_method end
+                    where upper(name)=upper(?)''',(sd,ndfd,ufv,pdi,pdia,rpb,fill,processing,name))
+        except Exception as exc:
+            print('DEV4.12 bilimsel yem referansı migrasyonu uygulanamadı:',exc)
         # V3.9.18: ÇiftlikPro 4 Fazlı Besi reçeteleri.
         # Reçeteler mevcut yem kataloğundaki kayıtları kullanır; besin değerlerini kopyalamaz.
         # Böylece kullanıcı bir yemin KM/HP/NDF/ME vb. değerini düzenlediğinde rasyon hesabı anında yeni değeri kullanır.
@@ -1444,7 +1561,9 @@ def ration_summary(ration_id, con=None):
         sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
                  from ration_items ri join feed_catalog f on f.id=ri.feed_id where ri.ration_id=? order by f.name"""
         rows=c.execute(sql,(date.today().isoformat(),ration_id)).fetchall()
-        out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,'tdn_kg':0.0,'me_mcal':0.0,'ca_g':0.0,'p_g':0.0,'cost':0.0,'roughage_dm_kg':0.0,'concentrate_dm_kg':0.0,'additive_dm_kg':0.0,'items':rows}
+        out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,
+             'rapid_starch_kg':0.0,'known_degradability_starch_kg':0.0,'tdn_kg':0.0,'me_mcal':0.0,'nem_mcal':0.0,'neg_mcal':0.0,
+             'ca_g':0.0,'p_g':0.0,'cost':0.0,'roughage_dm_kg':0.0,'concentrate_dm_kg':0.0,'additive_dm_kg':0.0,'items':rows}
         for r in rows:
             kg=float(r['kg_per_head_day'] or 0); dm=kg*float(r['dm_pct'] or 0)/100.0
             out['as_fed_kg']+=kg; out['dm_kg']+=dm
@@ -1453,9 +1572,15 @@ def ration_summary(ration_id, con=None):
             out['endf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0*float(r['effective_ndf_pct'] or 0)/100.0
             # Ekran, öneriler ve solver aynı güvenli nişasta değerini kullanır.
             # Böylece eski katalog aktarımlarındaki bariz kolon kaymaları rasyon özetini bozmaz.
-            out['starch_kg']+=dm*_solver_starch_pct(r)/100.0
+            feed_starch=dm*_solver_starch_pct(r)/100.0; out['starch_kg']+=feed_starch
+            starch_deg,known_deg=_feed_starch_degradability(r)
+            if known_deg:
+                out['known_degradability_starch_kg']+=feed_starch
+                out['rapid_starch_kg']+=feed_starch*starch_deg/100.0
             out['tdn_kg']+=dm*float(r['tdn_pct'] or 0)/100.0
             out['me_mcal']+=dm*float(r['me_mcal_kg'] or 0)
+            out['nem_mcal']+=dm*float(r['nem_mcal_kg'] or 0)
+            out['neg_mcal']+=dm*float(r['neg_mcal_kg'] or 0)
             out['ca_g']+=dm*float(r['ca_pct'] or 0)*10.0
             out['p_g']+=dm*float(r['p_pct'] or 0)*10.0
             out['cost']+=kg*float(r['price'] or 0)
@@ -1467,8 +1592,11 @@ def ration_summary(ration_id, con=None):
         out['ndf_pct_dm']=(out['ndf_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
         out['endf_pct_dm']=(out['endf_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
         out['starch_pct_dm']=(out['starch_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
-        out['rumen_ph']=min(6.46,5.425+0.04229*out['endf_pct_dm']) if out['endf_pct_dm']>0 else 0.0
+        out['rapid_starch_pct_dm']=(out['rapid_starch_kg']/out['dm_kg']*100) if out['dm_kg'] else 0.0
+        out['starch_degradability_coverage']=(out['known_degradability_starch_kg']/out['starch_kg']) if out['starch_kg'] else 1.0
         out['me_per_kg_dm']=(out['me_mcal']/out['dm_kg']) if out['dm_kg'] else 0.0
+        out['nem_density']=(out['nem_mcal']/out['dm_kg']) if out['dm_kg'] else 0.0
+        out['neg_density']=(out['neg_mcal']/out['dm_kg']) if out['dm_kg'] else 0.0
         rc_dm=out['roughage_dm_kg']+out['concentrate_dm_kg']
         out['roughage_pct_dm']=(out['roughage_dm_kg']/rc_dm*100) if rc_dm else 0.0
         out['concentrate_pct_dm']=(out['concentrate_dm_kg']/rc_dm*100) if rc_dm else 0.0
@@ -1527,10 +1655,13 @@ def _reference_nem_density(weight_kg, age_months=0):
     return 1.84
 
 def beef_starch_targets(phase):
-    """Besi dönemi için ideal nişasta bandı ve üst güvenlik sınırı (% KM).
+    """Besi dönemi için muhafazakâr çalışma/uyarı bandı (% KM).
 
     İdeal bant solver için yumuşak yönlendirmedir; enerji, NDF/eNDF ve kaba/kesif
-    hedeflerinin önüne geçmez. Üst sınır ise kademeli rumen güvenlik rayıdır.
+    hedeflerinin önüne geçmez. ``starch_max`` adı geriye uyumluluk için korunur,
+    fakat değer evrensel fizyolojik üst sınır değildir: üzerinde tek başına çözüm
+    reddedilmez; hızlı nişasta, etkili lif, işleme ve adaptasyonla birlikte uyarı
+    eşiği olarak değerlendirilir.
     """
     return {
         'Besi Başlangıç':{'starch_min':20.0,'starch_ideal_max':24.0,'starch_max':28.0},
@@ -1538,54 +1669,112 @@ def beef_starch_targets(phase):
         'Besi Bitirme':{'starch_min':25.0,'starch_ideal_max':29.0,'starch_max':31.0},
     }.get(str(phase),{'starch_min':23.0,'starch_ideal_max':27.0,'starch_max':30.0})
 
+def _beef_animal_profile(animal_type):
+    """NASEM Chapter 20 hayvan profilini kullanıcı seçimiyle eşleştirir.
+
+    Türkiye'deki ``Besi Erkek`` kaydı pratikte çoğunlukla kastre edilmemiş
+    tosun/boğayı ifade eder. Önceki sürüm bu alanı tamamen görmezden geliyor ve
+    her hayvanı orta çerçeveli kastre erkek/düve tablosuyla hesaplıyordu. Bu da
+    özellikle bakım enerjisini, büyüme enerjisini, MP ve mineral kartlarını aynı
+    anda yanlış profile bağlıyordu.
+    """
+    name=str(animal_type or '').strip().upper()
+    is_intact_male=any(token in name for token in ('BESİ ERKEK','BESI ERKEK','TOSUN','BOĞA','BOGA','BULL'))
+    is_castrated=any(token in name for token in ('KASTRE','STEER'))
+    if is_intact_male and not is_castrated:
+        return {
+            'key':'bull','label':'Tosun / Boğa (kastre edilmemiş)',
+            'mature_sbw_kg':900.0,'nem_coefficient':0.0885,
+            'neg_coefficient':0.0400,
+        }
+    return {
+        'key':'steer_heifer','label':'Düve / kastre erkek / genel büyüyen sığır',
+        'mature_sbw_kg':550.0,'nem_coefficient':0.0770,
+        # Table 20-1 gereksinim satırlarıyla uyumlu eşdeğer ağırlık katsayısı.
+        'neg_coefficient':0.0575,
+    }
+
 def ration_requirement_targets(weight_kg=450.0, target_adg=1.3, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik'):
     """Besi Hayvanı İhtiyaç Motoru V1.
 
-    Enerji çekirdeği NASEM 2016 büyüyen/bitirilen sığır yaklaşımına dayanır:
+    Enerji çekirdeği NASEM 2016 büyüyen/bitirilen sığır yaklaşımına dayanır ve
+    seçilen hayvan profiline göre Table 20-1 veya Table 20-2 kullanır:
       SBW = BW*0.96, EBW = 0.891*SBW, EBG = 0.956*ADG
-      NEm = 0.077*SBW^0.75
-      RE/NEg = 0.0635*EBW^0.75*EBG^1.097
+      NEm = profil_katsayısı*SBW^0.75
+      RE/NEg = profil_katsayısı*EBW^0.75*EBG^1.097
     MP, Ca ve P için NASEM 2016 Chapter 20 errata referans tablosu enterpolasyonla kullanılır.
     Katalogda RDP/RUP olmadığı için CP hedefi MP'nin tam karşılığı değildir; solverda ayrıca güvenlik taraması olarak tutulur.
     """
     w=max(150.0,min(float(weight_kg or 450),900.0)); adg=max(0.2,min(float(target_adg or 1.3),2.2)); age=max(0.0,min(float(age_months or 0),36.0))
+    profile=_beef_animal_profile(animal_type)
     sbw=w*0.96; ebw=0.891*sbw; ebg=max(0.05,0.956*adg)
-    nem_req=0.077*(sbw**0.75)
-    neg_req=0.0635*(ebw**0.75)*(ebg**1.097)
+    nem_req=profile['nem_coefficient']*(sbw**0.75)
+    neg_req=profile['neg_coefficient']*(ebw**0.75)*(ebg**1.097)
 
-    # NASEM 2016 Chapter 20 errata: bakım gereksinimleri (SBW 250..500 kg)
-    sbw_grid=[250,300,350,400,450,500]
-    mp_maint=_interp(sbw,sbw_grid,[239,274,307,340,371,402])
-    ca_maint=_interp(sbw,sbw_grid,[7.7,9.2,10.8,12.3,13.9,15.4])
-    p_maint=_interp(sbw,sbw_grid,[5.9,7.1,8.2,9.4,10.6,11.8])
-
-    # Aynı errata tablosundaki büyüme MP değerleri; ağırlık ve ADG boyunca iki boyutlu enterpolasyon.
     adg_grid=[0.4,0.8,1.2,1.6,2.0]
-    mp_gain_by_sbw={
-        250:[125,242,355,467,576],300:[127,244,357,467,575],350:[129,246,358,466,571],
-        400:[120,226,326,423,516],450:[111,207,296,381,463],500:[102,188,267,341,412],
-    }
+    if profile['key']=='bull':
+        # NASEM 2016 Chapter 20 Errata, Table 20-2: growing bulls.
+        sbw_grid=[300,400,500,600,700,800]
+        mp_maint_vals=[274,340,402,461,517,572]
+        ca_maint_vals=[9.2,12.3,15.4,18.5,21.6,24.6]
+        p_maint_vals=[7.1,9.4,11.8,14.1,16.5,18.8]
+        mp_gain_by_sbw={
+            300:[123,241,355,469,581],400:[125,242,355,467,576],500:[128,245,358,468,575],
+            600:[126,239,347,451,553],700:[115,215,310,400,487],800:[104,192,273,350,423],
+        }
+        ca_gain_by_sbw={
+            300:[11.4,22.3,32.9,43.4,53.8],400:[10.5,20.3,29.9,39.2,48.4],500:[9.6,18.5,27.0,35.3,43.4],
+            600:[8.8,16.7,24.2,31.5,38.6],700:[8.0,15.0,21.6,27.9,34.0],800:[7.3,13.4,19.1,24.5,29.6],
+        }
+        p_gain_by_sbw={
+            300:[4.6,9.0,13.3,17.5,21.7],400:[4.2,8.2,12.1,15.8,19.6],500:[3.9,7.5,10.9,14.2,17.5],
+            600:[3.6,6.8,9.8,12.7,15.6],700:[3.2,6.1,8.7,11.3,13.7],800:[2.9,5.4,7.7,9.9,11.9],
+        }
+        eval_adg={
+            300:[1.13,1.38,1.57,1.69],400:[1.31,1.58,1.79,1.92],500:[1.46,1.75,1.96,2.10],
+            600:[1.58,1.88,2.11,2.26],700:[1.69,2.01,2.25,2.40],800:[1.79,2.12,2.36,2.52],
+        }
+        eval_cp={
+            300:[11.7,13.3,14.8,16.3],400:[10.6,11.9,13.1,14.4],500:[9.8,10.9,12.0,13.0],
+            600:[9.0,9.9,10.9,11.8],700:[8.1,8.8,9.6,10.4],800:[7.3,8.0,8.6,9.3],
+        }
+    else:
+        # NASEM 2016 Chapter 20 Errata, Table 20-1: growing/finishing cattle.
+        sbw_grid=[250,300,350,400,450,500]
+        mp_maint_vals=[239,274,307,340,371,402]
+        ca_maint_vals=[7.7,9.2,10.8,12.3,13.9,15.4]
+        p_maint_vals=[5.9,7.1,8.2,9.4,10.6,11.8]
+        mp_gain_by_sbw={
+            250:[125,242,355,467,576],300:[127,244,357,467,575],350:[129,246,358,466,571],
+            400:[120,226,326,423,516],450:[111,207,296,381,463],500:[102,188,267,341,412],
+        }
+        ca_gain_by_sbw={
+            250:[10.4,20.1,29.6,38.9,48.0],300:[9.7,18.6,27.2,35.6,43.8],350:[9.0,17.2,25.0,32.5,39.9],
+            400:[8.4,15.8,22.8,29.5,36.1],450:[7.7,14.4,20.7,26.6,32.4],500:[7.1,13.1,18.6,23.8,28.8],
+        }
+        p_gain_by_sbw={
+            250:[4.2,8.1,12.0,15.7,19.4],300:[3.9,7.5,11.0,14.4,17.7],350:[3.6,6.9,10.1,13.1,16.1],
+            400:[3.4,6.4,9.2,11.9,14.6],450:[3.1,5.8,8.4,10.8,13.1],500:[2.9,5.3,7.5,9.6,11.6],
+        }
+        eval_adg={250:[.86,1.04,1.17,1.25],300:[.94,1.12,1.26,1.35],350:[1.00,1.19,1.34,1.43],400:[1.06,1.26,1.41,1.51],450:[1.12,1.32,1.48,1.58],500:[1.17,1.38,1.54,1.64]}
+        eval_cp={250:[11.5,12.9,14.3,15.6],300:[10.8,12.0,13.2,14.4],350:[10.2,11.3,12.4,13.5],400:[9.4,10.3,11.2,12.2],450:[8.7,9.4,10.2,11.0],500:[8.0,8.7,9.4,10.1]}
+
+    mp_maint=_interp(sbw,sbw_grid,mp_maint_vals)
+    ca_maint=_interp(sbw,sbw_grid,ca_maint_vals)
+    p_maint=_interp(sbw,sbw_grid,p_maint_vals)
+
+    # Aynı errata tablolarındaki büyüme değerleri ağırlık ve ADG boyunca enterpole edilir.
     mp_by_weight=[]
     for sw in sbw_grid: mp_by_weight.append(_interp(adg,adg_grid,mp_gain_by_sbw[sw]))
     mp_gain=_interp(sbw,sbw_grid,mp_by_weight)
     mp_req=max(0.0,mp_maint+mp_gain)
 
-    # NASEM Chapter 20 errata büyüme Ca/P gereksinimleri (g/gün), ADG x SBW enterpolasyonu.
-    ca_gain_by_sbw={
-        250:[10.4,20.1,29.6,38.9,48.0],300:[9.7,18.6,27.2,35.6,43.8],350:[9.0,17.2,25.0,32.5,39.9],
-        400:[8.4,15.8,22.8,29.5,36.1],450:[7.7,14.4,20.7,26.6,32.4],500:[7.1,13.1,18.6,23.8,28.8]}
-    p_gain_by_sbw={
-        250:[4.2,8.1,12.0,15.7,19.4],300:[3.9,7.5,11.0,14.4,17.7],350:[3.6,6.9,10.1,13.1,16.1],
-        400:[3.4,6.4,9.2,11.9,14.6],450:[3.1,5.8,8.4,10.8,13.1],500:[2.9,5.3,7.5,9.6,11.6]}
     ca_gain=_interp(sbw,sbw_grid,[_interp(adg,adg_grid,ca_gain_by_sbw[x]) for x in sbw_grid])
     p_gain=_interp(sbw,sbw_grid,[_interp(adg,adg_grid,p_gain_by_sbw[x]) for x in sbw_grid])
     ca_g=max(0.0,ca_maint+ca_gain); p_g=max(0.0,p_maint+p_gain)
 
     # Chapter 20 diet-evaluation satırlarından DMI ve CP tarama hedefi. Bunlar seçilen diyetin enerji yoğunluğuna göre
     # değişebildiğinden solver ayrıca NEm/NEg yoğunluğundan dinamik gerekli KM hesabı yapar.
-    eval_adg={250:[.86,1.04,1.17,1.25],300:[.94,1.12,1.26,1.35],350:[1.00,1.19,1.34,1.43],400:[1.06,1.26,1.41,1.51],450:[1.12,1.32,1.48,1.58],500:[1.17,1.38,1.54,1.64]}
-    eval_dmi={250:[6.06,5.93,5.72,5.42],300:[7.27,7.11,6.86,6.51],350:[8.48,8.30,8.00,7.59],400:[9.69,9.49,9.15,8.68],450:[10.90,10.67,10.29,9.76],500:[12.12,11.86,11.43,10.85]}
-    eval_cp={250:[11.5,12.9,14.3,15.6],300:[10.8,12.0,13.2,14.4],350:[10.2,11.3,12.4,13.5],400:[9.4,10.3,11.2,12.2],450:[8.7,9.4,10.2,11.0],500:[8.0,8.7,9.4,10.1]}
     # DMI sabit bir BW yüzdesi değildir. NASEM 2016'da genç sığırlarda diyetin NEm
     # yoğunluğuna bağlıdır. Çözümden önce kartlarda faza uygun referans NEm kullanılır;
     # solver her aday rasyonda DMI bütçesini gerçek aday NEm yoğunluğundan tekrar hesaplar.
@@ -1620,7 +1809,9 @@ def ration_requirement_targets(weight_kg=450.0, target_adg=1.3, animal_type='Bes
     k_m=0.35*((me_conc_ref*4.184)/18.4)+0.503
     k_g=0.78*((me_conc_ref*4.184)/18.4)+0.006
     me_mcal_day=(nem_req/max(k_m,.01))+(neg_req/max(k_g,.01))
-    return {'mode':'Besi','engine':'NASEM 2016 enerji + Chapter 20 referansları','weight_kg':w,'age_months':age,'adg':adg,
+    return {'mode':'Besi','engine':'NASEM 2016 enerji + Chapter 20 hayvan profili','weight_kg':w,'age_months':age,'adg':adg,
+            'animal_profile':profile['key'],'animal_profile_label':profile['label'],'mature_sbw_kg':profile['mature_sbw_kg'],
+            'nem_coefficient':profile['nem_coefficient'],'gain_energy_coefficient':profile['neg_coefficient'],
             'sbw_kg':sbw,'ebw_kg':ebw,'ebg_kg':ebg,'phase':phase,'phase_mode':('Manuel' if requested_phase!='Otomatik' else 'Otomatik'),'age_note':age_note,
             'dmi_pct_bw':dmi_pct,'dmi_kg':dmi_kg,'dmi_reference_nem':reference_nem,'cp_pct':cp_pct,'mp_req_g':mp_req,'mp_maint_g':mp_maint,'mp_gain_g':mp_gain,
             'nem_req_mcal':nem_req,'neg_req_mcal':neg_req,'me_mcal_day':me_mcal_day,'me_mcal_kg':me_mcal_day/max(dmi_kg,.01),
@@ -1642,6 +1833,54 @@ def beef_phase_limits(weight_kg, target_adg, target_dm, age_months=0, phase_over
     return {'phase':phase,'roughage_min':rough_min,'roughage_max':rough_max,'endf_min':endf_min,**starch_targets,
             'silage_dm_max_frac':silage_dm_max,'salt_dm_frac':0.0030,'target_dm':target_dm}
 
+def _is_commercial_compound_feed(feed):
+    """Besi ve süt için üretilmiş ticari karma yemleri tek yerde tanır.
+
+    Eski katalogda bazı süt yemleri ``Sulu Kaba Yemler`` kategorisine aktarılmıştır;
+    bu nedenle sınıflama kategoriye değil ürün adına dayanır.
+    """
+    name=str(_rowval(feed,'name','')).upper()
+    commercial_words=(
+        'BUZAĞI BAŞLANGIÇ YEMİ','BUZAGI BASLANGIC YEMI',
+        'BUZAĞI BÜYÜTME','BUZAGI BUYUTME',
+        'SIĞIR BESİ YEMİ','SIGIR BESI YEMI','BESİ YEMİ','BESI YEMI',
+        'SIĞIR SÜT YEMİ','SIGIR SUT YEMI','SÜT YEMİ','SUT YEMI',
+        'SAĞMAL YEMİ','SAGMAL YEMI','KARMA YEM'
+    )
+    return any(x in name for x in commercial_words)
+
+def _commercial_feed_kind(feed):
+    """Ticari yemin hedef hayvan profilini adından güvenli biçimde ayırır."""
+    name=str(_rowval(feed,'name','')).upper()
+    if any(x in name for x in ('SÜT YEMİ','SUT YEMI','SAĞMAL','SAGMAL','KARDELEN')):
+        return 'dairy'
+    if any(x in name for x in ('BESİ YEMİ','BESI YEMI','BUZAĞI','BUZAGI','GELİŞTİRME BESİ','GELISTIRME BESI')):
+        return 'beef'
+    return 'neutral'
+
+def _commercial_profile_penalty(feeds, qtys, animal_type, target_dm):
+    """Karşı profile ait ticari yemi yasaklamadan güçlü biçimde geri plana atar."""
+    animal=str(animal_type or '').upper()
+    wanted='dairy' if any(x in animal for x in ('SÜT','SUT','SAĞMAL','SAGMAL')) else 'beef'
+    mismatch_dm=0.0
+    for feed,qty in zip(feeds,qtys):
+        if not _is_commercial_compound_feed(feed): continue
+        kind=_commercial_feed_kind(feed)
+        if kind!='neutral' and kind!=wanted:
+            mismatch_dm+=max(0.0,float(qty or 0))*max(float(_rowval(feed,'dm_pct',0))/100.0,.01)
+    return mismatch_dm/max(float(target_dm or 0),.1)
+
+def _apply_commercial_profile_bounds(feeds, bounds, animal_type):
+    """Besi yemi varken aynı besi çözümünde süt yeminin kullanılmasını kapatır."""
+    animal_upper=str(animal_type or '').upper()
+    is_dairy=any(x in animal_upper for x in ('SÜT','SUT','SAĞMAL','SAGMAL'))
+    has_beef=(not is_dairy and any(
+        _is_commercial_compound_feed(f) and _commercial_feed_kind(f)=='beef' for f in feeds))
+    if not has_beef:return list(bounds)
+    return [(0.0,0.0) if (_is_commercial_compound_feed(f) and _commercial_feed_kind(f)=='dairy') else b
+            for f,b in zip(feeds,bounds)]
+
+
 def _solver_feed_role(feed):
     """Solver için pratik yem rolü; yalnız optimizasyon sınır/kalite katmanında kullanılır."""
     name=str(_rowval(feed,'name','')).upper(); grp=feed_group(feed)
@@ -1652,8 +1891,7 @@ def _solver_feed_role(feed):
         if 'SİLAJ' in name or 'SILAJ' in name: return 'silage'
         if any(x in name for x in ('YONCA','KURU OT','ÇAYIR','CAYIR','MERA','FİĞ','FIG','HASIL')): return 'hay'
         return 'roughage'
-    commercial_words=('BUZAĞI BAŞLANGIÇ YEMİ','BUZAĞI BÜYÜTME YEMİ','SIĞIR BESİ YEMİ','SIĞIR BESI YEMI','BESİ YEMİ','BESI YEMI')
-    if any(x in name for x in commercial_words): return 'commercial'
+    if _is_commercial_compound_feed(feed): return 'commercial'
     if cp>=30 or any(x in name for x in ('SOYA KÜSPESİ','SOYA KUSPESI','KANOLA KÜSPESİ','KANOLA KUSPESI','AYÇİÇEĞİ KÜSPESİ','AYCICEGI KUSPESI','PAMUK TOHUMU KÜSPESİ','PAMUK TOHUMU KUSPESI')):
         return 'protein'
     if starch>=35 or any(x in name for x in ('ARPA EZMESİ','ARPA EZMESI','BUĞDAY EZMESİ','BUGDAY EZMESI','BUĞDAY, ÖĞÜTÜLMÜŞ','BUGDAY, OGUTULMUS','MISIR DANE','MISIR KIRMA')):
@@ -1684,61 +1922,112 @@ def _feed_quality_penalty(feeds, qtys, target_dm):
     # Toplam tahıl dominansı; nişasta kartı güvenli kalsa bile pratik çeşitliliği korur.
     grain_share=role_dm.get('grain',0.0)/d
     if grain_share>0.34: penalty += 28*((grain_share-0.34)/0.10)**2
+    # Buğday nişastası arpa/mısıra göre daha hızlı fermente olur. Buğday yasak
+    # değildir; fakat seçili tane yem KM'sinin yarısından fazlasını oluşturduğunda
+    # solver daha dengeli (arpa/mısır içeren) adayı tercih eder. Toplam rasyon KM'si
+    # için ayrıca smart_feed_bounds içinde muhafazakâr %30 güvenlik tavanı vardır.
+    grain_dm,wheat_dm,_=_grain_mix_dm(feeds,qtys)
+    wheat_mix_share=wheat_dm/max(grain_dm,.01)
+    # ÇiftlikPro muhafazakâr saha hedefi: işleme/yıkılabilirlik bilinmiyorsa
+    # buğday toplam tane-yem KM'sinin %30'unu geçmesin. %30-40 dikkat bandıdır;
+    # %40 üzeri solverın sert güvenlik kapısında ayrıca reddedilir.
+    if grain_dm>0.05 and wheat_mix_share>0.30:
+        penalty += 90*((wheat_mix_share-0.30)/0.10)**2
     # 2-3 yeme çöken veya seçili tüm yemleri minik miktarda taşıyan çözümleri yumuşakça engelle.
     if active<4: penalty += (4-active)*4.0
     return penalty
 
+
+def _grain_mix_dm(feeds, qtys):
+    """Tahıl karışımını yaş kg değil KM kg olarak döndürür.
+
+    Sonuç: (toplam tahıl KM, buğday KM, arpa KM). Fabrika karma yemleri tahıl
+    karışımına dahil edilmez; kendi ticari-yem KM bütçelerinde izlenir.
+    """
+    total=wheat=barley=0.0
+    for feed,qty in zip(feeds,qtys):
+        if _solver_feed_role(feed)!='grain': continue
+        dm=max(0.0,float(qty or 0))*max(float(_rowval(feed,'dm_pct',0))/100.0,.01)
+        total+=dm
+        name=str(_rowval(feed,'name','')).upper()
+        if 'BUĞDAY' in name or 'BUGDAY' in name: wheat+=dm
+        elif 'ARPA' in name: barley+=dm
+    return total,wheat,barley
+
+def _apply_explicit_feed_limits(feed, automatic_bounds):
+    """Etiket/uzman alt-üst sınırını otomatik pratik sınırın önüne geçirir.
+
+    Sıfır alan "tanımlı değil" demektir. Kullanıcı bir üst sınır girdiyse solver
+    onu asla aşmaz; alt sınır girdiyse seçili yemi o dozun altında kullanmaz.
+    """
+    auto_lo,auto_hi=automatic_bounds
+    label_lo=max(0.0,float(_rowval(feed,'solver_min_kg_day',0) or 0))
+    label_hi=max(0.0,float(_rowval(feed,'solver_max_kg_day',0) or 0))
+    lo=label_lo if label_lo>0 else auto_lo
+    hi=min(auto_hi,label_hi) if label_hi>0 else auto_hi
+    if label_hi>0 and label_lo>label_hi:
+        # Geçersiz katalog girişi güvenli tarafta tek sabit doza kapanır; veri uyarısı
+        # kullanıcıya hangi kaydın düzeltilmesi gerektiğini ayrıca bildirir.
+        lo=hi=label_hi
+    return max(0.0,lo),max(max(0.0,lo),hi)
+
 def smart_feed_bounds(feed, weight_kg, target_dm, target_adg=1.3, age_months=0, phase_override='Otomatik'):
-    """Hayvan/faz + yem tipine bağlı güvenlik sınırları (kg/baş/gün, yaş baz)."""
+    """Hayvan/faz + etiket/uzman sınırları (kg/baş/gün, yaş baz).
+
+    Evrensel bir arpa/buğday/fabrika-yemi yüzdesi sert kısıt değildir. Toplam
+    nişasta, etkin nişasta yıkılabilirliği, eNDF ve kaba/kesif dengesi rasyon
+    düzeyinde korunur; ürün etiketi varsa kesin alt/üst sınır olarak uygulanır.
+    """
     dm=max(float(feed['dm_pct'] or 0)/100.0,.05); grp=feed_group(feed); name=str(feed['name'] or '').upper(); starch=_solver_starch_pct(feed)
     lim=beef_phase_limits(weight_kg,target_adg,target_dm,age_months,phase_override)
     if grp=='Katkı':
         if 'TUZ' in name:
-            dose=target_dm*lim['salt_dm_frac']; return max(0.0,dose*0.85), dose*1.15
-        if 'REVITAMIN BT-SACC' in name or 'BT-SACC' in name: return 0.10,0.10
-        if any(x in name for x in ('VİTAMİN','VITAMIN','PREMİKS','PREMIKS','PREMIX','VİT.-MİN','VIT.-MIN')): return 0.0,0.05
-        if any(x in name for x in ('ÜRE','URE')): return 0.0,min(0.10,target_dm*0.008)
-        if any(x in name for x in ('BİKARBONAT','BIKARBONAT')): return 0.0,min(0.20,target_dm*0.015)
-        if any(x in name for x in ('MERMER','KİREÇ','KIREC','KALSİYUM','KALSIYUM')): return 0.0,min(0.08,target_dm*0.008)
-        if any(x in name for x in ('FOSFAT','MİNERAL','MINERAL')): return 0.0,min(0.12,target_dm*0.010)
-        return 0.0,min(0.10,target_dm*0.008)
+            dose=target_dm*lim['salt_dm_frac']; return _apply_explicit_feed_limits(feed,(max(0.0,dose*0.85),dose*1.15))
+        if 'REVITAMIN BT-SACC' in name or 'BT-SACC' in name: return _apply_explicit_feed_limits(feed,(0.10,0.10))
+        if any(x in name for x in ('VİTAMİN','VITAMIN','PREMİKS','PREMIKS','PREMIX','VİT.-MİN','VIT.-MIN')): return _apply_explicit_feed_limits(feed,(0.0,0.05))
+        if any(x in name for x in ('ÜRE','URE')): return _apply_explicit_feed_limits(feed,(0.0,min(0.10,target_dm*0.008)))
+        if any(x in name for x in ('BİKARBONAT','BIKARBONAT')): return _apply_explicit_feed_limits(feed,(0.0,min(0.20,target_dm*0.015)))
+        if any(x in name for x in ('MERMER','KİREÇ','KIREC','KALSİYUM','KALSIYUM')): return _apply_explicit_feed_limits(feed,(0.0,min(0.08,target_dm*0.008)))
+        if any(x in name for x in ('FOSFAT','MİNERAL','MINERAL')): return _apply_explicit_feed_limits(feed,(0.0,min(0.12,target_dm*0.010)))
+        return _apply_explicit_feed_limits(feed,(0.0,min(0.10,target_dm*0.008)))
     if grp=='Kaba':
         role=_solver_feed_role(feed)
         if role=='silage':
-            dm_cap=target_dm*lim['silage_dm_max_frac']; return 0.0,max(0.5,dm_cap/dm)
+            dm_cap=target_dm*lim['silage_dm_max_frac']; return _apply_explicit_feed_limits(feed,(0.0,max(0.5,dm_cap/dm)))
         if role=='straw':
             # Saman fiziksel lif sağlar fakat KM/enerji açığını dolduran ana yem haline gelmemeli.
             # Canlı ağırlık ve besi ilerledikçe rasyondaki azami saman KM payı kademeli düşer.
             frac=0.10 if weight_kg<300 else (0.08 if weight_kg<450 else 0.06)
-            return 0.0,max(0.25,min(weight_kg*0.010,target_dm*frac/dm))
+            return _apply_explicit_feed_limits(feed,(0.0,max(0.25,min(weight_kg*0.010,target_dm*frac/dm))))
         if role=='hay':
             frac=0.34 if weight_kg<300 else (0.28 if weight_kg<450 else 0.18)
-            return 0.0,max(0.40,min(weight_kg*0.018,target_dm*frac/dm))
-        return 0.0,max(0.5,min(weight_kg*0.018,target_dm*0.30/dm))
+            return _apply_explicit_feed_limits(feed,(0.0,max(0.40,min(weight_kg*0.018,target_dm*frac/dm))))
+        return _apply_explicit_feed_limits(feed,(0.0,max(0.5,min(weight_kg*0.018,target_dm*0.45/dm))))
     # Ticari tam/karma buzağı-besi yemleri tek bir tahıl değildir. Eski katalogdaki
     # nişasta alanı hatalı yüksek olsa bile bunları tane yem sınırına sıkıştırma.
-    commercial_words=('BUZAĞI BAŞLANGIÇ YEMİ','BUZAĞI BÜYÜTME YEMİ','SIĞIR BESİ YEMİ','SIĞIR BESI YEMI','BESİ YEMİ','BESI YEMI')
-    is_commercial=any(x in name for x in commercial_words)
+    is_commercial=_is_commercial_compound_feed(feed)
     if is_commercial:
-        # Faz ve toplam KM'ye göre güvenli, fakat solverın enerji/protein açığını kapatmasına
-        # yetecek çalışma alanı. Kesin ürün etiketi varsa katalog min/max alanı ayrıca eklenebilir.
-        if weight_kg < 300: dm_frac=0.65
-        elif weight_kg < 500: dm_frac=0.52
-        else: dm_frac=0.46
-        return 0.0,max(0.50,min(weight_kg*0.018,target_dm*dm_frac/dm))
+        # Ticari karma yemin gerçek sınırı ürün etiketidir. Etiket girilmemişse
+        # kaba/kesif koridorunun izin verdiği geniş kapasite kullanılır; grup yüzdesi
+        # uydurulmaz. Nişasta/lif güvenliği rasyon toplamında değerlendirilir.
+        return _apply_explicit_feed_limits(feed,(0.0,max(0.50,min(weight_kg*0.025,target_dm*0.70/dm))))
     role=_solver_feed_role(feed)
     if role=='protein':
         # Küspeler kaliteli protein kaynağıdır; legacy nişasta hatası yüzünden tahıl sınırına düşmez.
         dm_frac=0.18 if weight_kg<300 else 0.16
-        return 0.0,max(0.25,min(weight_kg*0.006,target_dm*dm_frac/dm))
+        return _apply_explicit_feed_limits(feed,(0.0,max(0.25,min(weight_kg*0.006,target_dm*dm_frac/dm))))
     if role=='grain':
-        # Tek bir tahılın rasyonu ele geçirmesini önle; toplam tahıl ayrıca kalite puanında izlenir.
-        dm_frac=0.24 if weight_kg<400 else 0.22
-        return 0.0,max(0.30,min(weight_kg*0.008,target_dm*dm_frac/dm))
+        # Buğday hızlı fermente olan bir tahıldır. Muhafazakâr saha rayı olarak
+        # toplam rasyon KM'sinin en çok %30'u buğday olabilir; karışım içindeki
+        # buğday dominansı ayrıca kalite sıralamasında cezalandırılır. Arpa/mısır
+        # için toplam nişasta, eNDF ve rumen-risk kapıları belirleyicidir.
+        if 'BUĞDAY' in name or 'BUGDAY' in name:
+            return _apply_explicit_feed_limits(feed,(0.0,max(0.30,min(weight_kg*0.018,target_dm*0.30/dm))))
+        return _apply_explicit_feed_limits(feed,(0.0,max(0.30,min(weight_kg*0.018,target_dm*0.65/dm))))
     if starch>=55: dm_frac=0.22
     elif starch>=35: dm_frac=0.30
     else: dm_frac=0.36
-    return 0.0,max(0.30,min(weight_kg*(0.008 if starch>=55 else 0.010),target_dm*dm_frac/dm))
+    return _apply_explicit_feed_limits(feed,(0.0,max(0.30,min(weight_kg*(0.012 if starch>=55 else 0.016),target_dm*max(dm_frac,.50)/dm))))
 
 def practical_feed_min(feed, weight_kg, target_dm):
     """Sahada anlamlı en düşük kullanım miktarı (kg/baş/gün, yaş baz).
@@ -1783,13 +2072,22 @@ def _solver_nutrient(feed,key):
     name=str(_rowval(feed,'name','')).upper()
     if key=='starch_pct':
         return _solver_starch_pct(feed)
-    # 15 protein / 2700 ME etiketi: 2700 kcal/kg ürün yaklaşık 3.06 Mcal/kg KM'dir
-    # (%88.35 KM). NEm/NEg değerleri standart ME->NE dönüşümünden yaklaşık türetilmiştir.
-    if 'SIĞIR BESİ YEMİ,15,2700' in name or 'SIGIR BESI YEMI,15,2700' in name:
-        if key=='cp_pct': return 15.0
-        if key=='me_mcal_kg': return 3.06
-        if key=='nem_mcal_kg': return 2.04
-        if key=='neg_mcal_kg': return 1.40
+    # Kullanıcının gerçek Sunar/Çukoyem 15.26 etiketi: %15 HP ve 2650 kcal/kg.
+    # %88.35 referans KM ile yaklaşık 3.00 Mcal/kg KM; NEm/NEg dönüşümleri türetilmiştir.
+    if ('ÇUKOYEM' in name or 'CUKOYEM' in name) and ('15,2650' in name or '15.26' in name):
+        if key=='cp_pct': return 16.978
+        if key=='me_mcal_kg': return 3.00
+        if key=='nem_mcal_kg': return 2.00
+        if key=='neg_mcal_kg': return 1.37
+    # Sunar Kardelen 19.27: ürün adı %19 HP ve 2700 kcal/kg ME bilgisini verir.
+    # Referans %88,35 KM ile ME yaklaşık 3,056 Mcal/kg KM; net enerjiler NRC
+    # dönüşümüyle türetilmiştir. NDF/nişasta/mineraller etiket gelene kadar
+    # katalogdaki açıkça işaretlenmiş referans profilden okunur.
+    if 'KARDELEN' in name and ('19,2700' in name or '19.27' in name):
+        if key=='cp_pct': return 21.505
+        if key=='me_mcal_kg': return 3.056
+        if key=='nem_mcal_kg': return 2.08
+        if key=='neg_mcal_kg': return 1.41
     # Büyütme yemi: mevcut enerji/protein analizi makul, yalnız eski nişasta kolonu bozuk.
     # Pamuk tohumu yüksek lintli için OSU tipik whole-cottonseed değerlerine yakın,
     # daha muhafazakâr net enerji ve fiziksel etkinlik kullanılır.
@@ -1829,9 +2127,128 @@ def _solver_starch_pct(feed):
     # Ticari tam/karma yemlerde 55% üzeri nişasta değeri çoğu zaman eski Excel alan eşleşmesi hatasıdır.
     # Gerçek ürün analizi girilene kadar buzağı yeminde %32, besi yeminde %35 muhafazakâr çalışma değeri kullanılır.
     if ('BUZAĞI' in name or 'BUZAGI' in name) and ('YEMİ' in name or 'YEMI' in name) and raw>55.0: return 32.0
+    if ('SÜT YEMİ' in name or 'SUT YEMI' in name) and raw>55.0: return 32.0
     if ('BESİ' in name or 'BESI' in name) and ('YEMİ' in name or 'YEMI' in name) and raw>55.0: return 35.0
     if ('YEMİ' in name or 'YEMI' in name) and raw>55.0: return 38.0
     return min(raw,75.0)
+
+def _feed_starch_degradability(feed):
+    """INRA/CNCPS benzeri fermantasyon kontrolü için (değer, biliniyor) döndürür.
+
+    İşleme biçimi rumen nişasta yıkılabilirliğini ciddi ölçüde değiştirebildiği için
+    bilinmeyen bir yeme yalnız adından kesin oran uydurulmaz. ``init_db`` yalnız
+    açıkça eşleşen standart arpa/buğday/mısır kayıtlarını INRA 2018 referansıyla
+    doldurur; özel yemlerde laboratuvar/etiket alanı beklenir.
+    """
+    value=max(0.0,min(100.0,float(_rowval(feed,'starch_degradability_pct',0) or 0)))
+    return value,value>0
+
+def _rumen_risk_assessment(metrics, limits):
+    """Tek bir sahte pH sayısı yerine veri-kapsamalı göreli asidoz risk sınıfı.
+
+    Bu bir klinik tanı veya gerçek rumen pH tahmini değildir. Toplam nişasta,
+    bilinen kısmın etkin rumen yıkılabilirliği ve fiziksel etkili lif göstergesini
+    birlikte yorumlar. İşleme, adaptasyon ve yemleme yönetimi kullanıcı uyarısında
+    ayrıca korunur.
+    """
+    starch=float(metrics.get('starch_pct_dm') or 0)
+    endf=float(metrics.get('endf_pct_dm') or 0)
+    rapid=float(metrics.get('rapid_starch_pct_dm') or 0)
+    coverage=float(metrics.get('starch_degradability_coverage') or 0)
+    ideal=float(limits.get('starch_ideal_max') or 100)
+    maximum=float(limits.get('starch_max') or 100)
+    endf_min=float(limits.get('endf_min') or 0)
+    score=0
+    reasons=[]
+    # Analiz ve ekranda yuvarlama belirsizliği nedeniyle ideal bandın yalnız
+    # 0,1-0,5 puan üstü tek başına risk sınıfını yükseltmez.
+    starch_attention_buffer=.5
+    if starch>maximum:
+        score+=2; reasons.append('toplam nişasta dikkat eşiğinin üzerinde')
+    elif starch>ideal+starch_attention_buffer:
+        score+=1; reasons.append('toplam nişasta dikkat bandında')
+    if endf_min and endf<endf_min*.80:
+        score+=2; reasons.append('fiziksel etkili lif çok düşük')
+    elif endf_min and endf<endf_min:
+        score+=1; reasons.append('fiziksel etkili lif düşük')
+    # Yalnız veri kapsamı yeterliyse hızlı fermente olan nişasta ayrı risk sinyali olur.
+    if coverage>=.70 and rapid>ideal*.75:
+        score+=1; reasons.append('rumende etkin yıkılan nişasta yüksek')
+    level='Yüksek' if score>=3 else ('Orta' if score>=1 else 'Düşük')
+    confidence='Yüksek' if coverage>=.85 else ('Orta' if coverage>=.50 else 'Düşük')
+    return {'level':level,'score':score,'confidence':confidence,'coverage':coverage,
+            'reasons':reasons,'clinical_ph_prediction':False}
+
+def _solver_feasibility_report(metrics, targets, limits):
+    """Profesyonel optimizerlerdeki "limiting constraints" yaklaşımının özeti.
+
+    Güvensiz veya birden çok temel hedefi ciddi kaçıran aday "çözüm" diye
+    kaydedilmez. Küçük saha sapmaları ise açık uyarıyla kullanılabilir kalır.
+    """
+    dm_target=max(float(metrics.get('predicted_dmi_kg') or _predicted_dmi_for_metrics(metrics,targets)),.01)
+    metrics['predicted_dmi_kg']=dm_target
+    cp_target=max(float(targets.get('cp_pct') or 0),.01)
+    me_target=max(float(targets.get('me_mcal_day') or 0),.01)
+    dm_signed=(float(metrics.get('dm_kg') or 0)-dm_target)/dm_target
+    cp_signed=(float(metrics.get('cp_pct_dm') or 0)-cp_target)/cp_target
+    me_signed=(float(metrics.get('me_mcal') or 0)-me_target)/me_target
+    adg_target=max(float(targets.get('adg') or 0),0.0)
+    adg_value=float(metrics.get('achievable_adg_kg') or 0)
+    adg_signed=(adg_value-adg_target)/adg_target if adg_target>0 else 0.0
+    rough=float(metrics.get('roughage_pct_dm') or 0)
+    unsafe=[]; blockers=[]; warnings=[]
+    rumen_risk=_rumen_risk_assessment(metrics,limits)
+    # DEV4.17: İdeal üstü ile sert üst arasındaki dikkat bandı kullanılabilir;
+    # fazın sert nişasta üst sınırı aşılırsa çözüm kaydedilmez.
+    starch=float(metrics.get('starch_pct_dm') or 0)
+    starch_max=float(limits.get('starch_max') or 100)
+    if starch>starch_max+.05:
+        unsafe.append(f'nişasta %{starch:.1f}; faz üst sınırı %{starch_max:.1f}')
+    if rumen_risk['level']=='Yüksek' and (
+        starch>starch_max
+        or float(metrics.get('endf_pct_dm') or 0)<float(limits.get('endf_min') or 0)):
+        unsafe.append('yüksek göreli asidoz riski (nişasta/etkin lif birlikte)')
+    if float(metrics.get('endf_pct_dm') or 0)<float(limits.get('endf_min') or 0)*.80:
+        unsafe.append('fiziksel etkili lif ciddi düşük')
+    if float(metrics.get('ndf_pct_dm') or 0)<float(targets.get('ndf_min') or 0)*.80:
+        unsafe.append('NDF ciddi düşük')
+    wheat_grain=float(metrics.get('wheat_grain_pct_dm') or 0)
+    if wheat_grain>40.0:
+        unsafe.append(f'buğday tahıl KM payı %{wheat_grain:.1f}; sert üst sınır %40')
+    elif wheat_grain>30.0:
+        warnings.append(f'buğday tahıl KM payı %{wheat_grain:.1f}; hedef en çok %30')
+    cap=float(metrics.get('ca_g') or 0)/max(float(metrics.get('p_g') or 0),.01)
+    if cap<1.0 or cap>4.0:unsafe.append('Ca:P oranı güvenli pencerenin dışında')
+    mw=_mineral_windows(targets,dm_target)
+    if float(metrics.get('ca_g') or 0)>mw['ca_hard'] or float(metrics.get('p_g') or 0)>mw['p_hard']:
+        unsafe.append('mineral sert üst sınırı aşılıyor')
+
+    if abs(dm_signed)>.08:blockers.append(f'KM {dm_signed*100:+.1f}%')
+    elif abs(dm_signed)>.035:warnings.append(f'KM {dm_signed*100:+.1f}%')
+    # Chapter 20 CP değeri bir asgari tarama düzeyidir; RDP/RUP ve MP arzı
+    # bilinmeden hedefin üstündeki HP'yi fizibilite hatası saymak doğru değildir.
+    if cp_signed<-.08:blockers.append(f'HP tabanı {cp_signed*100:+.1f}%')
+    elif cp_signed<-.035:warnings.append(f'HP tabanı {cp_signed*100:+.1f}%')
+    elif float(metrics.get('cp_pct_dm') or 0)>max(cp_target*1.45,16.0):
+        warnings.append('HP yüksek; maliyet ve azot yükü kontrol edilmeli')
+    # Toplam ME arzı tek başına büyüme yeterliliği değildir. Enerji fizibilitesi
+    # aşağıdaki NEm/NEg tabanlı GCAA kapasitesiyle değerlendirilir.
+    if adg_target>0:
+        if adg_signed<-.01:blockers.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
+        elif adg_signed<-.005:warnings.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
+    if rough<float(limits.get('roughage_min') or 0)-5 or rough>float(limits.get('roughage_max') or 100)+5:
+        blockers.append(f'kaba yem %{rough:.1f}')
+    elif rough<float(limits.get('roughage_min') or 0) or rough>float(limits.get('roughage_max') or 100):
+        warnings.append(f'kaba yem %{rough:.1f}')
+
+    # Bir tek ciddi kartta sapma varsa kullanıcıya "sınırlı" çözüm gösterilebilir;
+    # iki veya daha fazlası seçili yem setinin birlikte fizibil olmadığını gösterir.
+    growth_blocked=adg_target>0 and adg_signed<-.01
+    core_critical=(abs(dm_signed)>.10 or cp_signed<-.10)
+    status='unsafe' if unsafe else ('infeasible' if growth_blocked or core_critical or len(blockers)>=2 else ('limited' if blockers or warnings else 'feasible'))
+    return {'status':status,'unsafe':unsafe,'blockers':blockers,'warnings':warnings,
+            'dm_signed':dm_signed,'cp_signed':cp_signed,'me_signed':me_signed,'adg_signed':adg_signed,
+            'rumen_risk':rumen_risk}
 
 def _feed_data_warnings(feeds):
     out=[]
@@ -1844,25 +2261,59 @@ def _feed_data_warnings(feeds):
         if not (5<=dm<=100): out.append(f'{name}: KM %{dm:.1f} değeri kontrol edilmeli.')
         if cp>45: out.append(f'{name}: HP %{cp:.1f} değeri kontrol edilmeli.')
         if ndf>90: out.append(f'{name}: NDF %{ndf:.1f} değeri kontrol edilmeli.')
+        label_min=float(_rowval(f,'solver_min_kg_day',0) or 0); label_max=float(_rowval(f,'solver_max_kg_day',0) or 0)
+        if label_min>0 and label_max>0 and label_min>label_max:
+            out.append(f'{name}: etiket alt sınırı üst sınırdan büyük; Yem Kataloğu kaydını düzeltin.')
     return out
+
+def _scientific_feed_coverage(feeds,qtys):
+    """Seçili çözümün ileri model alanlarındaki ağırlıklı veri kapsamını bildirir."""
+    total_dm=0.0; starch_total=0.0; starch_known=0.0; pdi_dm=0.0; ndfd_dm=0.0; limits_dm=0.0
+    for f,q in zip(feeds,qtys):
+        dm=max(0.0,float(q or 0))*max(float(_rowval(f,'dm_pct',0) or 0)/100.0,.01)
+        if dm<=1e-9:continue
+        total_dm+=dm
+        starch=dm*_solver_starch_pct(f)/100.0; starch_total+=starch
+        if float(_rowval(f,'starch_degradability_pct',0) or 0)>0:starch_known+=starch
+        if float(_rowval(f,'inra_pdi_g_kg_dm',0) or 0)>0:pdi_dm+=dm
+        if float(_rowval(f,'ndf_digestibility_pct',0) or 0)>0:ndfd_dm+=dm
+        if float(_rowval(f,'solver_min_kg_day',0) or 0)>0 or float(_rowval(f,'solver_max_kg_day',0) or 0)>0:limits_dm+=dm
+    return {
+        'starch_degradability':starch_known/starch_total if starch_total else 1.0,
+        'inra_pdi':pdi_dm/total_dm if total_dm else 0.0,
+        'ndf_digestibility':ndfd_dm/total_dm if total_dm else 0.0,
+        'explicit_limits':limits_dm/total_dm if total_dm else 0.0,
+    }
 
 def _ration_assistant(feeds,m,t,lim):
     """Çözüm güvenlik kapısına takılırsa seçili yemleri tanıyarak uygulanabilir öneri üretir."""
     tips=[]
-    gain_supply,_,_=_energy_balance(m,t)
-    names=[str(_rowval(x,'name','')).upper() for x in feeds]
-    commercial=next((str(_rowval(x,'name','')) for x in feeds if any(k in str(_rowval(x,'name','')).upper() for k in ('BUZAĞI BAŞLANGIÇ YEMİ','BUZAĞI BÜYÜTME YEMİ','SIĞIR BESİ YEMİ','SIĞIR BESI YEMI','BESİ YEMİ','BESI YEMI'))),None)
-    if gain_supply<t['neg_req_mcal']*.95:
-        if commercial: tips.append(f'Enerji yetersiz: seçili {commercial} önce güvenli üst sınırına kadar değerlendirildi; hâlâ açık varsa arpa/mısır gibi ek enerji kaynağı ekleyin.')
-        else: tips.append('Enerji yetersiz: arpa/buğday/mısır gibi enerji yoğun bir kesif yem ekleyin.')
+    adg_target=max(float(t.get('adg') or 0),0.0)
+    adg_capacity=float(m.get('achievable_adg_kg') or _achievable_adg(m,t) or 0)
+    commercial_feed=next((x for x in feeds if _is_commercial_compound_feed(x)),None)
+    commercial=str(_rowval(commercial_feed,'name','')) if commercial_feed is not None else None
+    if adg_target>0 and adg_capacity<adg_target*.995:
+        gap=max(0.0,(adg_target-adg_capacity)/adg_target*100)
+        # Enerji açığını yüksek HP'li ticari yemi körlemesine artırarak kapatma.
+        # Seçili yemler içinden NEg/KM'si yüksek ve HP yükü görece düşük olanı bul.
+        energy_candidates=[x for x in feeds
+                           if (str(_rowval(x,'category','')).startswith('Kesif') or _is_commercial_compound_feed(x))
+                           and _solver_nutrient(x,'neg_mcal_kg')>0]
+        energy_candidates.sort(key=lambda x:(_solver_nutrient(x,'neg_mcal_kg')-.012*max(0,_solver_nutrient(x,'cp_pct')-t['cp_pct'])),reverse=True)
+        energy_name=str(_rowval(energy_candidates[0],'name','uygun enerji yemi')) if energy_candidates else 'arpa/mısır gibi uygun enerji yemi'
+        tips.append(f'GCAA kapasitesi hedefin %{gap:.1f} altında: seçili yemlerden {energy_name} enerji açığı yönünde artırılmalı; aynı KM korunarak düşük enerjili veya gereksiz HP yükselten yem azaltılmalı. Nişasta, eNDF ve kaba/kesif rayları birlikte korunur.')
     if m['cp_pct_dm']<t['cp_pct']*.90:
         if commercial: tips.append(f'Protein yetersiz: seçili {commercial} protein kaynağı olarak kullanılıyor; yeterli değilse soya/kanola/ayçiçeği küspesi ekleyin.')
         else: tips.append('Protein yetersiz: soya/kanola/ayçiçeği küspesi veya uygun proteinli besi yemi ekleyin.')
-    if m['endf_pct_dm']<lim['endf_min'] or m['roughage_pct_dm']<lim['roughage_min']:
+    if m['endf_pct_dm']<lim['endf_min']:
         tips.append('Etkili lif düşük: saman/yonca/uygun kuru ot gibi fiziksel etkili kaba yem ekleyin veya tahılı azaltın.')
+    elif m['roughage_pct_dm']<lim['roughage_min']:
+        tips.append(f'Kaba yem KM oranı faz koridorunun altında (%{m["roughage_pct_dm"]:.1f}; hedef %{lim["roughage_min"]:.0f}–%{lim["roughage_max"]:.0f}). eNDF yeterli olsa da kaba/kesif dağılımını düzeltmek için uygun kaba yemi artırın veya kesif yemi azaltın.')
+    elif m['roughage_pct_dm']>lim['roughage_max']:
+        tips.append(f'Kaba yem KM oranı faz koridorunun üzerinde (%{m["roughage_pct_dm"]:.1f}; hedef %{lim["roughage_min"]:.0f}–%{lim["roughage_max"]:.0f}). Enerji yoğunluğunu ve GCAA kapasitesini koruyarak kaba/kesif dağılımını yeniden dengeleyin.')
     if m['starch_pct_dm']>lim['starch_max']:
         tips.append('Nişasta yüksek: buğday/arpa gibi hızlı fermente tahılı azaltın; kaba yem veya daha düşük nişastalı enerji kaynağı ekleyin.')
-    elif m['starch_pct_dm']>lim['starch_ideal_max']:
+    elif m['starch_pct_dm']>lim['starch_ideal_max']+.5:
         tips.append(f'Nişasta ideal bandın üzerinde (%{lim["starch_ideal_max"]:.0f}–%{lim["starch_max"]:.0f} dikkat bölgesi): arpa/buğday miktarı, yem işleme inceliği ve eNDF birlikte kontrol edilmeli.')
     cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99
     if cap<1.25: tips.append('Ca:P düşük: kalsiyum kaynağı/mineral dengeleyici ekleyin.')
@@ -1873,12 +2324,18 @@ def _ration_assistant(feeds,m,t,lim):
     return ' '.join(tips)
 
 def smart_ration_metrics(feeds, qty):
-    z={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,'tdn_kg':0.0,
+    z={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,
+       'rapid_starch_kg':0.0,'known_degradability_starch_kg':0.0,'tdn_kg':0.0,
        'me_mcal':0.0,'nem_mcal':0.0,'neg_mcal':0.0,'ca_g':0.0,'p_g':0.0,'na_g':0.0,'cl_g':0.0,'cost':0.0,'rough_dm':0.0,'conc_dm':0.0}
     for f,kg in zip(feeds,qty):
         dm=kg*float(_rowval(f,'dm_pct'))/100.0; z['as_fed_kg']+=kg; z['dm_kg']+=dm
         z['cp_kg']+=dm*_solver_nutrient(f,'cp_pct')/100; z['ndf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100
-        z['endf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100*_solver_nutrient(f,'effective_ndf_pct')/100; z['starch_kg']+=dm*_solver_starch_pct(f)/100
+        z['endf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100*_solver_nutrient(f,'effective_ndf_pct')/100
+        feed_starch=dm*_solver_starch_pct(f)/100; z['starch_kg']+=feed_starch
+        starch_deg,known_deg=_feed_starch_degradability(f)
+        if known_deg:
+            z['known_degradability_starch_kg']+=feed_starch
+            z['rapid_starch_kg']+=feed_starch*starch_deg/100
         z['tdn_kg']+=dm*_solver_nutrient(f,'tdn_pct')/100; z['me_mcal']+=dm*_solver_nutrient(f,'me_mcal_kg')
         z['nem_mcal']+=dm*_solver_nutrient(f,'nem_mcal_kg'); z['neg_mcal']+=dm*_solver_nutrient(f,'neg_mcal_kg')
         z['ca_g']+=dm*float(_rowval(f,'ca_pct'))*10; z['p_g']+=dm*float(_rowval(f,'p_pct'))*10
@@ -1886,18 +2343,53 @@ def smart_ration_metrics(feeds, qty):
         if feed_group(f)=='Kaba':z['rough_dm']+=dm
         elif feed_group(f)=='Kesif':z['conc_dm']+=dm
     dm=z['dm_kg']; rc=z['rough_dm']+z['conc_dm']; z['cp_pct_dm']=z['cp_kg']/dm*100 if dm else 0; z['ndf_pct_dm']=z['ndf_kg']/dm*100 if dm else 0
-    z['endf_pct_dm']=z['endf_kg']/dm*100 if dm else 0; z['starch_pct_dm']=z['starch_kg']/dm*100 if dm else 0; z['roughage_pct_dm']=z['rough_dm']/rc*100 if rc else 0; z['concentrate_pct_dm']=z['conc_dm']/rc*100 if rc else 0
+    z['endf_pct_dm']=z['endf_kg']/dm*100 if dm else 0; z['starch_pct_dm']=z['starch_kg']/dm*100 if dm else 0
+    z['rapid_starch_pct_dm']=z['rapid_starch_kg']/dm*100 if dm else 0
+    z['starch_degradability_coverage']=z['known_degradability_starch_kg']/z['starch_kg'] if z['starch_kg'] else 1.0
+    z['roughage_pct_dm']=z['rough_dm']/rc*100 if rc else 0; z['concentrate_pct_dm']=z['conc_dm']/rc*100 if rc else 0
     z['nem_density']=z['nem_mcal']/dm if dm else 0; z['neg_density']=z['neg_mcal']/dm if dm else 0
-    z['rumen_ph']=min(6.46,5.425+0.04229*z['endf_pct_dm']) if z['endf_pct_dm']>0 else 0
+    grain_dm,wheat_dm,barley_dm=_grain_mix_dm(feeds,qty)
+    z['grain_dm_kg']=grain_dm;z['wheat_dm_kg']=wheat_dm;z['barley_dm_kg']=barley_dm
+    z['wheat_grain_pct_dm']=wheat_dm/max(grain_dm,.01)*100 if grain_dm>.01 else 0.0
     return z
 
 def _energy_balance(m,t):
     """Net enerji sisteminde bakım için gereken KM ve kalan KM'nin büyümeye sağlayabildiği NEg."""
-    if m['dm_kg']<=0 or m['nem_density']<=0 or m['neg_density']<=0:return 0.0,0.0,999.0
-    maint_dm=t['nem_req_mcal']/m['nem_density']
-    gain_supply=max(0.0,m['dm_kg']-maint_dm)*m['neg_density']
-    required_dm=maint_dm+t['neg_req_mcal']/m['neg_density']
+    dm=float(m.get('dm_kg') or 0);nem=float(m.get('nem_density') or 0);neg=float(m.get('neg_density') or 0)
+    if dm<=0 or nem<=0 or neg<=0:return 0.0,0.0,999.0
+    maint_dm=t['nem_req_mcal']/nem
+    gain_supply=max(0.0,dm-maint_dm)*neg
+    required_dm=maint_dm+t['neg_req_mcal']/neg
     return gain_supply,required_dm,maint_dm
+
+def _predicted_dmi_for_metrics(metrics, targets):
+    """Kart, skor ve fizibilite için tek dinamik KM tüketim tahmini.
+
+    NASEM DMI denklemi diyetin NEm yoğunluğuna bağlıdır. Önceki kart sabit bir
+    referans yoğunluk kullanırken solver aday diyet yoğunluğunu kullanıyordu;
+    böylece aynı rasyon için iki farklı KM hedefi görünüyordu.
+    """
+    # Eski kayıtlar ve bazı yardımcı/test çağrıları SBW taşımayabilir. Bu durumda
+    # uydurma 0,04 kg gibi bir tahmin yerine kaydedilmiş referans KM korunur.
+    if float(targets.get('sbw_kg') or 0)<=0 or float(targets.get('weight_kg') or 0)<=0:
+        return max(float(targets.get('dmi_kg') or 0),.01)
+    nem=float(metrics.get('nem_density') or targets.get('dmi_reference_nem') or 1.6)
+    dmi=nasem_dynamic_dmi(targets.get('sbw_kg',0),nem,targets.get('age_months',0),targets.get('weight_kg',0))
+    weight=max(float(targets.get('weight_kg') or 0),1.0)
+    return max(weight*.018,min(weight*.035,dmi))
+
+def _achievable_adg(metrics, targets):
+    """Çözülmüş diyetin NEm/NEg arzından karşılanabilir canlı ağırlık artışı."""
+    gain,_,_=_energy_balance(metrics,targets)
+    if gain<=0:return 0.0
+    ebw=max(float(targets.get('ebw_kg') or 0),1.0)
+    gain_coefficient=max(float(targets.get('gain_energy_coefficient') or 0.0635),.001)
+    ebg=(gain/max(gain_coefficient*(ebw**0.75),1e-9))**(1/1.097)
+    adg=max(0.0,ebg/0.956)
+    cp_target=max(float(targets.get('cp_pct') or 0),.1)
+    cp=float(metrics.get('cp_pct_dm') or 0)
+    if cp<cp_target*.95:adg*=max(.70,cp/max(cp_target*.95,.1))
+    return adg
 
 def _mineral_windows(t, dmi_kg):
     """Formülasyon için hedef + yumuşak üst + pratik sert üst pencereleri.
@@ -1924,13 +2416,21 @@ def smart_ration_score(m,t,lim):
     m['predicted_dmi_kg']=dynamic_dmi
     # Önce enerji + gerçek DMI uyumu. Solver enerji açığını sadece daha çok KM yedirerek kapatamaz;
     # fakat DMI bütçesi de diyet enerji yoğunluğuna göre adaydan adaya değişir.
-    score=20*rel(gain_supply,t['neg_req_mcal']) + 15*rel(m['dm_kg'],dynamic_dmi) + 8*rel(m['cp_pct_dm'],t['cp_pct']) + 4*rel(m['ca_g'],t['ca_g'])+4*rel(m['p_g'],t['p_g'])
+    cp_deficit=max(0.0,(t['cp_pct']-m['cp_pct_dm'])/max(t['cp_pct'],.1))
+    ca_deficit=max(0.0,(t['ca_g']-m['ca_g'])/max(t['ca_g'],1))
+    p_deficit=max(0.0,(t['p_g']-m['p_g'])/max(t['p_g'],1))
+    score=20*rel(gain_supply,t['neg_req_mcal']) + 15*rel(m['dm_kg'],dynamic_dmi) + 8*cp_deficit + 4*ca_deficit+4*p_deficit
     if m['dm_kg'] > dynamic_dmi*1.08: score += 55*(m['dm_kg']-dynamic_dmi*1.08)/max(dynamic_dmi,.01)
     if m['dm_kg'] < dynamic_dmi*0.90: score += 25*(dynamic_dmi*.90-m['dm_kg'])/max(dynamic_dmi,.01)
     if m['dm_kg'] < maint_dm: score += 45*rel(m['dm_kg'],maint_dm)
     if gain_supply < t['neg_req_mcal']*.97: score += 38*(t['neg_req_mcal']*.97-gain_supply)/max(t['neg_req_mcal'],.01)
     if energy_required_dm > dynamic_dmi*1.08: score += 28*(energy_required_dm-dynamic_dmi*1.08)/max(dynamic_dmi,.01)
     if m['cp_pct_dm'] < t['cp_pct']*.95: score += 18*(t['cp_pct']*.95-m['cp_pct_dm'])/t['cp_pct']
+    # HP asgari gereksinimdir; küçük bir güvenlik payı normaldir. Fakat gereksinimin
+    # %20 üstünden sonrası enerji hedefini iyileştirmeden azot yükünü ve maliyeti
+    # artırır, bu nedenle kademeli olarak cezalanır.
+    if m['cp_pct_dm'] > t['cp_pct']*1.20:
+        score += 12*(m['cp_pct_dm']-t['cp_pct']*1.20)/max(t['cp_pct'],.1)
     if m['ndf_pct_dm']<t['ndf_min']:score+=10*(t['ndf_min']-m['ndf_pct_dm'])/t['ndf_min']
     if m['ndf_pct_dm']>t['ndf_max']:score+=5*(m['ndf_pct_dm']-t['ndf_max'])/t['ndf_max']
     if m['roughage_pct_dm']<lim['roughage_min']:score+=18*(lim['roughage_min']-m['roughage_pct_dm'])/lim['roughage_min']
@@ -1944,7 +2444,9 @@ def smart_ration_score(m,t,lim):
         score+=3.5*(m['starch_pct_dm']-lim['starch_ideal_max'])/max(lim['starch_ideal_max'],1)
     if m['starch_pct_dm']>lim['starch_max']:score+=8*(m['starch_pct_dm']-lim['starch_max'])/max(lim['starch_max'],1)
     if m['starch_pct_dm']>lim['starch_max']+2.0:score+=20*(m['starch_pct_dm']-lim['starch_max']-2.0)/max(lim['starch_max'],1)
-    if m['rumen_ph'] and m['rumen_ph']<5.8:score+=30*(5.8-m['rumen_ph'])
+    risk=_rumen_risk_assessment(m,lim)
+    if risk['level']=='Yüksek':score+=30
+    elif risk['level']=='Orta':score+=5
     cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99
     if cap<1.25:score+=10*(1.25-cap)
     if cap>3.0:score+=5*(cap-3.0)
@@ -1958,20 +2460,21 @@ def smart_ration_score(m,t,lim):
     return score+0.002*m['cost']
 
 def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik'):
-    """HOTFIX 6.17 - Besi_V5.02 Excel Solver mantigindan turetilen kisit-oncelikli optimizer.
+    """DEV4.16 - NASEM hayvan profilli, kısıt öncelikli besi optimizerı.
 
     Excel dosyasindaki gercek Solver modeli incelendi: yem miktarlari karar degiskenidir,
     hedef kartlari *ceza puani* degil toleransli kisitlardir ve uygun cozumler arasinda
     maliyet dusurulur. CiftlikPro'da kullanicinin sectigi normal yemler korunur.
 
-    Ana saha kisitlari (varsayilan +/- %3.5):
-      - Kuru madde (kg/gun)
-      - Ham protein (% KM)
-      - Metabolik enerji (Mcal/gun)
-      - Kaba yem KM orani (hedefin +/- 3.5 yuzde puani)
+    Ana saha kısıtları:
+      - Diyetin NEm yoğunluğuna bağlı kuru madde tüketimi
+      - Minimum ham protein tarama düzeyi
+      - NEm/NEg arzından karşılanabilir GCAA
+      - Fazın kaba yem KM koridoru
 
-    NDF/eNDF, nisasta, rumen pH ve mineral pencereleri guvenlik raylaridir. Hicbir aday
-    dort hedefi tam kapatamasa bile en az ihlal eden rasyon geri dondurulur.
+    NDF/eNDF, toplam ve etkin rumen nişastası ile mineral pencereleri güvenlik
+    raylarıdır. Güvensiz veya birden çok ana hedefi ciddi kaçıran aday kaydedilmez;
+    kullanıcıya çözümü sınırlayan kısıtlar bildirilir.
     """
     import random as _random, time as _time
     t=ration_requirement_targets(weight_kg,target_adg,animal_type,age_months,phase_override)
@@ -1982,6 +2485,10 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     if n<2:return None,t,'En az 2 yem seçin.'
 
     bounds=[smart_feed_bounds(f,t['weight_kg'],t['dmi_kg'],target_adg,age_months,phase_override) for f in feeds]
+    # Besi için uygun ticari yem seçilmişse süt yemini matematiksel kestirme olarak
+    # kullanma. Besi yemi yoksa kullanıcı seçimini tamamen kilitlemeden profil
+    # cezası mekanizması yalnız zorunlu durumda kullanımına izin verir.
+    bounds=_apply_commercial_profile_bounds(feeds,bounds,animal_type)
     # Normal yemlerde 0 kullanımına izin verilir. Eski sürüm seçilen her kaba/kesif yeme
     # zorunlu minimum vererek saman/tahıl gibi düşük kaliteli kalemleri rasyonda tutabiliyordu.
     # 0 ile pratik minimum arasındaki anlamsız gramajlar _practical_qty_penalty ile cezalanır.
@@ -1995,6 +2502,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     movable=[i for i in range(n) if not fixed[i]]
     rng=_random.Random(6172026)
     tol=.035
+    adg_tol=.01
     rough_tol_pp={'Besi Başlangıç':3.0,'Besi Geliştirme':3.0,'Besi Bitirme':5.0}.get(t.get('phase'),3.5)
     target_dm=float(t['dmi_kg'])
     target_cp=float(t['cp_pct'])
@@ -2005,22 +2513,16 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         return [max(bounds[i][0],min(bounds[i][1],float(q[i] or 0))) for i in range(n)]
 
     def achieved_adg(m):
-        gain,reqdm,maint=_energy_balance(m,t)
-        if gain<=0:return 0.0
-        ebg=(gain/max(0.0635*(t['ebw_kg']**0.75),1e-9))**(1/1.097)
-        adg=max(0.0,ebg/0.956)
-        if m['cp_pct_dm']<target_cp*.95:
-            adg*=max(.70,m['cp_pct_dm']/max(target_cp*.95,.1))
-        return adg
+        return _achievable_adg(m,t)
 
     def safety_vector(m):
-        # Sert guvenlik ihlalleri. Pozitif deger ihlal miktaridir; 0 = uygun.
+        # İzleme/gösterim rayları. Küçük bir NDF veya rumen-risk sapması dört ana besin
+        # hedefinin önüne geçirilmez; ciddi riskler hard_safety_vector ile ayrılır.
         vals=[]
         vals.append(max(0.0,(t['ndf_min']-m['ndf_pct_dm'])/max(t['ndf_min'],1)))
         vals.append(max(0.0,(m['ndf_pct_dm']-t['ndf_max'])/max(t['ndf_max'],1)))
         vals.append(max(0.0,(lim['endf_min']-m['endf_pct_dm'])/max(lim['endf_min'],1)))
-        vals.append(max(0.0,(m['starch_pct_dm']-(lim['starch_max']+4.0))/max(lim['starch_max'],1)))
-        vals.append(max(0.0,(6.00-(m['rumen_ph'] or 0))/0.30) if m['rumen_ph'] else 1.0)
+        vals.append(max(0.0,(m['starch_pct_dm']-lim['starch_max'])/max(lim['starch_max'],1)))
         cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99.0
         vals.append(max(0.0,(1.10-cap)/1.10)); vals.append(max(0.0,(cap-3.70)/3.70))
         mw=_mineral_windows(t,target_dm)
@@ -2028,16 +2530,47 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         vals.append(max(0.0,(m['p_g']-mw['p_hard'])/max(mw['p_hard'],1)))
         return vals
 
+    def hard_safety_vector(m,q):
+        """Ana hedeflerden önce gelen yalnız ciddi rumen/mineral riskleri.
+
+        Önceki sıralama türetilmiş bir pH göstergesini veya çok küçük bir eNDF sapmasını bile KM/HP/ME
+        fizibilitesinden üstün tutuyordu. Bu da solverın çok sayıda hedefi kaçıran,
+        tahıl ağırlıklı bir adayı seçmesine yol açabiliyordu.
+        """
+        vals=[]
+        vals.append(max(0.0,(t['ndf_min']*.85-m['ndf_pct_dm'])/max(t['ndf_min'],1)))
+        vals.append(max(0.0,(m['ndf_pct_dm']-t['ndf_max']*1.15)/max(t['ndf_max'],1)))
+        vals.append(max(0.0,(lim['endf_min']*.80-m['endf_pct_dm'])/max(lim['endf_min'],1)))
+        # Fazın nişasta üst sınırı kayıt öncesi sert güvenlik kapısıdır.
+        vals.append(max(0.0,(m['starch_pct_dm']-lim['starch_max'])/max(lim['starch_max'],1)))
+        risk=_rumen_risk_assessment(m,lim)
+        vals.append(1.0 if risk['level']=='Yüksek' else 0.0)
+        grain_dm,wheat_dm,_=_grain_mix_dm(feeds,q)
+        wheat_grain_share=wheat_dm/max(grain_dm,.01)
+        vals.append(max(0.0,(wheat_grain_share-.40)/.40) if grain_dm>.05 else 0.0)
+        cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99.0
+        vals.append(max(0.0,(1.00-cap)/1.00)); vals.append(max(0.0,(cap-4.00)/4.00))
+        mw=_mineral_windows(t,target_dm)
+        vals.append(max(0.0,(m['ca_g']-mw['ca_hard'])/max(mw['ca_hard'],1)))
+        vals.append(max(0.0,(m['p_g']-mw['p_hard'])/max(mw['p_hard'],1)))
+        return vals
+
     def target_devs(m):
-        dm=abs(m['dm_kg']-target_dm)/max(target_dm,.01)
-        cp=abs(m['cp_pct_dm']-target_cp)/max(target_cp,.01)
-        me=abs(m['me_mcal']-target_me)/max(target_me,.01)
+        dynamic_dm=_predicted_dmi_for_metrics(m,t)
+        m['predicted_dmi_kg']=dynamic_dm
+        dm=abs(m['dm_kg']-dynamic_dm)/max(dynamic_dm,.01)
+        # HP, Ca ve P asgari gereksinimdir. Hedefin üstü eşitlik sapması değildir.
+        cp=max(0.0,target_cp-m['cp_pct_dm'])/max(target_cp,.01)
+        # Enerji başarısı toplam ME yerine NEm/NEg'den hesaplanan GCAA kapasitesidir.
+        me=0.0
+        adg=max(0.0,target_adg-float(m.get('achievable_adg_kg') or 0))/max(target_adg,.01)
         rough=abs(m['roughage_pct_dm']-target_rough)  # yuzde puani
-        return dm,cp,me,rough
+        return dm,cp,me,adg,rough
 
     def rank(q):
         q=clip(q); m=smart_ration_metrics(feeds,q)
-        dm,cp,me,rough=target_devs(m)
+        m['achievable_adg_kg']=achieved_adg(m)
+        dm,cp,me,adg,rough=target_devs(m)
         starch=float(m.get('starch_pct_dm') or 0)
         starch_soft=0.0
         if starch>lim['starch_ideal_max']:
@@ -2046,26 +2579,51 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
             starch_soft+=3.0*(starch-lim['starch_max'])/max(lim['starch_max'],1)
         elif starch<lim['starch_min'] and me<target_me*.99:
             starch_soft=.25*(lim['starch_min']-starch)/max(lim['starch_min'],1)
+        cp_signed=(m['cp_pct_dm']-target_cp)/max(target_cp,.01)
+        me_signed=(m['me_mcal']-target_me)/max(target_me,.01)
+        adg_signed=(m['achievable_adg_kg']-target_adg)/max(target_adg,.01)
+        # Asgari hedefleri eşitlik kısıtına çevirmeden gereksiz yüksek arzı azalt.
+        # HP'de %20 güvenlik payı, enerjiye göre GCAA kapasitesinde %5 saha payı
+        # serbesttir; sonrası güvenlik hedeflerinden sonra, maliyetten önce sıralanır.
+        cp_surplus_soft=max(0.0,cp_signed-.20)/.20
+        adg_surplus_soft=max(0.0,adg_signed-.05)/.05
+        surplus_soft=cp_surplus_soft+adg_surplus_soft
         outs=[max(0.0,dm-tol)/tol,
-              max(0.0,cp-tol)/tol,
-              max(0.0,me-tol)/tol,
+              max(0.0,-cp_signed-tol)/tol,
+              0.0,
+              max(0.0,abs(adg_signed)-adg_tol)/adg_tol,
               max(0.0,rough-rough_tol_pp)/rough_tol_pp]
         sv=safety_vector(m)
+        hsv=hard_safety_vector(m,q)
+        rumen_risk=_rumen_risk_assessment(m,lim)
+        risk_soft=(2 if rumen_risk['level']=='Yüksek' else (1 if rumen_risk['level']=='Orta' else 0))
+        if rumen_risk['confidence']=='Düşük':risk_soft*=.35
         safety_count=sum(v>1e-10 for v in sv)
+        hard_safety_count=sum(v>1e-10 for v in hsv)
         target_count=sum(v>1e-10 for v in outs)
-        # Lexicographic mantik: Excel Solver gibi once fizibilite. Bir karti mukemmel yapip
-        # digerini bozmak, max ihlal nedeniyle asla avantaj saglamaz. Maliyet en son gelir.
-        key=(safety_count,
-             round(max(sv) if sv else 0.0,10),
+        grain_dm,wheat_dm,_=_grain_mix_dm(feeds,q)
+        wheat_share=wheat_dm/max(grain_dm,.01) if grain_dm>.05 else 0.0
+        wheat_soft=max(0.0,(wheat_share-.30)/.10)
+        profile_soft=_commercial_profile_penalty(feeds,q,animal_type,target_dm)
+        # Önce ciddi güvenlik, sonra KM/HP/ME/kaba fizibilitesi. Hafif NDF/eNDF/rumen-risk
+        # sapmaları ancak ana hedeflerden sonra karşılaştırılır; maliyet en son gelir.
+        key=(hard_safety_count,
+             round(max(hsv) if hsv else 0.0,10),
              target_count,
              round(max(outs),10),
+             round(sum(v*v for v in outs),10),
+             round(profile_soft,8),
+             round(starch_soft,8),
+             round(wheat_soft,8),
+             round(_practical_qty_penalty(feeds,q,t['weight_kg'],target_dm),8),
+             safety_count,
+             round(max(sv) if sv else 0.0,10),
+             round(risk_soft,8),
+             round(surplus_soft,8),
              # Aynı fizibilite seviyesinde önce uygulanabilirlik/kalite, sonra milimetrik kart farkı.
              # Bu sıra 0.01 kg gibi matematiksel ama saha dışı kalemleri ve ucuz yem dominansını azaltır.
-             round(_practical_qty_penalty(feeds,q,t['weight_kg'],target_dm),8),
              round(_feed_quality_penalty(feeds,q,target_dm),8),
-             round(starch_soft,8),
-             round(sum(v*v for v in outs),10),
-             round(dm+cp+me+rough/100.0,10),
+             round(dm+cp+me+adg+rough/100.0,10),
              round(m['cost'],6))
         return key,m
 
@@ -2179,25 +2737,59 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     # Kullanici sectigi normal yemleri kaybetmesin; katkilar kendi doz sinirinda kalir.
     best=[round(max(bounds[i][0],min(bounds[i][1],x)),3 if feed_group(feeds[i])=='Katkı' else 2) for i,x in enumerate(best)]
     finalk,bm=rank(best)
-    bm['predicted_dmi_kg']=target_dm
+    bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4 · canlı ağırlık→besi dönemi→faz kaba/kesif koridoru→eNDF/pH→besin→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.17 · NASEM hayvan profili→dinamik KM/GCAA→sert nişasta/profil→buğday→kalite/maliyet'
     bm['roughage_target_pct']=target_rough
+    bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
+    bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)
+    feasibility=_solver_feasibility_report(bm,t,lim)
+    bm['feasibility']=feasibility
+
+    if feasibility['status'] in ('unsafe','infeasible'):
+        reasons=feasibility['unsafe']+feasibility['blockers']
+        detail='; '.join(reasons) if reasons else 'seçili yem kısıtları hedefleri aynı anda karşılamıyor'
+        advice=_ration_assistant(feeds,bm,t,lim)
+        return None,t,'Çözüm kaydedilmedi: '+detail+'. Sınırlayan kısıtlar düzeltilmeli. Öneri: '+advice
 
     warnings=[]
     warnings.extend(_feed_data_warnings(feeds))
-    dm,cp,me,rough=target_devs(bm)
+    dm,cp,me,adg,rough=target_devs(bm)
     residual=[]
-    if dm>tol:residual.append(f'KM {(bm["dm_kg"]-target_dm)/target_dm*100:+.1f}%')
-    if cp>tol:residual.append(f'HP {(bm["cp_pct_dm"]-target_cp)/target_cp*100:+.1f}%')
-    if me>tol:residual.append(f'ME {(bm["me_mcal"]-target_me)/target_me*100:+.1f}%')
+    final_dmi=max(float(bm.get('predicted_dmi_kg') or target_dm),.01)
+    if dm>tol:residual.append(f'KM {(bm["dm_kg"]-final_dmi)/final_dmi*100:+.1f}%')
+    cp_signed=(bm['cp_pct_dm']-target_cp)/max(target_cp,.01)
+    if cp_signed < -tol:residual.append(f'HP tabanı {cp_signed*100:+.1f}%')
+    adg_signed=(bm['achievable_adg_kg']-target_adg)/max(target_adg,.01)
+    if adg_signed<-.005:residual.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
     if rough>rough_tol_pp:residual.append(f'Kaba {bm["roughage_pct_dm"]-target_rough:+.1f} puan')
     sv=safety_vector(bm)
     if residual:
         warnings.insert(0,'En iyi saha çözümü üretildi; ±%3,5 bandı dışında kalan kartlar: '+', '.join(residual)+'.')
     if any(x>1e-10 for x in sv):
-        warnings.append('Güvenlik raylarından biri sınırda; NDF/eNDF, nişasta, pH ve mineral kartlarını kontrol edin.')
+        warnings.append('Güvenlik raylarından biri sınırda; NDF/eNDF, nişasta, göreli asidoz riski ve mineral kartlarını kontrol edin.')
+    grain_dm,wheat_dm,_=_grain_mix_dm(feeds,best)
+    if grain_dm>.01 and wheat_dm/grain_dm>.30:
+        wheat_share=wheat_dm/grain_dm*100
+        band='sert %40 sınırının üzerinde' if wheat_share>40 else 'muhafazakâr %30 hedefinin üzerinde'
+        warnings.append(f'Buğday tahıl karışımının %{wheat_share:.0f} KM payında; {band}. İşleme inceliği, kademeli adaptasyon, toplam nişasta ve eNDF birlikte kontrol edilmelidir.')
+    used_commercial=[f for f,q in zip(feeds,best) if q>.01 and _is_commercial_compound_feed(f)]
+    # Etiket eksikliği ancak solver ürünü otomatik güvenlik sınırının %90'ına kadar
+    # zorluyorsa kullanıcıyı meşgul eder. Düşük/orta kullanımda uzun genel uyarı yoktur.
+    unlabeled=[]
+    for f,q in zip(feeds,best):
+        if q<=.01 or not _is_commercial_compound_feed(f) or float(_rowval(f,'solver_max_kg_day',0) or 0)>0:continue
+        _,auto_hi=smart_feed_bounds(f,t['weight_kg'],target_dm,target_adg,age_months,phase_override)
+        if auto_hi>0 and q>=auto_hi*.90:unlabeled.append(str(_rowval(f,'name','Yem')))
+    if unlabeled:
+        warnings.append('Otomatik güvenlik sınırına yaklaşan ticari yemde etiket üst dozu eksik: '+', '.join(unlabeled)+'. Gerçek ürün etiketini Yem Kataloğu → Düzenle alanına ekleyin.')
+    if bm['scientific_coverage']['starch_degradability']<.70 and bm['starch_kg']>.10:
+        warnings.append(f'Nişasta yıkılabilirliği veri kapsamı %{bm["scientific_coverage"]["starch_degradability"]*100:.0f}; rumen risk güveni düşüktür. İşleme biçimi ve analiz değerlerini tamamlayın.')
+    if feasibility['blockers'] or feasibility['warnings']:
+        warnings.insert(0,'Sınırlı saha çözümü: '+', '.join(feasibility['blockers']+feasibility['warnings'])+'.')
+    if residual or any(x>1e-10 for x in sv):
+        warnings.append('Öneri: '+_ration_assistant(feeds,bm,t,lim))
     return (best,bm,bounds),t,' '.join(warnings)
 
 def dairy_requirement_targets(weight_kg=650.0, target_milk_l=25.0, milk_fat_pct=3.7, milk_protein_pct=3.1):
@@ -2248,7 +2840,7 @@ def dairy_feed_bounds(feed, weight_kg, target_dm):
         if 'SİLAJ' in name or 'SILAJ' in name:return 0.0,max(1.0,target_dm*0.70/dm)
         return 0.0,max(0.5,target_dm*0.55/dm)
     # Tam karma/süt yemleri enerji-protein taşıyıcıdır; tek tahıl gibi sıkıştırılmaz.
-    if any(x in name for x in ('SÜT YEMİ','SUT YEMI','SAĞMAL','SAGMAL','KARMA YEM','YEMİ','YEMI')):
+    if _is_commercial_compound_feed(feed) or any(x in name for x in ('YEMİ','YEMI')):
         return 0.0,max(1.0,target_dm*0.58/dm)
     starch=_solver_starch_pct(feed)
     frac=0.30 if starch>=45 else 0.40
@@ -2276,13 +2868,16 @@ def solve_smart_dairy_ration(feeds, weight_kg, target_milk_l):
     def score(q):
         m=smart_ration_metrics(feeds,q)
         def rel(v,x):return abs(float(v)-float(x))/max(abs(float(x)),.01)
-        # Dört ana süt hedefi: KM, HP, ME, kaba/kesif. NDF/eNDF/pH güvenlik raylarıdır.
+        # Dört ana süt hedefi: KM, HP, ME, kaba/kesif. NDF/eNDF ve göreli
+        # asidoz riski güvenlik raylarıdır; klinik pH tahmini yapılmaz.
         sc=13*rel(m['dm_kg'],t['dmi_kg'])+14*rel(m['cp_pct_dm'],t['cp_pct'])+14*rel(m['me_mcal'],t['me_mcal_day'])+10*rel(m['roughage_pct_dm'],t['roughage_target'])
         if m['ndf_pct_dm']<t['ndf_min']:sc+=18*(t['ndf_min']-m['ndf_pct_dm'])/t['ndf_min']
         if m['ndf_pct_dm']>t['ndf_max']:sc+=7*(m['ndf_pct_dm']-t['ndf_max'])/t['ndf_max']
         if m['endf_pct_dm']<t['endf_min']:sc+=22*(t['endf_min']-m['endf_pct_dm'])/t['endf_min']
         if m['starch_pct_dm']>t['starch_max']:sc+=12*(m['starch_pct_dm']-t['starch_max'])/t['starch_max']
-        if m['rumen_ph'] and m['rumen_ph']<5.8:sc+=35*(5.8-m['rumen_ph'])
+        risk=_rumen_risk_assessment(m,t)
+        if risk['level']=='Yüksek':sc+=35
+        elif risk['level']=='Orta':sc+=6
         if m['roughage_pct_dm']<t['roughage_min']:sc+=15*(t['roughage_min']-m['roughage_pct_dm'])/t['roughage_min']
         if m['roughage_pct_dm']>t['roughage_max']:sc+=8*(m['roughage_pct_dm']-t['roughage_max'])/t['roughage_max']
         # Mineral aşırılıklarını ikincil ama görünür şekilde cezalandır.
@@ -2322,6 +2917,7 @@ def solve_smart_dairy_ration(feeds, weight_kg, target_milk_l):
             if cand_best is not None:best,bestscore=cand_best,cand_score; improved=True
     best=[round(max(mins[i],min(bounds[i][1],best[i])),3 if fixed[i] else 2) for i in range(n)]
     _,bm=score(best)
+    bm['rumen_risk']=_rumen_risk_assessment(bm,t)
     bm['solver_engine']='6.16 Süt_V5.01/INRA-NASEM · KM+HP+ME+kaba/kesif çok hedefli süt optimizer'
     notes=[]
     for label,val,target in [('KM',bm['dm_kg'],t['dmi_kg']),('HP',bm['cp_pct_dm'],t['cp_pct']),('ME',bm['me_mcal'],t['me_mcal_day']),('Kaba',bm['roughage_pct_dm'],t['roughage_target'])]:
@@ -2350,16 +2946,17 @@ def is_real_protein_feed(feed):
     if ash>=35: return False
     return True
 
-def nutrient_status(actual,target,tol=0.05):
+def nutrient_status(actual,target,tol=0.05,upper_tol=None):
     if target<=0:return ('-', 'mut')
+    upper_tol=tol if upper_tol is None else float(upper_tol)
     ratio=actual/target
     if ratio < 1-tol:return (f'⚠️ Eksik %{(1-ratio)*100:.0f}','red')
-    if ratio > 1+tol:return (f'⬆️ Fazla %{(ratio-1)*100:.0f}','orange')
+    if ratio > 1+upper_tol:return (f'⬆️ Fazla %{(ratio-1)*100:.0f}','orange')
     return ('✅ Uygun','preg pos')
 
-def ration_requirement_panel(rr,sm):
+def _ration_requirement_panel_legacy(rr,sm):
     t=ration_targets_for_record(rr)
-    cp_s,cp_c=nutrient_status(sm['cp_pct_dm'],t['cp_pct']); me_s,me_c=nutrient_status(sm['me_mcal'],t['me_mcal_day'],0.08); dm_s,dm_c=nutrient_status(sm['dm_kg'],t['dmi_kg'],0.10); ca_s,ca_c=nutrient_status(sm['ca_g'],t['ca_g'],0.10); p_s,p_c=nutrient_status(sm['p_g'],t['p_g'],0.10)
+    cp_s,cp_c=nutrient_status(sm['cp_pct_dm'],t['cp_pct'],0.05,0.10); me_s,me_c=nutrient_status(sm['me_mcal'],t['me_mcal_day'],0.08,0.10); dm_s,dm_c=nutrient_status(sm['dm_kg'],t['dmi_kg'],0.10); ca_s,ca_c=nutrient_status(sm['ca_g'],t['ca_g'],0.10); p_s,p_c=nutrient_status(sm['p_g'],t['p_g'],0.10)
     ndf=sm['ndf_pct_dm']; ndf_s='✅ Uygun' if t['ndf_min']<=ndf<=t['ndf_max'] else ('⚠️ Düşük' if ndf<t['ndf_min'] else '⚠️ Yüksek')
     starch=sm.get('starch_pct_dm',0);starch_min=t.get('starch_min',0);starch_ideal_max=t.get('starch_ideal_max',t.get('starch_max',100));starch_max=t.get('starch_max',100)
     starch_s='✅ Uygun' if starch_min<=starch<=starch_ideal_max else ('ℹ️ İdeal altı' if starch<starch_min else ('⚠️ Sınıra yakın' if starch<=starch_max else '🔴 Yüksek'))
@@ -2370,7 +2967,9 @@ def ration_requirement_panel(rr,sm):
     else:
         at=h(rr['animal_type'] or 'Besi Erkek')
         form_fields=f"""<input type='hidden' name='ration_type' value='Besi'><label>Canlı Ağırlık (kg)<input type='number' min='150' max='900' step='1' name='target_weight_kg' value='{t['weight_kg']:.0f}'></label><label>Hedef Artış (kg/gün)<input type='number' min='0.2' max='2.2' step='0.05' name='target_adg_kg' value='{t['adg']:.2f}'></label><label>Yaş (ay, opsiyonel)<input type='number' min='0' max='36' step='1' name='target_age_months' value='{t.get('age_months',0):.0f}'></label><label>Besi Dönemi<select name='target_beef_phase'><option value='Otomatik' {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Otomatik' else ''}>Otomatik (canlı ağırlığa göre)</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Başlangıç' else ''}>Besi Başlangıç</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Geliştirme' else ''}>Besi Geliştirme</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Bitirme' else ''}>Besi Bitirme</option></select></label><label>Hayvan Tipi<input name='animal_type' value='{at}'></label>"""
-        title='🎯 Akıllı Besi Rasyonu Hedefi'; ctx=f"<div class='target-context compact'><b>{t['weight_kg']:.0f} kg</b> · hedef <b>{t['adg']:.2f} kg/gün artış</b> · <b>{t.get('phase','')}</b> ({t.get('phase_mode','Otomatik')}) · faz K/K <b>%{t.get('roughage_min',0):.0f}–{t.get('roughage_max',0):.0f} / %{100-t.get('roughage_max',0):.0f}–{100-t.get('roughage_min',0):.0f}</b> · NEm {t.get('nem_req_mcal',0):.1f} / NEg {t.get('neg_req_mcal',0):.1f} Mcal</div>"
+        capacity=_achievable_adg(sm,t) if sm.get('nem_density',0)>0 and sm.get('neg_density',0)>0 else 0.0
+        capacity_text=f" · rasyon enerji kapasitesi <b>{capacity:.2f} kg/gün</b>" if capacity>0 else ''
+        title='🎯 Akıllı Besi Rasyonu Hedefi'; ctx=f"<div class='target-context compact'><b>{t['weight_kg']:.0f} kg</b> · hedef <b>{t['adg']:.2f} kg/gün artış</b>{capacity_text} · <b>{t.get('phase','')}</b> ({t.get('phase_mode','Otomatik')}) · faz K/K <b>%{t.get('roughage_min',0):.0f}–{t.get('roughage_max',0):.0f} / %{100-t.get('roughage_max',0):.0f}–{100-t.get('roughage_min',0):.0f}</b> · NEm {t.get('nem_req_mcal',0):.1f} / NEg {t.get('neg_req_mcal',0):.1f} Mcal</div>"
     def diff_text(actual,target,unit='',digits=1):
         if not target:return ''
         d=float(actual)-float(target); pct=d/float(target)*100; sign='+' if d>0 else ''
@@ -2395,15 +2994,16 @@ def ration_requirement_panel(rr,sm):
         </div>
         <div class='nutri-card-footer mineral-footer'><span><em id='target-mini-ca-status'>{ca_s}</em><i class='nutri-diff' id='target-mini-ca-diff'>{diff_text(sm['ca_g'],t['ca_g'],' g',0)}</i></span><span><em id='target-mini-p-status'>{p_s}</em><i class='nutri-diff' id='target-mini-p-diff'>{diff_text(sm['p_g'],t['p_g'],' g',0)}</i></span></div>
     </div>"""
-    ph_s='✅ Uygun' if sm.get('rumen_ph',0)>=6.0 else ('⚠️ Dikkat' if sm.get('rumen_ph',0)>=5.8 else '⚠️ Düşük')
-    starch_rumen_cls='ok' if ('Uygun' in starch_s and 'Uygun' in ph_s) else 'warn'
+    rumen_risk=_rumen_risk_assessment(sm,t)
+    risk_s={'Düşük':'✅ Düşük','Orta':'⚠️ Orta','Yüksek':'🔴 Yüksek'}[rumen_risk['level']]
+    starch_rumen_cls='ok' if ('Uygun' in starch_s and rumen_risk['level']=='Düşük') else 'warn'
     starch_rumen=f"""<div class='nutri-mini nutri-compare-card mineral-card {starch_rumen_cls}' id='target-mini-starch-rumen'>
-        <div class='nutri-card-title'>Nişasta + Rumen</div>
+        <div class='nutri-card-title' title='Göreli risk göstergesidir; klinik rumen pH tahmini değildir'>Nişasta + Rumen ⓘ</div>
         <div class='mineral-pairs'>
           <div class='nutri-pair'><span>NİŞASTA</span><div><small>HEDEF</small><b>%{starch_min:.0f}–{starch_ideal_max:.0f}</b></div><div><small>RASYON</small><b id='target-mini-starch-current'>%{starch:.1f}</b></div></div>
-          <div class='nutri-pair'><span>RUMEN pH</span><div><small>HEDEF</small><b>6.00+</b></div><div><small>TAHMİN</small><b id='target-mini-ph-current'>{sm.get('rumen_ph',0):.2f}</b></div></div>
+          <div class='nutri-pair'><span>ASİDOZ RİSKİ</span><div><small>HEDEF</small><b>Düşük</b></div><div><small>GÖSTERGE</small><b id='target-mini-ph-current'>{rumen_risk['level']}</b></div></div>
         </div>
-        <div class='nutri-card-footer mineral-footer'><span><em id='target-mini-starch-status'>{starch_s}</em><i class='nutri-diff' id='target-mini-starch-diff'>{sm.get('starch_kg',0):.2f} kg/baş</i></span><span><em id='target-mini-ph-status'>{ph_s}</em><i class='nutri-diff' id='target-mini-ph-diff'>eNDF %{sm.get('endf_pct_dm',0):.1f}</i></span></div>
+        <div class='nutri-card-footer mineral-footer'><span><em id='target-mini-starch-status'>{starch_s}</em><i class='nutri-diff' id='target-mini-starch-diff'>{sm.get('starch_kg',0):.2f} kg/baş</i></span><span><em id='target-mini-ph-status'>{risk_s}</em><i class='nutri-diff' id='target-mini-ph-diff'>Veri güveni {rumen_risk['confidence']}</i></span></div>
     </div>"""
     mini=''.join([
         box('dm','KM',f"{sm['dm_kg']:.2f} kg",f"{t['dmi_kg']:.2f} kg",dm_s,diff_text(sm['dm_kg'],t['dmi_kg'],' kg',2)),
@@ -2415,7 +3015,7 @@ def ration_requirement_panel(rr,sm):
         starch_rumen,
         box('cost','Maliyet',money(sm['cost']),money(sm['cost']),'💰 Canlı','Değişiklik yok'),
     ])
-    detail=f"""<details class='nutri-detail'><summary>📋 Besin detaylarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Besin</th><th>Hedef</th><th>Mevcut</th><th>Durum</th></tr></thead><tbody><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td>{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}</td><td>%{ndf:.1f}</td><td>{ndf_s}</td></tr><tr><td>eNDF</td><td>En az %{t.get('endf_min',0):.1f}</td><td>%{sm.get('endf_pct_dm',0):.1f}</td><td>{'✅ Uygun' if sm.get('endf_pct_dm',0)>=t.get('endf_min',0) else '⚠️ Düşük'}</td></tr><tr><td>Nişasta</td><td>İdeal %{starch_min:.0f}–{starch_ideal_max:.0f} · üst %{starch_max:.0f}</td><td>%{starch:.1f} KM · {sm.get('starch_kg',0):.2f} kg</td><td>{starch_s}</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g</td><td>{sm['ca_g']:.0f} g</td><td>{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g</td><td>{sm['p_g']:.0f} g</td><td>{p_s}</td></tr><tr><td>Kaba/Kesif</td><td>Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}</td><td>%{rough:.0f} / %{conc:.0f}</td><td>{rc_s}</td></tr></tbody></table></div></details>"""
+    detail=f"""<details class='nutri-detail'><summary>📋 Besin detaylarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Besin</th><th>Hedef</th><th>Mevcut</th><th>Durum</th></tr></thead><tbody><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td>{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}</td><td>%{ndf:.1f}</td><td>{ndf_s}</td></tr><tr><td>eNDF</td><td>En az %{t.get('endf_min',0):.1f}</td><td>%{sm.get('endf_pct_dm',0):.1f}</td><td>{'✅ Uygun' if sm.get('endf_pct_dm',0)>=t.get('endf_min',0) else '⚠️ Düşük'}</td></tr><tr><td>Nişasta</td><td>İdeal %{starch_min:.0f}–{starch_ideal_max:.0f} · üst %{starch_max:.0f}</td><td>%{starch:.1f} KM · {sm.get('starch_kg',0):.2f} kg</td><td>{starch_s}</td></tr><tr><td>Etkin rumen nişastası</td><td>Veri kapsamıyla izlenir</td><td>%{sm.get('rapid_starch_pct_dm',0):.1f} KM · kapsam %{sm.get('starch_degradability_coverage',0)*100:.0f}</td><td>{risk_s}</td></tr><tr><td>Asidoz riski</td><td>Düşük</td><td>{rumen_risk['level']} · güven {rumen_risk['confidence']}</td><td>Klinik pH tahmini değildir</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g</td><td>{sm['ca_g']:.0f} g</td><td>{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g</td><td>{sm['p_g']:.0f} g</td><td>{p_s}</td></tr><tr><td>Kaba/Kesif</td><td>Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}</td><td>%{rough:.0f} / %{conc:.0f}</td><td>{rc_s}</td></tr></tbody></table></div></details>"""
     return f"""<style>
 body:has(.workbench-shell) .nutri-mini-grid{{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:7px!important}}
 body:has(.workbench-shell) .nutri-mini.nutri-compare-card{{height:100px!important;min-height:100px!important;grid-template-rows:23px 1fr 28px!important}}
@@ -2439,7 +3039,157 @@ body:has(.workbench-shell) .mineral-footer>span{{display:flex;align-items:center
 body:has(.workbench-shell) .mineral-footer em,body:has(.workbench-shell) .mineral-footer .nutri-diff{{font-size:7.8px!important;min-height:0!important;line-height:1!important;width:auto!important}}
 @media(max-width:1180px){{body:has(.workbench-shell) .nutri-mini-grid{{grid-template-columns:repeat(2,minmax(145px,1fr))!important}}}}
 @media(max-width:820px){{body:has(.workbench-shell) .nutri-mini-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important}}body:has(.workbench-shell) .nutri-mini.nutri-compare-card{{height:102px!important;min-height:102px!important}}body:has(.workbench-shell) .nutri-side b{{font-size:16px!important}}body:has(.workbench-shell) .nutri-card-footer em{{font-size:9px!important}}body:has(.workbench-shell) .nutri-card-footer .nutri-diff{{font-size:8px!important}}}}
-</style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>{title}</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky'><div class='target-compare-title'><b>🎯 Hedef ↔ Mevcut</b><span id='target-live-note'>Çalışma masasıyla canlı bağlı</span></div><div class='nutri-mini-grid'>{mini}</div></div></div>"""
+</style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>{title}</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky'><div class='target-compare-title'><b>🎯 Hedef ↔ Mevcut</b><span id='target-live-note'>Göreli asidoz göstergesi · Klinik pH tahmini değildir</span></div><div class='nutri-mini-grid'>{mini}</div></div></div>"""
+
+def ration_requirement_panel(rr,sm):
+    """Besi hedeflerini gereksinim, arz ve performans olarak doğru anlamda gösterir.
+
+    Eski kartlar CP/Ca/P minimumlarını eşitlik hedefi, toplam ME'yi ise doğrudan
+    büyüme başarısı gibi gösteriyordu. Bu panel solver ile aynı dinamik DMI ve
+    NEm/NEg tabanlı GCAA kapasitesini kullanır. Süt paneli mevcut motor
+    yenilenene kadar kendi doğrulanmış eski görünümünü korur.
+    """
+    t=ration_targets_for_record(rr)
+    if t.get('mode')=='Süt':
+        return _ration_requirement_panel_legacy(rr,sm)
+
+    predicted_dmi=_predicted_dmi_for_metrics(sm,t)
+    sm['predicted_dmi_kg']=predicted_dmi
+    capacity=_achievable_adg(sm,t) if sm.get('nem_density',0)>0 and sm.get('neg_density',0)>0 else 0.0
+    gain_supply,_,_=_energy_balance(sm,t)
+    limits=beef_phase_limits(t['weight_kg'],t['adg'],predicted_dmi,t.get('age_months',0),t.get('phase','Otomatik'))
+    rumen_risk=_rumen_risk_assessment(sm,limits)
+    mw=_mineral_windows(t,predicted_dmi)
+
+    def symmetric_status(actual,target,soft=.05,hard=.10):
+        if target<=0:return 'ℹ️ Veri yok'
+        delta=(actual-target)/target
+        if delta < -hard:return f'🔴 Eksik %{abs(delta)*100:.0f}'
+        if delta > hard:return f'⚠️ Yüksek %{delta*100:.0f}'
+        if abs(delta)>soft:return '⚠️ Sınıra yakın'
+        return '✅ Uygun'
+
+    def minimum_status(actual,minimum,soft=.05,hard=.10):
+        if minimum<=0:return 'ℹ️ Veri yok'
+        delta=(actual-minimum)/minimum
+        if delta < -hard:return f'🔴 Eksik %{abs(delta)*100:.0f}'
+        # Asgari hedefte %5'lik "yeşil tolerans" yanıltıcıdır. Yalnız ölçüm ve
+        # yuvarlama payı olan %0,5 korunur; bunun altındaki arz açıkça uyarılır.
+        if delta < -.005:return f'⚠️ Hedef altı %{abs(delta)*100:.1f}'
+        return '✅ Yeterli'
+
+    def protein_status(actual,minimum):
+        base=minimum_status(actual,minimum,.05,.10)
+        if minimum<=0 or actual<minimum:return base
+        surplus=(actual-minimum)/minimum
+        if surplus>.25:return f'⚠️ Yüksek %{surplus*100:.0f}'
+        if surplus>.15:return f'ℹ️ Güvenlik payı +%{surplus*100:.0f}'
+        return '✅ Yeterli'
+
+    def capacity_status(actual,target):
+        if target<=0:return 'ℹ️ Veri yok'
+        delta=(actual-target)/target
+        if delta<-.10:return f'🔴 Eksik %{abs(delta)*100:.0f}'
+        if delta<-.005:return f'⚠️ Hedef altı %{abs(delta)*100:.1f}'
+        if delta>.10:return f'⚠️ Kapasite +%{delta*100:.0f}'
+        if delta>.05:return f'ℹ️ Kapasite +%{delta*100:.0f}'
+        return '✅ Hedefe yakın'
+
+    def mineral_status(actual,key):
+        minimum=mw[f'{key}_target'];soft=mw[f'{key}_soft'];hard=mw[f'{key}_hard']
+        if actual<minimum*.90:return f'🔴 Eksik %{(1-actual/minimum)*100:.0f}'
+        if actual<minimum:return '⚠️ Minimuma yakın'
+        if actual>hard:return '🔴 Güvenlik üstü'
+        if actual>soft:return '⚠️ Yüksek'
+        return '✅ Yeterli'
+
+    def range_status(actual,low,high,label=''):
+        if actual<low:return '🔴 Düşük'
+        if actual>high:return '⚠️ Yüksek'
+        return '✅ Aralıkta'
+
+    dm_s=symmetric_status(sm['dm_kg'],predicted_dmi,.05,.10)
+    adg_s=capacity_status(capacity,t['adg']) if capacity>0 else 'ℹ️ NEm/NEg verisi yok'
+    cp_s=protein_status(sm['cp_pct_dm'],t['cp_pct'])
+    ndf_s=range_status(sm['ndf_pct_dm'],t['ndf_min'],t['ndf_max'])
+    endf_s=minimum_status(sm.get('endf_pct_dm',0),t.get('endf_min',0),.05,.15)
+    rough=sm.get('roughage_pct_dm',0);conc=sm.get('concentrate_pct_dm',0)
+    rough_s=range_status(rough,t['roughage_min'],t['roughage_max'])
+    starch=sm.get('starch_pct_dm',0);starch_min=t.get('starch_min',0);starch_ideal=t.get('starch_ideal_max',100);starch_max=t.get('starch_max',100)
+    starch_s='✅ İdeal bant' if starch_min<=starch<=starch_ideal else ('ℹ️ İdeal altı' if starch<starch_min else ('⚠️ Sınırda' if starch<=starch_ideal+.5 else ('⚠️ Dikkat bandı' if starch<=starch_max else '🔴 Yüksek')))
+    risk_s={'Düşük':'✅ Düşük','Orta':'⚠️ Orta','Yüksek':'🔴 Yüksek'}[rumen_risk['level']]
+    ca_s=mineral_status(sm['ca_g'],'ca');p_s=mineral_status(sm['p_g'],'p')
+    cap_ratio=sm['ca_g']/sm['p_g'] if sm['p_g']>0 else 0.0
+    ratio_s='✅ Dengeli' if 1.2<=cap_ratio<=3.0 else ('🔴 Düşük' if cap_ratio<1.0 else '⚠️ Kontrol')
+
+    def kind(status):
+        if '🔴' in status:return 'bad'
+        if '⚠️' in status:return 'warn'
+        if '✅' in status:return 'ok'
+        return 'info'
+
+    def row(key,label,target,current,status,note=''):
+        return f"""<div class='science-target-row {kind(status)}' id='target-mini-{key}'>
+          <div class='science-target-label'><b>{label}</b><small>{note}</small></div>
+          <div class='science-target-values'><span><small>GEREKSİNİM</small><b id='target-mini-{key}-target'>{target}</b></span><span><small>RASYON</small><b id='target-mini-{key}-current'>{current}</b></span></div>
+          <div class='science-target-state'><em id='target-mini-{key}-status'>{status}</em><i id='target-mini-{key}-diff'></i></div>
+        </div>"""
+
+    energy_card=f"""<section class='science-target-card'><h4>⚖️ Tüketim & Performans</h4>
+      {row('dm','KM tüketimi',f'≈ {predicted_dmi:.2f} kg',f'{sm["dm_kg"]:.2f} kg',dm_s,'Diyet NEm yoğunluğuna göre dinamik')}
+      {row('adg','Enerjiye göre GCAA kapasitesi',f'≈ {t["adg"]:.2f} kg',f'{capacity:.2f} kg' if capacity>0 else '—',adg_s,'Gerçekleşen GCAA tahmini değildir')}
+      <span id='target-mini-me-current' hidden>{sm['me_mcal']:.1f}</span>
+    </section>"""
+    protein_card=f"""<section class='science-target-card'><h4>🌿 Protein & Lif</h4>
+      {row('cp','Ham protein',f'≥ %{t["cp_pct"]:.1f}',f'%{sm["cp_pct_dm"]:.1f}',cp_s,f'MP gereksinimi {t["mp_req_g"]:.0f} g/gün; HP bir tabandır')}
+      {row('ndf','NDF çalışma bandı',f'%{t["ndf_min"]:.0f}–{t["ndf_max"]:.0f}',f'%{sm["ndf_pct_dm"]:.1f}',ndf_s,'Faz bandı; tek başına güvenlik kararı değildir')}
+      {row('endf','Etkili NDF',f'≥ %{t.get("endf_min",0):.1f}',f'%{sm.get("endf_pct_dm",0):.1f}',endf_s,'Fiziksel etkili lif göstergesi')}
+    </section>"""
+    rumen_card=f"""<section class='science-target-card'><h4>🧪 Rumen Dengesi</h4>
+      {row('rc','Kaba / Kesif',f'Kaba %{t["roughage_min"]:.0f}–{t["roughage_max"]:.0f}',f'%{rough:.0f} / %{conc:.0f}',rough_s,'KM bazında')}
+      {row('starch','Nişasta',f'İdeal %{starch_min:.0f}–{starch_ideal:.0f}',f'%{starch:.1f}',starch_s,f'{sm.get("starch_kg",0):.2f} kg/baş/gün')}
+      {row('ph','Göreli asidoz riski','Düşük',rumen_risk['level'],risk_s,f'Veri güveni {rumen_risk["confidence"]}; klinik pH değildir')}
+    </section>"""
+    mineral_card=f"""<section class='science-target-card'><h4>🧂 Mineral & Ekonomi</h4>
+      {row('ca','Kalsiyum',f'≥ {t["ca_g"]:.0f} g',f'{sm["ca_g"]:.0f} g',ca_s,'Minimum gereksinim')}
+      {row('p','Fosfor',f'≥ {t["p_g"]:.0f} g',f'{sm["p_g"]:.0f} g',p_s,'Minimum gereksinim')}
+      {row('cap','Ca:P oranı','1,2–3,0',f'{cap_ratio:.2f}',ratio_s,'Güvenlik penceresi')}
+      {row('cost','Günlük maliyet','—',money(sm['cost']),'💰 Canlı','Besleme uygunluğundan sonra değerlendirilir')}
+    </section>"""
+
+    current_type=str(_rowval(rr,'animal_type','Besi Erkek') or 'Besi Erkek')
+    animal_choices=[('Besi Erkek','Besi Erkek (Tosun / Boğa)'),('Düve','Düve'),('Kastre Erkek','Kastre Erkek'),('Genel Büyüyen Sığır','Genel Büyüyen Sığır')]
+    animal_options=''.join(f"<option value='{h(value)}' {'selected' if current_type==value else ''}>{h(label)}</option>" for value,label in animal_choices)
+    if current_type not in [value for value,_ in animal_choices]:
+        animal_options=f"<option value='{h(current_type)}' selected>{h(current_type)}</option>"+animal_options
+    form_fields=f"""<input type='hidden' name='ration_type' value='Besi'><label>Canlı Ağırlık (kg)<input type='number' min='150' max='900' step='1' name='target_weight_kg' value='{t['weight_kg']:.0f}'></label><label>Hedef Artış (kg/gün)<input type='number' min='0.2' max='2.2' step='0.05' name='target_adg_kg' value='{t['adg']:.2f}'></label><label>Yaş (ay, opsiyonel)<input type='number' min='0' max='36' step='1' name='target_age_months' value='{t.get('age_months',0):.0f}'></label><label>Besi Dönemi<select name='target_beef_phase'><option value='Otomatik' {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Otomatik' else ''}>Otomatik</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Başlangıç' else ''}>Besi Başlangıç</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Geliştirme' else ''}>Besi Geliştirme</option><option {'selected' if _rowval(rr,'target_beef_phase','Otomatik')=='Besi Bitirme' else ''}>Besi Bitirme</option></select></label><label>Hayvan Profili<select name='animal_type'>{animal_options}</select></label>"""
+    ctx=f"<div class='target-context compact'><b>{t['weight_kg']:.0f} kg</b> · hedef <b>{t['adg']:.2f} kg/gün</b> · <b>{h(t['animal_profile_label'])}</b> · {h(t['phase'])}</div>"
+
+    details=f"""<details class='science-target-details'><summary>📋 Hesap ayrıntılarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Değer</th><th>Gereksinim / bant</th><th>Rasyon arzı</th><th>Yorum</th></tr></thead><tbody>
+      <tr><td>KM tüketimi</td><td>≈ {predicted_dmi:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr>
+      <tr><td>GCAA kapasitesi</td><td>≥ {t['adg']:.2f} kg/gün</td><td>{capacity:.2f} kg/gün</td><td>{adg_s}</td></tr>
+      <tr><td>NEm / NEg</td><td>{t['nem_req_mcal']:.1f} / {t['neg_req_mcal']:.1f} Mcal</td><td>NEm yoğunluk {sm.get('nem_density',0):.2f} · büyümeye NEg {gain_supply:.1f} Mcal</td><td>Performans hesabının enerji temeli</td></tr>
+      <tr><td>Ham protein</td><td>En az %{t['cp_pct']:.1f} KM · MP {t['mp_req_g']:.0f} g/gün</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}; RDP/RUP analizi MP doğruluğunu artırır</td></tr>
+      <tr><td>ME</td><td>{t['me_mcal_day']:.1f} Mcal/gün referans</td><td>{sm['me_mcal']:.1f} Mcal</td><td>Bilgi amaçlı; fizibilite GCAA kapasitesiyle verilir</td></tr>
+      <tr><td>NDF / eNDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f} / en az %{t.get('endf_min',0):.1f}</td><td>%{sm['ndf_pct_dm']:.1f} / %{sm.get('endf_pct_dm',0):.1f}</td><td>{ndf_s} · {endf_s}</td></tr>
+      <tr><td>Nişasta / risk</td><td>İdeal %{starch_min:.0f}–{starch_ideal:.0f}</td><td>%{starch:.1f} · {rumen_risk['level']}</td><td>{starch_s}; klinik pH tahmini değildir</td></tr>
+      <tr><td>Ca / P</td><td>En az {t['ca_g']:.0f} / {t['p_g']:.0f} g</td><td>{sm['ca_g']:.0f} / {sm['p_g']:.0f} g</td><td>{ca_s} · {p_s} · oran {cap_ratio:.2f}</td></tr>
+    </tbody></table></div></details>"""
+
+    return f"""<style>
+    body:has(.workbench-shell) .science-target-grid{{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px!important;overflow:visible!important}}
+    .science-target-card{{min-width:0;border:1px solid #cfe1d3;border-radius:10px;background:#fff;overflow:hidden}}
+    .science-target-card h4{{margin:0;padding:7px 9px;background:#edf6f0;border-bottom:1px solid #d8e6dc;font-size:12px;color:#173f2b}}
+    .science-target-row{{display:grid;grid-template-columns:minmax(72px,.8fr) minmax(128px,1.35fr);grid-template-areas:'label values' 'state state';gap:2px 7px;padding:5px 7px;border-bottom:1px solid #edf2ee;min-width:0;border-left:3px solid #94a69a}}
+    .science-target-row:last-child{{border-bottom:0}}.science-target-row.ok{{border-left-color:#21a45b}}.science-target-row.warn{{border-left-color:#e6a11a;background:#fffaf0}}.science-target-row.bad{{border-left-color:#d6453d;background:#fff5f4}}
+    .science-target-label{{grid-area:label;min-width:0}}.science-target-label>b{{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.science-target-label>small{{display:block;font-size:7.5px;line-height:1.1;color:#6b7b72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}}
+    .science-target-values{{grid-area:values;display:grid;grid-template-columns:1fr 1fr;gap:5px;min-width:0}}.science-target-values span{{min-width:0}}.science-target-values small{{display:block;font-size:7px;color:#668074;font-weight:800}}.science-target-values b{{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .science-target-state{{grid-area:state;display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}}.science-target-state em{{font-style:normal;font-size:9px;font-weight:900;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}}.science-target-state i{{font-style:normal;font-size:8px;color:#68766d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}}
+    .science-target-details{{margin-top:7px;font-size:11px}}.science-target-details>summary{{cursor:pointer;font-weight:800;color:#315d46}}
+    @media(min-width:1001px) and (max-width:1450px){{.science-target-row{{grid-template-columns:minmax(78px,.9fr) minmax(100px,1.2fr);gap:2px 4px;padding:4px 5px}}.science-target-values{{gap:3px}}.science-target-values b{{font-size:11px}}.science-target-state i{{display:none}}}}
+    @media(max-width:1000px){{body:has(.workbench-shell) .science-target-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important}}}}
+    @media(max-width:650px){{body:has(.workbench-shell) .science-target-grid{{display:grid!important;grid-auto-flow:column!important;grid-template-columns:none!important;grid-auto-columns:minmax(280px,86vw)!important;overflow-x:auto!important;scroll-snap-type:x mandatory;padding-bottom:5px!important}}.science-target-card{{scroll-snap-align:start}}.science-target-row{{padding:6px 7px}}}}
+    </style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>🎯 Bilimsel Hedef Özeti</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky science-target-shell'><div class='target-compare-title'><b>Gereksinim ↔ Rasyon Arzı</b><span id='target-live-note'>NASEM hayvan profili · Dinamik KM · NEm/NEg performansı</span></div><div class='science-target-grid'>{energy_card}{protein_card}{rumen_card}{mineral_card}</div>{details}</div></div>"""
 
 def ration_smart_recommendations(rr, sm, con=None, limit=6):
     """Katalogdaki yemleri mevcut besin açıklarını iyileştirme potansiyeline göre sıralar.
@@ -2447,28 +3197,30 @@ def ration_smart_recommendations(rr, sm, con=None, limit=6):
     own=con is None; c=con or db().__enter__()
     try:
         t=ration_targets_for_record(rr)
+        predicted_dmi=_predicted_dmi_for_metrics(sm,t)
+        gain_supply,_,_=_energy_balance(sm,t)
         deficits={
-            'dm':max(0,t['dmi_kg']-sm['dm_kg'])/max(t['dmi_kg'],.01),
+            'dm':max(0,predicted_dmi-sm['dm_kg'])/max(predicted_dmi,.01),
             'cp':max(0,t['cp_pct']-sm['cp_pct_dm'])/max(t['cp_pct'],.01),
-            'me':max(0,t['me_mcal_day']-sm['me_mcal'])/max(t['me_mcal_day'],.01),
+            'energy':max(0,t.get('neg_req_mcal',0)-gain_supply)/max(t.get('neg_req_mcal',0),.01),
             'ca':max(0,t['ca_g']-sm['ca_g'])/max(t['ca_g'],.01),
             'p':max(0,t['p_g']-sm['p_g'])/max(t['p_g'],.01),
         }
         rows=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1""",(date.today().isoformat(),)).fetchall()
         out=[]
         for f in rows:
-            dm=float(f['dm_pct'] or 0)/100; cp=float(f['cp_pct'] or 0)/100; ndf=float(f['ndf_pct'] or 0)/100; me=float(f['me_mcal_kg'] or 0); ca=float(f['ca_pct'] or 0); ph=float(f['p_pct'] or 0)
+            dm=float(f['dm_pct'] or 0)/100; cp=float(f['cp_pct'] or 0)/100; ndf=float(f['ndf_pct'] or 0)/100; neg=float(f['neg_mcal_kg'] or 0); ca=float(f['ca_pct'] or 0); ph=float(f['p_pct'] or 0)
             if dm<=0: continue
             # 1 kg yaş yem katkısının açık kapatma yönündeki göreli puanı
             protein_factor=(dm*cp*5 if is_real_protein_feed(f) else 0.0)
-            score=(deficits['dm']*dm + deficits['cp']*protein_factor + deficits['me']*dm*me/3 + deficits['ca']*dm*ca/1.0 + deficits['p']*dm*ph/0.6)
+            score=(deficits['dm']*dm + deficits['cp']*protein_factor + deficits['energy']*dm*neg/1.5 + deficits['ca']*dm*ca/1.0 + deficits['p']*dm*ph/0.6)
             # NDF zaten yüksekse yüksek-NDF yemleri; protein zaten fazlaysa çok proteinli yemleri geri it
             if sm['ndf_pct_dm']>t['ndf_max'] and float(f['ndf_pct'] or 0)>40: score*=0.55
-            if sm['cp_pct_dm']>t['cp_pct']*1.05 and float(f['cp_pct'] or 0)>18: score*=0.60
+            if sm['cp_pct_dm']>max(t['cp_pct']*1.45,16.0) and float(f['cp_pct'] or 0)>18: score*=0.60
             if score<=0: continue
             price=float(f['price'] or 0); value=score/(1+(price/20 if price>0 else .15))
             reasons=[]
-            if deficits['me']>.03 and me>=2.3: reasons.append('enerji')
+            if deficits['energy']>.03 and neg>=1.0: reasons.append('büyüme enerjisi')
             if deficits['cp']>.03 and is_real_protein_feed(f) and float(f['cp_pct'] or 0)>=14: reasons.append('protein')
             if deficits['dm']>.05: reasons.append('kuru madde')
             if deficits['ca']>.05 and ca>=.5: reasons.append('kalsiyum')
@@ -2484,12 +3236,29 @@ def ration_balance_error(targets, sm):
     Bu skor reçete değildir; öneri sıralamasında karar desteği için kullanılır."""
     def rel(actual, target):
         return abs(float(actual)-float(target))/max(abs(float(target)), 0.01)
+    def deficit(actual, minimum):
+        return max(0.0,float(minimum)-float(actual))/max(abs(float(minimum)),0.01)
     score=0.0
-    score += rel(sm.get('dm_kg',0), targets['dmi_kg'])*1.10
-    score += rel(sm.get('cp_pct_dm',0), targets['cp_pct'])*1.20
-    score += rel(sm.get('me_mcal',0), targets['me_mcal_day'])*1.45
-    score += rel(sm.get('ca_g',0), targets['ca_g'])*0.65
-    score += rel(sm.get('p_g',0), targets['p_g'])*0.65
+    predicted_dmi=_predicted_dmi_for_metrics(sm,targets)
+    sm['predicted_dmi_kg']=predicted_dmi
+    score += rel(sm.get('dm_kg',0), predicted_dmi)*1.10
+    # Chapter 20 HP, Ca ve P değerleri minimum gereksinimdir. Hedefi makul
+    # ölçüde aşmak, hedefe eşit olmamaktan doğan bir formülasyon hatası değildir.
+    score += deficit(sm.get('cp_pct_dm',0), targets['cp_pct'])*1.20
+    if targets.get('mode')=='Besi' and sm.get('nem_density',0)>0 and sm.get('neg_density',0)>0:
+        score += deficit(_achievable_adg(sm,targets),targets.get('adg',0))*1.45
+    else:
+        score += deficit(sm.get('me_mcal',0),targets.get('me_mcal_day',0))*1.45
+    score += deficit(sm.get('ca_g',0), targets['ca_g'])*0.65
+    score += deficit(sm.get('p_g',0), targets['p_g'])*0.65
+    mw=_mineral_windows(targets,predicted_dmi)
+    if float(sm.get('ca_g',0) or 0)>mw['ca_soft']:
+        score += (float(sm.get('ca_g',0))-mw['ca_soft'])/max(mw['ca_soft'],1)*.25
+    if float(sm.get('p_g',0) or 0)>mw['p_soft']:
+        score += (float(sm.get('p_g',0))-mw['p_soft'])/max(mw['p_soft'],1)*.25
+    cp_high=max(float(targets.get('cp_pct',0))*1.45,16.0)
+    if float(sm.get('cp_pct_dm',0) or 0)>cp_high:
+        score += (float(sm.get('cp_pct_dm',0))-cp_high)/max(cp_high,1)*.15
     ndf=float(sm.get('ndf_pct_dm',0) or 0)
     if ndf < targets['ndf_min']:
         score += (targets['ndf_min']-ndf)/max(targets['ndf_min'],1)*1.10
@@ -2512,6 +3281,7 @@ def ration_reduction_recommendations(rr, sm, con=None, limit=6):
     own=con is None; c=con or db().__enter__()
     try:
         t=ration_targets_for_record(rr)
+        base_dmi=_predicted_dmi_for_metrics(sm,t); mw=_mineral_windows(t,base_dmi)
         base_err=ration_balance_error(t,sm); out=[]
         for it in sm['items']:
             current=float(it['kg_per_head_day'] or 0)
@@ -2524,14 +3294,14 @@ def ration_reduction_recommendations(rr, sm, con=None, limit=6):
                 err=ration_balance_error(t,ss); improve=base_err-err
                 if improve <= 0.0005: continue
                 reasons=[]
-                if sm['cp_pct_dm']>t['cp_pct']*1.05 and float(it['cp_pct'] or 0)>=t['cp_pct']: reasons.append('proteini düşürür')
-                if sm['ca_g']>t['ca_g']*1.10 and float(it['ca_pct'] or 0)>=0.35: reasons.append('kalsiyumu düşürür')
-                if sm['p_g']>t['p_g']*1.10 and float(it['p_pct'] or 0)>=0.25: reasons.append('fosforu düşürür')
+                if sm['cp_pct_dm']>max(t['cp_pct']*1.45,16.0) and float(it['cp_pct'] or 0)>=t['cp_pct']: reasons.append('çok yüksek proteini düşürür')
+                if sm['ca_g']>mw['ca_soft'] and float(it['ca_pct'] or 0)>=0.35: reasons.append('yüksek kalsiyumu düşürür')
+                if sm['p_g']>mw['p_soft'] and float(it['p_pct'] or 0)>=0.25: reasons.append('yüksek fosforu düşürür')
                 if sm['ndf_pct_dm']>t['ndf_max'] and float(it['ndf_pct'] or 0)>t['ndf_max']: reasons.append('NDF yükünü azaltır')
                 # Bir değeri düzeltirken enerji/KM açığını büyütüyorsa cezalandır.
                 warnings=[]
-                if ss['me_mcal'] < t['me_mcal_day']*0.92: warnings.append('enerji düşebilir')
-                if ss['dm_kg'] < t['dmi_kg']*0.90: warnings.append('KM düşebilir')
+                if _achievable_adg(ss,t) < t.get('adg',0)*.90: warnings.append('GCAA kapasitesi düşebilir')
+                if ss['dm_kg'] < _predicted_dmi_for_metrics(ss,t)*0.90: warnings.append('KM düşebilir')
                 candidate=(improve, it, delta, ', '.join(reasons) or 'genel dengeyi iyileştirir', ', '.join(warnings), ss)
                 if best is None or candidate[0]>best[0]: best=candidate
             if best: out.append(best)
@@ -2545,6 +3315,8 @@ def ration_addition_recommendations(rr, sm, con=None, limit=30):
     own=con is None; c=con or db().__enter__()
     try:
         t=ration_targets_for_record(rr)
+        base_dmi=_predicted_dmi_for_metrics(sm,t); mw=_mineral_windows(t,base_dmi)
+        base_adg=_achievable_adg(sm,t)
         base_err=ration_balance_error(t,sm)
         rows=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
             coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock
@@ -2562,20 +3334,18 @@ def ration_addition_recommendations(rr, sm, con=None, limit=30):
             if cp_gap>0.15 and is_real_protein_feed(f):
                 cp_gain=max(0.0,ss['cp_pct_dm']-sm['cp_pct_dm'])
                 targeted += min(cp_gain/max(cp_gap,0.01),1.5)*0.90
-                if sm['me_mcal']>t['me_mcal_day']*1.05 and ss['me_mcal']>sm['me_mcal']:
-                    targeted -= ((ss['me_mcal']-sm['me_mcal'])/max(t['me_mcal_day'],0.1))*0.45
             rank_score=improve+targeted
             if rank_score<=0.0005: continue
             reasons=[]
-            if sm['me_mcal']<t['me_mcal_day']*0.98 and ss['me_mcal']>sm['me_mcal']: reasons.append('enerji açığını azaltır')
+            if base_adg<t.get('adg',0)*.98 and _achievable_adg(ss,t)>base_adg: reasons.append('GCAA kapasitesini artırır')
             if sm['cp_pct_dm']<t['cp_pct']*0.98 and is_real_protein_feed(f) and ss['cp_pct_dm']>sm['cp_pct_dm']+0.03: reasons.append('protein açığını azaltır')
-            if sm['dm_kg']<t['dmi_kg']*0.95 and ss['dm_kg']>sm['dm_kg']: reasons.append('KM desteği')
+            if sm['dm_kg']<base_dmi*.95 and ss['dm_kg']>sm['dm_kg']: reasons.append('KM desteği')
             if sm['ca_g']<t['ca_g']*0.95 and ss['ca_g']>sm['ca_g']: reasons.append('Ca desteği')
             if sm['p_g']<t['p_g']*0.95 and ss['p_g']>sm['p_g']: reasons.append('P desteği')
             warnings=[]
-            if sm['cp_pct_dm']>t['cp_pct']*1.05 and ss['cp_pct_dm']>sm['cp_pct_dm']+0.05: warnings.append('proteini artırır')
-            if sm['ca_g']>t['ca_g']*1.10 and ss['ca_g']>sm['ca_g']+1: warnings.append('Ca fazlasını artırır')
-            if sm['p_g']>t['p_g']*1.10 and ss['p_g']>sm['p_g']+1: warnings.append('P fazlasını artırır')
+            if sm['cp_pct_dm']>max(t['cp_pct']*1.45,16.0) and ss['cp_pct_dm']>sm['cp_pct_dm']+0.05: warnings.append('çok yüksek proteini artırır')
+            if sm['ca_g']>mw['ca_soft'] and ss['ca_g']>sm['ca_g']+1: warnings.append('yüksek Ca arzını artırır')
+            if sm['p_g']>mw['p_soft'] and ss['p_g']>sm['p_g']+1: warnings.append('yüksek P arzını artırır')
             out.append((rank_score,f,', '.join(reasons) or 'genel dengeyi iyileştirir',', '.join(warnings),ss))
         # Önce denge katkısı; aynı katkıda fiyatı bilinen ve daha ucuz olan öne gelsin.
         out.sort(key=lambda x:(x[0], 1 if float(x[1]['price'] or 0)>0 else 0, -float(x[1]['price'] or 999999)),reverse=True)
@@ -2593,14 +3363,21 @@ def ration_simulated_multi_summary(ration_id, changes, con=None):
             f=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),int(feed_id))).fetchone()
             if not f: continue
             kg=float(delta_kg or 0); dm=kg*float(f['dm_pct'] or 0)/100
-            out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=dm*_solver_starch_pct(f)/100;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+            feed_starch=dm*_solver_starch_pct(f)/100
+            starch_deg,known_deg=_feed_starch_degradability(f)
+            out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['nem_mcal']+=dm*float(f['nem_mcal_kg'] or 0);out['neg_mcal']+=dm*float(f['neg_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+            if known_deg:
+                out['known_degradability_starch_kg']+=feed_starch
+                out['rapid_starch_kg']+=feed_starch*starch_deg/100
             grp=feed_group(f)
             if grp=='Kaba': out['roughage_dm_kg']=out.get('roughage_dm_kg',0)+dm
             elif grp=='Kesif': out['concentrate_dm_kg']=out.get('concentrate_dm_kg',0)+dm
             else: out['additive_dm_kg']=out.get('additive_dm_kg',0)+dm
-        for key in ('as_fed_kg','dm_kg','cp_kg','ndf_kg','endf_kg','starch_kg','me_mcal','ca_g','p_g','cost','roughage_dm_kg','concentrate_dm_kg'):
+        for key in ('as_fed_kg','dm_kg','cp_kg','ndf_kg','endf_kg','starch_kg','rapid_starch_kg','known_degradability_starch_kg','me_mcal','nem_mcal','neg_mcal','ca_g','p_g','cost','roughage_dm_kg','concentrate_dm_kg'):
             if key in out: out[key]=max(0.0,float(out[key] or 0))
-        out['cp_pct_dm']=out['cp_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['ndf_pct_dm']=out['ndf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['endf_pct_dm']=out['endf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_pct_dm']=out['starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['rumen_ph']=min(6.46,5.425+0.04229*out['endf_pct_dm']) if out['endf_pct_dm']>0 else 0;out['me_per_kg_dm']=out['me_mcal']/out['dm_kg'] if out['dm_kg'] else 0
+        out['cp_pct_dm']=out['cp_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['ndf_pct_dm']=out['ndf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['endf_pct_dm']=out['endf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_pct_dm']=out['starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['me_per_kg_dm']=out['me_mcal']/out['dm_kg'] if out['dm_kg'] else 0
+        out['rapid_starch_pct_dm']=out['rapid_starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_degradability_coverage']=out['known_degradability_starch_kg']/out['starch_kg'] if out['starch_kg'] else 1.0
+        out['nem_density']=out['nem_mcal']/out['dm_kg'] if out['dm_kg'] else 0;out['neg_density']=out['neg_mcal']/out['dm_kg'] if out['dm_kg'] else 0
         rc=out.get('roughage_dm_kg',0)+out.get('concentrate_dm_kg',0); out['roughage_pct_dm']=out.get('roughage_dm_kg',0)/rc*100 if rc else 0; out['concentrate_pct_dm']=out.get('concentrate_dm_kg',0)/rc*100 if rc else 0
         return out
     finally:
@@ -2609,11 +3386,18 @@ def ration_simulated_multi_summary(ration_id, changes, con=None):
 def ration_effect_text(targets,before,after,max_items=3):
     """Öneriyi ölçülebilir ve kısa bir dille açıklar."""
     impacts=[]
-    metrics=[('HP',before['cp_pct_dm'],after['cp_pct_dm'],targets['cp_pct'],'%{:.1f}'),('Enerji',before['me_mcal'],after['me_mcal'],targets['me_mcal_day'],'{:.1f} Mcal'),('KM',before['dm_kg'],after['dm_kg'],targets['dmi_kg'],'{:.2f} kg'),('Ca',before['ca_g'],after['ca_g'],targets['ca_g'],'{:.0f} g'),('P',before['p_g'],after['p_g'],targets['p_g'],'{:.0f} g')]
-    for name,b,a,t,fmt in metrics:
-        if t<=0: continue
-        gain=abs(b-t)/t-abs(a-t)/t
-        if gain>0.01: impacts.append((gain,f"{name} {fmt.format(b)} → {fmt.format(a)}"))
+    before_dmi=_predicted_dmi_for_metrics(before,targets);after_dmi=_predicted_dmi_for_metrics(after,targets)
+    dm_gain=abs(before['dm_kg']-before_dmi)/max(before_dmi,.01)-abs(after['dm_kg']-after_dmi)/max(after_dmi,.01)
+    if dm_gain>0.01:impacts.append((dm_gain,f"KM {before['dm_kg']:.2f} → {after['dm_kg']:.2f} kg"))
+    minimums=[('HP',before['cp_pct_dm'],after['cp_pct_dm'],targets['cp_pct'],'%{:.1f}'),('Ca',before['ca_g'],after['ca_g'],targets['ca_g'],'{:.0f} g'),('P',before['p_g'],after['p_g'],targets['p_g'],'{:.0f} g')]
+    for name,b,a,t,fmt in minimums:
+        if t<=0:continue
+        gain=max(0,t-b)/t-max(0,t-a)/t
+        if gain>0.01:impacts.append((gain,f"{name} {fmt.format(b)} → {fmt.format(a)}"))
+    if targets.get('mode')=='Besi':
+        b_adg=_achievable_adg(before,targets);a_adg=_achievable_adg(after,targets);goal=max(targets.get('adg',0),.01)
+        gain=max(0,goal-b_adg)/goal-max(0,goal-a_adg)/goal
+        if gain>0.01:impacts.append((gain,f"GCAA kapasitesi {b_adg:.2f} → {a_adg:.2f} kg"))
     def add_range(name,b,a,lo,hi,fmt):
         def dist(x): return (lo-x)/max(lo,1) if x<lo else (x-hi)/max(hi,1) if x>hi else 0
         gain=dist(b)-dist(a)
@@ -2645,12 +3429,21 @@ def ration_simulated_summary(ration_id, feed_id, delta_kg, con=None):
         f=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),feed_id)).fetchone()
         if not f:return base
         kg=float(delta_kg); dm=kg*float(f['dm_pct'] or 0)/100
-        out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=dm*_solver_starch_pct(f)/100;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+        feed_starch=dm*_solver_starch_pct(f)/100
+        starch_deg,known_deg=_feed_starch_degradability(f)
+        out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['nem_mcal']+=dm*float(f['nem_mcal_kg'] or 0);out['neg_mcal']+=dm*float(f['neg_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+        if known_deg:
+            out['known_degradability_starch_kg']+=feed_starch
+            out['rapid_starch_kg']+=feed_starch*starch_deg/100
         grp=feed_group(f)
         if grp=='Kaba': out['roughage_dm_kg']=out.get('roughage_dm_kg',0)+dm
         elif grp=='Kesif': out['concentrate_dm_kg']=out.get('concentrate_dm_kg',0)+dm
         else: out['additive_dm_kg']=out.get('additive_dm_kg',0)+dm
-        out['cp_pct_dm']=out['cp_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['ndf_pct_dm']=out['ndf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['endf_pct_dm']=out['endf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_pct_dm']=out['starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['rumen_ph']=min(6.46,5.425+0.04229*out['endf_pct_dm']) if out['endf_pct_dm']>0 else 0;out['me_per_kg_dm']=out['me_mcal']/out['dm_kg'] if out['dm_kg'] else 0
+        for key in ('as_fed_kg','dm_kg','cp_kg','ndf_kg','endf_kg','starch_kg','rapid_starch_kg','known_degradability_starch_kg','me_mcal','nem_mcal','neg_mcal','ca_g','p_g','cost','roughage_dm_kg','concentrate_dm_kg'):
+            if key in out:out[key]=max(0.0,float(out[key] or 0))
+        out['cp_pct_dm']=out['cp_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['ndf_pct_dm']=out['ndf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['endf_pct_dm']=out['endf_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_pct_dm']=out['starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['me_per_kg_dm']=out['me_mcal']/out['dm_kg'] if out['dm_kg'] else 0
+        out['rapid_starch_pct_dm']=out['rapid_starch_kg']/out['dm_kg']*100 if out['dm_kg'] else 0;out['starch_degradability_coverage']=out['known_degradability_starch_kg']/out['starch_kg'] if out['starch_kg'] else 1.0
+        out['nem_density']=out['nem_mcal']/out['dm_kg'] if out['dm_kg'] else 0;out['neg_density']=out['neg_mcal']/out['dm_kg'] if out['dm_kg'] else 0
         rc=out.get('roughage_dm_kg',0)+out.get('concentrate_dm_kg',0); out['roughage_pct_dm']=out.get('roughage_dm_kg',0)/rc*100 if rc else 0; out['concentrate_pct_dm']=out.get('concentrate_dm_kg',0)/rc*100 if rc else 0
         return out
     finally:
@@ -3005,7 +3798,14 @@ def page(title,body,path='/',user='admin',flash=''):
         active=any(path==url or (url=='/performance' and path.startswith('/performance')) for _,url in items)
         children=''.join(nav_link(name,url) for name,url in items)
         nav+=f'<details class="nav-group {"open-group" if active else ""}" {"open" if active else ""}><summary>{label}</summary><div class="nav-children">{children}</div></details>'
-    fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
+    if flash and path=='/rations' and len(flash)>260:
+        flash_summary=flash.split('. ',1)[0].strip()
+        if len(flash_summary)>180:
+            flash_summary=flash_summary[:177].rsplit(' ',1)[0]+'…'
+        fl=(f'<details class="flash ration-result-flash"><summary>{h(flash_summary)} <span>Ayrıntılar</span></summary>'
+            f'<div class="ration-result-flash-detail">{h(flash)}</div></details>')
+    else:
+        fl=f'<div class="flash">{h(flash)}</div>' if flash else ''
     return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>{CSS}{DESKTOP_ERP_CSS}{ERP_ALL_MODULES_FINAL_CSS}{FINAL5_UI_CSS}
 /* V3.7.8 Finance Drawer Hotfix */
 #financeDrawerBackdrop.finance-drawer-backdrop{{position:fixed!important;inset:0!important;z-index:2090!important;display:none!important;background:rgba(9,34,22,.42)!important;backdrop-filter:blur(2px)}}
@@ -3019,7 +3819,7 @@ def page(title,body,path='/',user='admin',flash=''):
 #financeDrawer .bulk-list{{max-height:310px!important;overflow-y:auto!important}}
 @media(max-width:700px){{#financeDrawer.finance-drawer{{width:100vw!important;max-width:100vw!important}}#financeDrawer .finance-drawer-head{{padding:16px!important}}#financeDrawer .finance-drawer-body{{padding:12px 12px 28px!important}}#financeDrawer .bulk-list{{max-height:42vh!important}}}}
 
-.ration-new-collapsed>details>summary{{cursor:pointer}}.target-context{{background:#f4faf6;border:1px solid #d8e9dd;border-radius:10px;padding:10px 12px;margin-bottom:12px}}.smart-solution-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}}.smart-solution{{border:1px solid #dce8df;background:#f8fbf9;border-radius:12px;padding:12px}}.smart-solution b{{display:block;color:#164f31}}.smart-solution small{{display:block;margin-top:4px;font-weight:700}}.smart-solution p{{margin:8px 0;font-size:13px}}.ration-section-collapse>details>summary,details>summary{{cursor:pointer}}@media(max-width:900px){{.smart-solution-grid{{grid-template-columns:1fr}}}}
+.ration-result-flash>summary{{font-weight:800;line-height:1.45;cursor:pointer}}.ration-result-flash>summary span{{white-space:nowrap;font-size:12px;color:#226b40;text-decoration:underline}}.ration-result-flash-detail{{margin-top:10px;padding-top:10px;border-top:1px solid #cfe2d5;line-height:1.5}}.ration-new-collapsed>details>summary{{cursor:pointer}}.target-context{{background:#f4faf6;border:1px solid #d8e9dd;border-radius:10px;padding:10px 12px;margin-bottom:12px}}.smart-solution-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}}.smart-solution{{border:1px solid #dce8df;background:#f8fbf9;border-radius:12px;padding:12px}}.smart-solution b{{display:block;color:#164f31}}.smart-solution small{{display:block;margin-top:4px;font-weight:700}}.smart-solution p{{margin:8px 0;font-size:13px}}.ration-section-collapse>details>summary,details>summary{{cursor:pointer}}@media(max-width:900px){{.smart-solution-grid{{grid-template-columns:1fr}}}}
 
 .quick-feed-card:not([open]){{padding:11px 14px}}.quick-feed-card[open]{{position:fixed;z-index:95;left:max(210px,8vw);right:4vw;top:58px;bottom:4vh;background:#fff;overflow:auto;padding:14px 16px!important;border-radius:16px!important;box-shadow:0 24px 70px rgba(0,0,0,.28)!important}}.quick-feed-card[open]::before{{content:'';position:fixed;inset:0;background:rgba(8,38,23,.38);z-index:-1}}.quick-feed-card[open] .quick-feed-head{{position:sticky;top:-14px;z-index:3;background:#fff;padding:10px 0;border-bottom:1px solid #e2ece5}}.quick-feed-card[open] .quick-feed-results{{max-height:42vh}}.quick-feed-card:not([open]) .quick-feed-head{{min-height:28px}}.quick-feed-card:not([open]) .quick-feed-head .mut{{font-size:12px}}@media(max-width:820px){{.quick-feed-card[open]{{left:8px;right:8px;top:48px;bottom:8px}}}}.quick-feed-card{{padding:16px}}.quick-feed-head,.quick-feed-selected{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}}.quick-feed-tools{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}}.quick-feed-tools>input{{flex:1;min-width:280px;padding:11px 13px;border:1px solid #cbd8cf;border-radius:10px}}.quick-feed-shortcuts{{display:flex;gap:6px;flex-wrap:wrap}}.quick-feed-results{{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:290px;overflow:auto}}.quick-feed-result{{border:1px solid #dce8df;background:#fff;border-radius:10px;padding:10px 12px;text-align:left;display:flex;justify-content:space-between;gap:12px;cursor:pointer;color:inherit}}.quick-feed-result:hover,.quick-feed-result.selected{{border-color:#23824a;background:#f0f8f3}}.quick-feed-result span{{display:flex;flex-direction:column;gap:3px}}.quick-feed-result small{{color:#66736b}}.quick-feed-side{{text-align:right;white-space:nowrap}}.quick-feed-selected{{margin-top:12px;padding:11px;background:#f6faf7;border:1px solid #dce8df;border-radius:10px}}.quick-feed-selected>div:first-child{{display:flex;flex-direction:column}}.quick-feed-selected .ration-stepper input{{width:92px}}@media(max-width:760px){{.quick-feed-results{{grid-template-columns:1fr}}.quick-feed-tools>input{{min-width:100%}}.quick-feed-selected{{align-items:stretch}}.quick-feed-selected .ration-stepper{{justify-content:center}}.quick-feed-selected .btn{{justify-content:center}}}}
 .target-card{{padding:14px 16px}}.target-head{{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}}.target-head h3{{margin:0}}.target-context.compact{{margin:0;padding:7px 10px;font-size:13px}}.target-form{{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr)) auto;gap:8px;align-items:end;margin-top:10px}}.target-form label{{font-size:12px}}.target-form input,.target-form select{{padding:7px 9px}}.compact-target-btn{{height:36px}}.target-more{{grid-column:auto}}.target-more summary{{font-size:12px;font-weight:700;padding:8px}}.target-more-grid{{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}}.nutri-mini-grid{{display:grid;grid-template-columns:repeat(7,minmax(96px,1fr));gap:6px;margin-top:8px}}.nutri-mini{{border:1px solid #dce8df;border-radius:10px;padding:7px 8px;background:#fbfdfb;min-width:0}}.nutri-mini span{{display:block;font-size:11px;color:#587064}}.nutri-mini b{{display:block;font-size:15px;line-height:1.15;margin:2px 0}}.nutri-mini small{{display:block;font-size:11px;color:#3f5148;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.nutri-mini em{{display:block;font-style:normal;font-size:10px;font-weight:700;margin-top:3px}}.nutri-diff{{display:block;font-style:normal;font-size:10px;font-weight:800;margin-top:4px;color:#607067}}.nutri-mini.warn .nutri-diff{{color:#bf4d32}}.target-live-note{{margin-top:7px;padding:7px 9px;border-radius:8px;background:#eef8f1;color:#2d6242;font-size:11px;font-weight:700}}.nutri-mini.ok{{border-left:3px solid #27a45e}}.nutri-mini.ok em{{color:#17733d}}.nutri-mini.warn{{border-left:3px solid #e6a11a;background:#fffdf7}}.nutri-mini.warn em{{color:#a96700}}.nutri-detail{{margin-top:8px}}.nutri-detail summary{{font-size:12px;color:#345b47}}.compact-note{{margin:7px 0 0;font-size:11px}}.table-compact-wrap{{overflow:auto;margin-top:7px}}.compact-table th,.compact-table td{{font-size:13px!important}}.ration-workbench-table th,.ration-workbench-table td,.smart-tech-table th,.smart-tech-table td{{padding:5px 7px;font-size:12px;vertical-align:middle}}.zebra tbody tr:nth-child(even),.ration-workbench-table tbody tr:nth-child(even),.smart-tech-table tbody tr:nth-child(even){{background:#f1f8f3}}.zebra tbody tr:nth-child(odd),.ration-workbench-table tbody tr:nth-child(odd),.smart-tech-table tbody tr:nth-child(odd){{background:#fff}}.ration-workbench-table tbody tr:hover,.smart-tech-table tbody tr:hover{{background:#e4f2e9}}.ration-workbench-table th:nth-child(1){{width:32%}}.ration-workbench-table th:nth-child(2){{width:22%}}.ration-workbench-table .ration-stepper{{gap:4px}}.ration-workbench-table .ration-qty{{width:72px;padding:6px}}.ration-live-grid{{display:none!important}}.ration-live{{position:static!important;padding:6px 8px!important;margin:5px 0!important;background:#f8fbf9!important}}.ration-live-metric{{padding:7px 8px!important}}.smart-solution{{padding:10px}}.smart-solution .effect{{font-size:11px;color:#456859;background:#eef7f1;border-radius:7px;padding:6px 7px;margin:7px 0}}.combo-apply{{margin-top:7px}}.smart-solution-grid{{gap:8px}}.ration-section-collapse{{padding:12px 14px}}.smart-tech-table th,.smart-tech-table td{{white-space:normal}}.ration-savebar{{margin-top:7px}}.ration-page-steps{{margin-bottom:8px}}
@@ -4344,7 +5144,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <div class="grid"><div class="card stat metric"><span>Yem Kataloğu</span><b>{len(allfeeds)}</b></div><div class="card stat metric blue"><span>Gösterilen</span><b>{len(feeds)}</b></div><div class="card stat metric orange"><span>Fiyat Mantığı</span><b>Geçmişli</b><small>Her tarih kendi fiyatını korur</small></div></div>
             <div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2><form method="post" action="/feed/price" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tarih<input type="date" name="effective_date" value="{date.today().isoformat()}" required></label><label>₺ / kg<input type="number" step="0.0001" min="0" name="price_per_kg" required></label><label class="full">Not<input name="notes" placeholder="Tedarikçi / alım notu"></label><div class="full"><button class="btn">Fiyatı Kaydet</button></div></form></div>
             <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form" id="feedStockForm"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type" id="feedStockType"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" inputmode="decimal" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="full" id="feedFinanceAsk" style="padding:10px;background:#edf7f0;border:1px solid #cfe3d5;border-radius:10px"><input type="checkbox" name="post_to_finance" value="yes" style="width:auto;margin-right:8px"> Bu stok girişini <b>Finans → Gider / Yem</b> olarak da kaydet</label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
-            <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct"></label><label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" step="0.001" name="p_pct"></label><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
+            <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" min="0" max="100" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" min="0" max="100" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" min="0" max="100" step="0.01" name="ndf_pct"></label><label>eNDF etkinliği %<input type="number" min="0" max="100" step="0.01" name="effective_ndf_pct"></label><label>Nişasta % KM<input type="number" min="0" max="100" step="0.01" name="starch_pct"></label><label>ME Mcal/kg KM<input type="number" min="0" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" min="0" max="100" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" min="0" max="100" step="0.001" name="p_pct"></label><details class="full"><summary><b>🏷 Üretici etiketi (ürün bazında)</b></summary><div class="form" style="margin-top:12px"><label>Etiket HP %<input type="number" min="0" max="100" step="0.01" name="label_cp_pct_as_fed"></label><label>Etiket ME kcal/kg<input type="number" min="0" step="1" name="label_me_kcal_kg_as_fed"></label><label>Etiket ham selüloz %<input type="number" min="0" max="100" step="0.01" name="label_crude_fiber_pct_as_fed"></label><label>Etiket ham yağ %<input type="number" min="0" max="100" step="0.01" name="label_fat_pct_as_fed"></label><label>Etiket ham kül %<input type="number" min="0" max="100" step="0.01" name="label_ash_pct_as_fed"></label><label>Etiket sodyum %<input type="number" min="0" max="100" step="0.01" name="label_sodium_pct_as_fed"></label></div><p class="mut">Bu alanlar çuval/üretici değerlerini aynen saklar. Solver alanları yukarıda KM bazında ayrıca girilir.</p></details><details class="full"><summary><b>🧪 İleri analiz ve etiket sınırları</b></summary><div class="form" style="margin-top:12px"><label>Nişasta rumen yıkılabilirliği %<input type="number" min="0" max="100" step="0.01" name="starch_degradability_pct"></label><label>NDF sindirilebilirliği %<input type="number" min="0" max="100" step="0.01" name="ndf_digestibility_pct"></label><label>İşleme biçimi<input name="processing_method" placeholder="Ezme / kırma / flake / öğütme"></label><label>Etiket alt doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_min_kg_day"></label><label>Etiket üst doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_max_kg_day"></label><label>Sınır kaynağı<input name="constraint_source" placeholder="Ürün etiketi / uzman / laboratuvar"></label></div><p class="mut">Bilinmeyen alanları 0 bırakın. Etiket üst dozu girilirse solver bu miktarı aşmaz.</p></details><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
             <div class="card" style="margin-top:14px;overflow:auto"><form class="actions" id="feed-catalog-search-form"><input id="feed-catalog-search" name="q" value="{h(search)}" placeholder="Yem ara... yazdıkça filtrelenir" autocomplete="off"><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a><span class="mut" id="feed-search-count"></span></form><table id="feed-catalog-table"><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th><th>İşlem</th></tr>{trs or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'}</table></div><script>(()=>{{const i=document.getElementById('feed-catalog-search'),rows=[...document.querySelectorAll('.feed-catalog-row')],count=document.getElementById('feed-search-count');if(!i)return;const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');function run(){{const t=norm(i.value.trim());let n=0;rows.forEach(r=>{{const ok=!t||norm(r.dataset.search||r.textContent).includes(t);r.style.display=ok?'':'none';if(ok)n++;}});if(count)count.textContent=n+' yem gösteriliyor';}}i.addEventListener('input',run);run();}})();</script>'''
             return self.send_html(page('Yem Kataloğu',body,'/feeds',u,msg))
         if path=='/feed-edit':
@@ -4361,7 +5161,17 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <label>KM %<input type="number" step="0.01" name="dm_pct" value="{fv('dm_pct',2)}"></label><label>HP % KM<input type="number" step="0.01" name="cp_pct" value="{fv('cp_pct',2)}"></label><label>NDF % KM<input type="number" step="0.01" name="ndf_pct" value="{fv('ndf_pct',2)}"></label><label>TDN % KM<input type="number" step="0.01" name="tdn_pct" value="{fv('tdn_pct',2)}"></label>
             <label>ME Mcal/kg KM<input type="number" step="0.001" name="me_mcal_kg" value="{fv('me_mcal_kg')}"></label><label>NEm Mcal/kg KM<input type="number" step="0.001" name="nem_mcal_kg" value="{fv('nem_mcal_kg')}"></label><label>NEg Mcal/kg KM<input type="number" step="0.001" name="neg_mcal_kg" value="{fv('neg_mcal_kg')}"></label>
             <label>Nişasta % KM<input type="number" step="0.01" name="starch_pct" value="{fv('starch_pct',2)}"></label><label>Yağ % KM<input type="number" step="0.01" name="fat_pct" value="{fv('fat_pct',2)}"></label><label>Kül % KM<input type="number" step="0.01" name="ash_pct" value="{fv('ash_pct',2)}"></label>
+            <label>eNDF etkinliği %<input type="number" min="0" max="100" step="0.01" name="effective_ndf_pct" value="{fv('effective_ndf_pct',2)}"></label>
             <label>Ca % KM<input type="number" step="0.001" name="ca_pct" value="{fv('ca_pct')}"></label><label>P % KM<input type="number" step="0.001" name="p_pct" value="{fv('p_pct')}"></label><label>Mg % KM<input type="number" step="0.001" name="mg_pct" value="{fv('mg_pct')}"></label><label>K % KM<input type="number" step="0.001" name="k_pct" value="{fv('k_pct')}"></label><label>Na % KM<input type="number" step="0.001" name="na_pct" value="{fv('na_pct')}"></label><label>S % KM<input type="number" step="0.001" name="s_pct" value="{fv('s_pct')}"></label>
+            <details class="full" open><summary><b>🏷 Üretici etiketi / ürün bazındaki değerler</b></summary><div class="form" style="margin-top:12px">
+            <label>Etiket HP %<input type="number" min="0" max="100" step="0.01" name="label_cp_pct_as_fed" value="{fv('label_cp_pct_as_fed',2)}"></label><label>Etiket ME kcal/kg<input type="number" min="0" step="1" name="label_me_kcal_kg_as_fed" value="{fv('label_me_kcal_kg_as_fed',0)}"></label><label>Etiket ham selüloz %<input type="number" min="0" max="100" step="0.01" name="label_crude_fiber_pct_as_fed" value="{fv('label_crude_fiber_pct_as_fed',2)}"></label><label>Etiket ham yağ %<input type="number" min="0" max="100" step="0.01" name="label_fat_pct_as_fed" value="{fv('label_fat_pct_as_fed',2)}"></label><label>Etiket ham kül %<input type="number" min="0" max="100" step="0.01" name="label_ash_pct_as_fed" value="{fv('label_ash_pct_as_fed',2)}"></label><label>Etiket sodyum %<input type="number" min="0" max="100" step="0.01" name="label_sodium_pct_as_fed" value="{fv('label_sodium_pct_as_fed',2)}"></label>
+            </div><p class="mut">Çuval veya üretici bilgisini aynen gösterir. Yukarıdaki HP/enerji/mineral alanları solverın kullandığı KM bazındaki değerlerdir.</p></details>
+            <details class="full"><summary><b>🧪 İleri bilimsel analiz ve kesin ürün sınırları</b></summary><div class="form" style="margin-top:12px">
+            <label>Nişasta rumen yıkılabilirliği %<input type="number" min="0" max="100" step="0.01" name="starch_degradability_pct" value="{fv('starch_degradability_pct',2)}"></label><label>NDF sindirilebilirliği %<input type="number" min="0" max="100" step="0.01" name="ndf_digestibility_pct" value="{fv('ndf_digestibility_pct',2)}"></label>
+            <label>RDP % HP<input type="number" min="0" max="100" step="0.01" name="rdp_pct_cp" value="{fv('rdp_pct_cp',2)}"></label><label>RUP % HP<input type="number" min="0" max="100" step="0.01" name="rup_pct_cp" value="{fv('rup_pct_cp',2)}"></label>
+            <label>INRA UFV<input type="number" min="0" step="0.001" name="inra_ufv" value="{fv('inra_ufv')}"></label><label>INRA PDI g/kg KM<input type="number" step="0.1" name="inra_pdi_g_kg_dm" value="{fv('inra_pdi_g_kg_dm',1)}"></label><label>INRA PDIA g/kg KM<input type="number" step="0.1" name="inra_pdia_g_kg_dm" value="{fv('inra_pdia_g_kg_dm',1)}"></label><label>INRA RPB g/kg KM<input type="number" step="0.1" name="inra_rpb_g_kg_dm" value="{fv('inra_rpb_g_kg_dm',1)}"></label><label>INRA doluluk birimi<input type="number" min="0" step="0.001" name="inra_fill_unit" value="{fv('inra_fill_unit')}"></label>
+            <label>İşleme biçimi<input name="processing_method" value="{h(_rowval(feed,'processing_method',''))}" placeholder="Ezme / kırma / flake / öğütme"></label><label>Etiket alt doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_min_kg_day" value="{fv('solver_min_kg_day',2)}"></label><label>Etiket üst doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_max_kg_day" value="{fv('solver_max_kg_day',2)}"></label><label>Sınır kaynağı<input name="constraint_source" value="{h(_rowval(feed,'constraint_source',''))}" placeholder="Ürün etiketi / uzman / laboratuvar"></label>
+            </div><p class="mut">0, “veri bilinmiyor” demektir. INRA alanları NASEM gereksinim hesabına karıştırılmaz; veri kapsamı ve yem doğrulaması için ayrı kullanılır. Etiket dozları kesin solver sınırıdır.</p></details>
             <label class="full">Kaynak / Referans<input name="source" value="{h(feed['source'])}" placeholder="NASEM 2016 / NASEM 2021 / Laboratuvar analizi / Kullanıcı girişi"></label>
             <div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/feeds">İptal</a></div></form></div>'''
             return self.send_html(page('Yemi Düzenle',body,'/feeds',u,msg))
@@ -4410,7 +5220,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
                     if rr:
                         sm=ration_summary(selected,c)
-                        item_rows=''.join(f'''<tr class="ration-row" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{float(x['cp_pct'] or 0):.8f}" data-ndf="{float(x['ndf_pct'] or 0):.8f}" data-endf="{float(x['effective_ndf_pct'] or 0):.8f}" data-me="{float(x['me_mcal_kg'] or 0):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        item_rows=''.join(f'''<tr class="ration-row" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{float(x['cp_pct'] or 0):.8f}" data-ndf="{float(x['ndf_pct'] or 0):.8f}" data-endf="{float(x['effective_ndf_pct'] or 0):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{float(x['me_mcal_kg'] or 0):.8f}" data-nem="{float(x['nem_mcal_kg'] or 0):.8f}" data-neg="{float(x['neg_mcal_kg'] or 0):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
                         feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
                         current_feed_qty={int(x['id']):float(x['kg_per_head_day'] or 0) for x in sm['items']}
                         quick_feed_rows=[]
@@ -4453,7 +5263,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                             if sf: sim_html=f'''<div class="card" style="margin-top:14px;border:2px solid #2f78d0"><h3>🧪 Kaydetmeden Simülasyon: +{sim_delta:.2f} kg {h(sf['name'])}</h3><div class="grid"><div class="card stat">KM<b>{sm['dm_kg']:.2f} → {ss['dm_kg']:.2f}</b></div><div class="card stat">HP<b>%{sm['cp_pct_dm']:.1f} → %{ss['cp_pct_dm']:.1f}</b></div><div class="card stat">ME<b>{sm['me_mcal']:.1f} → {ss['me_mcal']:.1f}</b></div><div class="card stat">NDF<b>%{sm['ndf_pct_dm']:.1f} → %{ss['ndf_pct_dm']:.1f}</b></div><div class="card stat">Kaba/Kesif<b>%{sm['roughage_pct_dm']:.0f}/%{sm['concentrate_pct_dm']:.0f} → %{ss['roughage_pct_dm']:.0f}/%{ss['concentrate_pct_dm']:.0f}</b></div><div class="card stat metric orange">Maliyet<b>{money(sm['cost'])} → {money(ss['cost'])}</b></div></div><div class="actions"><form method="post" action="/ration/apply-suggestion"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="feed_id" value="{sim_feed}"><input type="hidden" name="delta" value="{sim_delta}"><button class="btn blue">✅ Bu Değişikliği Uygula</button></form><a class="btn alt" href="/rations?id={selected}">↩ Vazgeç</a></div></div>'''
                         detail=f'''<div class="card workbench-shell" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Hedef ↔ mevcut → çalışma masası → yem ekle → akıllı çözüm</span></div><details><summary><b>✏️ Rasyon Bilgileri</b></summary><form method="post" action="/ration/edit" class="form" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="full">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form><form method="post" action="/ration/delete" style="margin-top:10px" onsubmit="return confirm('Bu rasyonu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">🗑 Rasyonu Sil</button></form></details></div>
                         {ration_requirement_panel(rr,sm)}
-                        <div id="ration-workbench" class="card" style="margin-top:14px"><div class="workbench-head"><div><h3 style="margin:0">🌾 Rasyon Çalışma Masası</h3><span class="mut">Miktarı yazın veya −/+ kullanın. Hedef ↔ mevcut değerler üstte canlı güncellenir.</span></div><div class="workbench-actions"><button type="button" class="btn" onclick="document.getElementById('quick-feed-add').open=true;setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)">➕ Yem Ekle</button><a class="btn alt" href="/ration-prep-report?id={selected}">🧾 Rasyonu Yazdır</a></div></div><form method="post" action="/ration/items-bulk" id="ration-bulk-form"><input type="hidden" name="ration_id" value="{selected}"><div class="ration-changebar compact-changebar"><span id="dirty-status" class="mut">Kaydedilmiş rasyon gösteriliyor.</span><button type="button" id="ration-reset" class="btn alt compact-btn" style="display:none">↩ Değişiklikleri Geri Al</button></div><div style="overflow:auto;margin-top:8px"><table class="ration-workbench-table"><thead><tr><th>Yem</th><th>Miktar kg/baş/gün</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr></thead><tbody>{item_rows}</tbody></table></div><div class="ration-savebar"><button class="btn blue" id="ration-save" disabled>💾 Değişiklikleri Kaydet</button></div></form></div><script>(()=>{{const form=document.getElementById('ration-bulk-form');if(!form)return;const scrollKey='cp-ration-scroll';const rows=[...form.querySelectorAll('.ration-row')],save=document.getElementById('ration-save'),reset=document.getElementById('ration-reset'),status=document.getElementById('dirty-status');const base={{asfed:{sm['as_fed_kg']:.8f},dm:{sm['dm_kg']:.8f},cp:{sm['cp_pct_dm']:.8f},me:{sm['me_mcal']:.8f},ndf:{sm['ndf_pct_dm']:.8f},endf:{sm['endf_pct_dm']:.8f},ph:{sm['rumen_ph']:.8f},ca:{sm['ca_g']:.8f},p:{sm['p_g']:.8f},cost:{sm['cost']:.8f},rough:{sm['roughage_pct_dm']:.8f},conc:{sm['concentrate_pct_dm']:.8f}}};const targetsLive={{dm:{targets['dmi_kg']:.8f},cp:{targets['cp_pct']:.8f},me:{targets['me_mcal_day']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const setText=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};function targetStatus(actual,target,tol){{const r=target?actual/target:1;if(r<1-tol)return '⚠️ Eksik %'+((1-r)*100).toFixed(0);if(r>1+tol)return '⬆️ Fazla %'+((r-1)*100).toFixed(0);return '✅ Uygun';}}function liveDiff(actual,target,unit,digits){{if(!target)return '—';const d=actual-target,p=d/target*100,sg=d>0?'+':'';return sg+d.toFixed(digits)+unit+' ('+sg+p.toFixed(0)+'%)';}}function updateTargetCard(key,current,status,diff){{setText('target-mini-'+key+'-current',current);setText('target-mini-'+key+'-status',status);setText('target-mini-'+key+'-diff',diff);const b=document.getElementById('target-mini-'+key);if(b){{b.classList.toggle('ok',status.indexOf('Uygun')>=0);b.classList.toggle('warn',status.indexOf('Uygun')<0);}}}}function updateTargetCards(dm,cp,me,ndf,endf,ph,ca,p,rough,conc,changed){{const ts=targetsLive;const dmS=targetStatus(dm,ts.dm,.10),cpS=targetStatus(cp,ts.cp,.05),meS=targetStatus(me,ts.me,.08),caS=targetStatus(ca,ts.ca,.10),pS=targetStatus(p,ts.p,.10),ndfS=(ndf>=ts.ndfMin&&ndf<=ts.ndfMax)?'✅ Uygun':(ndf<ts.ndfMin?'⚠️ Düşük':'⚠️ Yüksek'),rcS=(rough>=ts.roughMin&&rough<=ts.roughMax)?'✅ Uygun':(rough<ts.roughMin?'⚠️ Kaba yem düşük':'⚠️ Kaba yem yüksek');updateTargetCard('dm',dm.toFixed(2)+' kg',dmS,liveDiff(dm,ts.dm,' kg',2));updateTargetCard('cp','%'+cp.toFixed(1),cpS,liveDiff(cp,ts.cp,' puan',1));updateTargetCard('me',me.toFixed(1),meS,liveDiff(me,ts.me,' Mcal',1));updateTargetCard('ndf','%'+ndf.toFixed(1),ndfS,ndfS.indexOf('Uygun')>=0?'Aralık içi':(ndf<ts.ndfMin?'Alt sınırın altında':'Üst sınırın üzerinde'));updateTargetCard('ca',ca.toFixed(0)+' g',caS,liveDiff(ca,ts.ca,' g',0));updateTargetCard('p',p.toFixed(0)+' g',pS,liveDiff(p,ts.p,' g',0));const mineral=document.getElementById('target-mini-mineral');if(mineral){{const mok=caS.indexOf('Uygun')>=0&&pS.indexOf('Uygun')>=0;mineral.classList.toggle('ok',mok);mineral.classList.toggle('warn',!mok);}}updateTargetCard('rc','%'+rough.toFixed(0)+' / %'+conc.toFixed(0),rcS,rcS.indexOf('Uygun')>=0?'Aralık içi':(rough<ts.roughMin?'Kaba yem düşük':'Kaba yem yüksek'));const phS=ph>=6.0?'✅ Uygun':(ph>=5.8?'⚠️ Dikkat':'⚠️ Düşük');updateTargetCard('ph',ph.toFixed(2),phS,'eNDF %'+endf.toFixed(1));const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak canlı analiz ediliyor. Hedef kartları çalışma masasıyla birlikte değişiyor.':'🌾 Çalışma masası ile canlı bağlı: miktar değiştikçe bu kartlar anında güncellenir.';}}const trMoney=n=>'₺'+n.toLocaleString('tr-TR',{{minimumFractionDigits:2,maximumFractionDigits:2}});const delta=(id,n,b,suffix='')=>{{const e=document.getElementById(id),d=n-b;e.textContent=Math.abs(d)<0.005?'':((d>0?'+':'')+d.toFixed(2)+suffix);e.style.color=d>0?'#17733d':d<0?'#b33a2b':''}};function calc(){{let asfed=0,dm=0,cpkg=0,ndfkg=0,endfkg=0,me=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const i=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((i.value||'0').replace(',','.'))||0),orig=parseFloat(i.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),dmkg=kg*dmp/100;asfed+=kg;dm+=dmkg;cpkg+=dmkg*parseFloat(r.dataset.cp||0)/100;ndfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100;endfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;me+=dmkg*parseFloat(r.dataset.me||0);ca+=dmkg*parseFloat(r.dataset.ca||0)*10;p+=dmkg*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=dmkg;else if(r.dataset.group==='Kesif')concdm+=dmkg;const ch=Math.abs(kg-orig)>.0005;i.classList.toggle('ration-dirty',ch);r.querySelector('.qty-delta').textContent=ch?((kg-orig>0?'+':'')+(kg-orig).toFixed(2)+' kg'):'';if(ch)changed++;r.querySelector('.row-daily').textContent=trMoney(kg*parseFloat(r.dataset.price||0));}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,ph=endf>0?Math.min(6.46,5.425+0.04229*endf):0,rcdm=roughdm+concdm,rough=rcdm?roughdm/rcdm*100:0,conc=rcdm?concdm/rcdm*100:0;const dc=cost-base.cost;updateTargetCards(dm,cp,me,ndf,endf,ph,ca,p,rough,conc,changed);setText('target-mini-cost-current',trMoney(cost));setText('target-mini-cost-diff',Math.abs(cost-base.cost)<.005?'Değişiklik yok':((cost-base.cost>0?'+':'')+trMoney(cost-base.cost)));setText('target-mini-cost-status',cost<=base.cost?'💰 Maliyet düştü':'💰 Maliyet arttı');save.disabled=changed===0;reset.style.display=changed?'inline-flex':'none';status.className=changed?'ration-dirty-text':'mut';status.textContent=changed?('● '+changed+' yem kaleminde kaydedilmemiş değişiklik var'):'Kaydedilmiş rasyon gösteriliyor.';}}rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.addEventListener('input',calc);r.querySelectorAll('.qty-step').forEach(b=>b.onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value=Math.max(0,(parseFloat(i.value)||0)+parseFloat(b.dataset.delta)).toFixed(2);calc();requestAnimationFrame(()=>window.scrollTo(0,y));}});r.querySelector('.qty-zero').onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value='0.00';calc();requestAnimationFrame(()=>window.scrollTo(0,y));}};}});reset.onclick=()=>{{rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.value=parseFloat(i.dataset.original||0).toFixed(2);}});calc();}};form.addEventListener('submit',()=>sessionStorage.setItem(scrollKey,String(window.scrollY)));const saved=sessionStorage.getItem(scrollKey);if(saved!==null){{sessionStorage.removeItem(scrollKey);requestAnimationFrame(()=>window.scrollTo(0,parseFloat(saved)||0));}}calc();}})();</script>
+                        <div id="ration-workbench" class="card" style="margin-top:14px"><div class="workbench-head"><div><h3 style="margin:0">🌾 Rasyon Çalışma Masası</h3><span class="mut">Miktarı yazın veya −/+ kullanın. Hedef ↔ mevcut değerler üstte canlı güncellenir.</span></div><div class="workbench-actions"><button type="button" class="btn" onclick="document.getElementById('quick-feed-add').open=true;setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)">➕ Yem Ekle</button><a class="btn alt" href="/ration-prep-report?id={selected}">🧾 Rasyonu Yazdır</a></div></div><form method="post" action="/ration/items-bulk" id="ration-bulk-form"><input type="hidden" name="ration_id" value="{selected}"><div class="ration-changebar compact-changebar"><span id="dirty-status" class="mut">Kaydedilmiş rasyon gösteriliyor.</span><button type="button" id="ration-reset" class="btn alt compact-btn" style="display:none">↩ Değişiklikleri Geri Al</button></div><div style="overflow:auto;margin-top:8px"><table class="ration-workbench-table"><thead><tr><th>Yem</th><th>Miktar kg/baş/gün</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr></thead><tbody>{item_rows}</tbody></table></div><div class="ration-savebar"><button class="btn blue" id="ration-save" disabled>💾 Değişiklikleri Kaydet</button></div></form></div><script>(()=>{{const form=document.getElementById('ration-bulk-form');if(!form)return;const scrollKey='cp-ration-scroll';const rows=[...form.querySelectorAll('.ration-row')],save=document.getElementById('ration-save'),reset=document.getElementById('ration-reset'),status=document.getElementById('dirty-status');const base={{asfed:{sm['as_fed_kg']:.8f},dm:{sm['dm_kg']:.8f},cp:{sm['cp_pct_dm']:.8f},me:{sm['me_mcal']:.8f},ndf:{sm['ndf_pct_dm']:.8f},endf:{sm['endf_pct_dm']:.8f},ca:{sm['ca_g']:.8f},p:{sm['p_g']:.8f},cost:{sm['cost']:.8f},rough:{sm['roughage_pct_dm']:.8f},conc:{sm['concentrate_pct_dm']:.8f}}};const targetsLive={{dm:{targets['dmi_kg']:.8f},cp:{targets['cp_pct']:.8f},me:{targets['me_mcal_day']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const setText=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};function targetStatus(actual,target,tol,upperTol){{upperTol=upperTol===undefined?tol:upperTol;const r=target?actual/target:1;if(r<1-tol)return '⚠️ Eksik %'+((1-r)*100).toFixed(0);if(r>1+upperTol)return '⬆️ Fazla %'+((r-1)*100).toFixed(0);return '✅ Uygun';}}function liveDiff(actual,target,unit,digits){{if(!target)return '—';const d=actual-target,p=d/target*100,sg=d>0?'+':'';return sg+d.toFixed(digits)+unit+' ('+sg+p.toFixed(0)+'%)';}}function updateTargetCard(key,current,status,diff){{setText('target-mini-'+key+'-current',current);setText('target-mini-'+key+'-status',status);setText('target-mini-'+key+'-diff',diff);const b=document.getElementById('target-mini-'+key);if(b){{b.classList.toggle('ok',status.indexOf('Uygun')>=0);b.classList.toggle('warn',status.indexOf('Uygun')<0);}}}}function updateTargetCards(dm,cp,me,ndf,endf,starch,starchKg,rapidStarch,coverage,ca,p,rough,conc,changed){{const ts=targetsLive;const dmS=targetStatus(dm,ts.dm,.10),cpS=targetStatus(cp,ts.cp,.05,.10),meS=targetStatus(me,ts.me,.08,.10),caS=targetStatus(ca,ts.ca,.10),pS=targetStatus(p,ts.p,.10),ndfS=(ndf>=ts.ndfMin&&ndf<=ts.ndfMax)?'✅ Uygun':(ndf<ts.ndfMin?'⚠️ Düşük':'⚠️ Yüksek'),rcS=(rough>=ts.roughMin&&rough<=ts.roughMax)?'✅ Uygun':(rough<ts.roughMin?'⚠️ Kaba yem düşük':'⚠️ Kaba yem yüksek'),starchS=(starch>=ts.starchMin&&starch<=ts.starchIdeal)?'✅ Uygun':(starch<ts.starchMin?'ℹ️ İdeal altı':(starch<=ts.starchIdeal+.5?'⚠️ Sınırda':(starch<=ts.starchMax?'⚠️ Sınıra yakın':'🔴 Yüksek')));updateTargetCard('dm',dm.toFixed(2)+' kg',dmS,liveDiff(dm,ts.dm,' kg',2));updateTargetCard('cp','%'+cp.toFixed(1),cpS,liveDiff(cp,ts.cp,' puan',1));updateTargetCard('me',me.toFixed(1),meS,liveDiff(me,ts.me,' Mcal',1));updateTargetCard('ndf','%'+ndf.toFixed(1),ndfS,ndfS.indexOf('Uygun')>=0?'Aralık içi':(ndf<ts.ndfMin?'Alt sınırın altında':'Üst sınırın üzerinde'));updateTargetCard('ca',ca.toFixed(0)+' g',caS,liveDiff(ca,ts.ca,' g',0));updateTargetCard('p',p.toFixed(0)+' g',pS,liveDiff(p,ts.p,' g',0));const mineral=document.getElementById('target-mini-mineral');if(mineral){{const mok=caS.indexOf('Uygun')>=0&&pS.indexOf('Uygun')>=0;mineral.classList.toggle('ok',mok);mineral.classList.toggle('warn',!mok);}}updateTargetCard('rc','%'+rough.toFixed(0)+' / %'+conc.toFixed(0),rcS,rcS.indexOf('Uygun')>=0?'Aralık içi':(rough<ts.roughMin?'Kaba yem düşük':'Kaba yem yüksek'));let riskScore=0;if(starch>ts.starchMax)riskScore+=2;else if(starch>ts.starchIdeal+.5)riskScore+=1;if(endf<ts.endfMin*.80)riskScore+=2;else if(endf<ts.endfMin)riskScore+=1;if(coverage>=.70&&rapidStarch>ts.starchIdeal*.75)riskScore+=1;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setText('target-mini-starch-current','%'+starch.toFixed(1));setText('target-mini-starch-status',starchS);setText('target-mini-starch-diff',starchKg.toFixed(2)+' kg/baş');setText('target-mini-ph-current',risk);setText('target-mini-ph-status',riskS);setText('target-mini-ph-diff','Veri güveni '+confidence);const sr=document.getElementById('target-mini-starch-rumen');if(sr){{const ok=starchS.indexOf('Uygun')>=0&&risk==='Düşük';sr.classList.toggle('ok',ok);sr.classList.toggle('warn',!ok);}}const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak canlı analiz ediliyor. Hedef kartları çalışma masasıyla birlikte değişiyor.':'🌾 Çalışma masası ile canlı bağlı: miktar değiştikçe bu kartlar anında güncellenir.';}}const trMoney=n=>'₺'+n.toLocaleString('tr-TR',{{minimumFractionDigits:2,maximumFractionDigits:2}});const delta=(id,n,b,suffix='')=>{{const e=document.getElementById(id),d=n-b;e.textContent=Math.abs(d)<0.005?'':((d>0?'+':'')+d.toFixed(2)+suffix);e.style.color=d>0?'#17733d':d<0?'#b33a2b':''}};function calc(){{let asfed=0,dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const i=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((i.value||'0').replace(',','.'))||0),orig=parseFloat(i.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),dmkg=kg*dmp/100;asfed+=kg;dm+=dmkg;cpkg+=dmkg*parseFloat(r.dataset.cp||0)/100;ndfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100;endfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=dmkg*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=dmkg*parseFloat(r.dataset.me||0);ca+=dmkg*parseFloat(r.dataset.ca||0)*10;p+=dmkg*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=dmkg;else if(r.dataset.group==='Kesif')concdm+=dmkg;const ch=Math.abs(kg-orig)>.0005;i.classList.toggle('ration-dirty',ch);r.querySelector('.qty-delta').textContent=ch?((kg-orig>0?'+':'')+(kg-orig).toFixed(2)+' kg'):'';if(ch)changed++;r.querySelector('.row-daily').textContent=trMoney(kg*parseFloat(r.dataset.price||0));}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapidStarch=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,rcdm=roughdm+concdm,rough=rcdm?roughdm/rcdm*100:0,conc=rcdm?concdm/rcdm*100:0;const dc=cost-base.cost;updateTargetCards(dm,cp,me,ndf,endf,starch,starchkg,rapidStarch,coverage,ca,p,rough,conc,changed);setText('target-mini-cost-current',trMoney(cost));setText('target-mini-cost-diff',Math.abs(cost-base.cost)<.005?'Değişiklik yok':((cost-base.cost>0?'+':'')+trMoney(cost-base.cost)));setText('target-mini-cost-status',cost<=base.cost?'💰 Maliyet düştü':'💰 Maliyet arttı');save.disabled=changed===0;reset.style.display=changed?'inline-flex':'none';status.className=changed?'ration-dirty-text':'mut';status.textContent=changed?('● '+changed+' yem kaleminde kaydedilmemiş değişiklik var'):'Kaydedilmiş rasyon gösteriliyor.';}}rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.addEventListener('input',calc);r.querySelectorAll('.qty-step').forEach(b=>b.onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value=Math.max(0,(parseFloat(i.value)||0)+parseFloat(b.dataset.delta)).toFixed(2);calc();requestAnimationFrame(()=>window.scrollTo(0,y));}});r.querySelector('.qty-zero').onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value='0.00';calc();requestAnimationFrame(()=>window.scrollTo(0,y));}};}});reset.onclick=()=>{{rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.value=parseFloat(i.dataset.original||0).toFixed(2);}});calc();}};form.addEventListener('submit',()=>sessionStorage.setItem(scrollKey,String(window.scrollY)));const saved=sessionStorage.getItem(scrollKey);if(saved!==null){{sessionStorage.removeItem(scrollKey);requestAnimationFrame(()=>window.scrollTo(0,parseFloat(saved)||0));}}calc();}})();</script>
+                        <script id="dev413-science-live">(()=>{{const form=document.getElementById('ration-bulk-form');if(!form||!document.querySelector('.science-target-grid'))return;const rows=[...form.querySelectorAll('.ration-row')];const t={{weight:{targets['weight_kg']:.8f},sbw:{targets['sbw_kg']:.8f},ebw:{targets['ebw_kg']:.8f},age:{targets.get('age_months',0):.8f},adg:{targets['adg']:.8f},nemReq:{targets['nem_req_mcal']:.8f},negReq:{targets['neg_req_mcal']:.8f},gainCoefficient:{targets.get('gain_energy_coefficient',0.0635):.8f},cp:{targets['cp_pct']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const fmt=(n,d=1)=>Number(n||0).toLocaleString('tr-TR',{{minimumFractionDigits:d,maximumFractionDigits:d}});const set=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};const level=s=>s.includes('🔴')?'bad':s.includes('⚠️')?'warn':s.includes('✅')?'ok':'info';function setRow(key,target,current,status,diff=''){{set('target-mini-'+key+'-target',target);set('target-mini-'+key+'-current',current);set('target-mini-'+key+'-status',status);set('target-mini-'+key+'-diff',diff);const el=document.getElementById('target-mini-'+key);if(el){{el.classList.remove('ok','warn','bad','info');el.classList.add(level(status));}}}}function symmetric(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d>.10)return '⚠️ Yüksek %'+fmt(d*100,0);if(Math.abs(d)>.05)return '⚠️ Sınıra yakın';return '✅ Uygun';}}function minimum(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d<-.005)return '⚠️ Hedef altı %'+fmt(Math.abs(d)*100,1);return '✅ Yeterli';}}function range(a,lo,hi){{return a<lo?'🔴 Düşük':(a>hi?'⚠️ Yüksek':'✅ Aralıkta');}}function calcScience(){{let dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,nem=0,neg=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const input=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((input?.value||'0').replace(',','.'))||0),orig=parseFloat(input?.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),d=kg*dmp/100;dm+=d;cpkg+=d*parseFloat(r.dataset.cp||0)/100;ndfkg+=d*parseFloat(r.dataset.ndf||0)/100;endfkg+=d*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=d*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=d*parseFloat(r.dataset.me||0);nem+=d*parseFloat(r.dataset.nem||0);neg+=d*parseFloat(r.dataset.neg||0);ca+=d*parseFloat(r.dataset.ca||0)*10;p+=d*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=d;else if(r.dataset.group==='Kesif')concdm+=d;if(Math.abs(kg-orig)>.0005)changed++;}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapid=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,nemDensity=dm?nem/dm:0,negDensity=dm?neg/dm:0,rc=roughdm+concdm,rough=rc?roughdm/rc*100:0,conc=rc?concdm/rc*100:0;let ne=Math.max(.70,Math.min(nemDensity||1.60,2.50)),nema=Math.max(ne,.95),yearling=t.age>0?t.age>=12:t.weight>=300,pred=Math.pow(t.sbw,.75)*(.2435*nema-.0466*nema*nema-(yearling?.0869:.1128))/nema;pred=Math.max(t.weight*.018,Math.min(t.weight*.035,pred));let capacity=0;if(nemDensity>0&&negDensity>0){{const gain=Math.max(0,dm-t.nemReq/nemDensity)*negDensity;if(gain>0){{const ebg=Math.pow(gain/Math.max(t.gainCoefficient*Math.pow(t.ebw,.75),1e-9),1/1.097);capacity=Math.max(0,ebg/.956);if(cp<t.cp*.95)capacity*=Math.max(.70,cp/Math.max(t.cp*.95,.1));}}}}setRow('dm','≈ '+fmt(pred,2)+' kg',fmt(dm,2)+' kg',symmetric(dm,pred),(dm-pred>=0?'+':'')+fmt(dm-pred,2)+' kg');setRow('adg','≥ '+fmt(t.adg,2)+' kg',capacity?fmt(capacity,2)+' kg':'—',capacity?minimum(capacity,t.adg):'ℹ️ NEm/NEg verisi yok',(capacity-t.adg>=0?'+':'')+fmt(capacity-t.adg,2)+' kg');setRow('cp','≥ %'+fmt(t.cp,1),'%'+fmt(cp,1),minimum(cp,t.cp),'HP tabanı');setRow('ndf','%'+fmt(t.ndfMin,0)+'–'+fmt(t.ndfMax,0),'%'+fmt(ndf,1),range(ndf,t.ndfMin,t.ndfMax));setRow('endf','≥ %'+fmt(t.endfMin,1),'%'+fmt(endf,1),minimum(endf,t.endfMin));setRow('rc','Kaba %'+fmt(t.roughMin,0)+'–'+fmt(t.roughMax,0),'%'+fmt(rough,0)+' / %'+fmt(conc,0),range(rough,t.roughMin,t.roughMax));const starchS=starch>=t.starchMin&&starch<=t.starchIdeal?'✅ İdeal bant':(starch<t.starchMin?'ℹ️ İdeal altı':(starch<=t.starchIdeal+.5?'⚠️ Sınırda':(starch<=t.starchMax?'⚠️ Dikkat bandı':'🔴 Yüksek')));setRow('starch','İdeal %'+fmt(t.starchMin,0)+'–'+fmt(t.starchIdeal,0),'%'+fmt(starch,1),starchS,fmt(starchkg,2)+' kg/baş');let riskScore=0;if(starch>t.starchMax)riskScore+=2;else if(starch>t.starchIdeal+.5)riskScore++;if(endf<t.endfMin*.80)riskScore+=2;else if(endf<t.endfMin)riskScore++;if(coverage>=.70&&rapid>t.starchIdeal*.75)riskScore++;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setRow('ph','Düşük',risk,riskS,'Veri güveni '+confidence);const caSoft=Math.max(t.ca*1.5,pred*10*.85),pSoft=Math.max(t.p*1.5,pred*10*.50),caHard=Math.max(t.ca*2.25,pred*10*1.20),pHard=Math.max(t.p*2.25,pred*10*.70);function mineral(a,min,soft,hard){{if(a<min*.90)return '🔴 Eksik %'+fmt((1-a/min)*100,0);if(a<min)return '⚠️ Minimuma yakın';if(a>hard)return '🔴 Güvenlik üstü';if(a>soft)return '⚠️ Yüksek';return '✅ Yeterli';}}setRow('ca','≥ '+fmt(t.ca,0)+' g',fmt(ca,0)+' g',mineral(ca,t.ca,caSoft,caHard));setRow('p','≥ '+fmt(t.p,0)+' g',fmt(p,0)+' g',mineral(p,t.p,pSoft,pHard));const ratio=p>0?ca/p:0,ratioS=ratio>=1.2&&ratio<=3?'✅ Dengeli':(ratio<1?'🔴 Düşük':'⚠️ Kontrol');setRow('cap','1,2–3,0',fmt(ratio,2),ratioS);setRow('cost','—','₺'+fmt(cost,2),changed?'💰 Taslak':'💰 Güncel',changed?changed+' kalem değişti':'Kaydedilmiş');set('target-mini-me-current',fmt(me,1));const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak; tüm göstergeler canlı yeniden hesaplandı.':'NASEM hayvan profili · Dinamik KM · NEm/NEg performansı';}}rows.forEach(r=>r.querySelector('.ration-qty')?.addEventListener('input',calcScience));form.addEventListener('click',e=>{{if(e.target.closest('.qty-step,.qty-zero,#ration-reset'))requestAnimationFrame(calcScience);}});calcScience();}})();</script>
                         <details id='quick-feed-add' class='card quick-feed-card' style='margin-top:14px;border:1px solid #cfe3d5' {('open' if q.get('feedadd',['0'])[0]=='1' else '')}><summary class='quick-feed-head' style='cursor:pointer'><div><h3 style='display:inline;margin:0'>➕ Rasyona Yem Ekle</h3><span class='mut' style='margin-left:8px'>Yem ekleyeceğiniz zaman açın</span></div><span class='pill'>{('🥛 Süt' if ('ration_type' in rr.keys() and (rr['ration_type'] or '').lower().startswith(('süt','sut'))) else '🥩 Besi')}</span></summary><div class='quick-feed-body'><div class='quick-feed-tools'><input id='quick-feed-search' type='search' placeholder='🔎 Yem ara: mısır, arpa, yonca, süt yemi...' autocomplete='off'><div class='quick-feed-shortcuts'><button type='button' class='btn alt compact-btn quick-filter' data-filter=''>Tümü</button><button type='button' class='btn alt compact-btn quick-filter' data-filter='mısır'>Mısır</button><button type='button' class='btn alt compact-btn quick-filter' data-filter='arpa'>Arpa</button><button type='button' class='btn alt compact-btn quick-filter' data-filter='yonca'>Yonca</button></div></div><div id='quick-feed-results' class='quick-feed-results'>{quick_feed_html}</div><form method='post' action='/ration/item' id='quick-feed-form' class='quick-feed-selected'><input type='hidden' name='ration_id' value='{selected}'><input type='hidden' name='keep_feed_add_open' value='1'><input type='hidden' name='feed_id' id='quick-feed-id' required><div><span class='mut'>Seçilen Yem</span><b id='quick-feed-name'>Önce yukarıdan yem seçin</b></div><div class='ration-stepper'><button type='button' class='btn alt compact-btn' id='quick-feed-minus'>−</button><input id='quick-feed-qty' type='number' step='0.01' min='0.01' name='kg_per_head_day' value='0.50' required><button type='button' class='btn alt compact-btn' id='quick-feed-plus'>+</button></div><button class='btn' id='quick-feed-submit' disabled>➕ Rasyona Ekle / Güncelle</button></form><div style='display:flex;justify-content:flex-end;margin-top:10px'><button type='button' class='btn alt compact-btn' id='quick-feed-close'>✕ Yem Ekleme Alanını Kapat</button></div></div></details><script>(()=>{{const box=document.getElementById('quick-feed-add');if(!box)return;const search=document.getElementById('quick-feed-search'),results=[...box.querySelectorAll('.quick-feed-result')],fid=document.getElementById('quick-feed-id'),fname=document.getElementById('quick-feed-name'),qty=document.getElementById('quick-feed-qty'),submit=document.getElementById('quick-feed-submit');const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');function filter(){{const q=norm(search.value.trim());let shown=0;results.forEach(r=>{{const hay=norm((r.dataset.search||'')+' '+(r.textContent||''));const ok=!q||hay.includes(q);const vis=ok&&(q||shown<30);r.style.display=vis?'flex':'none';if(vis)shown++;}});}}search.addEventListener('input',filter);box.querySelectorAll('.quick-filter').forEach(b=>b.onclick=()=>{{search.value=b.dataset.filter||'';filter();search.focus();}});results.forEach(r=>r.onclick=()=>{{results.forEach(x=>x.classList.remove('selected'));r.classList.add('selected');fid.value=r.dataset.feedId;fname.textContent=r.dataset.feedName;const cur=parseFloat(r.dataset.current||0);qty.value=(cur>0?cur:0.50).toFixed(2);submit.disabled=false;}});document.getElementById('quick-feed-minus').onclick=()=>qty.value=Math.max(.01,(parseFloat(qty.value)||.5)-.10).toFixed(2);document.getElementById('quick-feed-plus').onclick=()=>qty.value=Math.max(.01,(parseFloat(qty.value)||.5)+.10).toFixed(2);document.getElementById('quick-feed-close').onclick=()=>{{box.open=false;history.replaceState(null,'',location.pathname+'?id={selected}#ration-workbench');}};box.addEventListener('toggle',()=>{{if(box.open)setTimeout(()=>search.focus(),50);}});filter();}})();</script>
                         
                         {sim_html}
@@ -4471,7 +5282,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if is_workbench:
                 if not selected or not detail:
                     return self.redirect('/rations','Rasyon bulunamadı veya seçilmedi.')
-                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası</h1><p class="mut">Bu ekran yalnızca seçili rasyon üzerinde çalışmak içindir. Hedef, yem miktarları, rumen pH ve maliyet burada birlikte değerlendirilir.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}'''
+                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası</h1><p class="mut">Bu ekran yalnızca seçili rasyon üzerinde çalışmak içindir. Hedefler, yem miktarları, göreli asidoz riski ve maliyet birlikte değerlendirilir; klinik rumen pH tahmini yapılmaz.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}'''
                 return self.send_html(page('Rasyon Çalışma Masası',body,'/rations',u,msg))
             body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyonlarınızı oluşturun, çözün ve yönetin. Bir rasyona tıklayınca ayrı Çalışma Masası açılır.</p><div class="ration-page-steps"><span>1️⃣ Rasyon oluştur / çöz</span><span>2️⃣ Rasyonu seç</span><span>3️⃣ Ayrı çalışma masasında düzenle</span></div>{action_cards}{new_ration_panel}{solve_panel}{drawer_script}<div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
@@ -5317,7 +6128,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
             b=json.dumps(export_payload(),ensure_ascii=False,indent=2).encode('utf-8');name=f'ciftlik_json_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
             self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/version-notes':
-            body='''<h1>📝 Sürüm Notları</h1><div class="card"><h2>ÇiftlikPro Enterprise · v3.9.20</h2><p class="mut">Rasyon motoru Besi_V5.02.xlsm içindeki Solver yaklaşımı incelenerek kısıt-öncelikli yapıya taşındı.</p><ul><li><b>Besi Rasyonu:</b> Seçilen yemlerin miktarları aynı anda optimize edilir; KM, HP, ME ve kaba/kesif hedefleri yaklaşık ±%3,5 saha toleransıyla birlikte değerlendirilir.</li><li><b>Güvenlik:</b> NDF/eNDF, nişasta, rumen pH ve mineral sınırları hedef puanından önce kontrol edilir.</li><li><b>Maliyet:</b> Besleme ve güvenlik hedeflerinden sonra son seçim kriteridir.</li><li><b>Akıllı Süt Rasyonu:</b> Aynı Yem Kataloğu ve veritabanı ile canlı ağırlık + hedef süt miktarından çözüm üretir.</li><li><b>Arayüz:</b> Kullanıcıya HOTFIX / DEV / PORT gibi teknik etiketler gösterilmez.</li></ul><p class="mut">Kaynak geçmişi CHANGELOG.md içinde tutulur.</p></div>'''
+            body='''<h1>📝 Sürüm Notları</h1><div class="card"><h2>ÇiftlikPro Enterprise · v3.9.20</h2><p class="mut">Rasyon motoru Besi_V5.02.xlsm içindeki Solver yaklaşımı incelenerek kısıt-öncelikli yapıya taşındı.</p><ul><li><b>Besi Rasyonu:</b> Seçilen yemlerin miktarları aynı anda optimize edilir; KM, HP, ME ve kaba/kesif hedefleri yaklaşık ±%3,5 saha toleransıyla birlikte değerlendirilir.</li><li><b>Bilimsel katman:</b> NASEM gereksinim çekirdeği korunur; INRA yem değerleri yalnız veri varsa ayrı doğrulama katmanında kullanılır.</li><li><b>Rumen güvenliği:</b> NDF/eNDF, toplam ve rumende yıkılabilir nişasta birlikte yorumlanır. Gösterge göreli risktir; klinik pH tahmini değildir.</li><li><b>Ürün sınırları:</b> Evrensel tahıl/fabrika yemi yüzdesi uygulanmaz; girilmiş etiket veya uzman doz sınırı kesin kısıttır.</li><li><b>Maliyet:</b> Besleme, güvenlik ve fizibilite hedeflerinden sonra son seçim kriteridir.</li><li><b>Arayüz:</b> Kullanıcıya HOTFIX / DEV / PORT gibi teknik etiketler gösterilmez.</li></ul><p class="mut">Kaynak geçmişi CHANGELOG.md içinde tutulur.</p></div>'''
             return self.send_html(page('Sürüm Notları',body,'/version-notes',u,msg))
         if path=='/backups':
             if not self.require_admin():return
@@ -5566,8 +6377,26 @@ setTimeout(()=>setFinanceDrawer(false),0);
             def num(k):
                 try:return float(f.get(k) or 0)
                 except:return 0.0
+            def pct(k):return max(0.0,min(100.0,num(k)))
+            label_min=max(0.0,num('solver_min_kg_day'));label_max=max(0.0,num('solver_max_kg_day'))
+            if label_min>0 and label_max>0 and label_min>label_max:
+                return self.redirect('/feeds','Etiket alt dozu üst dozdan büyük olamaz.')
             try:
-                with db() as c:c.execute('''insert into feed_catalog(name,category,dm_pct,ndf_pct,cp_pct,starch_pct,me_mcal_kg,ca_pct,p_pct,source,active) values(?,?,?,?,?,?,?,?,?,?,1)''',(name,(f.get('category') or 'Özel Yem').strip(),num('dm_pct'),num('ndf_pct'),num('cp_pct'),num('starch_pct'),num('me_mcal_kg'),num('ca_pct'),num('p_pct'),'Kullanıcı girişi'))
+                with db() as c:c.execute('''insert into feed_catalog(
+                    name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,starch_pct,me_mcal_kg,ca_pct,p_pct,
+                    label_cp_pct_as_fed,label_me_kcal_kg_as_fed,label_crude_fiber_pct_as_fed,
+                    label_fat_pct_as_fed,label_ash_pct_as_fed,label_sodium_pct_as_fed,
+                    starch_degradability_pct,ndf_digestibility_pct,processing_method,
+                    solver_min_kg_day,solver_max_kg_day,constraint_source,source,active
+                ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',(
+                    name,(f.get('category') or 'Özel Yem').strip(),pct('dm_pct'),pct('ndf_pct'),
+                    pct('effective_ndf_pct'),pct('cp_pct'),pct('starch_pct'),max(0.0,num('me_mcal_kg')),
+                    pct('ca_pct'),pct('p_pct'),pct('label_cp_pct_as_fed'),max(0.0,num('label_me_kcal_kg_as_fed')),
+                    pct('label_crude_fiber_pct_as_fed'),pct('label_fat_pct_as_fed'),
+                    pct('label_ash_pct_as_fed'),pct('label_sodium_pct_as_fed'),
+                    pct('starch_degradability_pct'),pct('ndf_digestibility_pct'),
+                    (f.get('processing_method') or '').strip(),label_min,label_max,
+                    (f.get('constraint_source') or '').strip(),'Kullanıcı girişi'))
             except sqlite3.IntegrityError:return self.redirect('/feeds','Bu yem zaten katalogda var.')
             audit(username,'Yem kataloğuna ekledi',name,self.client_ip());return self.redirect('/feeds','Özel yem kataloğa eklendi.')
         if path=='/feed/edit':
@@ -5578,13 +6407,26 @@ setTimeout(()=>setFinanceDrawer(false),0);
             def num(k):
                 try:return float(f.get(k) or 0)
                 except:return 0.0
-            cols=('dm_pct','ndf_pct','cp_pct','tdn_pct','me_mcal_kg','nem_mcal_kg','neg_mcal_kg','starch_pct','fat_pct','ash_pct','ca_pct','p_pct','mg_pct','k_pct','na_pct','s_pct')
-            vals=[num(k) for k in cols]
+            def pct(k):return max(0.0,min(100.0,num(k)))
+            label_min=max(0.0,num('solver_min_kg_day'));label_max=max(0.0,num('solver_max_kg_day'))
+            if label_min>0 and label_max>0 and label_min>label_max:
+                return self.redirect('/feed-edit?id='+str(fid),'Etiket alt dozu üst dozdan büyük olamaz.')
             try:
                 with db() as c:
                     old=c.execute('select name from feed_catalog where id=? and active=1',(fid,)).fetchone()
                     if not old:return self.redirect('/feeds','Yem bulunamadı.')
-                    c.execute('''update feed_catalog set name=?,category=?,dm_pct=?,ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,source=? where id=?''',(name,(f.get('category') or 'Özel Yem').strip(),*vals,(f.get('source') or 'Kullanıcı tarafından güncellendi').strip(),fid))
+                    c.execute('''update feed_catalog set name=?,category=?,dm_pct=?,ndf_pct=?,effective_ndf_pct=?,cp_pct=?,tdn_pct=?,me_mcal_kg=?,nem_mcal_kg=?,neg_mcal_kg=?,starch_pct=?,fat_pct=?,ash_pct=?,ca_pct=?,p_pct=?,mg_pct=?,k_pct=?,na_pct=?,s_pct=?,label_cp_pct_as_fed=?,label_me_kcal_kg_as_fed=?,label_crude_fiber_pct_as_fed=?,label_fat_pct_as_fed=?,label_ash_pct_as_fed=?,label_sodium_pct_as_fed=?,starch_degradability_pct=?,ndf_digestibility_pct=?,rdp_pct_cp=?,rup_pct_cp=?,inra_ufv=?,inra_pdi_g_kg_dm=?,inra_pdia_g_kg_dm=?,inra_rpb_g_kg_dm=?,inra_fill_unit=?,processing_method=?,solver_min_kg_day=?,solver_max_kg_day=?,constraint_source=?,source=? where id=?''',(
+                        name,(f.get('category') or 'Özel Yem').strip(),
+                        pct('dm_pct'),pct('ndf_pct'),pct('effective_ndf_pct'),pct('cp_pct'),pct('tdn_pct'),
+                        max(0.0,num('me_mcal_kg')),max(0.0,num('nem_mcal_kg')),max(0.0,num('neg_mcal_kg')),
+                        pct('starch_pct'),pct('fat_pct'),pct('ash_pct'),pct('ca_pct'),pct('p_pct'),pct('mg_pct'),pct('k_pct'),pct('na_pct'),pct('s_pct'),
+                        pct('label_cp_pct_as_fed'),max(0.0,num('label_me_kcal_kg_as_fed')),
+                        pct('label_crude_fiber_pct_as_fed'),pct('label_fat_pct_as_fed'),
+                        pct('label_ash_pct_as_fed'),pct('label_sodium_pct_as_fed'),
+                        pct('starch_degradability_pct'),pct('ndf_digestibility_pct'),pct('rdp_pct_cp'),pct('rup_pct_cp'),
+                        max(0.0,num('inra_ufv')),max(0.0,num('inra_pdi_g_kg_dm')),max(0.0,num('inra_pdia_g_kg_dm')),num('inra_rpb_g_kg_dm'),max(0.0,num('inra_fill_unit')),
+                        (f.get('processing_method') or '').strip(),label_min,label_max,(f.get('constraint_source') or '').strip(),
+                        (f.get('source') or 'Kullanıcı tarafından güncellendi').strip(),fid))
             except sqlite3.IntegrityError:return self.redirect('/feed-edit?id='+str(fid),'Bu yem adı başka bir kayıtta kullanılıyor.')
             audit(username,'Yem kataloğunu düzenledi',f'{old["name"]} -> {name}',self.client_ip());return self.redirect('/feeds','Yem bilgileri güncellendi.')
         if path=='/feed/delete':
@@ -5649,14 +6491,17 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if not solved:return self.redirect('/rations?solve=1',warn or 'Seçilen yemlerle çözüm üretilemedi.')
                 qty,m,bounds=solved; stamp=datetime.now().strftime('%d%m-%H%M%S')
                 if rtype=='Süt':
-                    name=f'Akıllı Süt {w:.0f}kg {milk:.1f}kg {stamp}'; note=f'Süt_V5.01 / INRA-NASEM referanslı süt hedef motoru · KM {t["dmi_kg"]:.2f} kg · HP %{t["cp_pct"]:.1f} · ME {t["me_mcal_day"]:.1f} Mcal · Tahmini rumen pH {m["rumen_ph"]:.2f}' + ((' · '+warn) if warn else '')
+                    risk=m.get('rumen_risk',{}).get('level','Belirsiz')
+                    name=f'Akıllı Süt {w:.0f}kg {milk:.1f}kg {stamp}'; note=f'Süt_V5.01 / INRA-NASEM referanslı süt hedef motoru · KM {t["dmi_kg"]:.2f} kg · HP %{t["cp_pct"]:.1f} · ME {t["me_mcal_day"]:.1f} Mcal · Göreli asidoz riski {risk} (klinik pH tahmini değildir)' + ((' · '+warn) if warn else '')
                     cur=c.execute('insert into rations(name,target_group,notes,active,created_at,target_weight_kg,target_adg_kg,animal_type,ration_type,target_milk_l,milk_fat_pct,milk_protein_pct,target_age_months) values(?,?,?,1,?,?,?,?,?,?,?,?,?)',(name,'Sağmal',note,datetime.now().isoformat(timespec='seconds'),w,0.0,'Sağmal İnek','Süt',milk,t['milk_fat_pct'],t['milk_protein_pct'],0));rid=cur.lastrowid
                 else:
-                    name=f'Akıllı Çözüm {w:.0f}kg {adg:.2f} GCAA {stamp}'; note=f'Besi Hayvanı İhtiyaç Motoru V2 · NASEM 2016 dinamik DMI + net enerji çekirdeği · NEm {t["nem_req_mcal"]:.1f} · NEg {t["neg_req_mcal"]:.1f} Mcal · Tahmini rumen pH {m["rumen_ph"]:.2f}' + ((' · '+warn) if warn else '')
+                    risk=m.get('rumen_risk',{}).get('level','Belirsiz')
+                    name=f'Akıllı Çözüm {w:.0f}kg {adg:.2f} GCAA {stamp}'; note=f'Besi Hayvanı İhtiyaç Motoru V2 · NASEM 2016 dinamik DMI + net enerji çekirdeği · NEm {t["nem_req_mcal"]:.1f} · NEg {t["neg_req_mcal"]:.1f} Mcal · Göreli rumen asidoz riski: {risk} (klinik pH tahmini değildir)' + ((' · '+warn) if warn else '')
                     cur=c.execute('insert into rations(name,target_group,notes,active,created_at,target_weight_kg,target_adg_kg,animal_type,ration_type,target_milk_l,milk_fat_pct,milk_protein_pct,target_age_months,target_beef_phase) values(?,?,?,1,?,?,?,?,?,?,?,?,?,?)',(name,'Besi',note,datetime.now().isoformat(timespec='seconds'),w,adg,animal_type,'Besi',25,3.8,3.2,age,phase_override));rid=cur.lastrowid
                 for feed,kg in zip(rows,qty):
                     if kg>=.01:c.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(rid,int(feed['id']),kg));record_ration_item_history(c,rid,int(feed['id']),kg,notes='Hotfix6_16 Akıllı Rasyon')
-            audit(username,'Akıllı rasyon çözdü',name,self.client_ip());return self.redirect('/rations?id='+str(rid),f'🧠 Rasyon çözüldü · Tahmini rumen pH {m["rumen_ph"]:.2f}. '+(warn or 'Otomatik sınırlar içinde çözüm üretildi.'))
+            result_head=(f'🧠 Rasyon çözüldü · Göreli rumen riski {m.get("rumen_risk",{}).get("level","Belirsiz")}.' if rtype!='Süt' else f'🧠 Süt rasyonu çözüldü · Göreli asidoz riski {m.get("rumen_risk",{}).get("level","Belirsiz")} (klinik pH tahmini değildir).')
+            audit(username,'Akıllı rasyon çözdü',name,self.client_ip());return self.redirect('/rations?id='+str(rid),result_head+' '+(warn or 'Otomatik sınırlar içinde çözüm üretildi.'))
         if path=='/ration/create':
             name=(f.get('name') or '').strip()
             if not name:return self.redirect('/rations','Rasyon adı zorunludur.')
@@ -6674,7 +7519,7 @@ DEV43_DESKTOP_RATION_CSS = r'''
   body.erp-ration-reference .ration-workbench-table .ration-qty{width:54px!important;height:28px!important;padding:2px 4px!important;text-align:center!important;font-weight:900!important}
   body.erp-ration-reference .ration-workbench-table .qty-step{width:25px!important;height:28px!important;padding:0!important}
   body.erp-ration-reference .ration-workbench-table .qty-zero{padding:5px 8px!important}
-  body.erp-ration-reference .ration-savebar{position:sticky!important;bottom:26px!important;z-index:8!important;display:flex!important;justify-content:flex-end!important;background:rgba(255,255,255,.96)!important;border-top:1px solid #dce6df!important;margin:6px -9px -9px!important;padding:7px 9px!important;backdrop-filter:blur(5px)!important}
+  body.erp-ration-reference .ration-savebar{position:static!important;bottom:auto!important;z-index:8!important;display:flex!important;justify-content:flex-end!important;background:#fff!important;border-top:1px solid #dce6df!important;margin:6px -9px -9px!important;padding:7px 9px!important;backdrop-filter:none!important}
   body.erp-ration-reference .ration-savebar .btn{padding:8px 12px!important;border-radius:6px!important}
 
   body.erp-ration-reference #smart-balance{margin-top:10px!important;padding:12px!important;border-color:#d4e0d7!important;background:#fff!important}
