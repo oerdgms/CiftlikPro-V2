@@ -1586,7 +1586,7 @@ def ration_summary(ration_id, con=None):
             out['as_fed_kg']+=kg; out['dm_kg']+=dm
             out['cp_kg']+=dm*float(r['cp_pct'] or 0)/100.0
             out['ndf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0
-            out['endf_kg']+=dm*float(r['ndf_pct'] or 0)/100.0*float(r['effective_ndf_pct'] or 0)/100.0
+            out['endf_kg']+=dm*_solver_nutrient(r,'ndf_pct')/100.0*_solver_nutrient(r,'effective_ndf_pct')/100.0
             # Ekran, öneriler ve solver aynı güvenli nişasta değerini kullanır.
             # Böylece eski katalog aktarımlarındaki bariz kolon kaymaları rasyon özetini bozmaz.
             feed_starch=dm*_solver_starch_pct(r)/100.0; out['starch_kg']+=feed_starch
@@ -1594,10 +1594,10 @@ def ration_summary(ration_id, con=None):
             if known_deg:
                 out['known_degradability_starch_kg']+=feed_starch
                 out['rapid_starch_kg']+=feed_starch*starch_deg/100.0
-            out['tdn_kg']+=dm*float(r['tdn_pct'] or 0)/100.0
-            out['me_mcal']+=dm*float(r['me_mcal_kg'] or 0)
-            out['nem_mcal']+=dm*float(r['nem_mcal_kg'] or 0)
-            out['neg_mcal']+=dm*float(r['neg_mcal_kg'] or 0)
+            out['tdn_kg']+=dm*_solver_nutrient(r,'tdn_pct')/100.0
+            out['me_mcal']+=dm*_solver_nutrient(r,'me_mcal_kg')
+            out['nem_mcal']+=dm*_solver_nutrient(r,'nem_mcal_kg')
+            out['neg_mcal']+=dm*_solver_nutrient(r,'neg_mcal_kg')
             out['ca_g']+=dm*float(r['ca_pct'] or 0)*10.0
             out['p_g']+=dm*float(r['p_pct'] or 0)*10.0
             out['cost']+=kg*float(r['price'] or 0)
@@ -2120,6 +2120,24 @@ def _solver_nutrient(feed,key):
         vals={'ndf_pct':53.0,'effective_ndf_pct':80.0,'tdn_pct':77.0,
               'nem_mcal_kg':1.70,'neg_mcal_kg':1.39,'cp_pct':24.0,'fat_pct':19.0}
         if key in vals:return vals[key]
+    # Kullanıcı tanımlı yemlerde ME girilip NEm/NEg boş bırakılabiliyor. Büyüme
+    # kapasitesinde bunları sıfır saymak, enerji taşıyan yemi yok sayarak sahte
+    # "çözüm yok" üretir. NRC tipi ME→net enerji polinomları yalnız eksik alan
+    # için çalışma değeri sağlar; kullanıcının gerçek NEm/NEg analizi varsa dokunulmaz.
+    me=max(0.0,float(_rowval(feed,'me_mcal_kg',0) or 0))
+    if raw<=0 and 1.0<=me<=4.5:
+        if key=='nem_mcal_kg':
+            return max(0.0,1.37*me-0.138*me**2+0.0105*me**3-1.12)
+        if key=='neg_mcal_kg':
+            return max(0.0,1.42*me-0.174*me**2+0.0122*me**3-1.65)
+        if key=='tdn_pct':
+            return max(0.0,min(100.0,me/(0.82*0.04409)))
+    # Etkin NDF yüzdesi girilmemiş kaba yem, sıfır fiziksel lif değildir. İsimle
+    # açıkça silaj/kuru ot/saman olduğu bilinen kayıtta muhafazakâr çalışma oranı.
+    if key=='effective_ndf_pct' and raw<=0 and feed_group(feed)=='Kaba':
+        if 'SAMAN' in name:return 100.0
+        if 'SİLAJ' in name or 'SILAJ' in name:return 70.0
+        return 80.0
     return raw
 
 def _solver_starch_pct(feed):
@@ -2801,7 +2819,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.19.1 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.19.3 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)
@@ -3426,7 +3444,7 @@ def ration_simulated_multi_summary(ration_id, changes, con=None):
             kg=float(delta_kg or 0); dm=kg*float(f['dm_pct'] or 0)/100
             feed_starch=dm*_solver_starch_pct(f)/100
             starch_deg,known_deg=_feed_starch_degradability(f)
-            out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['nem_mcal']+=dm*float(f['nem_mcal_kg'] or 0);out['neg_mcal']+=dm*float(f['neg_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+            out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*_solver_nutrient(f,'cp_pct')/100;out['ndf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100;out['endf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100*_solver_nutrient(f,'effective_ndf_pct')/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*_solver_nutrient(f,'tdn_pct')/100;out['me_mcal']+=dm*_solver_nutrient(f,'me_mcal_kg');out['nem_mcal']+=dm*_solver_nutrient(f,'nem_mcal_kg');out['neg_mcal']+=dm*_solver_nutrient(f,'neg_mcal_kg');out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
             if known_deg:
                 out['known_degradability_starch_kg']+=feed_starch
                 out['rapid_starch_kg']+=feed_starch*starch_deg/100
@@ -3492,7 +3510,7 @@ def ration_simulated_summary(ration_id, feed_id, delta_kg, con=None):
         kg=float(delta_kg); dm=kg*float(f['dm_pct'] or 0)/100
         feed_starch=dm*_solver_starch_pct(f)/100
         starch_deg,known_deg=_feed_starch_degradability(f)
-        out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*float(f['cp_pct'] or 0)/100;out['ndf_kg']+=dm*float(f['ndf_pct'] or 0)/100;out['endf_kg']+=dm*float(f['ndf_pct'] or 0)/100*float(f['effective_ndf_pct'] or 0)/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*float(f['tdn_pct'] or 0)/100;out['me_mcal']+=dm*float(f['me_mcal_kg'] or 0);out['nem_mcal']+=dm*float(f['nem_mcal_kg'] or 0);out['neg_mcal']+=dm*float(f['neg_mcal_kg'] or 0);out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
+        out['as_fed_kg']+=kg;out['dm_kg']+=dm;out['cp_kg']+=dm*_solver_nutrient(f,'cp_pct')/100;out['ndf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100;out['endf_kg']+=dm*_solver_nutrient(f,'ndf_pct')/100*_solver_nutrient(f,'effective_ndf_pct')/100;out['starch_kg']+=feed_starch;out['tdn_kg']+=dm*_solver_nutrient(f,'tdn_pct')/100;out['me_mcal']+=dm*_solver_nutrient(f,'me_mcal_kg');out['nem_mcal']+=dm*_solver_nutrient(f,'nem_mcal_kg');out['neg_mcal']+=dm*_solver_nutrient(f,'neg_mcal_kg');out['ca_g']+=dm*float(f['ca_pct'] or 0)*10;out['p_g']+=dm*float(f['p_pct'] or 0)*10;out['cost']+=kg*float(f['price'] or 0)
         if known_deg:
             out['known_degradability_starch_kg']+=feed_starch
             out['rapid_starch_kg']+=feed_starch*starch_deg/100
@@ -5281,7 +5299,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
                     if rr:
                         sm=ration_summary(selected,c)
-                        item_rows=''.join(f'''<tr class="ration-row" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{float(x['cp_pct'] or 0):.8f}" data-ndf="{float(x['ndf_pct'] or 0):.8f}" data-endf="{float(x['effective_ndf_pct'] or 0):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{float(x['me_mcal_kg'] or 0):.8f}" data-nem="{float(x['nem_mcal_kg'] or 0):.8f}" data-neg="{float(x['neg_mcal_kg'] or 0):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        item_rows=''.join(f'''<tr class="ration-row" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{_solver_nutrient(x,'cp_pct'):.8f}" data-ndf="{_solver_nutrient(x,'ndf_pct'):.8f}" data-endf="{_solver_nutrient(x,'effective_ndf_pct'):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{_solver_nutrient(x,'me_mcal_kg'):.8f}" data-nem="{_solver_nutrient(x,'nem_mcal_kg'):.8f}" data-neg="{_solver_nutrient(x,'neg_mcal_kg'):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
                         feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
                         current_feed_qty={int(x['id']):float(x['kg_per_head_day'] or 0) for x in sm['items']}
                         quick_feed_rows=[]

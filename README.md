@@ -1,4 +1,15 @@
-# ÇiftlikPro v3.9.20 — Solver DEV4.19.1 Saha Hotfix
+# ÇiftlikPro v3.9.20 — Solver DEV4.19.3 Canlı Kart Hotfix
+
+DEV4.19.3, kaydedilmiş rasyon açıldığında tarayıcıdaki canlı hedef kartının
+türetilmiş NEm/NEg yerine ham sıfır alanlarını okuyarak doğru GCAA değerini
+ezmesini düzeltir. Sunucu özeti, canlı miktar değişimi ve rasyon simülasyonları
+artık aynı normalize edilmiş besin değerlerini kullanır.
+
+DEV4.19.2, kullanıcının gerçek yedeğinde görülen eksik enerji alanını düzeltir.
+ME değeri bulunan fakat NEm/NEg alanları boş kullanıcı yemleri artık sıfır enerji
+sayılmaz; yalnız eksik alanlar NRC tipi ME dönüşümüyle çalışma değerine çevrilir.
+Gerçek analiz girilmiş alanlara dokunulmaz. Aynı yaklaşım eksik TDN ve kaba yem
+eNDF alanlarında muhafazakâr çalışma değeri sağlar.
 
 DEV4.19.1, 260 kg / 10 ay / 1,40 kg GCAA saha testinde görülen geç kayıt
 reddini düzeltir. Ciddi kaba/kesif koridoru sapması artık yalnız sonuçta değil,

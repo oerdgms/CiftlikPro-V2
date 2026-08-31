@@ -1,3 +1,21 @@
+# v3.9.20 Solver DEV4.19.3 — Canlı Hedef Kartı Hotfix
+
+- Solverın yaklaşık `1,39 kg` hesapladığı GCAA değerinin rasyon detayında canlı
+  JavaScript tarafından ham NEm/NEg ile `0,67 kg` gösterilmesi düzeltildi.
+- Rasyon satırlarının canlı hesap veri alanları, sunucuyla aynı normalize edilmiş
+  ME/NEm/NEg/eNDF/HP/NDF değerlerinden üretiliyor.
+- Miktar değişikliği simülasyonları da aynı besin katmanına bağlandı.
+
+# v3.9.20 Solver DEV4.19.2 — Gerçek Veritabanı Enerji Hotfix
+
+- Kullanıcının gerçek yedeğindeki Mısır Koçanı Silajı kaydında ME `2,65` iken
+  NEm/NEg/TDN/eNDF alanlarının sıfır olması nedeniyle yemin enerji kapasitesinin
+  yok sayıldığı belirlendi.
+- ME mevcutsa eksik NEm ve NEg, NRC tipi net enerji polinomlarıyla; eksik TDN,
+  ME dönüşümüyle; eksik silaj eNDF'si muhafazakâr `%70` çalışma oranıyla tamamlanıyor.
+- Beş yemli gerçek saha senaryosu GCAA `1,387`, kaba yem `%51,3`; sekiz yemli
+  gerçek senaryo GCAA `1,396`, kaba yem `%49,0` ile çözüldü.
+
 # v3.9.20 Solver DEV4.19.1 — 260 kg Saha Hotfix
 
 - 260 kg / 10 ay / 1,40 kg GCAA ve sekiz seçili yem senaryosunda optimizerın

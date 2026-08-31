@@ -543,11 +543,13 @@ class ReportImportTests(unittest.TestCase):
         with server.db() as con:
             base=[dict(con.execute('select * from feed_catalog where name=?',(name,)).fetchone()) for name in names]
         cob=dict(base[1])
-        cob.update({'name':'MISIR KOÇANI SİLAJI','category':'Özel Yem','dm_pct':45.0,
-                    'ndf_pct':45.0,'effective_ndf_pct':70.0,'tdn_pct':68.0,
-                    'me_mcal_kg':2.45,'nem_mcal_kg':1.55,'neg_mcal_kg':.95,
-                    'cp_pct':8.0,'starch_pct':28.0,'solver_min_kg_day':0.0,
-                    'solver_max_kg_day':5.0})
+        # Gerçek saha yedeğindeki kullanıcı girişi: ME mevcut, NEm/NEg/TDN/eNDF
+        # boş. Solver bunları sıfır enerji saymamalı; güvenli çalışma değerini türetmeli.
+        cob.update({'name':'MISIR KOÇANI SİLAJI','category':'Özel Yem','dm_pct':35.0,
+                    'ndf_pct':40.0,'effective_ndf_pct':0.0,'tdn_pct':0.0,
+                    'me_mcal_kg':2.65,'nem_mcal_kg':0.0,'neg_mcal_kg':0.0,
+                    'cp_pct':9.0,'starch_pct':0.0,'solver_min_kg_day':0.0,
+                    'solver_max_kg_day':0.0})
         feeds=base[:3]+[cob]+base[3:]
         solved,targets,message=server.solve_smart_ration(feeds,260,1.4,'Besi Erkek',10,'Otomatik')
         self.assertIsNotNone(solved,message)
@@ -557,6 +559,21 @@ class ReportImportTests(unittest.TestCase):
         self.assertGreaterEqual(metrics['roughage_pct_dm'],targets['roughage_min'])
         self.assertLessEqual(metrics['roughage_pct_dm'],targets['roughage_max'])
         self.assertIn(metrics['feasibility']['status'],('feasible','limited'))
+
+    def test_4192_missing_net_energy_is_derived_from_entered_me(self):
+        feed={'name':'MISIR KOÇANI SİLAJI','category':'Özel Yem','dm_pct':35.0,
+              'ndf_pct':40.0,'effective_ndf_pct':0.0,'tdn_pct':0.0,
+              'me_mcal_kg':2.65,'nem_mcal_kg':0.0,'neg_mcal_kg':0.0}
+        self.assertGreater(server._solver_nutrient(feed,'nem_mcal_kg'),1.7)
+        self.assertGreater(server._solver_nutrient(feed,'neg_mcal_kg'),1.1)
+        self.assertGreater(server._solver_nutrient(feed,'tdn_pct'),70.0)
+        self.assertEqual(server._solver_nutrient(feed,'effective_ndf_pct'),70.0)
+
+    def test_4193_live_ration_rows_use_same_normalized_energy_as_solver(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        self.assertIn('data-nem="{_solver_nutrient(x,\'nem_mcal_kg\'):.8f}"',source)
+        self.assertIn('data-neg="{_solver_nutrient(x,\'neg_mcal_kg\'):.8f}"',source)
+        self.assertNotIn('data-nem="{float(x[\'nem_mcal_kg\'] or 0):.8f}"',source)
 
 
 if __name__ == "__main__":
