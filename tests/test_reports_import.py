@@ -325,8 +325,8 @@ class ReportImportTests(unittest.TestCase):
 
     def test_416_beef_profile_penalizes_dairy_feed_but_not_beef_feed(self):
         feeds=[
-            {'name':'SUNAR KARDELEN SÜT YEMİ,19,2700','category':'Ticari Karma Yem','dm_pct':88.35},
-            {'name':'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','category':'Ticari Karma Yem','dm_pct':88.35},
+            {'name':'SUNAR KARDELEN 19.27 SÜT YEMİ','category':'Ticari Karma Yem','dm_pct':88.35},
+            {'name':'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','category':'Ticari Karma Yem','dm_pct':88.35},
         ]
         self.assertGreater(server._commercial_profile_penalty(feeds,[1.0,1.0],'Besi Erkek',8.0),0)
         self.assertEqual(server._commercial_profile_penalty(feeds,[0.0,2.0],'Besi Erkek',8.0),0)
@@ -338,8 +338,8 @@ class ReportImportTests(unittest.TestCase):
 
     def test_417_beef_feed_selected_closes_dairy_feed_bound(self):
         feeds=[
-            {'name':'SUNAR KARDELEN SÜT YEMİ,19,2700','category':'Ticari Karma Yem'},
-            {'name':'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','category':'Ticari Karma Yem'},
+            {'name':'SUNAR KARDELEN 19.27 SÜT YEMİ','category':'Ticari Karma Yem'},
+            {'name':'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','category':'Ticari Karma Yem'},
             {'name':'ARPA EZMESİ','category':'Kesif Yemler'},
         ]
         adjusted=server._apply_commercial_profile_bounds(feeds,[(0,5),(0,5),(0,5)],'Besi Erkek')
@@ -357,9 +357,9 @@ class ReportImportTests(unittest.TestCase):
 
     def test_414_commercial_reference_profiles_are_complete_and_normalized(self):
         names=('BUZAĞI BAŞLANGIÇ YEMİ','SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
-               'SUNAR KARDELEN SÜT YEMİ,19,2700',
+               'SUNAR KARDELEN 19.27 SÜT YEMİ',
                'SIĞIR BESİ YEMİ,13,2700','SIĞIR BESİ YEMİ,14,2800',
-               'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','SIĞIR BESİ YEMİ,14,2600')
+               'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','SIĞIR BESİ YEMİ,14,2600')
         with server.db() as con:
             rows=con.execute('select * from feed_catalog where name in ('+','.join('?' for _ in names)+')',names).fetchall()
         self.assertEqual(len(rows),len(names))
@@ -372,34 +372,47 @@ class ReportImportTests(unittest.TestCase):
             self.assertLessEqual(row['starch_pct'],35.0)
             self.assertTrue(row['constraint_source'])
 
-    def test_415_cukoyem_real_label_profile_and_dose(self):
+    def test_418_sunar_beef_real_label_profile_and_dose(self):
         with server.db() as con:
-            row=con.execute("select * from feed_catalog where name='ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650'").fetchone()
+            row=con.execute("select * from feed_catalog where name='SUNAR 15.26 GELİŞTİRME BESİ YEMİ'").fetchone()
         self.assertIsNotNone(row)
         self.assertAlmostEqual(row['cp_pct'],16.978,places=3)
+        self.assertAlmostEqual(row['me_mcal_kg'],2.943,places=3)
+        self.assertAlmostEqual(row['nem_mcal_kg'],1.984,places=3)
+        self.assertAlmostEqual(row['neg_mcal_kg'],1.333,places=3)
         self.assertAlmostEqual(row['fat_pct'],3.396,places=3)
-        self.assertAlmostEqual(row['ash_pct'],8.602,places=3)
-        self.assertAlmostEqual(row['na_pct'],.351,places=3)
+        self.assertAlmostEqual(row['ash_pct'],8.749,places=3)
+        self.assertAlmostEqual(row['na_pct'],.306,places=3)
         self.assertEqual(row['label_cp_pct_as_fed'],15.0)
-        self.assertEqual(row['label_me_kcal_kg_as_fed'],2650.0)
-        self.assertEqual(row['label_crude_fiber_pct_as_fed'],8.86)
+        self.assertEqual(row['label_me_kcal_kg_as_fed'],2600.0)
+        self.assertEqual(row['label_crude_fiber_pct_as_fed'],9.27)
         self.assertEqual(row['label_fat_pct_as_fed'],3.0)
-        self.assertEqual(row['label_ash_pct_as_fed'],7.6)
-        self.assertEqual(row['label_sodium_pct_as_fed'],.31)
+        self.assertEqual(row['label_ash_pct_as_fed'],7.73)
+        self.assertEqual(row['label_sodium_pct_as_fed'],.27)
         self.assertEqual(row['solver_max_kg_day'],10.0)
-        self.assertIn('Çukoyem etiketi',row['constraint_source'])
+        self.assertIn('20/08/2026',row['constraint_source'])
+        self.assertIn('referans tahminidir',row['source'])
 
-    def test_415_sunar_kardelen_verified_nameplate_and_energy_profile(self):
+    def test_418_sunar_kardelen_real_label_profile_and_dose(self):
         with server.db() as con:
-            row=con.execute("select * from feed_catalog where name='SUNAR KARDELEN SÜT YEMİ,19,2700'").fetchone()
+            row=con.execute("select * from feed_catalog where name='SUNAR KARDELEN 19.27 SÜT YEMİ'").fetchone()
         self.assertIsNotNone(row)
         self.assertAlmostEqual(row['cp_pct'],21.505,places=3)
         self.assertAlmostEqual(row['me_mcal_kg'],3.056,places=3)
-        self.assertAlmostEqual(row['nem_mcal_kg'],2.08,places=2)
-        self.assertAlmostEqual(row['neg_mcal_kg'],1.41,places=2)
+        self.assertAlmostEqual(row['nem_mcal_kg'],2.078,places=3)
+        self.assertAlmostEqual(row['neg_mcal_kg'],1.413,places=3)
+        self.assertAlmostEqual(row['fat_pct'],3.962,places=3)
+        self.assertAlmostEqual(row['ash_pct'],7.799,places=3)
+        self.assertAlmostEqual(row['na_pct'],.374,places=3)
         self.assertEqual(row['label_cp_pct_as_fed'],19.0)
         self.assertEqual(row['label_me_kcal_kg_as_fed'],2700.0)
-        self.assertIn('19 HP / 2700 ME',row['source'])
+        self.assertEqual(row['label_crude_fiber_pct_as_fed'],9.07)
+        self.assertEqual(row['label_fat_pct_as_fed'],3.50)
+        self.assertEqual(row['label_ash_pct_as_fed'],6.89)
+        self.assertEqual(row['label_sodium_pct_as_fed'],.33)
+        self.assertEqual((row['solver_min_kg_day'],row['solver_max_kg_day']),(6.0,12.0))
+        self.assertEqual(server.dairy_feed_bounds(row,650,20.0),(6.0,12.0))
+        self.assertIn('19/08/2026',row['source'])
         self.assertIn('referans tahminidir',row['source'])
 
     def test_415_sunar_calf_grower_is_named_and_classified_without_fake_label_claim(self):
@@ -411,25 +424,38 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('referans tahminidir',row['source'])
         self.assertIn('sayısal etiket',row['constraint_source'])
 
-    def test_416_sunar_name_migration_preserves_feed_identity_and_history_link(self):
+    def test_418_sunar_name_migration_preserves_feed_identity_and_history_link(self):
         with server.db() as con:
-            row=con.execute("select id from feed_catalog where name='SUNAR KARDELEN SÜT YEMİ,19,2700'").fetchone()
+            row=con.execute("select id from feed_catalog where name='SUNAR KARDELEN 19.27 SÜT YEMİ'").fetchone()
             feed_id=row['id']
+            beef=con.execute("select id from feed_catalog where name='SUNAR 15.26 GELİŞTİRME BESİ YEMİ'").fetchone()
+            beef_id=beef['id']
             ration_id=con.execute("insert into rations(name,target_group,notes,active,created_at) values(?,?,?,?,?)",
                                   ('Sunar geçiş testi','Test','',1,'2026-08-29T00:00:00')).lastrowid
             con.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(ration_id,feed_id,1.0))
-            con.execute("update feed_catalog set name='SIĞIR SÜT YEMİ',source='ÇiftlikPro DEV4.14 test profili' where id=?",(feed_id,))
+            stock_id=con.execute("insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)",
+                                 (beef_id,'2026-08-31','Giriş',50,1,'Sunar geçiş testi')).lastrowid
+            con.execute("update feed_catalog set name='SUNAR KARDELEN SÜT YEMİ,19,2700',source='Sunar resmi ürün adı ve 2020 katalog test profili' where id=?",(feed_id,))
+            con.execute("update feed_catalog set name='ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650',source='Sunar/Çukoyem ürün etiketi test profili' where id=?",(beef_id,))
         server.init_db()
         with server.db() as con:
             migrated=con.execute('select * from feed_catalog where id=?',(feed_id,)).fetchone()
+            migrated_beef=con.execute('select * from feed_catalog where id=?',(beef_id,)).fetchone()
             link=con.execute('select feed_id from ration_items where ration_id=?',(ration_id,)).fetchone()
+            stock_link=con.execute('select feed_id from feed_stock_transactions where id=?',(stock_id,)).fetchone()
+            con.execute('delete from feed_stock_transactions where id=?',(stock_id,))
             con.execute('delete from ration_item_history where ration_id=?',(ration_id,))
             con.execute('delete from ration_items where ration_id=?',(ration_id,))
             con.execute('delete from rations where id=?',(ration_id,))
-        self.assertEqual(migrated['name'],'SUNAR KARDELEN SÜT YEMİ,19,2700')
+        self.assertEqual(migrated['name'],'SUNAR KARDELEN 19.27 SÜT YEMİ')
         self.assertEqual(link['feed_id'],feed_id)
         self.assertEqual(migrated['label_cp_pct_as_fed'],19.0)
         self.assertAlmostEqual(migrated['cp_pct'],21.505,places=3)
+        self.assertEqual((migrated['solver_min_kg_day'],migrated['solver_max_kg_day']),(6.0,12.0))
+        self.assertEqual(migrated_beef['name'],'SUNAR 15.26 GELİŞTİRME BESİ YEMİ')
+        self.assertEqual(stock_link['feed_id'],beef_id)
+        self.assertEqual(migrated_beef['label_crude_fiber_pct_as_fed'],9.27)
+        self.assertAlmostEqual(migrated_beef['me_mcal_kg'],2.943,places=3)
 
     def test_414_high_cp_and_energy_capacity_are_explained_as_surplus(self):
         rr={'id':1,'ration_type':'Besi','target_weight_kg':500,'target_adg_kg':1.30,

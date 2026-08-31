@@ -1,4 +1,11 @@
-# ÇiftlikPro v3.9.20 — Solver DEV4.17 Sert Güvenlik
+# ÇiftlikPro v3.9.20 — Solver DEV4.18 Gerçek Sunar Etiketleri
+
+DEV4.18, 19–20 Ağustos 2026 tarihli gerçek ürün etiketlerini Yem Kataloğu'na
+işler. `Sunar 15.26 Geliştirme Besi Yemi` ile `Sunar Kardelen 19.27 Süt Yemi`
+adları, etiket HP/yağ/selüloz/kül/sodyum değerleri ve kuru madde dönüşümleri
+güncellenmiştir. Kardelen'in `6–12 kg/baş/gün` etiket sınırı artık süt
+solverında da kesin uygulanır. NDF, nişasta, Ca/P ve KM etikette bulunmadığı için
+referans tahmin olarak açıkça ayrılır.
 
 DEV4.17, faz nişasta üst sınırını kayıt kapısı yapar; besi yemi varken süt
 yemini çözümden çıkarır ve enerjiye göre GCAA kapasitesini hedefin `%1`
@@ -11,15 +18,15 @@ maliyet ve genel çeşitlilikten önce değerlendirir. DEV4.15 Sunar yem profill
 ve etiket alanları korunmuştur.
 
 Bu paket, DEV4.14 rasyon güvenlik düzeltmelerine ek olarak kullanıcının gerçek
-Çukoyem 15/2650 etiketini, Sunar Kardelen 19/2700 Süt Yemi'ni ve Sunar Buzağı
-Büyütme Özel Dönem Yemi'ni Yem Kataloğu'na geçirir. Üreticinin yayımlamadığı
-analiz alanları tahmin olarak açıkça işaretlenir; kesin etiket değeri gibi sunulmaz.
-Ürün etiketindeki değerler ayrı alanlarda aynen saklanır; solverın kullandığı
-besin alanları ise kuru madde bazındadır.
+Sunar 15.26 ve Kardelen 19.27 etiketlerini, ayrıca Sunar Buzağı Büyütme Özel
+Dönem Yemi'ni Yem Kataloğu'nda tutar. Üreticinin yayımlamadığı analiz alanları
+tahmin olarak açıkça işaretlenir; kesin etiket değeri gibi sunulmaz. Ürün
+etiketindeki değerler ayrı alanlarda aynen saklanır; solverın kullandığı besin
+alanları ise kuru madde bazındadır.
 
-Sunar Kardelen için resmi 2020 katalogdaki 25-35 kg süt verimine yönelik
-7-12 kg/baş/gün örnek program; Buzağı Büyütme için 60-120 gün ve serbest tüketim
-bilgisi kaynak notunda yer alır. Mevcut kullanıcı/laboratuvar analizleri korunur.
+Sunar Kardelen için güncel etiketteki `6–12 kg/baş/gün`; Buzağı Büyütme için
+60–120 gün ve serbest tüketim bilgisi kaynak notunda yer alır. Mevcut
+kullanıcı/laboratuvar analizleri korunur.
 
 ## DEV4.13 Bilimsel Hedef Kartları
 

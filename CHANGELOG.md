@@ -1,3 +1,24 @@
+# v3.9.20 Solver DEV4.18 — Gerçek Sunar Etiketleri
+
+- 20/08/2026 tarihli `Sunar 15.26 Geliştirme Besi Yemi` etiketi işlendi: ürün
+  bazında `%15 HP`, `%3,00 yağ`, `%9,27 ham selüloz`, `%7,73 kül` ve `%0,27
+  sodyum`.
+- Besi yemi enerji sınıfı ürün koduna uygun `2600 kcal/kg` olarak düzeltildi;
+  `%88,35` referans KM ile `2,943 ME`, `1,984 NEm` ve `1,333 NEg Mcal/kg KM`
+  kullanılıyor. Güncel etikette ME ayrı analitik satır olmadığı kaynak notunda
+  açıkça belirtiliyor.
+- 19/08/2026 tarihli `Sunar Kardelen 19.27 Süt Yemi` etiketi işlendi: ürün
+  bazında `%19 HP`, `%3,50 yağ`, `%9,07 ham selüloz`, `%6,89 kül` ve `%0,33
+  sodyum`.
+- Kardelen'in `6–12 kg/baş/gün` etiket sınırı süt solverına bağlandı; süt
+  solverındaki etiket alt/üst sınırını atlayan eski yol düzeltildi.
+- Eski Çukoyem/Sığır Besi ve Sığır Süt adları, yem kimliği ile rasyon, fiyat ve
+  stok bağlantıları korunarak yeni Sunar adlarına geçiriliyor.
+- KM, NDF, nişasta, Ca/P ve ileri rumen alanları gerçek analiz olmadığı için
+  referans tahmin olarak kalıyor; vitamin/iz element kartları belgeye eklendi
+  fakat eksik mikro-mineral modeliyle otomatik premiks optimizasyonuna katılmadı.
+- 40 otomatik test başarıyla tamamlandı.
+
 # v3.9.20 Solver DEV4.17 — Sert Güvenlik ve Net GCAA
 
 - Fazın nişasta sert üst sınırını aşan aday artık kaydedilmiyor.

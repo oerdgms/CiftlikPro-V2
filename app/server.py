@@ -698,7 +698,10 @@ def init_db():
                 row=c.execute("select id,source,starch_pct from feed_catalog where upper(name)=upper(?)",(name,)).fetchone()
                 if not row: return
                 src=(row['source'] or '')
-                old_source=(not src) or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 4.11') or src.startswith('ÇiftlikPro 6.12') or src.startswith('ÇiftlikPro 6.13') or src.startswith('ÇiftlikPro DEV4.14')
+                old_source=((not src) or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 4.11')
+                            or src.startswith('ÇiftlikPro 6.12') or src.startswith('ÇiftlikPro 6.13')
+                            or src.startswith('ÇiftlikPro DEV4.14') or src.startswith('Sunar/Çukoyem')
+                            or src.startswith('Sunar resmi') or src.startswith('Sunar ürün etiketi'))
                 suspicious=bool(suspicious_sql and c.execute('select 1 from feed_catalog where id=? and '+suspicious_sql,(row['id'],*suspicious_args)).fetchone())
                 if not (old_source or suspicious): return
                 cols=list(values)
@@ -720,34 +723,46 @@ def init_db():
                 'constraint_source':'Sunar 2020 katalog: 61-120 gün serbest; sayısal etiket alt/üst dozu yayımlanmamış',
                 'source':'Sunar resmi ürün sayfası ve 2020 katalog: 60-120 gün, serbest tüketim; besin profili ÇiftlikPro/Besi_V5.02 referans tahminidir, ürün etiketi veya laboratuvar analiziyle doğrulanmalı'
             },'starch_pct>55')
-            _patch_feed('SIĞIR BESİ YEMİ,15,2700',{
-                'name':'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','category':'Ticari Karma Yem',
-                'cp_pct':16.978,'me_mcal_kg':3.00,'nem_mcal_kg':2.00,'neg_mcal_kg':1.37,
-                'starch_pct':35.0,'fat_pct':3.396,'ash_pct':8.602,'na_pct':0.351,
-                'label_cp_pct_as_fed':15.0,'label_me_kcal_kg_as_fed':2650.0,
-                'label_crude_fiber_pct_as_fed':8.86,'label_fat_pct_as_fed':3.0,
-                'label_ash_pct_as_fed':7.60,'label_sodium_pct_as_fed':0.31,
-                'solver_max_kg_day':10.0,'processing_method':'Ticari karma yem',
-                'constraint_source':'Çukoyem etiketi: üst doz 10 kg/baş/gün; fotoğrafta alt doz kapalı',
-                'source':'Sunar/Çukoyem ürün etiketi 08/04/2025: ürün bazında 15 HP, %3 yağ, %8,86 ham selüloz, %7,60 kül, %0,31 sodyum; kullanıcı doğrulaması 2650 ME. Solver alanları %88,35 referans KM ile dönüştürülmüştür; NDF-nişasta-mineraller referans tahminidir'
-            },'starch_pct>55 OR category like ?',('Sulu Kaba%',))
-            _patch_feed('SIĞIR SÜT YEMİ',{
-                'name':'SUNAR KARDELEN SÜT YEMİ,19,2700','category':'Ticari Karma Yem',
-                'cp_pct':21.505,'me_mcal_kg':3.056,'nem_mcal_kg':2.08,'neg_mcal_kg':1.41,
-                'starch_pct':32.0,'processing_method':'Ticari süt yemi',
-                'label_cp_pct_as_fed':19.0,'label_me_kcal_kg_as_fed':2700.0,
-                'constraint_source':'Sunar 2020 katalog besleme örnekleri: 25-35 kg süt için kaba yem programına göre 7-12 kg/baş/gün; mutlak etiket üst dozu değildir',
-                'source':'Sunar resmi ürün adı ve 2020 katalog: 19 HP / 2700 ME ürün bazında; solver HP/ME değerleri %88,35 referans KM ile dönüştürülmüştür. NDF-nişasta-mineraller ÇiftlikPro/Besi_V5.02 referans tahminidir'
-            },'starch_pct>55 OR category like ?',('Sulu Kaba%',))
+            # DEV4.18: Kullanıcının 19-20 Ağustos 2026 tarihli gerçek Sunar
+            # etiketleri. Çuval değerleri ürün bazında aynen, solver değerleri ise
+            # %88,35 referans KM üzerinden tutulur. Etikette bulunmayan NDF,
+            # nişasta, KM ve Ca/P alanları JSON profilinde açıkça tahmin olarak kalır.
+            sunar_beef_1526={
+                'name':'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','category':'Ticari Karma Yem',
+                'cp_pct':16.978,'me_mcal_kg':2.943,'nem_mcal_kg':1.984,'neg_mcal_kg':1.333,
+                'starch_pct':35.0,'fat_pct':3.396,'ash_pct':8.749,'na_pct':0.306,
+                'label_cp_pct_as_fed':15.0,'label_me_kcal_kg_as_fed':2600.0,
+                'label_crude_fiber_pct_as_fed':9.27,'label_fat_pct_as_fed':3.0,
+                'label_ash_pct_as_fed':7.73,'label_sodium_pct_as_fed':0.27,
+                'solver_max_kg_day':10.0,'processing_method':'Ticari besi yemi',
+                'constraint_source':'Sunar ürün etiketi 20/08/2026: üst doz 10 kg/baş/gün; alt doz kat yerinde okunamadığı için kesin alt sınır girilmemiştir',
+                'source':"Sunar ürün etiketi 20/08/2026: ürün bazında %15 HP, %3,00 yağ, %9,27 ham selüloz, %7,73 kül ve %0,27 sodyum. Sunar resmi ürün adı 15.26 Geliştirme Besi Yemi'dir; 2600 kcal/kg enerji sınıfı ürün kodundan alınmıştır, güncel etiketin analitik bileşenler bölümünde ME ayrıca yazmamaktadır. Solver alanları %88,35 referans KM ile dönüştürülmüştür. KM, NDF, nişasta, Ca/P ve ileri alanlar referans tahminidir; laboratuvar analiziyle doğrulanmalıdır"
+            }
+            for old_name in ('ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','SIĞIR BESİ YEMİ,15,2700'):
+                _patch_feed(old_name,sunar_beef_1526,'starch_pct>55 OR category like ?',('Sulu Kaba%',))
+
+            sunar_dairy_1927={
+                'name':'SUNAR KARDELEN 19.27 SÜT YEMİ','category':'Ticari Karma Yem',
+                'cp_pct':21.505,'me_mcal_kg':3.056,'nem_mcal_kg':2.078,'neg_mcal_kg':1.413,
+                'starch_pct':32.0,'fat_pct':3.962,'ash_pct':7.799,'na_pct':0.374,
+                'processing_method':'Ticari süt yemi','label_cp_pct_as_fed':19.0,
+                'label_me_kcal_kg_as_fed':2700.0,'label_crude_fiber_pct_as_fed':9.07,
+                'label_fat_pct_as_fed':3.50,'label_ash_pct_as_fed':6.89,
+                'label_sodium_pct_as_fed':0.33,'solver_min_kg_day':6.0,'solver_max_kg_day':12.0,
+                'constraint_source':'Sunar ürün etiketi 19/08/2026: 6-12 kg/baş/gün; 3-4 öğünde toplam rasyona karıştırılarak ve 10 günlük geçişle kullanılmalıdır',
+                'source':"Sunar ürün etiketi 19/08/2026: ürün bazında %19 HP, %3,50 yağ, %9,07 ham selüloz, %6,89 kül ve %0,33 sodyum. Sunar resmi ürün adı Kardelen 19.27'dir; 2700 kcal/kg enerji sınıfı ürün kodu ve önceki resmi katalogla uyumludur, güncel etiketin analitik bileşenler bölümünde ME ayrıca yazmamaktadır. Solver alanları %88,35 referans KM ile dönüştürülmüştür. KM, NDF, nişasta, Ca/P ve ileri alanlar referans tahminidir; laboratuvar analiziyle doğrulanmalıdır"
+            }
+            for old_name in ('SUNAR KARDELEN SÜT YEMİ,19,2700','SIĞIR SÜT YEMİ'):
+                _patch_feed(old_name,sunar_dairy_1927,'starch_pct>55 OR category like ?',('Sulu Kaba%',))
             # DEV4.14: Katalogdaki bütün jenerik ticari yemlerin mevcut kurulumlara
             # temel besin profilini eksiksiz taşı. Bunlar marka/parti analizi değildir;
             # ileri rumen/INRA ve etiket doz alanları bilinmiyorsa sıfır bırakılır.
             # Kullanıcı veya laboratuvar kaynaklı bir satır kesinlikle ezilmez.
             commercial_names={
                 'BUZAĞI BAŞLANGIÇ YEMİ','SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
-                'SUNAR KARDELEN SÜT YEMİ,19,2700',
+                'SUNAR KARDELEN 19.27 SÜT YEMİ',
                 'SIĞIR BESİ YEMİ,13,2700','SIĞIR BESİ YEMİ,14,2800',
-                'ÇUKOYEM GELİŞTİRME BESİ YEMİ,15,2650','SIĞIR BESİ YEMİ,14,2600'}
+                'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','SIĞIR BESİ YEMİ,14,2600'}
             catalog_rows={x.get('name'):x for x in json.loads(catalog_file.read_text(encoding='utf-8')) if x.get('name') in commercial_names}
             basic_cols=('category','dm_pct','ndf_pct','effective_ndf_pct','cp_pct','tdn_pct',
                         'me_mcal_kg','nem_mcal_kg','neg_mcal_kg','starch_pct','fat_pct','ash_pct',
@@ -786,11 +801,13 @@ def init_db():
                 reference_source=(not src or src.startswith('Besi_V5.02') or src.startswith('ÇiftlikPro 4.11')
                                   or src.startswith('ÇiftlikPro 6.12') or src.startswith('ÇiftlikPro 6.13')
                                   or src.startswith('ÇiftlikPro DEV4.14') or src.startswith('Sunar/Çukoyem')
-                                  or src.startswith('Sunar resmi'))
+                                  or src.startswith('Sunar resmi') or src.startswith('Sunar ürün etiketi'))
                 if not reference_source:continue
                 values={k:x.get(k,0) for k in basic_cols}
                 values.update({'processing_method':'Ticari karma yem',
                                'constraint_source':x.get('constraint_source') or 'Ürün etiketi veya laboratuvar analizi gerekli'})
+                if float(x.get('solver_min_kg_day') or 0)>0:
+                    values['solver_min_kg_day']=float(x['solver_min_kg_day'])
                 if float(x.get('solver_max_kg_day') or 0)>0:
                     values['solver_max_kg_day']=float(x['solver_max_kg_day'])
                 cols=list(values)
@@ -867,8 +884,8 @@ def init_db():
                 'wheat':_pick_feed('BUĞDAY EZMESİ','BUGDAY EZMESI','BUĞDAY, ÖĞÜTÜLMÜŞ'),
                 'alfalfa':_pick_feed('YONCA',"YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF","YONCA KURU OTU, KM'de %15-17 HP, %44-48 NDF"),
                 'cob_silage':_pick_feed('MISIR KOÇANI SİLAJI','MISIR KOCANI SILAJI'),
-                'beef15':_pick_feed('15 PROTEİN 2650 ME BESİ YEMİ','15 PROTEIN 2650 ME BESI YEMI','%15 BESİ YEMİ','15 BESİ YEMİ'),
-                'dairy19':_pick_feed('19 PROTEİN 2750 ME SÜT YEMİ','19 PROTEIN 2750 ME SUT YEMI','%19 SÜT YEMİ','19 SÜT YEMİ'),
+                'beef15':_pick_feed('SUNAR 15.26 GELİŞTİRME BESİ YEMİ','15 PROTEİN 2600 ME BESİ YEMİ','%15 BESİ YEMİ','15 BESİ YEMİ'),
+                'dairy19':_pick_feed('SUNAR KARDELEN 19.27 SÜT YEMİ','19 PROTEİN 2700 ME SÜT YEMİ','%19 SÜT YEMİ','19 SÜT YEMİ'),
             }
 
             phase_recipes=[
@@ -907,7 +924,7 @@ def init_db():
                     if not feed_refs[key][0]:missing.append(key)
                 note=rnote+' Besin hesapları doğrudan aktif Yem Kataloğu değerlerinden yapılır.'
                 if missing:
-                    labels={'straw':'Arpa samanı','barley':'Arpa ezmesi','wheat':'Buğday ezmesi','alfalfa':'Yonca','cob_silage':'Mısır koçanı silajı','beef15':'%15 / 2650 ME besi yemi','dairy19':'%19 / 2750 ME süt yemi'}
+                    labels={'straw':'Arpa samanı','barley':'Arpa ezmesi','wheat':'Buğday ezmesi','alfalfa':'Yonca','cob_silage':'Mısır koçanı silajı','beef15':'Sunar 15.26 besi yemi','dairy19':'Sunar Kardelen 19.27 süt yemi'}
                     note+=' Eksik katalog eşleşmesi: '+', '.join(labels[x] for x in missing)+'. Bu yemleri katalogda ekledikten sonra reçeteye manuel ekleyebilirsiniz.'
                 cur=c.execute('''insert into rations(name,target_group,notes,active,created_at,target_weight_kg,target_adg_kg,animal_type,ration_type,target_milk_l,milk_fat_pct,milk_protein_pct)
                                  values(?,?,?,1,?,?,?,?,?,?,?,?)''',
@@ -2072,13 +2089,16 @@ def _solver_nutrient(feed,key):
     name=str(_rowval(feed,'name','')).upper()
     if key=='starch_pct':
         return _solver_starch_pct(feed)
-    # Kullanıcının gerçek Sunar/Çukoyem 15.26 etiketi: %15 HP ve 2650 kcal/kg.
-    # %88.35 referans KM ile yaklaşık 3.00 Mcal/kg KM; NEm/NEg dönüşümleri türetilmiştir.
-    if ('ÇUKOYEM' in name or 'CUKOYEM' in name) and ('15,2650' in name or '15.26' in name):
+    # Kullanıcının 20/08/2026 tarihli gerçek Sunar 15.26 etiketi: %15 HP.
+    # Ürün adındaki 15.26 enerji sınıfı 2600 kcal/kg ürün bazına karşılık gelir;
+    # %88,35 referans KM ile 2,943 Mcal/kg KM ve türetilmiş NEm/NEg kullanılır.
+    # Eski Çukoyem adı da DB geçişi tamamlanana kadar aynı profile bağlanır.
+    if (('SUNAR' in name and '15.26' in name) or
+        (('ÇUKOYEM' in name or 'CUKOYEM' in name) and '15,2650' in name)):
         if key=='cp_pct': return 16.978
-        if key=='me_mcal_kg': return 3.00
-        if key=='nem_mcal_kg': return 2.00
-        if key=='neg_mcal_kg': return 1.37
+        if key=='me_mcal_kg': return 2.943
+        if key=='nem_mcal_kg': return 1.984
+        if key=='neg_mcal_kg': return 1.333
     # Sunar Kardelen 19.27: ürün adı %19 HP ve 2700 kcal/kg ME bilgisini verir.
     # Referans %88,35 KM ile ME yaklaşık 3,056 Mcal/kg KM; net enerjiler NRC
     # dönüşümüyle türetilmiştir. NDF/nişasta/mineraller etiket gelene kadar
@@ -2086,8 +2106,8 @@ def _solver_nutrient(feed,key):
     if 'KARDELEN' in name and ('19,2700' in name or '19.27' in name):
         if key=='cp_pct': return 21.505
         if key=='me_mcal_kg': return 3.056
-        if key=='nem_mcal_kg': return 2.08
-        if key=='neg_mcal_kg': return 1.41
+        if key=='nem_mcal_kg': return 2.078
+        if key=='neg_mcal_kg': return 1.413
     # Büyütme yemi: mevcut enerji/protein analizi makul, yalnız eski nişasta kolonu bozuk.
     # Pamuk tohumu yüksek lintli için OSU tipik whole-cottonseed değerlerine yakın,
     # daha muhafazakâr net enerji ve fiziksel etkinlik kullanılır.
@@ -2460,7 +2480,7 @@ def smart_ration_score(m,t,lim):
     return score+0.002*m['cost']
 
 def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik'):
-    """DEV4.16 - NASEM hayvan profilli, kısıt öncelikli besi optimizerı.
+    """DEV4.18 - NASEM hayvan profilli, gerçek etiketli besi optimizerı.
 
     Excel dosyasindaki gercek Solver modeli incelendi: yem miktarlari karar degiskenidir,
     hedef kartlari *ceza puani* degil toleransli kisitlardir ve uygun cozumler arasinda
@@ -2740,7 +2760,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.17 · NASEM hayvan profili→dinamik KM/GCAA→sert nişasta/profil→buğday→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.18 · gerçek Sunar etiketi→NASEM hayvan profili→dinamik KM/GCAA→sert nişasta/profil→buğday→kalite/maliyet'
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)
@@ -2828,23 +2848,23 @@ def dairy_requirement_targets(weight_kg=650.0, target_milk_l=25.0, milk_fat_pct=
 
 
 def dairy_feed_bounds(feed, weight_kg, target_dm):
-    """Süt rasyonu için pratik günlük yaş-yem sınırları."""
+    """Süt rasyonu için pratik günlük yaş-yem ve ürün etiketi sınırları."""
     dm=max(float(_rowval(feed,'dm_pct',0))/100.0,.05); grp=feed_group(feed); name=str(_rowval(feed,'name','')).upper()
     if grp=='Katkı':
-        if 'TUZ' in name:return 0.0,min(0.15,target_dm*0.008)
-        if any(x in name for x in ('VİTAMİN','VITAMIN','PREMİKS','PREMIKS','PREMIX')):return 0.0,0.25
-        if any(x in name for x in ('BİKARBONAT','BIKARBONAT')):return 0.0,min(0.30,target_dm*0.015)
-        if any(x in name for x in ('MERMER','KİREÇ','KIREC','KALSİYUM','KALSIYUM')):return 0.0,min(0.15,target_dm*0.008)
-        return 0.0,min(0.20,target_dm*0.010)
+        if 'TUZ' in name:return _apply_explicit_feed_limits(feed,(0.0,min(0.15,target_dm*0.008)))
+        if any(x in name for x in ('VİTAMİN','VITAMIN','PREMİKS','PREMIKS','PREMIX')):return _apply_explicit_feed_limits(feed,(0.0,0.25))
+        if any(x in name for x in ('BİKARBONAT','BIKARBONAT')):return _apply_explicit_feed_limits(feed,(0.0,min(0.30,target_dm*0.015)))
+        if any(x in name for x in ('MERMER','KİREÇ','KIREC','KALSİYUM','KALSIYUM')):return _apply_explicit_feed_limits(feed,(0.0,min(0.15,target_dm*0.008)))
+        return _apply_explicit_feed_limits(feed,(0.0,min(0.20,target_dm*0.010)))
     if grp=='Kaba':
-        if 'SİLAJ' in name or 'SILAJ' in name:return 0.0,max(1.0,target_dm*0.70/dm)
-        return 0.0,max(0.5,target_dm*0.55/dm)
+        if 'SİLAJ' in name or 'SILAJ' in name:return _apply_explicit_feed_limits(feed,(0.0,max(1.0,target_dm*0.70/dm)))
+        return _apply_explicit_feed_limits(feed,(0.0,max(0.5,target_dm*0.55/dm)))
     # Tam karma/süt yemleri enerji-protein taşıyıcıdır; tek tahıl gibi sıkıştırılmaz.
     if _is_commercial_compound_feed(feed) or any(x in name for x in ('YEMİ','YEMI')):
-        return 0.0,max(1.0,target_dm*0.58/dm)
+        return _apply_explicit_feed_limits(feed,(0.0,max(1.0,target_dm*0.58/dm)))
     starch=_solver_starch_pct(feed)
     frac=0.30 if starch>=45 else 0.40
-    return 0.0,max(0.5,target_dm*frac/dm)
+    return _apply_explicit_feed_limits(feed,(0.0,max(0.5,target_dm*frac/dm)))
 
 
 def solve_smart_dairy_ration(feeds, weight_kg, target_milk_l):
@@ -2863,7 +2883,7 @@ def solve_smart_dairy_ration(feeds, weight_kg, target_milk_l):
     mins=[]
     for i,f in enumerate(feeds):
         if fixed[i]:mins.append(bounds[i][0])
-        else:mins.append(min(bounds[i][1],practical_feed_min(f,t['weight_kg'],t['dmi_kg'])))
+        else:mins.append(max(bounds[i][0],min(bounds[i][1],practical_feed_min(f,t['weight_kg'],t['dmi_kg']))))
     def clip(q):return [max(mins[i],min(bounds[i][1],float(q[i]))) for i in range(n)]
     def score(q):
         m=smart_ration_metrics(feeds,q)
