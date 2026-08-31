@@ -1,3 +1,12 @@
+# v3.9.20 Solver DEV4.19.1 — 260 kg Saha Hotfix
+
+- 260 kg / 10 ay / 1,40 kg GCAA ve sekiz seçili yem senaryosunda optimizerın
+  kaba/kesif koridoru dışındaki adayı seçip en sonda reddetmesi düzeltildi.
+- Faz koridorunun 5 puandan fazla dışı, aday sıralamasının sert güvenlik
+  vektörüne taşındı; solver güvenli kombinasyonu arama sırasında seçiyor.
+- Arpa ezmesi, arpa samanı, buğday kepeği, mısır koçanı silajı, soya küspesi,
+  Sunar 15.26, Sunar Buzağı Büyütme ve yonca saha seti regresyona alındı.
+
 # v3.9.20 Solver DEV4.19 — Son Kilitleme
 
 - Seçilen tüm normal yemler uygulanabilir saha minimumuyla çözümde tutuluyor;

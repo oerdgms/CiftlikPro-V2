@@ -2577,6 +2577,12 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         tahıl ağırlıklı bir adayı seçmesine yol açabiliyordu.
         """
         vals=[]
+        rough_pct=float(m.get('roughage_pct_dm') or 0)
+        # Kayıt sonunda reddedilecek ciddi kaba/kesif sapmasını arama sırasında
+        # da sert ray yap. Aksi halde optimizer besin kartları iyi görünen fakat
+        # faz koridorunun dışında kalan adayı seçip en sonda çözümsüz dönüyordu.
+        vals.append(max(0.0,(float(lim['roughage_min'])-5.0-rough_pct)/max(float(lim['roughage_min']),1.0)))
+        vals.append(max(0.0,(rough_pct-float(lim['roughage_max'])-5.0)/max(float(lim['roughage_max']),1.0)))
         vals.append(max(0.0,(t['ndf_min']*.85-m['ndf_pct_dm'])/max(t['ndf_min'],1)))
         vals.append(max(0.0,(m['ndf_pct_dm']-t['ndf_max']*1.15)/max(t['ndf_max'],1)))
         vals.append(max(0.0,(lim['endf_min']*.80-m['endf_pct_dm'])/max(lim['endf_min'],1)))
@@ -2795,7 +2801,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.19 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.19.1 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)

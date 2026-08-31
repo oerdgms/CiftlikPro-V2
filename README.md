@@ -1,4 +1,9 @@
-# ÇiftlikPro v3.9.20 — Solver DEV4.19 Son Kilitleme
+# ÇiftlikPro v3.9.20 — Solver DEV4.19.1 Saha Hotfix
+
+DEV4.19.1, 260 kg / 10 ay / 1,40 kg GCAA saha testinde görülen geç kayıt
+reddini düzeltir. Ciddi kaba/kesif koridoru sapması artık yalnız sonuçta değil,
+aday araması sırasında da sert raydır; solver güvenli koridordaki yem miktarı
+kombinasyonlarını önceliklendirir.
 
 DEV4.19, seçilen kaba ve kesif yemlerin tamamını uygulanabilir alt miktarda
 rasyonda tutar ve miktarlarını besin değerlerine göre yeniden dengeler. Fazın

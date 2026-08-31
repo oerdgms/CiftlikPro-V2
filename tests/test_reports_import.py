@@ -535,6 +535,29 @@ class ReportImportTests(unittest.TestCase):
         self.assertGreaterEqual(quantities[-1],6.0)
         self.assertLessEqual(quantities[-1],12.0)
 
+    def test_4191_field_260kg_eight_feed_set_solves_inside_roughage_corridor(self):
+        names=['ARPA EZMESİ','ARPA SAMANI','BUĞDAY KEPEĞİ',
+               'SOYA KÜSPESİ, SOLVENT, %44','SUNAR 15.26 GELİŞTİRME BESİ YEMİ',
+               'SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
+               "YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF"]
+        with server.db() as con:
+            base=[dict(con.execute('select * from feed_catalog where name=?',(name,)).fetchone()) for name in names]
+        cob=dict(base[1])
+        cob.update({'name':'MISIR KOÇANI SİLAJI','category':'Özel Yem','dm_pct':45.0,
+                    'ndf_pct':45.0,'effective_ndf_pct':70.0,'tdn_pct':68.0,
+                    'me_mcal_kg':2.45,'nem_mcal_kg':1.55,'neg_mcal_kg':.95,
+                    'cp_pct':8.0,'starch_pct':28.0,'solver_min_kg_day':0.0,
+                    'solver_max_kg_day':5.0})
+        feeds=base[:3]+[cob]+base[3:]
+        solved,targets,message=server.solve_smart_ration(feeds,260,1.4,'Besi Erkek',10,'Otomatik')
+        self.assertIsNotNone(solved,message)
+        quantities,metrics,_=solved
+        self.assertTrue(all(value>0 for value in quantities))
+        self.assertLessEqual(quantities[3],5.0)
+        self.assertGreaterEqual(metrics['roughage_pct_dm'],targets['roughage_min'])
+        self.assertLessEqual(metrics['roughage_pct_dm'],targets['roughage_max'])
+        self.assertIn(metrics['feasibility']['status'],('feasible','limited'))
+
 
 if __name__ == "__main__":
     unittest.main()
