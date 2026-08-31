@@ -1,4 +1,12 @@
-# ÇiftlikPro v3.9.20 — Solver DEV4.18 Gerçek Sunar Etiketleri
+# ÇiftlikPro v3.9.20 — Solver DEV4.19 Son Kilitleme
+
+DEV4.19, seçilen kaba ve kesif yemlerin tamamını uygulanabilir alt miktarda
+rasyonda tutar ve miktarlarını besin değerlerine göre yeniden dengeler. Fazın
+kaba/kesif koridorunu ciddi aşan aday, toplam tahıl faz üst sınırını aşan aday
+ve buğdayın tahıl KM içindeki payı `%32` üstüne çıkan aday kaydedilmez. `%30–32`
+buğday payı yalnız küçük sapma olarak “sınırlı” kabul edilir. Sunar 15.26 için
+`10 kg`, Kardelen 19.27 için `6–12 kg` etiket sınırları kesin korunur. 250, 350
+ve 500 kg besi ile 25 litre süt senaryoları kalıcı regresyon kapısındadır.
 
 DEV4.18, 19–20 Ağustos 2026 tarihli gerçek ürün etiketlerini Yem Kataloğu'na
 işler. `Sunar 15.26 Geliştirme Besi Yemi` ile `Sunar Kardelen 19.27 Süt Yemi`

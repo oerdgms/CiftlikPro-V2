@@ -730,7 +730,7 @@ def init_db():
             sunar_beef_1526={
                 'name':'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','category':'Ticari Karma Yem',
                 'cp_pct':16.978,'me_mcal_kg':2.943,'nem_mcal_kg':1.984,'neg_mcal_kg':1.333,
-                'starch_pct':35.0,'fat_pct':3.396,'ash_pct':8.749,'na_pct':0.306,
+                'starch_pct':30.0,'fat_pct':3.396,'ash_pct':8.749,'na_pct':0.306,
                 'label_cp_pct_as_fed':15.0,'label_me_kcal_kg_as_fed':2600.0,
                 'label_crude_fiber_pct_as_fed':9.27,'label_fat_pct_as_fed':3.0,
                 'label_ash_pct_as_fed':7.73,'label_sodium_pct_as_fed':0.27,
@@ -2235,8 +2235,14 @@ def _solver_feasibility_report(metrics, targets, limits):
     wheat_grain=float(metrics.get('wheat_grain_pct_dm') or 0)
     if wheat_grain>40.0:
         unsafe.append(f'buğday tahıl KM payı %{wheat_grain:.1f}; sert üst sınır %40')
+    elif wheat_grain>32.0:
+        blockers.append(f'buğday tahıl KM payı %{wheat_grain:.1f}; küçük sapma sınırı %32')
     elif wheat_grain>30.0:
         warnings.append(f'buğday tahıl KM payı %{wheat_grain:.1f}; hedef en çok %30')
+    grain_pct=float(metrics.get('grain_pct_dm') or 0)
+    grain_max=float(limits.get('grain_max') or 100)
+    if grain_pct>grain_max+.05:
+        unsafe.append(f'toplam tahıl KM payı %{grain_pct:.1f}; faz üst sınırı %{grain_max:.0f}')
     cap=float(metrics.get('ca_g') or 0)/max(float(metrics.get('p_g') or 0),.01)
     if cap<1.0 or cap>4.0:unsafe.append('Ca:P oranı güvenli pencerenin dışında')
     mw=_mineral_windows(targets,dm_target)
@@ -2254,18 +2260,18 @@ def _solver_feasibility_report(metrics, targets, limits):
     # Toplam ME arzı tek başına büyüme yeterliliği değildir. Enerji fizibilitesi
     # aşağıdaki NEm/NEg tabanlı GCAA kapasitesiyle değerlendirilir.
     if adg_target>0:
-        if adg_signed<-.01:blockers.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
+        if adg_signed<-.015:blockers.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
         elif adg_signed<-.005:warnings.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
     if rough<float(limits.get('roughage_min') or 0)-5 or rough>float(limits.get('roughage_max') or 100)+5:
-        blockers.append(f'kaba yem %{rough:.1f}')
+        unsafe.append(f'kaba yem KM payı %{rough:.1f}; faz koridoru dışında')
     elif rough<float(limits.get('roughage_min') or 0) or rough>float(limits.get('roughage_max') or 100):
         warnings.append(f'kaba yem %{rough:.1f}')
 
     # Bir tek ciddi kartta sapma varsa kullanıcıya "sınırlı" çözüm gösterilebilir;
     # iki veya daha fazlası seçili yem setinin birlikte fizibil olmadığını gösterir.
-    growth_blocked=adg_target>0 and adg_signed<-.01
+    growth_blocked=adg_target>0 and adg_signed<-.015
     core_critical=(abs(dm_signed)>.10 or cp_signed<-.10)
-    status='unsafe' if unsafe else ('infeasible' if growth_blocked or core_critical or len(blockers)>=2 else ('limited' if blockers or warnings else 'feasible'))
+    status='unsafe' if unsafe else ('infeasible' if growth_blocked or core_critical or blockers else ('limited' if warnings else 'feasible'))
     return {'status':status,'unsafe':unsafe,'blockers':blockers,'warnings':warnings,
             'dm_signed':dm_signed,'cp_signed':cp_signed,'me_signed':me_signed,'adg_signed':adg_signed,
             'rumen_risk':rumen_risk}
@@ -2370,6 +2376,7 @@ def smart_ration_metrics(feeds, qty):
     z['nem_density']=z['nem_mcal']/dm if dm else 0; z['neg_density']=z['neg_mcal']/dm if dm else 0
     grain_dm,wheat_dm,barley_dm=_grain_mix_dm(feeds,qty)
     z['grain_dm_kg']=grain_dm;z['wheat_dm_kg']=wheat_dm;z['barley_dm_kg']=barley_dm
+    z['grain_pct_dm']=grain_dm/max(dm,.01)*100 if dm>.01 else 0.0
     z['wheat_grain_pct_dm']=wheat_dm/max(grain_dm,.01)*100 if grain_dm>.01 else 0.0
     return z
 
@@ -2480,7 +2487,7 @@ def smart_ration_score(m,t,lim):
     return score+0.002*m['cost']
 
 def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik'):
-    """DEV4.18 - NASEM hayvan profilli, gerçek etiketli besi optimizerı.
+    """DEV4.19 - seçili yemleri bilimsel min/max içinde kullanan kapanış optimizerı.
 
     Excel dosyasindaki gercek Solver modeli incelendi: yem miktarlari karar degiskenidir,
     hedef kartlari *ceza puani* degil toleransli kisitlardir ve uygun cozumler arasinda
@@ -2501,6 +2508,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     lim=beef_phase_limits(t['weight_kg'],target_adg,t['dmi_kg'],age_months,phase_override)
     t['roughage_min'],t['roughage_max']=lim['roughage_min'],lim['roughage_max']
     t['endf_min']=lim['endf_min'];t['starch_min']=lim['starch_min'];t['starch_ideal_max']=lim['starch_ideal_max'];t['starch_max']=lim['starch_max'];t['phase']=lim['phase']
+    lim['grain_max']={'Besi Başlangıç':24.0,'Besi Geliştirme':30.0,'Besi Bitirme':34.0}.get(lim['phase'],30.0)
     n=len(feeds)
     if n<2:return None,t,'En az 2 yem seçin.'
 
@@ -2516,6 +2524,17 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     rough=[i for i,f in enumerate(feeds) if feed_group(f)=='Kaba']
     conc=[i for i,f in enumerate(feeds) if feed_group(f)=='Kesif']
     if not rough or not conc:return None,t,'En az bir kaba ve bir kesif yem seçin.'
+
+    selected_bounds=[]
+    for f,(lo,hi) in zip(feeds,bounds):
+        if hi>0 and feed_group(f)!='Katkı':
+            # Buğday hızlı fermente olur; seçili kalmasını sağlarken diğer tahılları
+            # sıkıştırmayacak 150 g saha tabanı kullanılır. Üst oran ayrıca sert raydır.
+            fname=str(_rowval(f,'name','')).upper()
+            selected_min=0.15 if _solver_feed_role(f)=='grain' and ('BUĞDAY' in fname or 'BUGDAY' in fname) else practical_feed_min(f,t['weight_kg'],t['dmi_kg'])
+            lo=max(lo,min(hi,selected_min))
+        selected_bounds.append((lo,hi))
+    bounds=selected_bounds
 
     dmfrac=[max(float(_rowval(f,'dm_pct',0))/100.0,.01) for f in feeds]
     fixed=[abs(hi-lo)<1e-10 for lo,hi in bounds]
@@ -2567,7 +2586,9 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         vals.append(1.0 if risk['level']=='Yüksek' else 0.0)
         grain_dm,wheat_dm,_=_grain_mix_dm(feeds,q)
         wheat_grain_share=wheat_dm/max(grain_dm,.01)
-        vals.append(max(0.0,(wheat_grain_share-.40)/.40) if grain_dm>.05 else 0.0)
+        vals.append(max(0.0,(wheat_grain_share-.32)/.32) if grain_dm>.05 else 0.0)
+        grain_share=grain_dm/max(float(m.get('dm_kg') or 0),.01)
+        vals.append(max(0.0,(grain_share-lim['grain_max']/100.0)/max(lim['grain_max']/100.0,.01)))
         cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99.0
         vals.append(max(0.0,(1.00-cap)/1.00)); vals.append(max(0.0,(cap-4.00)/4.00))
         mw=_mineral_windows(t,target_dm)
@@ -2611,7 +2632,9 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         outs=[max(0.0,dm-tol)/tol,
               max(0.0,-cp_signed-tol)/tol,
               0.0,
-              max(0.0,abs(adg_signed)-adg_tol)/adg_tol,
+              # GCAA bir kapasite tabanıdır; hedef üstü kapasite ana hedef ihlali
+              # değildir. Fazlalık aşağıdaki ayrı yumuşak cezayla yönetilir.
+              max(0.0,-adg_signed-adg_tol)/adg_tol,
               max(0.0,rough-rough_tol_pp)/rough_tol_pp]
         sv=safety_vector(m)
         hsv=hard_safety_vector(m,q)
@@ -2680,17 +2703,25 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
             f=feeds[i]; me=max(.05,_solver_nutrient(f,'me_mcal_kg')); cp=max(.1,_solver_nutrient(f,'cp_pct'))
             endf=max(.1,_solver_nutrient(f,'ndf_pct')*_solver_nutrient(f,'effective_ndf_pct')/100.0)
             price=max(.01,float(_rowval(f,'price',0) or .01))
-            if mode=='energy': val=me+.02*cp+.005*endf
+            fname=str(_rowval(f,'name','')).upper()
+            if mode=='commercial_anchor': val=3.0 if ('SİLAJ' in fname or 'SILAJ' in fname) else (2.0 if ('YONCA' in fname or 'ALFALFA' in fname) else .45)
+            elif mode=='energy': val=me+.02*cp+.005*endf
             elif mode=='cost': val=1.0/price
             else: val=.55*me+.015*cp+.008*endf
-            rw[i]=max(.01,val)*(0.65+rng.random()*.70)
+            rw[i]=max(.01,val)*(1.0 if mode=='commercial_anchor' else (0.65+rng.random()*.70))
         for i in conc:
             f=feeds[i]; me=max(.05,_solver_nutrient(f,'me_mcal_kg')); cp=max(.1,_solver_nutrient(f,'cp_pct'))
             starch=_solver_starch_pct(f); price=max(.01,float(_rowval(f,'price',0) or .01))
             if mode=='protein': val=.10*cp+.35*me
+            elif mode in ('commercial','commercial_anchor'):
+                # Toplam tahıl/nişasta rayı dolduğunda arpa-buğdayı daha fazla
+                # zorlamak yerine hedef hayvana uygun tam karma yeme kapasite aç.
+                kind=_commercial_feed_kind(f)
+                wanted='dairy' if any(x in str(animal_type).upper() for x in ('SÜT','SUT','SAĞMAL','SAGMAL')) else 'beef'
+                val=14.0 if (_is_commercial_compound_feed(f) and kind in (wanted,'neutral')) else (.9 if mode=='commercial_anchor' and 'ARPA' in str(_rowval(f,'name','')).upper() else .25)
             elif mode=='cost': val=1.0/price
             else: val=.65*me+.035*cp-.004*starch
-            cw[i]=max(.01,val)*(0.65+rng.random()*.70)
+            cw[i]=max(.01,val)*(1.0 if mode=='commercial_anchor' else (0.65+rng.random()*.70))
         allocate_group(q,rough,rneed,rw)
         allocate_group(q,conc,cneed,cw)
         # kalan KM herhangi bir gruptaki kapasiteye dagitilir
@@ -2706,20 +2737,20 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         if all(abs(sh-x)>.005 for x in shares): shares.append(sh)
     seeds=[]
     for sh in shares:
-        for mode in ('balanced','energy','protein','cost'):
+        for mode in ('balanced','energy','protein','commercial','commercial_anchor','cost'):
             for _ in range(2):seeds.append(make_seed(sh,mode))
 
     # Rastgele fizibilite taramasi: karar degiskenleri yem miktarlaridir; DMI ve kaba hedefi
     # etrafinda farkli dagilimlar olusturulur. Sabit RNG nedeniyle sonuc tekrarlanabilirdir.
     for _ in range(450):
         sh=max(lim['roughage_min'],min(lim['roughage_max'],target_rough+rng.uniform(-12,12)))/100.0
-        seeds.append(make_seed(sh,rng.choice(('balanced','energy','protein','cost'))))
+        seeds.append(make_seed(sh,rng.choice(('balanced','energy','protein','commercial','cost'))))
 
     scored=[]
     for q in seeds:
         k,m=rank(q); scored.append((k,q))
     scored.sort(key=lambda x:x[0])
-    starts=[q for k,q in scored[:18]]
+    starts=[q for k,q in scored[:40]]
 
     def local_opt(q,deadline):
         q=clip(q); k,_=rank(q)
@@ -2746,7 +2777,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
                 if bestk<k:q,k=bestq,bestk; improved=True
         return q,k
 
-    started=_time.perf_counter(); deadline=started+4.5
+    started=_time.perf_counter(); deadline=started+10.0
     best=None; bestk=None
     for st in starts:
         if _time.perf_counter()>deadline and best is not None:break
@@ -2754,13 +2785,17 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         if bestk is None or k<bestk:best,bestk=q,k
 
     if best is None:return None,t,'Rasyon optimizasyonu başlatılamadı.'
+    # Donanım hızına bağlı olarak son başlangıcın yarıda kalması sonucu değiştirmesin.
+    # En iyi adaya kısa, bağımsız bir kapanış turu vererek regresyonu kararlı tut.
+    polished,polishedk=local_opt(best,_time.perf_counter()+2.0)
+    if polishedk<bestk:best,bestk=polished,polishedk
     # Kullanici sectigi normal yemleri kaybetmesin; katkilar kendi doz sinirinda kalir.
     best=[round(max(bounds[i][0],min(bounds[i][1],x)),3 if feed_group(feeds[i])=='Katkı' else 2) for i,x in enumerate(best)]
     finalk,bm=rank(best)
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.18 · gerçek Sunar etiketi→NASEM hayvan profili→dinamik KM/GCAA→sert nişasta/profil→buğday→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.19 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)

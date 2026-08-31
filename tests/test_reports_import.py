@@ -476,6 +476,65 @@ class ReportImportTests(unittest.TestCase):
         css=server.DEV43_DESKTOP_RATION_CSS
         self.assertIn('.ration-savebar{position:static!important;bottom:auto!important',css)
 
+    def test_419_limited_solution_is_only_a_small_wheat_share_deviation(self):
+        targets={'dmi_kg':10.0,'cp_pct':12.0,'me_mcal_day':25.0,'adg':1.3,
+                 'ndf_min':25.0,'ca_g':40.0,'p_g':22.0}
+        limits={'starch_ideal_max':27.0,'starch_max':30.0,'endf_min':11.5,
+                'roughage_min':37.0,'roughage_max':43.0,'grain_max':30.0}
+        base={'dm_kg':10.0,'predicted_dmi_kg':10.0,'cp_pct_dm':12.0,'me_mcal':25.0,
+              'achievable_adg_kg':1.3,'ndf_pct_dm':30.0,'endf_pct_dm':14.0,
+              'starch_pct_dm':27.0,'rapid_starch_pct_dm':18.0,'starch_degradability_coverage':1.0,
+              'roughage_pct_dm':40.0,'grain_pct_dm':20.0,'ca_g':40.0,'p_g':22.0}
+        small=dict(base,wheat_grain_pct_dm=31.0)
+        large=dict(base,wheat_grain_pct_dm=32.1)
+        self.assertEqual(server._solver_feasibility_report(small,targets,limits)['status'],'limited')
+        self.assertEqual(server._solver_feasibility_report(large,targets,limits)['status'],'infeasible')
+
+    def test_419_total_grain_phase_cap_is_a_hard_save_gate(self):
+        targets={'dmi_kg':10.0,'cp_pct':12.0,'me_mcal_day':25.0,'adg':1.3,
+                 'ndf_min':25.0,'ca_g':40.0,'p_g':22.0}
+        limits={'starch_ideal_max':27.0,'starch_max':30.0,'endf_min':11.5,
+                'roughage_min':37.0,'roughage_max':43.0,'grain_max':30.0}
+        metrics={'dm_kg':10.0,'predicted_dmi_kg':10.0,'cp_pct_dm':12.0,'me_mcal':25.0,
+                 'achievable_adg_kg':1.3,'ndf_pct_dm':30.0,'endf_pct_dm':14.0,
+                 'starch_pct_dm':27.0,'rapid_starch_pct_dm':18.0,'starch_degradability_coverage':1.0,
+                 'roughage_pct_dm':40.0,'grain_pct_dm':30.1,'wheat_grain_pct_dm':20.0,
+                 'ca_g':40.0,'p_g':22.0}
+        report=server._solver_feasibility_report(metrics,targets,limits)
+        self.assertEqual(report['status'],'unsafe')
+        self.assertTrue(any('toplam tahıl' in item for item in report['unsafe']))
+
+    def test_419_sunar_label_limits_survive_solver_bounds(self):
+        with server.db() as con:
+            beef=con.execute("select * from feed_catalog where name='SUNAR 15.26 GELİŞTİRME BESİ YEMİ'").fetchone()
+            dairy=con.execute("select * from feed_catalog where name='SUNAR KARDELEN 19.27 SÜT YEMİ'").fetchone()
+        self.assertLessEqual(server.smart_feed_bounds(beef,500,11.0,1.4,12,'Besi Bitirme')[1],10.0)
+        self.assertEqual(server.dairy_feed_bounds(dairy,650,20.0),(6.0,12.0))
+
+    def test_419_field_scenarios_250_350_500_beef_and_25l_dairy(self):
+        beef_names=['ARPA SAMANI','ARPA EZMESİ','BUĞDAY EZMESİ',
+                    "YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF",
+                    'MISIR SİLAJI, %29-33 KM','SUNAR 15.26 GELİŞTİRME BESİ YEMİ']
+        dairy_names=["YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF",
+                     'MISIR SİLAJI, %29-33 KM','ARPA EZMESİ','SUNAR KARDELEN 19.27 SÜT YEMİ']
+        with server.db() as con:
+            beef=[con.execute('select * from feed_catalog where name=?',(name,)).fetchone() for name in beef_names]
+            dairy=[con.execute('select * from feed_catalog where name=?',(name,)).fetchone() for name in dairy_names]
+        for weight in (250,350,500):
+            with self.subTest(weight=weight):
+                solved,_,message=server.solve_smart_ration(beef,weight,1.4,'Besi Erkek',12,'Otomatik')
+                self.assertIsNotNone(solved,message)
+                quantities,metrics,_=solved
+                self.assertTrue(all(value>0 for value in quantities))
+                self.assertLessEqual(quantities[-1],10.0)
+                self.assertLessEqual(metrics['wheat_grain_pct_dm'],32.0)
+                self.assertIn(metrics['feasibility']['status'],('feasible','limited'))
+        solved,_,message=server.solve_smart_dairy_ration(dairy,650,25)
+        self.assertIsNotNone(solved,message)
+        quantities,_,_=solved
+        self.assertGreaterEqual(quantities[-1],6.0)
+        self.assertLessEqual(quantities[-1],12.0)
+
 
 if __name__ == "__main__":
     unittest.main()

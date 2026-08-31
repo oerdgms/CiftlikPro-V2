@@ -1,3 +1,17 @@
+# v3.9.20 Solver DEV4.19 — Son Kilitleme
+
+- Seçilen tüm normal yemler uygulanabilir saha minimumuyla çözümde tutuluyor;
+  enerji/protein açığı aynı yemlerin miktarları değiştirilerek yeniden aranıyor.
+- Faz kaba/kesif koridorunun 5 puandan fazla aşılması ve faz toplam tahıl KM
+  üst sınırının aşılması artık kesin kayıt engeli.
+- Buğday/tahıl KM oranında `%30–32` yalnız küçük “sınırlı” sapma; `%32–40`
+  çözümsüz, `%40` üstü güvensiz kabul ediliyor.
+- Sunar 15.26 `0–10 kg`, Kardelen 19.27 `6–12 kg` ürün sınırları korunuyor.
+- Etikette bulunmayan Sunar 15.26 nişastası, ürünün `%9,27` ham selülozu ve
+  yan ürün ağırlıklı hammaddeleriyle uyumlu açık referans tahmin olarak `%30`
+  tutuluyor; laboratuvar değeri gibi sunulmuyor.
+- 250/350/500 kg besi ve 25 litre süt saha senaryoları regresyon testine alındı.
+
 # v3.9.20 Solver DEV4.18 — Gerçek Sunar Etiketleri
 
 - 20/08/2026 tarihli `Sunar 15.26 Geliştirme Besi Yemi` etiketi işlendi: ürün
