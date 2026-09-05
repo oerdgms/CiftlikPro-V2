@@ -1,4 +1,5 @@
 import socket
+import sys
 import threading
 import time
 import webbrowser
@@ -26,8 +27,10 @@ def open_browser_when_ready() -> None:
 
 
 def run() -> None:
+    background = "--background" in sys.argv or "--startup" in sys.argv
     if port_is_open():
-        webbrowser.open(URL)
+        if not background:
+            webbrowser.open(URL)
         return
 
     server.init_db()
@@ -35,7 +38,8 @@ def run() -> None:
     server.promote_mature_calves()
 
     httpd = ThreadingHTTPServer(("0.0.0.0", server.PORT), server.App)
-    threading.Thread(target=open_browser_when_ready, daemon=True).start()
+    if not background:
+        threading.Thread(target=open_browser_when_ready, daemon=True).start()
 
     def background_backup() -> None:
         try:

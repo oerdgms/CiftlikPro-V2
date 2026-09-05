@@ -23,9 +23,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.20'
+APP_VERSION='3.9.21 DEV5.1'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.20'
+APP_LABEL='v3.9.21 DEV4 Hotfix2'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -543,6 +543,43 @@ def claim_request_once(con,fingerprint,ttl_seconds=15):
 def active_admin_count():
     with db() as c:return c.execute("select count(*) from users where role='admin' and active=1").fetchone()[0]
 
+def medicine_safe_dates(last_application_date, meat_withdrawal_days=0, milk_withdrawal_hours=0):
+    """Son uygulamadan sonra et ve süt için en erken güvenli tarih/zaman.
+
+    Ürün prospektüsündeki bekleme süresi asgari kabul edilir. Veteriner daha
+    uzun süre belirlerse tedavi kaydında ileri tarih ayrıca seçilebilir.
+    """
+    try: base=date.fromisoformat(str(last_application_date)[:10])
+    except Exception: raise ValueError('Geçerli son uygulama tarihi gerekli.')
+    meat_days=max(0,int(meat_withdrawal_days or 0)); milk_hours=max(0,int(milk_withdrawal_hours or 0))
+    meat=(base+timedelta(days=meat_days)).isoformat()
+    milk_dt=datetime.combine(base,datetime.min.time())+timedelta(hours=milk_hours)
+    return meat,milk_dt.isoformat(timespec='minutes')
+
+def medicine_stock_balance(con, medicine_id, batch_id=None):
+    sql="""select coalesce(sum(case when tx_type in ('Giriş','İade','Düzeltme +') then quantity
+             else -quantity end),0) qty from medicine_stock_transactions where medicine_id=?"""
+    args=[int(medicine_id)]
+    if batch_id is not None:sql+=' and batch_id=?';args.append(int(batch_id))
+    return float(con.execute(sql,args).fetchone()['qty'] or 0)
+
+def medicine_fefo_allocations(con, medicine_id, quantity, use_date):
+    """Stok kullanımını SKT'si en yakın uygun partiden başlayarak böler (FEFO)."""
+    remaining=max(0.0,float(quantity or 0)); allocations=[]
+    if remaining<=0:return allocations
+    batches=con.execute("""select * from medicine_batches where medicine_id=?
+        order by case when coalesce(expiry_date,'')='' then 1 else 0 end,expiry_date,id""",(int(medicine_id),)).fetchall()
+    for batch in batches:
+        balance=medicine_stock_balance(con,medicine_id,batch['id'])
+        if balance<=1e-9:continue
+        if batch['expiry_date'] and str(batch['expiry_date'])<str(use_date):continue
+        used=min(balance,remaining)
+        allocations.append((batch,used))
+        remaining-=used
+        if remaining<=1e-9:break
+    if remaining>1e-9:return []
+    return allocations
+
 def init_db():
     BACKUPS.mkdir(exist_ok=True)
     UPLOADS.mkdir(exist_ok=True)
@@ -558,6 +595,45 @@ def init_db():
         CREATE TABLE IF NOT EXISTS health_courses(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,product TEXT NOT NULL,scope_type TEXT NOT NULL DEFAULT 'single',paddock_id INTEGER,start_date TEXT NOT NULL,treatment_days INTEGER DEFAULT 1,times_per_day INTEGER DEFAULT 1,dose_count INTEGER DEFAULT 1,interval_days INTEGER DEFAULT 0,cost_per_application REAL DEFAULT 0,notes TEXT,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS health_tasks(id INTEGER PRIMARY KEY,course_id INTEGER NOT NULL,animal_id INTEGER,calf_id INTEGER,planned_date TEXT NOT NULL,dose_no INTEGER DEFAULT 1,dose_total INTEGER DEFAULT 1,day_no INTEGER DEFAULT 1,day_total INTEGER DEFAULT 1,application_no INTEGER DEFAULT 1,applications_per_day INTEGER DEFAULT 1,status TEXT DEFAULT 'Bekliyor',completed_date TEXT,cost REAL DEFAULT 0,notes TEXT);
         CREATE INDEX IF NOT EXISTS idx_health_tasks_due ON health_tasks(status,planned_date,course_id);
+        CREATE TABLE IF NOT EXISTS medicine_catalog(
+            id INTEGER PRIMARY KEY,product_name TEXT UNIQUE NOT NULL,active_ingredient TEXT,company TEXT,
+            therapeutic_group TEXT,target_species TEXT DEFAULT 'Sığır',application_route TEXT,
+            pharmaceutical_form TEXT,meat_withdrawal_days INTEGER DEFAULT 0,milk_withdrawal_hours INTEGER DEFAULT 0,
+            storage_conditions TEXT,prescription_required INTEGER DEFAULT 1,official_source_url TEXT,
+            source_checked_date TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS medicine_batches(
+            id INTEGER PRIMARY KEY,medicine_id INTEGER NOT NULL,lot_no TEXT,expiry_date TEXT,quantity REAL NOT NULL DEFAULT 0,
+            unit TEXT DEFAULT 'ml',unit_cost REAL DEFAULT 0,received_date TEXT NOT NULL,supplier TEXT,finance_id INTEGER,
+            notes TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS medicine_stock_transactions(
+            id INTEGER PRIMARY KEY,medicine_id INTEGER NOT NULL,batch_id INTEGER,tx_date TEXT NOT NULL,
+            tx_type TEXT NOT NULL,quantity REAL NOT NULL,unit_cost REAL DEFAULT 0,treatment_id INTEGER,notes TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS veterinary_visits(
+            id INTEGER PRIMARY KEY,animal_id INTEGER,calf_id INTEGER,paddock_id INTEGER,visit_date TEXT NOT NULL,
+            veterinarian TEXT,complaint TEXT,diagnosis TEXT,examination TEXT,prescription TEXT,cost REAL DEFAULT 0,
+            finance_id INTEGER,next_control_date TEXT,notes TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS treatments(
+            id INTEGER PRIMARY KEY,animal_id INTEGER,calf_id INTEGER,paddock_id INTEGER,visit_id INTEGER,
+            medicine_id INTEGER,batch_id INTEGER,start_date TEXT NOT NULL,end_date TEXT,dose_amount REAL DEFAULT 0,
+            dose_unit TEXT DEFAULT 'ml',application_route TEXT,applications_per_day INTEGER DEFAULT 1,
+            diagnosis TEXT,veterinarian TEXT,prescription_no TEXT,meat_safe_date TEXT,milk_safe_date TEXT,
+            total_quantity REAL DEFAULT 0,cost REAL DEFAULT 0,finance_id INTEGER,status TEXT DEFAULT 'Aktif',
+            notes TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS medicine_ingredient_reference(
+            id INTEGER PRIMARY KEY,generic_name TEXT UNIQUE NOT NULL,therapeutic_group TEXT,
+            caution TEXT,official_search_url TEXT,source_checked_date TEXT,active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS disease_catalog(
+            id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,contagious INTEGER DEFAULT 0,
+            zoonotic INTEGER DEFAULT 0,urgency TEXT DEFAULT 'Veteriner değerlendirmesi',common_signs TEXT,
+            reportable_note TEXT,official_source_url TEXT,source_checked_date TEXT,active INTEGER DEFAULT 1);
+        CREATE TABLE IF NOT EXISTS animal_losses(
+            id INTEGER PRIMARY KEY,subject_type TEXT NOT NULL,animal_id INTEGER,calf_id INTEGER,
+            event_date TEXT NOT NULL,event_type TEXT NOT NULL,cause TEXT,diagnosis TEXT,
+            total_cost REAL DEFAULT 0,recovery_amount REAL DEFAULT 0,net_loss REAL DEFAULT 0,
+            finance_id INTEGER,notes TEXT,created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_animal_losses_date ON animal_losses(event_date,event_type);
+        CREATE INDEX IF NOT EXISTS idx_medicine_batches_expiry ON medicine_batches(expiry_date,medicine_id);
+        CREATE INDEX IF NOT EXISTS idx_treatments_withdrawal ON treatments(meat_safe_date,milk_safe_date,status);
         CREATE TABLE IF NOT EXISTS finance(id INTEGER PRIMARY KEY, tx_date TEXT NOT NULL, tx_type TEXT NOT NULL, category TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT, animal_id INTEGER, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS backups(id INTEGER PRIMARY KEY, filename TEXT, created_at TEXT, size_bytes INTEGER);
         CREATE TABLE IF NOT EXISTS weights(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL, weight REAL NOT NULL, notes TEXT);
@@ -576,6 +652,146 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_ration_item_history_lookup ON ration_item_history(ration_id,feed_id,effective_date,id);
         CREATE TABLE IF NOT EXISTS paddock_rations(id INTEGER PRIMARY KEY,paddock_id INTEGER NOT NULL,ration_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT,active INTEGER DEFAULT 1,notes TEXT);
         ''')
+        medicine_cols={r[1] for r in c.execute('pragma table_info(medicine_catalog)').fetchall()}
+        if 'withdrawal_verified' not in medicine_cols:
+            c.execute("ALTER TABLE medicine_catalog ADD COLUMN withdrawal_verified INTEGER DEFAULT 0")
+        treatment_cols={r[1] for r in c.execute('pragma table_info(treatments)').fetchall()}
+        if 'disease_id' not in treatment_cols:
+            c.execute("ALTER TABLE treatments ADD COLUMN disease_id INTEGER")
+        disease_cols={r[1] for r in c.execute('pragma table_info(disease_catalog)').fetchall()}
+        for col,typ in [
+            ('description','TEXT'),('cause_agent','TEXT'),('transmission','TEXT'),
+            ('differential_notes','TEXT'),('immediate_actions','TEXT'),
+            ('veterinary_management','TEXT'),('prevention','TEXT')]:
+            if col not in disease_cols:c.execute(f'ALTER TABLE disease_catalog ADD COLUMN {col} {typ}')
+        official_product_search='https://hbs.tarbil.gov.tr/Receipt/SearchProduct'
+        official_vet_source='https://www.tarimorman.gov.tr/konular/veteriner-hizmetleri'
+        ingredient_rows=[
+            ('Oksitetrasiklin','Tetrasiklin antibiyotik'),('Florfenikol','Fenikol antibiyotik'),
+            ('Tulatromisin','Makrolid antibiyotik'),('Tilosin','Makrolid antibiyotik'),
+            ('Enrofloksasin','Florokinolon antibiyotik'),('Seftiofur','Sefalosporin antibiyotik'),
+            ('Benzilpenisilin + Dihidrostreptomisin','Kombine antibiyotik'),('Amoksisilin','Beta-laktam antibiyotik'),
+            ('Fluniksin meglumin','NSAİİ'),('Meloksikam','NSAİİ'),('İvermektin','Endektosit'),
+            ('Doramektin','Endektosit'),('Eprinomektin','Endektosit'),('Albendazol','Anthelmintik'),
+            ('Kloprostenol','Üreme hormonu'),('Gonadorelin (GnRH)','Üreme hormonu'),
+            ('Oksitosin','Hormon'),('Kalsiyum boroglukonat','Mineral / metabolik destek')]
+        caution='Ticari ürün, hedef hayvan, uygulama yolu, reçete ve arınma süresi Bakanlık ruhsat kaydından doğrulanmalıdır.'
+        for generic,group in ingredient_rows:
+            c.execute('insert or ignore into medicine_ingredient_reference(generic_name,therapeutic_group,caution,official_search_url,source_checked_date,active) values(?,?,?,?,?,1)',
+                      (generic,group,caution,official_product_search,date.today().isoformat()))
+        disease_rows=[
+            ('Mastitis','Meme','Aynı gün','Sütte değişiklik, meme sıcaklığı veya şişlik',0,0,''),
+            ('Metritis / Endometritis','Üreme','Aynı gün','Kötü kokulu akıntı, ateş, iştahsızlık',0,0,''),
+            ('Retensiyo sekundinarum (eşin atılamaması)','Üreme','Aynı gün','Doğum zarlarının zamanında atılamaması',0,0,''),
+            ('Hipokalsemi (süt humması)','Metabolik','Acil','Güçsüzlük, yatma, soğuk kulaklar',0,0,''),
+            ('Ketozis','Metabolik','Aynı gün','İştah azalması, süt düşüşü, kilo kaybı',0,0,''),
+            ('Rumen asidozu','Sindirim','Acil','İştahsızlık, ishal, halsizlik',0,0,''),
+            ('Timpani (şişme)','Sindirim','Acil','Sol karında şişkinlik, solunum güçlüğü',0,0,''),
+            ('Abomasum deplasmanı','Sindirim','Aynı gün','İştah ve süt düşüşü, dışkı azalması',0,0,''),
+            ('Travmatik retikuloperitonitis','Sindirim','Aynı gün','Ağrı, hareket isteksizliği, iştahsızlık',0,0,''),
+            ('Ayak çürüğü / interdigital nekrobasilloz','Ayak','Aynı gün','Topallık, şişlik, kötü koku',0,0,''),
+            ('Dijital dermatit','Ayak','Veteriner değerlendirmesi','Topallık, topuk bölgesinde lezyon',0,0,''),
+            ('Solunum yolu hastalığı kompleksi (BRD)','Solunum','Aynı gün','Ateş, öksürük, burun akıntısı',1,0,''),
+            ('Buzağı ishali','Buzağı','Acil','Sulu dışkı, sıvı kaybı, halsizlik',1,0,''),
+            ('Buzağı pnömonisi','Buzağı','Aynı gün','Öksürük, ateş, hızlı solunum',1,0,''),
+            ('Göbek enfeksiyonu','Buzağı','Aynı gün','Göbekte şişlik, akıntı veya ağrı',0,0,''),
+            ('Koksidiyoz','Paraziter','Aynı gün','İshal, ıkınma, gelişme geriliği',1,0,''),
+            ('Şap','Resmî bildirim','Acil','Ağız ve ayaklarda vezikül, salya, topallık',1,0,'Şüphede veteriner ve resmî makam bildirim prosedürü izlenmelidir.'),
+            ('Bruselloz','Resmî bildirim','Acil','Yavru atma, döl tutmama; insan sağlığı riski',1,1,'Zoonoz ve resmî kontrol hastalığıdır.'),
+            ('Sığır tüberkülozu','Resmî bildirim','Acil','Kronik zayıflama veya solunum bulguları',1,1,'Zoonoz ve resmî kontrol hastalığıdır.'),
+            ('Sığırların nodüler ekzantemi (LSD)','Resmî bildirim','Acil','Deri nodülleri, ateş, verim düşüşü',1,0,'Şüphede resmî bildirim gerekir.'),
+            ('Şarbon','Resmî bildirim','Acil','Ani ölüm; karkasa müdahale edilmemelidir',1,1,'Acil veteriner ve resmî makam bildirimi gerekir.'),
+            ('BVD','Enfeksiyöz','Aynı gün','İshal, üreme kayıpları, gelişme geriliği',1,0,''),
+            ('IBR','Enfeksiyöz','Aynı gün','Ateş, burun-göz akıntısı, solunum bulguları',1,0,''),
+            ('Leptospiroz','Enfeksiyöz / zoonoz','Aynı gün','Yavru atma, ateş, süt düşüşü',1,1,''),
+            ('Salmonelloz','Enfeksiyöz / zoonoz','Acil','Ateş, ishal, halsizlik veya ani ölüm',1,1,''),
+            ('Listerioz','Enfeksiyöz / zoonoz','Acil','Dönme, yüz felci, sinirsel bulgular',1,1,''),
+            ('Paratüberküloz (Johne)','Enfeksiyöz','Veteriner değerlendirmesi','Kronik ishal ve zayıflama',1,0,''),
+            ('Neosporoz','Paraziter / üreme','Veteriner değerlendirmesi','Tekrarlayan yavru atma',1,0,''),
+            ('Babesiyoz','Kan paraziti','Acil','Ateş, kansızlık, kırmızı-koyu idrar',0,0,''),
+            ('Anaplazmoz','Kan paraziti','Acil','Ateş, kansızlık, sarılık, güçsüzlük',0,0,''),
+            ('Theileriosis','Kan paraziti','Acil','Ateş, lenf düğümü şişliği, kansızlık',0,0,''),
+            ('İç parazit enfestasyonu','Paraziter','Veteriner değerlendirmesi','Zayıflama, ishal, mat tüy',0,0,''),
+            ('Dış parazit enfestasyonu','Paraziter','Veteriner değerlendirmesi','Kaşıntı, deri lezyonu, kene veya bit',1,0,''),
+            ('Laminitis','Ayak','Aynı gün','Topallık, sıcak ağrılı tırnaklar',0,0,''),
+            ('Beyaz çizgi hastalığı','Ayak','Veteriner değerlendirmesi','Topallık ve taban lezyonu',0,0,''),
+            ('Uterus prolapsusu','Doğum / üreme','Acil','Doğum sonrası rahmin dışarı çıkması',0,0,''),
+            ('Vajina prolapsusu','Doğum / üreme','Acil','Vajinal dokunun dışarı çıkması',0,0,''),
+            ('Güç doğum (distosi)','Doğum / üreme','Acil','İlerlemeyen veya uzayan doğum',0,0,''),
+            ('Meme ödemi','Meme','Veteriner değerlendirmesi','Doğum çevresinde meme şişliği',0,0,''),
+            ('Yemek borusu tıkanması','Sindirim','Acil','Salya, yutamama ve hızlı şişme',0,0,''),
+            ('Rumen durgunluğu','Sindirim','Aynı gün','Geviş getirmeme, iştahsızlık',0,0,''),
+            ('Mikotoksikoz şüphesi','Beslenme / toksikoloji','Aynı gün','Yem reddi, verim düşüşü, değişken bulgular',0,0,''),
+            ('Nitrat / nitrit zehirlenmesi şüphesi','Toksikoloji','Acil','Solunum güçlüğü, koyu kan, ani çökme',0,0,''),
+            ('Üre / amonyak zehirlenmesi şüphesi','Toksikoloji','Acil','Şişme, titreme, hızlı solunum',0,0,''),
+            ('Göz enfeksiyonu (pinkeye)','Göz','Aynı gün','Göz yaşarması, ışığa hassasiyet, kornea bulanıklığı',1,0,''),
+            ('Aktinomikoz / tahta dil şüphesi','Ağız / çene','Veteriner değerlendirmesi','Çene şişliği veya sert dil',0,0,'')]
+        for name,category,urgency,signs,contagious,zoonotic,note in disease_rows:
+            c.execute('insert or ignore into disease_catalog(name,category,contagious,zoonotic,urgency,common_signs,reportable_note,official_source_url,source_checked_date,active) values(?,?,?,?,?,?,?,?,?,1)',
+                      (name,category,contagious,zoonotic,urgency,signs,note,official_vet_source,date.today().isoformat()))
+        disease_details={
+            'Şap':(
+                'Çift tırnaklı hayvanlarda görülen, çok hızlı yayılan viral bir hastalıktır. Kesin tanı laboratuvarla konur.',
+                'Picornaviridae ailesinden Aphthovirus.',
+                'Enfekte hayvan, salgı ve dışkılar; süt, sperma, ekipman, araç, insan hareketi ve hava yoluyla yayılabilir.',
+                'Ağız ve ayak lezyonu yapan diğer enfeksiyonlar ile travmatik yaralar veteriner tarafından ayırt edilmelidir.',
+                'Hayvanı ayırın; hayvan, araç ve ziyaretçi hareketini durdurun. Karkasa veya lezyonlara müdahale etmeyin ve veteriner/resmî birimle hemen iletişim kurun.',
+                'Virüse yönelik özgül tedavi yoktur. Destekleyici bakım ve ikincil enfeksiyonların yönetimi yalnız veteriner değerlendirmesi ve reçetesiyle yapılır.',
+                'Resmî aşılama programı, karantina, giriş-çıkış kontrolü, temizlik ve uygun dezenfeksiyon.'),
+            'Bruselloz':(
+                'Başlıca yavru atma ve döl verimi kaybıyla seyreden, insanlara da bulaşabilen bakteriyel bir hastalıktır.',
+                'Brucella türleri.','Atık yavru, doğum sıvıları, plasenta, süt ve enfekte materyalle temas.',
+                'Diğer yavru atma nedenlerinden laboratuvar ve resmî testlerle ayrılır.',
+                'Atık materyale çıplak elle dokunmayın; alanı ayırın, çiğ süt tüketmeyin ve veteriner/resmî birime bildirin.',
+                'Sürü düzeyinde resmî mücadele uygulanır; kendi kendine antibiyotik tedavisi yapılmaz.',
+                'Resmî aşılama ve tarama programları, biyogüvenlik, atık materyalin güvenli yönetimi.'),
+            'Şarbon':(
+                'Ani ölüm yapabilen, zoonoz ve ciddi bir bakteriyel hastalıktır.',
+                'Bacillus anthracis.','Sporlarla bulaşık toprak, yem veya su; enfekte karkas ve materyal.',
+                'Ani ölümün diğer nedenlerinden veteriner ve laboratuvar incelemesiyle ayrılır.',
+                'Karkası açmayın, taşımayın veya kanatmayın. Bölgeyi kapatıp derhal veteriner ve resmî birime bildirin.',
+                'Resmî kontrol altında veteriner müdahalesi gerekir; şüpheli karkasa saha müdahalesi yapılmaz.',
+                'Riskli bölgelerde resmî aşılama, ölü hayvanların mevzuata uygun bertarafı ve alan kontrolü.'),
+            'Mastitis':(
+                'Meme dokusunun çoğunlukla enfeksiyona bağlı iltihabıdır; klinik veya gizli seyredebilir.',
+                'Çeşitli bakteriler ve çevresel/sağım kaynaklı etkenler.',
+                'Sağım ekipmanı, eller, yataklık ve enfekte meme başları üzerinden yayılabilir.',
+                'Meme travması, ödem ve süt değişikliğinin diğer nedenleri değerlendirilmelidir.',
+                'Şüpheli sütü tanka katmayın; hayvanı işaretleyin, ateş ve genel durumunu kontrol edip veterineri arayın.',
+                'Süt muayenesi/kültür sonucuna ve klinik duruma göre veteriner protokolü uygulanır; arınma süresi ürüne göre kaydedilir.',
+                'Sağım hijyeni, meme başı dezenfeksiyonu, temiz-kuru yataklık ve sağım makinesi bakımı.'),
+            'Hipokalsemi (süt humması)':(
+                'Özellikle doğum çevresinde kan kalsiyumunun düşmesiyle gelişen acil metabolik tablodur.',
+                'Kalsiyum dengesinin doğum ve süt başlangıcındaki ani değişimi.',
+                'Bulaşıcı değildir.','Travma, ağır enfeksiyon, ketozis ve diğer yatma nedenleri ayrılmalıdır.',
+                'Hayvanı güvenli göğüs pozisyonunda tutun, şişmeyi önleyin ve acilen veteriner çağırın.',
+                'Kalsiyum uygulaması kalp ritmi riski nedeniyle veteriner gözetimi gerektirir.',
+                'Geçiş dönemi rasyonunun mineral/anyon-katyon dengesi ve riskli hayvanların yakın takibi.'),
+            'Timpani (şişme)':(
+                'Rumende gazın atılamaması sonucu sol karında hızla şişme ve solunum baskısı oluşmasıdır.',
+                'Köpüklü mera/yem kaynaklı veya yemek borusu tıkanması gibi serbest gaz nedenleri.',
+                'Bulaşıcı değildir.','Yemek borusu tıkanması ve diğer karın şişliği nedenleri ayrılmalıdır.',
+                'Yemi kesin, hayvanı sakin tutun ve solunum güçlüğünde acil veteriner çağırın. Deneyimsiz girişim yapmayın.',
+                'Nedene göre sonda, köpük giderici veya acil dekompresyon yalnız eğitimli veteriner tarafından uygulanır.',
+                'Rasyon geçişlerini kademeli yapmak, riskli meraya aç çıkarmamak ve kaba yem yönetimi.'),
+            'Buzağı ishali':(
+                'Yeni doğan ve genç buzağılarda hızla sıvı-elektrolit kaybına yol açabilen klinik tablodur.',
+                'Bakteriyel, viral, paraziter veya besleme/hijyen kaynaklı çok sayıda neden.',
+                'Dışkı ile kirlenmiş çevre, ekipman ve temas yoluyla etkenler yayılabilir.',
+                'Etken ve şiddet; yaş, dışkı, ateş ve testlerle veteriner tarafından değerlendirilir.',
+                'Buzağıyı sıcak-kuru ayrı bölmeye alın; emme refleksi, göz çökmesi ve ayağa kalkmayı kontrol edip veterineri arayın.',
+                'Sıvı-elektrolit desteği ve etkene yönelik yaklaşım muayeneye göre belirlenir; antibiyotik her ishale uygun değildir.',
+                'Yeterli ve zamanında kolostrum, doğum bölmesi hijyeni, temiz ekipman ve yaş grubu ayrımı.'),
+            'Solunum yolu hastalığı kompleksi (BRD)':(
+                'Stres, çevre ve birden fazla enfeksiyon etkeninin birlikte rol aldığı sığır solunum hastalığı kompleksidir.',
+                'Viral ve bakteriyel etkenlerin stres/bağışıklıkla etkileşimi.',
+                'Yakın temas ve solunum salgıları; nakil, kalabalık ve yetersiz havalandırma riski artırır.',
+                'Akciğer enfeksiyonu, üst solunum hastalığı ve diğer ateş nedenleri ayrılmalıdır.',
+                'Hayvanı ayırın; ateş, solunum sayısı, iştah ve burun akıntısını kaydedip aynı gün veteriner değerlendirmesi isteyin.',
+                'Muayene ve sürü protokolüne göre destek/ilaç seçilir; doz ve arınma ruhsatlı ürün kaydına göre belirlenir.',
+                'Karantina, aşılama planı, havalandırma, düşük stresli nakil ve uygun barınak yoğunluğu.')}
+        for disease_name,detail in disease_details.items():
+            c.execute('''update disease_catalog set description=?,cause_agent=?,transmission=?,differential_notes=?,immediate_actions=?,veterinary_management=?,prevention=? where name=?''',(*detail,disease_name))
         user_cols={r[1] for r in c.execute('pragma table_info(users)').fetchall()}
         for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT'),('recovery_email','TEXT')]:
             if col not in user_cols:c.execute(f'ALTER TABLE users ADD COLUMN {col} {typ}')
@@ -647,8 +863,15 @@ def init_db():
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
-        for col,typ in [('nickname','TEXT'),('breed','TEXT'),('paddock','TEXT'),('photo_url','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'")]:
+        for col,typ in [('nickname','TEXT'),('breed','TEXT'),('paddock','TEXT'),('photo_url','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('sold_price','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0')]:
             if col not in calf_cols:c.execute(f'ALTER TABLE calves ADD COLUMN {col} {typ}')
+        c.execute("update calves set status='Aktif' where status is null or trim(status)=''")
+        loss_cols={r[1] for r in c.execute('pragma table_info(animal_losses)').fetchall()}
+        for col,typ in [('purchase_cost','REAL DEFAULT 0'),('operating_cost','REAL DEFAULT 0'),
+                        ('treatment_cost','REAL DEFAULT 0'),('other_cost','REAL DEFAULT 0'),
+                        ('previously_financed','REAL DEFAULT 0'),('new_expense','REAL DEFAULT 0'),
+                        ('recovery_finance_id','INTEGER')]:
+            if col not in loss_cols:c.execute(f'ALTER TABLE animal_losses ADD COLUMN {col} {typ}')
         c.execute("CREATE TABLE IF NOT EXISTS calf_weights(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,measure_date TEXT NOT NULL,weight REAL NOT NULL,notes TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS calf_photos(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,filename TEXT NOT NULL,created_at TEXT NOT NULL,caption TEXT)")
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
@@ -659,6 +882,14 @@ def init_db():
         if 'paddock_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN paddock_id INTEGER')
         animal_cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
         if 'paddock_id' not in animal_cols:c.execute('ALTER TABLE animals ADD COLUMN paddock_id INTEGER')
+        # Hotfix2: eski/yarım kalmış zayiat kayıtlarında kaynak hayvanın durumu
+        # arşivdeki son olayla eşitlenir. Aktif listeler ayrıca arşiv varlığını dışlar.
+        c.execute('''update animals set status=(select l.event_type from animal_losses l where l.animal_id=animals.id order by l.id desc limit 1),
+            exit_date=(select l.event_date from animal_losses l where l.animal_id=animals.id order by l.id desc limit 1)
+            where exists(select 1 from animal_losses l where l.animal_id=animals.id) and coalesce(status,'Aktif')='Aktif' ''')
+        c.execute('''update calves set status=(select l.event_type from animal_losses l where l.calf_id=calves.id order by l.id desc limit 1),
+            exit_date=(select l.event_date from animal_losses l where l.calf_id=calves.id order by l.id desc limit 1)
+            where exists(select 1 from animal_losses l where l.calf_id=calves.id) and coalesce(status,'Aktif')='Aktif' ''')
         # Eski serbest metin padokları kaybetmeden gerçek padok kayıtlarına dönüştür.
         legacy_names=set()
         for rr in c.execute("select distinct trim(coalesce(paddock,'')) p from animals where trim(coalesce(paddock,''))<>''").fetchall(): legacy_names.add(rr['p'])
@@ -1386,10 +1617,10 @@ def ration_cost_between(c, ration_id, start_day, end_day):
     return total
 
 
-def animal_paddock_intervals(c, a, start_day, end_day):
+def animal_paddock_intervals(c, a, start_day, end_day, source='animal'):
     # Hayvanın [start,end) dönemindeki padoklarını tarih aralıkları halinde döndürür.
     aid=int(a['id']); current_pid=a['paddock_id'] if 'paddock_id' in a.keys() else None
-    rows=c.execute("select * from paddock_history where animal_source='animal' and animal_id=? order by moved_at,id",(aid,)).fetchall()
+    rows=c.execute("select * from paddock_history where animal_source=? and animal_id=? order by moved_at,id",(source,aid)).fetchall()
     # Başlangıç günündeki padoku bul.
     pid=current_pid
     before=[]; after=[]
@@ -1458,7 +1689,7 @@ def animal_current_feed_context(a, con=None, on_date=None):
         if own:c.close()
 
 
-def animal_cost_values(a, con=None):
+def animal_cost_values(a, con=None, source='animal'):
     purchase=float(a['purchase_price'] or 0) if 'purchase_price' in a.keys() else 0.0
     manual_feed=float(a['daily_feed_cost'] or 0) if 'daily_feed_cost' in a.keys() else 0.0
     care=float(a['daily_care_cost'] or 0) if 'daily_care_cost' in a.keys() else 0.0
@@ -1474,7 +1705,7 @@ def animal_cost_values(a, con=None):
     own=con is None;c=con or db().__enter__()
     try:
         feed_acc=0.0
-        for a0,b0,pid in animal_paddock_intervals(c,a,start_date,end_date):
+        for a0,b0,pid in animal_paddock_intervals(c,a,start_date,end_date,source):
             part,_,_=paddock_feed_cost_between(c,pid,a0,b0,manual_feed);feed_acc+=part
         accumulated=feed_acc + days*care
         ctx=animal_current_feed_context(a,c,end_date.isoformat())
@@ -1482,6 +1713,60 @@ def animal_cost_values(a, con=None):
         return days,daily,accumulated,purchase+accumulated
     finally:
         if own:c.close()
+
+def calf_cost_values(calf, con=None):
+    """Buzağıları yetişkinlerle aynı tarihsel padok/rasyon maliyet motorunda hesaplar."""
+    return animal_cost_values(calf,con,'calf')
+
+
+def animal_loss_breakdown(c, rec, source, event_date):
+    """Zayiat maliyetini kurar; daha önceki finans kayıtlarını ikinci kez giderleştirmez."""
+    sid=int(rec['id']); tag=str(rec['tag'] or '').strip(); frozen=dict(rec)
+    frozen['status']='Zayiat'; frozen['exit_date']=event_date
+    _,_,operating_cost,base_total=animal_cost_values(frozen,c,source)
+    purchase_cost=float(rec['purchase_price'] or 0) if 'purchase_price' in rec.keys() else 0.0
+    id_col='animal_id' if source=='animal' else 'calf_id'
+    treatments=c.execute(f'''select cost,finance_id from treatments
+        where {id_col}=? and start_date<=?''',(sid,event_date)).fetchall()
+    visits=c.execute(f'''select cost,finance_id from veterinary_visits
+        where {id_col}=? and visit_date<=?''',(sid,event_date)).fetchall()
+    treatment_cost=sum(float(x['cost'] or 0) for x in treatments)+sum(float(x['cost'] or 0) for x in visits)
+    medical_finance_ids={int(x['finance_id']) for x in list(treatments)+list(visits) if x['finance_id']}
+    linked=[]
+    if source=='animal':
+        linked=c.execute('''select distinct f.* from finance f left join finance_animals fa on fa.finance_id=f.id
+            where f.tx_date<=? and (f.animal_id=? or fa.animal_id=? or upper(coalesce(f.description,'')) like upper(?))''',
+            (event_date,sid,sid,'%'+tag+'%')).fetchall()
+    elif tag:
+        linked=c.execute("select * from finance where tx_date<=? and upper(coalesce(description,'')) like upper(?)",
+                         (event_date,'%'+tag+'%')).fetchall()
+    purchase_posted=any(x['tx_type']=='Gider' and x['category']=='Hayvan Alımı' for x in linked)
+    financed_medical=sum(float(x['amount'] or 0) for x in linked if int(x['id']) in medical_finance_ids and x['tx_type']=='Gider')
+    other_rows=[x for x in linked if x['tx_type']=='Gider' and x['category']!='Hayvan Alımı' and int(x['id']) not in medical_finance_ids]
+    other_cost=sum(float(x['amount'] or 0) for x in other_rows)
+    previous=purchase_cost if purchase_posted else 0.0
+    previous+=min(treatment_cost,financed_medical)+other_cost
+    purchase_gap=0.0 if purchase_posted else purchase_cost
+    treatment_gap=max(0.0,treatment_cost-financed_medical)
+    new_expense=max(0.0,purchase_gap+operating_cost+treatment_gap)
+    gross_loss=base_total+treatment_cost+other_cost
+    return {'purchase_cost':purchase_cost,'operating_cost':operating_cost,'treatment_cost':treatment_cost,
+            'other_cost':other_cost,'previously_financed':previous,'new_expense':new_expense,
+            'gross_loss':gross_loss,'purchase_posted':purchase_posted}
+
+
+def delete_loss_generated_finance(c, loss, tag=''):
+    """Yalnız zayiat işleminin kendi ürettiği finans satırlarını kaldırır."""
+    ids=set()
+    for col in ('finance_id','recovery_finance_id'):
+        if col in loss.keys() and loss[col]:ids.add(int(loss[col]))
+    if tag and not (('recovery_finance_id' in loss.keys()) and loss['recovery_finance_id']):
+        rows=c.execute('''select id from finance where tx_date=? and category='Sigorta / Zayiat Tazminatı'
+            and upper(coalesce(description,'')) like upper(?)''',(loss['event_date'],'%'+tag+'%')).fetchall()
+        ids.update(int(r['id']) for r in rows)
+    for fid in ids:
+        c.execute('delete from finance_animals where finance_id=?',(fid,))
+        c.execute('delete from finance where id=?',(fid,))
 
 
 def pregnancy_vaccine_tasks(con, animal_id=None, horizon_days=7):
@@ -3593,15 +3878,18 @@ def weight_chart_svg(rows):
 def promote_mature_calves():
     """10 ayını dolduran buzağıları yetişkin karta geçirir; geçmiş kayıtları korur."""
     with db() as c:
-        rows=c.execute("select * from calves where promoted_animal_id is null and birth_date is not null and birth_date<>''").fetchall()
+        rows=c.execute("select * from calves where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and birth_date is not null and birth_date<>''").fetchall()
         for calf in rows:
             if months_old(calf['birth_date']) < 10: continue
             existing=c.execute('select id from animals where tag=?',(calf['tag'],)).fetchone()
             if existing: aid=existing['id']
             else:
-                cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price) values(?,?,?,?,?,?,?,?,?,?,?,?)',
-                    (calf['tag'],calf['nickname'] or '',calf['gender'] or '',calf['breed'] or '',calf['birth_date'],calf['notes'] or '',calf['paddock'] or '',calf['photo_url'] or '',0,'Aktif',calf['purchase_date'] or '',float(calf['purchase_price'] or 0)))
+                cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,paddock_id,photo_url,sold_price,status,purchase_date,purchase_price,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (calf['tag'],calf['nickname'] or '',calf['gender'] or '',calf['breed'] or '',calf['birth_date'],calf['notes'] or '',calf['paddock'] or '',calf['paddock_id'],calf['photo_url'] or '',0,'Aktif',calf['purchase_date'] or '',float(calf['purchase_price'] or 0),float(calf['daily_feed_cost'] or 0),float(calf['daily_care_cost'] or 0),float(calf['target_sale_price'] or 0)))
                 aid=cur.lastrowid
+            for phist in c.execute("select * from paddock_history where animal_source='calf' and animal_id=? order by id",(calf['id'],)).fetchall():
+                if not c.execute("select 1 from paddock_history where animal_source='animal' and animal_id=? and moved_at=? and coalesce(to_paddock_id,0)=coalesce(?,0)",(aid,phist['moved_at'],phist['to_paddock_id'])).fetchone():
+                    c.execute("insert into paddock_history(animal_source,animal_id,from_paddock_id,to_paddock_id,moved_at,notes) values('animal',?,?,?,?,?)",(aid,phist['from_paddock_id'],phist['to_paddock_id'],phist['moved_at'],'Buzağı maliyet geçmişinden devralındı'))
             c.execute('update health set animal_id=?,calf_id=null where calf_id=?',(aid,calf['id']))
             for w in c.execute('select * from calf_weights where calf_id=? order by measure_date,id',(calf['id'],)).fetchall():
                 if not c.execute('select 1 from weights where animal_id=? and measure_date=?',(aid,w['measure_date'])).fetchone():
@@ -3865,9 +4153,9 @@ def page(title,body,path='/',user='admin',flash=''):
     def nav_link(name,url):
         return f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>'
     groups=[
-        ('🐄 Hayvanlar',[('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('➕ Hayvan Ekle','/animal-add')]),
+        ('🐄 Hayvanlar',[('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
         ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
-        ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health')]),
+        ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('📝 Sürüm Notları','/version-notes')]),
         ('⚙️ Yönetim',[('⚙️ Program Ayarları','/farm-profile'),('🔐 Şifremi Değiştir','/password-change')]+([('🔐 Lisans Bilgileri','/license-info'),('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')] if role=='admin' else []))
@@ -4254,7 +4542,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 .prep-report-table-wrap{{overflow:auto}}.prep-report-table{{width:100%;border-collapse:collapse}}.prep-report-table th,.prep-report-table td{{padding:8px 9px;border-bottom:1px solid #e1ebe4;text-align:left}}.prep-report-table th{{background:#eaf4ed;font-size:12px}}.prep-report-note{{margin-top:8px;font-size:11px}}
 @media(max-width:820px){{.prep-report-summary{{grid-template-columns:repeat(2,minmax(0,1fr))}}.prep-report-controls{{width:100%}}.prep-report-controls label{{flex:1}}.prep-report-controls input{{width:100%}}.prep-report-controls .btn{{flex:1}}}}
 @media(max-width:520px){{.prep-report-summary{{grid-template-columns:1fr}}.prep-report-table th:nth-child(4),.prep-report-table td:nth-child(4){{display:none}}}}
-</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar"><a class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a href="/rations"><span class="ico">⚖</span>Rasyon</a><a href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a href="/finance"><span class="ico">₺</span>Finans</a><a href="/reports"><span class="ico">▥</span>Raporlar</a><a href="/data"><span class="ico">⇄</span>Veri</a></div><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">v3.9.20</span></div><script>
+</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar"><a class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a href="/rations"><span class="ico">⚖</span>Rasyon</a><a href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a href="/finance"><span class="ico">₺</span>Finans</a><a href="/reports"><span class="ico">▥</span>Raporlar</a><a href="/data"><span class="ico">⇄</span>Veri</a></div><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">{h(APP_LABEL)}</span></div><script>
 (function(){{
  const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
  if(btn&&side){{btn.addEventListener("click",function(){{side.classList.toggle("mobile-open");}});side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{side.classList.remove("mobile-open");}});}});}}
@@ -5420,6 +5708,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if not rec:return self.send_html('Hayvan bulunamadı',404)
             cancel='/animals' if rec['gender']=='Dişi' else '/males'
             body=f'''<h1>Hayvan Düzenle</h1><div class="card"><form method="post" action="/animal-edit" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="id" value="{rec["id"]}"><label>Küpe No<input name="tag" required value="{h(rec["tag"])}"></label><label>Takma Ad<input name="nickname" value="{h(rec["nickname"])}"></label><label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label><label>Irk<input name="breed" value="{h(rec["breed"])}"></label><label>Doğum Tarihi<input type="date" name="birth_date" value="{h(rec["birth_date"])}"></label><label>Padok / Ahır<input name="paddock" value="{h(rec["paddock"])}"></label><label>Fotoğrafı Değiştir<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><input type="hidden" name="photo_url" value="{h(rec["photo_url"])}"><label>Durum<select name="status"><option value="Aktif" {'selected' if rec["status"]=='Aktif' else ''}>Aktif</option><option value="Satıldı" {'selected' if rec["status"]=='Satıldı' else ''}>Satıldı</option><option value="Kesildi" {'selected' if rec["status"]=='Kesildi' else ''}>Kesildi</option></select></label><label>Satış Fiyatı<input type="number" step="0.01" name="sold_price" value="{h(rec["sold_price"])}"></label><label>Alış Tarihi<input type="date" name="purchase_date" value="{h(rec["purchase_date"])}"></label><label>Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price" value="{h(rec["purchase_price"])}"></label><label>Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" value="{h(rec["purchase_weight"])}"></label><label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{h(rec["daily_feed_cost"])}"></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{h(rec["daily_care_cost"])}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{h(rec["target_sale_price"])}"></label><label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="{cancel}">İptal</a></div></form></div>'''
+            body=body.replace('<label class="full">Not<textarea', '<label class="full"><input type="checkbox" name="sync_purchase_finance" value="yes" checked> Alış fiyatını Finans &gt; Hayvan Alımı kaydıyla oluştur/güncelle</label><label class="full">Not<textarea')
+            body=body.replace('</label><label>Günlük Bakım (TL)', '<span class="mut">Padokta aktif rasyon varsa otomatik rasyon maliyeti kullanılır.</span></label><label>Günlük Bakım (TL)',1)
             return self.send_html(page('Hayvan Düzenle',body,cancel,u,msg))
         if path=='/calf-edit':
             cid=q.get('id',[''])[0]
@@ -5440,6 +5730,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <label>Fotoğraf Yükle<input type="file" name="photo_file" accept="image/*"></label>
             <label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label>
             <div class="full"><button class="btn">Buzağıyı Güncelle</button> <a class="btn alt" href="/calf?id={cid}">İptal</a></div></form></div>'''
+            body=body.replace('<label>Fotoğraf Yükle', f'''<label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{float(rec['daily_feed_cost'] or 0)}"><span class="mut">Padokta aktif rasyon varsa otomatik maliyet kullanılır.</span></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{float(rec['daily_care_cost'] or 0)}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{float(rec['target_sale_price'] or 0)}"></label><label>Fotoğraf Yükle''')
             return self.send_html(page('Buzağı Düzenle',body,'/calves',u,msg))
         if path=='/animal-add':
             with db() as c:
@@ -5450,12 +5741,17 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             breed_options=''.join(f'<option value="{h(x)}">' for x in breeds)
             paddock_options=''.join(f'<option value="{h(x)}">' for x in paddocks)
             body=f'''<div class="pro-form-head"><div><h1>Hayvan Ekle</h1><div class="mut">Tek formdan dişi, erkek veya buzağı kaydı oluşturun.</div></div><span id="recordTypeBadge" class="type-chip">Dişi Hayvan</span></div><div class="card"><form method="post" action="/animal-add" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><label>Kayıt Türü<select id="recordType" name="record_type" required onchange="toggleAnimalFields()"><option value="Dişi">Dişi Hayvan</option><option value="Erkek">Erkek Hayvan</option><option value="Buzağı">Buzağı</option></select></label><label>Küpe No<input name="tag" required autocomplete="off"></label><label>Takma Ad<input name="nickname"></label><label class="adult-only">Irk<input name="breed" list="breedOptions"><datalist id="breedOptions">{breed_options}</datalist></label><label>Doğum Tarihi<input type="date" name="birth_date"></label><label class="adult-only">Padok / Ahır<input name="paddock" list="paddockOptions"><datalist id="paddockOptions">{paddock_options}</datalist></label><label class="adult-only">Fotoğraf Yükle / Kameradan veya Galeriden Seç<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><label class="adult-only">Alış Tarihi<input type="date" name="purchase_date"></label><label class="adult-only">Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="adult-only">Alış Ödeme Yöntemi<select name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="male-only" style="display:none">Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight"></label><label class="male-only" style="display:none">Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost"></label><label class="male-only" style="display:none">Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="male-only" style="display:none">Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price"></label><div class="female-pregnancy full" id="femalePregnancyBox"><div class="card" style="background:#f7fbf8;border:1px solid #d7eadc"><h3 style="margin-top:0">🤰 Üreme Durumu</h3><div class="form"><label>Hayvanın Durumu<select id="entryPregnancyStatus" name="entry_pregnancy_status" onchange="toggleEntryPregnancy()"><option value="Bos">Boş / Gebe Değil</option><option value="Gebe">Gebe</option><option value="Bilinmiyor">Bilinmiyor</option></select></label><label id="pregnancyInfoModeLabel" style="display:none">Gebelik Bilgisi<select id="pregnancyInfoMode" name="pregnancy_info_mode" onchange="toggleEntryPregnancy()"><option value="date">Son Tohumlama Tarihi Biliniyor</option><option value="age">Sadece Gebelik Yaşı Biliniyor</option></select></label><label id="knownInseminationLabel" style="display:none">Son Tohumlama Tarihi<input type="date" name="known_insemination_date"></label><label id="pregnancyAgeLabel" style="display:none">Gebelik Yaşı (Ay)<input type="number" name="pregnancy_age_months" min="1" max="9" step="0.5" placeholder="Örn. 6"></label><label id="pregnancyEntryDateLabel" style="display:none">Gebelik Bilgisinin Tarihi<input type="date" name="pregnancy_entry_date" value="{date.today().isoformat()}"></label><div class="full mut" id="pregnancyEntryHint" style="display:none">Satın alınırken gebe olduğu ayrıca kaydedilir. Yalnız gebelik ayı biliniyorsa tahmini doğum yaklaşık hesaplanır.</div></div></div></div><label class="calf-only" style="display:none">Buzağı Cinsiyeti<select name="calf_gender"><option>Dişi</option><option>Erkek</option></select></label><label class="calf-only" style="display:none">Anne Küpesi<input name="mother_tag" list="motherTagOptions"><datalist id="motherTagOptions">{mother_options}</datalist></label><label class="calf-only" style="display:none">Baba Küpesi<input name="father_tag"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Kaydı Oluştur</button> <a class="btn alt" href="/">İptal</a></div></form></div><script>document.addEventListener('DOMContentLoaded',function(){{toggleAnimalFields();}});</script>'''
+            body=body.replace('<label class="male-only" style="display:none">Günlük Yem/Rasyon (TL)', '<label class="adult-only">Günlük Yem/Rasyon (TL)')
+            body=body.replace('<label class="male-only" style="display:none">Günlük Bakım (TL)', '<label class="adult-only">Günlük Bakım (TL)')
+            body=body.replace('<label class="male-only" style="display:none">Hedef Satış Fiyatı (TL)', '<label class="adult-only">Hedef Satış Fiyatı (TL)')
+            body=body.replace('<label class="male-only" style="display:none">Alış Kilosu', '<label class="adult-only">Alış Kilosu')
+            body=body.replace('<label class="adult-only">Alış Ödeme Yöntemi', '<label class="adult-only"><input type="checkbox" name="post_purchase_finance" value="yes" checked> Alış bedelini Finansa gider olarak kaydet</label><label class="adult-only">Alış Ödeme Yöntemi')
             return self.send_html(page('Hayvan Ekle',body,'/animal-add',u,msg))
 
         if path=='/all-animals':
             with db() as c:
-                adults=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                calves_all=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date from calves where promoted_animal_id is null order by tag").fetchall()
+                adults=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag").fetchall()
+                calves_all=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date from calves where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag").fetchall()
             paddocks=sorted({str(r['paddock'] or '').strip() for r in list(adults)+list(calves_all) if str(r['paddock'] or '').strip()},key=lambda x:x.casefold())
             combined=[]
             for r in adults:
@@ -5477,16 +5773,20 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if term:
                     like=f"%{term}%"
                     rows=c.execute(
-                        "select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' and (tag like ? or nickname like ? or breed like ? or paddock like ?) order by tag",
+                        "select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) and (tag like ? or nickname like ? or breed like ? or paddock like ?) order by tag",
                         (like,like,like,like)
                     ).fetchall()
                 else:
-                    rows=c.execute("select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                    rows=c.execute("select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag").fetchall()
                 rec=c.execute('select * from animals where id=?',(edit,)).fetchone() if edit else None
-            trs=''.join('<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={0}">{1}</a></td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><a class="btn alt" href="/animal-edit?id={0}">Düzenle</a>{7}</td></tr>'.format(r['id'],h(r['tag']),h(r['nickname']),h(r['gender']),h(r['breed']),h(r['paddock']),age_text(r['birth_date']),(' <a class="btn" href="/inseminations?animal='+str(r['id'])+'">Tohumlama</a>' if r['gender']=='Dişi' else '')+' <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?\')"><input type="hidden" name="id" value="'+str(r['id'])+'"><button class="btn red">Sil</button></form>') for r in rows)
+            female_rows=[]
+            for r in rows:
+                days,daily,accumulated,current=animal_cost_values(r)
+                female_rows.append(f'''<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r['id']}">{h(r['tag'])}</a></td><td>{h(r['nickname'])}</td><td>{h(r['breed'])}</td><td>{h(r['paddock'])}</td><td>{days} gün</td><td>{money(r['purchase_price'])}</td><td>{money(accumulated)}</td><td><b>{money(current)}</b></td><td><a class="btn alt" href="/animal-edit?id={r['id']}">Düzenle</a> <a class="btn orange" href="/animal?id={r['id']}#animalSale">Satış</a> <a class="btn" href="/inseminations?animal={r['id']}">Tohumlama</a> <form class="inline-form" method="post" action="/animal-delete" onsubmit="return confirm('Bu hayvan ve bağlı kayıtları kalıcı olarak silmek istediğinize emin misiniz?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red">Sil</button></form></td></tr>''')
+            trs=''.join(female_rows) or '<tr><td colspan="9">Dişi hayvan kaydı yok.</td></tr>'
             search_options=''.join(f'<option value="{h(r["tag"])}">{h(r["nickname"])}</option>' for r in rows)
             table_rows=trs.replace('<tr>','<tr class="data-row">')
-            body=f'''<h1>Dişi Hayvanlar</h1><div class="livebox"><input id="femaleLiveSearch" type="search" placeholder="Küpe, takma ad, ırk veya padok yazın..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('femaleLiveSearch').value='';document.getElementById('femaleLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="femaleEmpty" class="empty-state">Eşleşen dişi hayvan bulunamadı.</div><div class="card"><table id="femaleLiveTable" class="mobile-animal-table female-table"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Padok</th><th>Yaş</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('femaleLiveSearch','femaleLiveTable','femaleEmpty');}});</script>'''
+            body=f'''<h1>Dişi Hayvanlar</h1><p class="mut">Alış bedeli ile tarihsel padok/rasyon gideri birlikte hesaplanır. Satış tamamlandığında gelir Finansa yazılır ve net kâr arşivde görünür.</p><div class="livebox"><input id="femaleLiveSearch" type="search" placeholder="Küpe, takma ad, ırk veya padok yazın..." autocomplete="off"><button type="button" class="btn alt live-clear" onclick="document.getElementById('femaleLiveSearch').value='';document.getElementById('femaleLiveSearch').dispatchEvent(new Event('input'))">Temizle</button></div><div id="femaleEmpty" class="empty-state">Eşleşen dişi hayvan bulunamadı.</div><div class="card" style="overflow:auto"><table id="femaleLiveTable" class="mobile-animal-table female-table" style="min-width:1180px"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Irk</th><th>Padok</th><th>Bizde Kalma</th><th>Alış</th><th>Rasyon + Bakım</th><th>Anlık Maliyet</th><th>İşlem</th></tr></thead><tbody>{table_rows}</tbody></table></div><script>document.addEventListener('DOMContentLoaded',function(){{liveTableFilter('femaleLiveSearch','femaleLiveTable','femaleEmpty');}});</script>'''
             return self.send_html(page('Hayvanlar',body,'/animals',u,msg))
         if path=='/males':
             edit=q.get('edit',[''])[0]
@@ -5495,11 +5795,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if term:
                     like=f"%{term}%"
                     rows=c.execute(
-                        "select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' and (tag like ? or nickname like ? or breed like ? or paddock like ?) order by tag",
+                        "select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) and (tag like ? or nickname like ? or breed like ? or paddock like ?) order by tag",
                         (like,like,like,like)
                     ).fetchall()
                 else:
-                    rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                    rows=c.execute("select * from animals where gender='Erkek' and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag").fetchall()
                 rec=c.execute("select * from animals where id=? and gender='Erkek'",(edit,)).fetchone() if edit else None
             male_rows=[]
             for r in rows:
@@ -5515,14 +5815,38 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             title='Satılan Hayvanlar' if status=='Satıldı' else 'Kesilen Hayvanlar'
             with db() as c:
                 rows=c.execute("select * from animals where status=? order by exit_date desc,tag",(status,)).fetchall()
-            trs=''.join(
-                f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td>'
-                f'<td>{h(r["nickname"])}</td><td>{h(r["gender"])}</td><td>{h(r["breed"])}</td>'
-                f'<td>{fmt_date(r["exit_date"])}</td><td>{h(r["exit_reason"])}</td><td>{money(r["sold_price"])}</td></tr>'
-                for r in rows
-            ) or '<tr><td colspan=7>Kayıt yok.</td></tr>'
-            body=f'<h1>{title}</h1><div class="card"><p class="mut">Bu hayvanların geçmiş kayıtları silinmez; yalnızca aktif sürü listesinden çıkarılır.</p><table class="mobile-animal-table archive-animal-table"><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Irk</th><th>Çıkış Tarihi</th><th>Neden</th><th>Satış/Kesim Tutarı</th></tr>{trs}</table></div>'
+            archive_rows=[]
+            for r in rows:
+                _,_,operating,total_cost=animal_cost_values(r)
+                revenue=float(r['sold_price'] or 0);profit=revenue-total_cost
+                profit_class='color:#08783f' if profit>=0 else 'color:#c0392b'
+                archive_rows.append(f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"])}</td><td>{h(r["gender"])}</td><td>{fmt_date(r["exit_date"])}</td><td>{money(r["purchase_price"])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>')
+            trs=''.join(archive_rows) or '<tr><td colspan="9">Kayıt yok.</td></tr>'
+            body=f'<h1>{title}</h1><div class="card"><p class="mut">Maliyet çıkış tarihinde donar. Alış + tarihsel padok/rasyon + bakım gideri satış geliriyle karşılaştırılır; geçmiş kayıtlar silinmez.</p><div style="overflow:auto"><table class="mobile-animal-table archive-animal-table" style="min-width:1050px"><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Çıkış Tarihi</th><th>Alış</th><th>Rasyon + Bakım</th><th>Toplam Maliyet</th><th>Satış Geliri</th><th>Net Kâr/Zarar</th></tr>{trs}</table></div></div>'
             return self.send_html(page(title,body,path,u,msg))
+        if path=='/archive/lost':
+            with db() as c:
+                rows=c.execute('''select l.*,a.tag animal_tag,a.nickname animal_nickname,a.gender animal_gender,
+                    ca.tag calf_tag,ca.nickname calf_nickname,ca.gender calf_gender
+                    from animal_losses l left join animals a on a.id=l.animal_id
+                    left join calves ca on ca.id=l.calf_id order by l.event_date desc,l.id desc''').fetchall()
+            loss_rows=[]
+            for r in rows:
+                tag=r['animal_tag'] or r['calf_tag'] or '-';nick=r['animal_nickname'] or r['calf_nickname'] or ''
+                gender=r['animal_gender'] or r['calf_gender'] or '-';href=('/animal?id='+str(r['animal_id'])) if r['animal_id'] else ('/calf?id='+str(r['calf_id']))
+                loss_rows.append(f'''<tr><td><a class="animal-tag-btn" href="{href}">{h(tag)}</a><div class="mut">{h(nick)}</div></td><td>{h(gender)}</td><td>{h(r['event_type'])}</td><td>{fmt_date(r['event_date'])}</td><td>{h(r['cause']) or '-'}</td><td>{money(r['purchase_cost'])}</td><td>{money(r['operating_cost'])}</td><td>{money(r['treatment_cost'])}</td><td>{money(r['other_cost'])}</td><td><b>{money(r['total_cost'])}</b></td><td>{money(r['previously_financed'])}</td><td>{money(r['new_expense'])}</td><td>{money(r['recovery_amount'])}</td><td><b style="color:#b42318">{money(r['net_loss'])}</b></td><td><div class="actions"><a class="btn alt compact-btn" href="/loss-edit?id={r['id']}">Düzenle</a><form class="inline-form" method="post" action="/loss-delete" onsubmit="return confirm('Bu zayiat kaydı silinsin, otomatik finans hareketleri geri alınsın ve hayvan yeniden aktif sürüye dönsün mü?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil / Geri Al</button></form></div></td></tr>''')
+            trs=''.join(loss_rows) or '<tr><td colspan="15">Ölüm, kayıp veya zorunlu imha kaydı yok.</td></tr>'
+            body=f'''<h1>🕯 Ölen / Kayıp Hayvanlar</h1><p class="mut">Maliyet olay tarihinde donar. Küpeye bağlı eski alış ve giderler tekrar yazılmaz; yalnız finansa aktarılmamış maliyet giderleşir. Sigorta, et veya kurtarma geliri net zayiattan düşer.</p><div class="card" style="overflow:auto"><table style="min-width:1950px"><tr><th>Küpe</th><th>Cinsiyet</th><th>Olay</th><th>Tarih</th><th>Neden</th><th>Alış</th><th>Rasyon + Bakım</th><th>Tedavi</th><th>Diğer</th><th>Brüt Kayıp</th><th>Önceden Finans</th><th>Yeni Gider</th><th>Sigorta/Et</th><th>Net Zayiat</th><th>İşlem</th></tr>{trs}</table></div>'''
+            return self.send_html(page('Ölen / Kayıp Hayvanlar',body,path,u,msg))
+        if path=='/loss-edit':
+            lid=q.get('id',[''])[0]
+            with db() as c:
+                loss=c.execute('''select l.*,coalesce(a.tag,ca.tag) tag from animal_losses l
+                    left join animals a on a.id=l.animal_id left join calves ca on ca.id=l.calf_id where l.id=?''',(lid,)).fetchone()
+            if not loss:return self.redirect('/archive/lost','Zayiat kaydı bulunamadı.')
+            opts=''.join(f'<option {"selected" if loss["event_type"]==x else ""}>{x}</option>' for x in ('Öldü','Kayıp','Zorunlu İmha','İşletmeden Çıkarıldı'))
+            body=f'''<div class="actions"><a class="btn alt" href="/archive/lost">← Arşive Dön</a></div><h1>🕯 Zayiat Kaydını Düzenle</h1><div class="card"><p><b>{h(loss['tag'])}</b> küpeli hayvan</p><p class="mut">Tarih veya gelir değişirse donmuş maliyet ve bağlı otomatik finans kayıtları yeniden hesaplanır.</p><form method="post" action="/loss-edit" class="form"><input type="hidden" name="id" value="{loss['id']}"><label>Olay Türü<select name="event_type">{opts}</select></label><label>Olay Tarihi<input type="date" name="event_date" value="{h(loss['event_date'])}" required></label><label>Neden<input name="cause" value="{h(loss['cause'])}"></label><label>Veteriner Teşhisi<input name="diagnosis" value="{h(loss['diagnosis'])}"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="{float(loss['recovery_amount'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(loss['notes'])}</textarea></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form></div>'''
+            return self.send_html(page('Zayiat Kaydını Düzenle',body,'/archive/lost',u,msg))
         if path=='/pregnancy-edit':
             aid=q.get('animal_id',[''])[0]
             with db() as c:
@@ -5600,8 +5924,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             perf_labels={'good':('Hedefte / Üstünde','status-good'),'watch':('Takip Edilmeli','status-watch'),'low':('Düşük Artış','status-low'),'none':('Veri Yetersiz','status-none')}
             perf_label,perf_class=perf_labels[period_perf['status']] if period_perf else ('','')
             chart_html=weight_chart_svg(list(reversed(weights))) if a['gender']=='Erkek' else ''
-            purchase_summary=(f'<div class="costbox"><h3>Canlı Anlık Maliyet ve Performans</h3><div class="quick-metrics"><span class="pill">Alış Fiyatı<br><b>{money(a["purchase_price"])}</b></span><span class="pill">Bizde Kaldığı Süre<br><b>{stay_days} gün</b></span><span class="pill">Birikmiş Yem + Bakım<br><b>{money(accumulated_cost)}</b></span><span class="pill">Anlık Toplam Maliyet<br><b>{money(current_cost)}</b></span><span class="pill">Toplam Kilo Artışı<br><b>{(str(round(weight_gain,1))+" kg") if weight_gain is not None else "-"}</b></span><span class="pill">Günlük Kilo Artışı<br><b>{(str(round(daily_gain,3))+" kg/gün") if daily_gain is not None else "-"}</b></span><span class="pill">Hedef Satış<br><b>{money(a["target_sale_price"]) if float(a["target_sale_price"] or 0)>0 else "-"}</b></span><span class="pill">Hedef Kâr<br><b>{money(target_profit) if target_profit is not None else "-"}</b></span></div><p class="mut">Günlük yem/rasyon: {money(feed_ctx["feed_cost"])} · Günlük bakım: {money(a["daily_care_cost"])} · Günlük toplam: {money(daily_cost)}</p><p class="mut">{("🌾 Padok rasyonu: "+h(feed_ctx["ration_name"])+" · "+fmt_date(feed_ctx["start_date"])+" tarihinden itibaren") if feed_ctx["source"]=="ration" else "Manuel sabit yem maliyeti kullanılıyor (padokta aktif rasyon yok)."}</p></div>') if a['gender']=='Erkek' else ''
-            sale_box=(f'<div class="card" style="margin-top:14px"><h2>Erkek Hayvan Satışı</h2><p class="mut">Satış kaydı oluşturulduğunda hayvan Satılan Hayvanlar arşivine alınır ve net kâr otomatik hesaplanır.</p><form method="post" action="/animal/sale" class="form" onsubmit="return confirm(\'Bu hayvanı satıldı olarak işaretlemek istediğinize emin misiniz?\')"><input type="hidden" name="animal_id" value="{aid}"><label>Satış Tarihi<input type="date" name="sale_date" required value="{date.today().isoformat()}"></label><label>Satış Fiyatı (TL)<input type="number" name="sale_price" min="0" step="0.01" required value="{h(a["target_sale_price"])}"></label><label>Satış Kilosu (kg)<input type="number" name="sale_weight" min="0" step="0.1" value="{h(latest_weight)}"></label><label>Alıcı / Açıklama<input name="description"></label><div class="full"><button class="btn orange">Satışı Tamamla</button></div></form></div>') if a['gender']=='Erkek' and a['status']=='Aktif' else ''
+            purchase_summary=f'<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış Fiyatı<br><b>{money(a["purchase_price"])}</b></span><span class="pill">Bizde Kaldığı Süre<br><b>{stay_days} gün</b></span><span class="pill">Birikmiş Rasyon + Bakım<br><b>{money(accumulated_cost)}</b></span><span class="pill">Anlık Toplam Maliyet<br><b>{money(current_cost)}</b></span><span class="pill">Hedef Satış<br><b>{money(a["target_sale_price"]) if float(a["target_sale_price"] or 0)>0 else "-"}</b></span><span class="pill">Hedef Kâr<br><b>{money(target_profit) if target_profit is not None else "-"}</b></span></div><p class="mut">Günlük yem/rasyon: {money(feed_ctx["feed_cost"])} · Günlük bakım: {money(a["daily_care_cost"])} · Günlük toplam: {money(daily_cost)}</p><p class="mut">{("🌾 Padok rasyonu: "+h(feed_ctx["ration_name"])+" · tarihsel atamalar ve fiyatlar kullanılıyor") if feed_ctx["source"]=="ration" else "Padokta aktif rasyon yok; manuel günlük yem maliyeti kullanılıyor."}</p></div>'
+            sale_box=(f'<div class="card" id="animalSale" style="margin-top:14px"><h2>{h(a["gender"])} Hayvan Satışı</h2><p class="mut">Onayınızdan sonra satış geliri ilgili küpeye Finans &gt; Hayvan Satışı olarak kaydedilir. Maliyet çıkış tarihinde donar ve net kâr Satılan Hayvanlar ekranında görünür.</p><form method="post" action="/animal/sale" class="form" onsubmit="return confirm(\'{h(a["tag"])} küpeli hayvan satılsın ve gelir Finansa kaydedilsin mi?\')"><input type="hidden" name="animal_id" value="{aid}"><label>Satış Tarihi<input type="date" name="sale_date" required value="{date.today().isoformat()}"></label><label>Satış Fiyatı (TL)<input type="number" name="sale_price" min="0.01" step="0.01" required value="{h(a["target_sale_price"])}"></label><label>Satış Kilosu (kg)<input type="number" name="sale_weight" min="0" step="0.1" value="{h(latest_weight)}"></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="full">Alıcı / Açıklama<input name="description"></label><div class="full"><button class="btn orange">Satışı Onayla ve Finansa Kaydet</button></div></form></div>') if a['status']=='Aktif' else ''
+            loss_box=(f'''<details class="card" id="animalLoss" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><p class="mut">Maliyet olay tarihinde donar. Küpeye daha önce yazılmış alış/tedavi giderleri tekrarlanmaz; yalnız eksik işletme maliyeti finansa gider olarak aktarılır.</p><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(a['tag'])} küpeli hayvan için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="animal"><input type="hidden" name="subject_id" value="{aid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if a['status']=='Aktif' else ''
             photo=f'<img class="photo" src="{h(a["photo_url"])}">' if a['photo_url'] else '<div class="photo">🐄</div>'
             gallery=''.join(f'<figure><img src="/uploads/{h(r["filename"])}"><figcaption>{h(r["caption"])}<br>{fmt_datetime(r["created_at"])}</figcaption></figure>' for r in photos) or '<p class="mut">Henüz fotoğraf yüklenmedi.</p>'
             itr=''.join(f'<tr><td>{r["attempt"]}</td><td>{fmt_date(r["insemination_date"])}</td><td>{h(r["pregnancy_result"])}</td><td>{fmt_date(r["due_date"])}</td></tr>' for r in ins) or '<tr><td colspan=4>Kayıt yok</td></tr>'
@@ -5624,6 +5949,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{fmt_date(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             back='/males' if a['gender']=='Erkek' else '/animals'; edit_url='/animal-edit?id='+str(aid)
             body=f'''<div class="actions"><a class="btn alt" href="{back}">← Hayvanlara Dön</a><a class="btn" href="{edit_url}">Bilgileri Düzenle</a><a class="btn blue" href="/animal/print?id={aid}">Kimlik Kartını Yazdır</a></div><div class="card profile">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname'])}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed'])}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span>{pregnancy_panel}{pregnancy_line}<div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span><span class="pill">Son Süt<br><b>{(str(latest_milk)+' L') if latest_milk is not None else '-'}</b></span><span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div><p>Toplam masraf: <b>{money(total_cost)}</b> · Buzağı: <b>{len(calves)}</b></p>{purchase_summary}<p>{h(a['notes'])}</p></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>Tohumlama ve Gebelik</h2><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="card"><h2>Buzağıları</h2><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div><div class="two" style="margin-top:14px"><div class="card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''}<form method="post" action="/animal/weight" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div><div class="card"><h2>Süt Verimi</h2><form method="post" action="/animal/milk" class="actions"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>{sale_box}<div class="card" style="margin-top:14px"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button><div class="camera-note">Mobil tarayıcıda arka kamera açılır. Fotoğraflar uygulama klasöründeki uploads dizininde saklanır; bu klasörü de düzenli kopyalayın.</div></form><div class="gallery" style="margin-top:14px">{gallery}</div></div><div class="card" style="margin-top:14px"><h2>Sağlık Geçmişi</h2><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div>'''
+            if loss_box:body=body.replace(sale_box,sale_box+loss_box,1)
             return self.send_html(page('Hayvan Kartı',body,'/animals',u,msg))
         if path=='/animal/print':
             aid=q.get('id',[''])[0]
@@ -5665,14 +5991,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     rows=c.execute(
                         '''select calves.*,animals.tag mother_tag,animals.nickname mother_name
                            from calves join animals on animals.id=calves.mother_id
-                           where calves.promoted_animal_id is null and
+                           where calves.promoted_animal_id is null and coalesce(calves.status,'Aktif')='Aktif'
+                           and not exists(select 1 from animal_losses l where l.calf_id=calves.id) and
                            (calves.tag like ? or animals.tag like ? or animals.nickname like ?)
                            order by calves.birth_date desc''',
                         (like,like,like)
                     ).fetchall()
                 else:
                     rows=c.execute(
-                        'select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves join animals on animals.id=calves.mother_id where calves.promoted_animal_id is null order by calves.birth_date desc'
+                        "select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves join animals on animals.id=calves.mother_id where calves.promoted_animal_id is null and coalesce(calves.status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by calves.birth_date desc"
                     ).fetchall()
                 rec=c.execute('select * from calves where id=?',(edit,)).fetchone() if edit else None
             opts=''.join(f'<option value="{m["id"]}" {"selected" if rec and rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
@@ -5693,17 +6020,21 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             icon='🐮' if calf['gender']=='Dişi' else '🐂'
             photo=f'<img src="{h(calf["photo_url"])}" alt="Buzağı">' if calf['photo_url'] else icon
             last_weight=float(weight_rows[0]['weight']) if weight_rows else None
+            calf_days,calf_daily,calf_operating,calf_total=calf_cost_values(calf)
+            calf_feed=animal_current_feed_context(calf)
+            calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış / Başlangıç<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">Rasyon + Bakım<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}</p></div>'''
+            calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
             health_html=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{h(r["notes"])}</td></tr>' for r in health_rows) or '<tr><td colspan="5">Henüz sağlık/tedavi kaydı yok.</td></tr>'
             weight_html=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td><b>{float(r["weight"]):.1f} kg</b></td><td>{h(r["notes"])}</td></tr>' for r in weight_rows) or '<tr><td colspan="3">Henüz tartım kaydı yok.</td></tr>'
             body=f'''<div class="actions"><a class="btn alt" href="/calves">← Buzağılara Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}
             <div class="card profile"><div class="photo">{photo}</div><div><h1>{h(calf["tag"])}</h1><span class="pill">{h(calf["gender"])}</span><span class="pill">Yaş: {age_text(calf["birth_date"])}</span>
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
             <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: <a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a></p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
-            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p><p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p><p>{h(calf["notes"])}</p></div></div>
+            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p><p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
             <div class="grid" style="margin-top:14px"><div class="card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
             <div class="card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
             <div class="card" style="margin-top:14px"><h2>💉 Sağlık / Tedavi Geçmişi</h2><p><a class="btn" href="/health">Sağlık Kaydı Ekle</a></p><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Not</th></tr>{health_html}</table></div></div>
-            <div class="card" style="margin-top:14px"><h2>⚖️ Kilo Geçmişi</h2><div class="tablewrap"><table><tr><th>Tarih</th><th>Kilo</th><th>Not</th></tr>{weight_html}</table></div></div>'''
+            <div class="card" style="margin-top:14px"><h2>⚖️ Kilo Geçmişi</h2><div class="tablewrap"><table><tr><th>Tarih</th><th>Kilo</th><th>Not</th></tr>{weight_html}</table></div></div>{calf_loss_box}'''
             return self.send_html(page('Buzağı Kartı',body,'/calves',u,msg))
         if path=='/estrus-edit':
             eid=q.get('id',[''])[0]
@@ -5873,6 +6204,79 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             result=str(rec['pregnancy_result'] or 'Bekleniyor')
             body=f'''<div class="actions"><a class="btn alt" href="/inseminations">← Tohumlamalara Dön</a></div><h1>Tohumlama Kaydını Düzenle</h1><div class="card"><form method="post" action="/insemination-edit" class="form"><input type="hidden" name="id" value="{rec['id']}"><label>Hayvan<div class="attempt-preview">{h(rec['tag'])} · {h(rec['nickname'])}</div></label><label>Deneme<div class="attempt-preview">{rec['attempt']}. Deneme</div></label><label>Tohumlama Tarihi<input type="date" name="insemination_date" required max="{date.today().isoformat()}" value="{h(rec['insemination_date'])}"></label><label>Baba Küpe / Boğa No<input name="bull_tag" maxlength="80" value="{h(rec['bull_tag'])}" placeholder="Örn. TR-BOGA-123"></label><label>Boğa Adı<input name="bull_name" maxlength="120" value="{h(rec['bull_name'])}" placeholder="Kullanılan boğanın adı"></label><label>Tohumlayan<input name="inseminator" maxlength="120" value="{h(rec['inseminator'])}" placeholder="Veteriner / teknisyen / kişi"></label><label>Gebelik Sonucu<select name="pregnancy_result"><option value="Bekleniyor" {'selected' if result=='Bekleniyor' else ''}>Kontrol Bekliyor</option><option value="Pozitif" {'selected' if is_pregnant_value(result) else ''}>Gebe</option><option value="Negatif" {'selected' if result=='Negatif' else ''}>Gebe Değil</option><option value="Belirsiz" {'selected' if result=='Belirsiz' else ''}>Belirsiz</option></select></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/inseminations">İptal</a></div></form></div>'''
             return self.send_html(page('Tohumlama Düzenle',body,'/inseminations',u,msg))
+        if path=='/disease':
+            disease_id=q.get('id',[''])[0]
+            with db() as c:disease=c.execute('select * from disease_catalog where id=? and active=1',(disease_id,)).fetchone()
+            if not disease:return self.redirect('/medicines?tab=diseases','Hastalık kaydı bulunamadı.')
+            def detail_card(icon,title,value,alert=False):
+                if not str(value or '').strip():value='Bu başlık için ayrıntı veteriner değerlendirmesiyle tamamlanmalıdır.'
+                return f'''<section class="disease-detail-card {'alert' if alert else ''}"><h3>{icon} {h(title)}</h3><p>{h(value)}</p></section>'''
+            badges=f'''<span class="pill">{h(disease['category'])}</span><span class="pill">Öncelik: {h(disease['urgency'])}</span>{'<span class="pill" style="background:#fff0ed;color:#a93025">Bulaşıcı</span>' if disease['contagious'] else ''}{'<span class="pill" style="background:#fff0ed;color:#a93025">Zoonoz</span>' if disease['zoonotic'] else ''}'''
+            body=f'''<style>.disease-hero{{background:linear-gradient(135deg,#173f2b,#26734a);color:white;border-radius:18px;padding:24px;margin-bottom:14px}}.disease-hero h1{{margin:8px 0}}.disease-detail-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.disease-detail-card{{background:#fff;border:1px solid #dce8df;border-radius:14px;padding:17px}}.disease-detail-card h3{{margin:0 0 8px}}.disease-detail-card p{{margin:0;line-height:1.6}}.disease-detail-card.alert{{border-left:6px solid #d44a3a;background:#fff8f6}}@media(max-width:800px){{.disease-detail-grid{{grid-template-columns:1fr}}}}</style>
+            <div class="actions"><a class="btn alt" href="/medicines?tab=diseases">← Hastalık Kataloğuna Dön</a></div>
+            <div class="disease-hero"><div>HASTALIK BİLGİ KARTI</div><h1>{h(disease['name'])}</h1><div>{badges}</div></div>
+            {detail_card('📖','Nedir?',disease['description'])}
+            <div class="disease-detail-grid" style="margin-top:12px">
+            {detail_card('🦠','Etken',disease['cause_agent'])}{detail_card('🔁','Nasıl bulaşır?',disease['transmission'])}
+            {detail_card('🔎','Sık görülen belirtiler',disease['common_signs'])}{detail_card('🧪','Ayırıcı tanı',disease['differential_notes'])}
+            {detail_card('🚨','İlk yapılacaklar',disease['immediate_actions'],True)}{detail_card('🩺','Tedavi / veteriner yaklaşımı',disease['veterinary_management'],True)}
+            {detail_card('🛡️','Korunma',disease['prevention'])}{detail_card('🏛️','Resmî bildirim notu',disease['reportable_note'] or 'Özel bildirim notu bulunmuyor; güncel durum veteriner ve İl/İlçe Müdürlüğünden doğrulanmalıdır.')}
+            </div><div class="card" style="margin-top:14px"><b>Güvenlik:</b> Bu kart tanı veya reçete değildir. Doz ve ilaç yalnız veteriner reçetesi ve ruhsatlı ürün bilgisiyle kaydedilir.<div class="actions"><a class="btn" href="/medicines?tab=treatments&disease_id={disease['id']}">🩺 Bu hastalık için tedavi kaydı aç</a><a class="btn alt" href="{h(disease['official_source_url'])}" target="_blank" rel="noopener">Resmî kaynağı aç ↗</a></div></div>'''
+            return self.send_html(page(str(disease['name']),body,'/medicines',u,msg))
+        if path=='/medicines':
+            today=date.today().isoformat(); soon=(date.today()+timedelta(days=60)).isoformat()
+            with db() as c:
+                meds=c.execute("""select m.*,
+                    coalesce((select sum(case when s.tx_type in ('Giriş','İade','Düzeltme +') then s.quantity else -s.quantity end)
+                              from medicine_stock_transactions s where s.medicine_id=m.id),0) stock
+                    from medicine_catalog m where m.active=1 order by m.product_name""").fetchall()
+                batches=c.execute("""select b.*,m.product_name,
+                    coalesce((select sum(case when s.tx_type in ('Giriş','İade','Düzeltme +') then s.quantity else -s.quantity end)
+                              from medicine_stock_transactions s where s.batch_id=b.id),0) balance
+                    from medicine_batches b join medicine_catalog m on m.id=b.medicine_id
+                    order by b.expiry_date,b.id""").fetchall()
+                animals=c.execute("select id,tag,nickname from animals where status='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag").fetchall()
+                calves=c.execute("select id,tag,nickname from calves where coalesce(status,'Aktif')='Aktif' and promoted_animal_id is null and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag").fetchall()
+                diseases=c.execute("select * from disease_catalog where active=1 order by category,name").fetchall()
+                ingredients=c.execute("select * from medicine_ingredient_reference where active=1 order by therapeutic_group,generic_name").fetchall()
+                treatments=c.execute("""select t.*,m.product_name,a.tag animal_tag,ca.tag calf_tag
+                    from treatments t left join medicine_catalog m on m.id=t.medicine_id
+                    left join animals a on a.id=t.animal_id left join calves ca on ca.id=t.calf_id
+                    order by t.start_date desc,t.id desc limit 100""").fetchall()
+            med_opts=''.join(f'<option value="{r["id"]}">{h(r["product_name"])} · stok {float(r["stock"] or 0):.2f}</option>' for r in meds)
+            subject_opts=''.join(f'<option value="animal:{r["id"]}">{h(r["tag"])} · {h(r["nickname"])}</option>' for r in animals)+''.join(f'<option value="calf:{r["id"]}">{h(r["tag"])} · {h(r["nickname"])} (Buzağı)</option>' for r in calves)
+            med_rows=''.join(f'''<tr><td><b>{h(r['product_name'])}</b><div class="mut">{h(r['company'])}</div></td><td>{h(r['active_ingredient'])}</td><td>{h(r['therapeutic_group'])}</td><td>{h(r['application_route'])}</td><td>{(str(int(r['meat_withdrawal_days'] or 0))+' gün') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td>{(str(int(r['milk_withdrawal_hours'] or 0))+' saat') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td><b>{float(r['stock'] or 0):.2f}</b></td></tr>''' for r in meds) or '<tr><td colspan="7">Henüz ilaç kaydı yok.</td></tr>'
+            selected_disease=q.get('disease_id',[''])[0]
+            disease_opts=''.join(f'<option value="{r["id"]}" {"selected" if str(r["id"])==selected_disease else ""}>{h(r["name"])} · {h(r["category"])}</option>' for r in diseases)
+            disease_rows=''.join(f'''<tr><td><a class="animal-tag-btn" href="/disease?id={r['id']}">{h(r['name'])}</a></td><td>{h(r['category'])}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['contagious'] else 'Hayır'}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['zoonotic'] else 'Hayır'}</td><td><b>{h(r['urgency'])}</b></td><td>{h(r['common_signs'])}<div class="mut">{h(r['reportable_note'])}</div></td></tr>''' for r in diseases)
+            ingredient_rows=''.join(f'''<tr><td><b>{h(r['generic_name'])}</b></td><td>{h(r['therapeutic_group'])}</td><td>{h(r['caution'])}</td></tr>''' for r in ingredients)
+            batch_rows=''.join(f'''<tr class="{'bad' if r['expiry_date'] and r['expiry_date']<today else ('warn' if r['expiry_date'] and r['expiry_date']<=soon else '')}"><td>{h(r['product_name'])}</td><td>{h(r['lot_no']) or '—'}</td><td>{fmt_date(r['expiry_date']) or '—'}</td><td>{float(r['balance'] or 0):.2f} {h(r['unit'])}</td><td>{money(r['unit_cost'])}</td></tr>''' for r in batches) or '<tr><td colspan="5">Parti/stok kaydı yok.</td></tr>'
+            treatment_rows=''.join(f'''<tr><td>{fmt_date(r['start_date'])}</td><td>{h(r['animal_tag'] or r['calf_tag'])}</td><td><b>{h(r['product_name'])}</b><div class="mut">{h(r['dose_amount'])} {h(r['dose_unit'])} · {h(r['application_route'])}</div></td><td>{h(r['diagnosis'])}</td><td>{fmt_date(r['meat_safe_date'])}</td><td>{fmt_date(str(r['milk_safe_date'] or '')[:10])}</td><td>{h(r['status'])}</td></tr>''' for r in treatments) or '<tr><td colspan="7">Tedavi kaydı yok.</td></tr>'
+            critical_stock=sum(1 for r in meds if float(r['stock'] or 0)<=0)
+            expiring=sum(1 for r in batches if float(r['balance'] or 0)>0 and r['expiry_date'] and r['expiry_date']<=soon)
+            active_withdrawal=sum(1 for r in treatments if (r['meat_safe_date'] and r['meat_safe_date']>today) or (r['milk_safe_date'] and str(r['milk_safe_date'])[:10]>today))
+            active_tab=(q.get('tab',['products'])[0] or 'products').lower()
+            if active_tab not in ('products','ingredients','diseases','stock','treatments'):active_tab='products'
+            body=f'''<style>
+            body.medicine-drawer-open{{overflow:hidden}}.medicine-actions{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}}.medicine-action{{border:1px solid #d7e6dc;background:#fff;border-radius:13px;padding:16px;text-align:left;cursor:pointer;color:#183c29;box-shadow:0 2px 8px rgba(17,70,40,.05)}}.medicine-action b{{display:block;font-size:18px;margin-bottom:5px}}.medicine-action span{{color:#64766b}}.medicine-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}}.medicine-kpi{{padding:13px 15px;border-radius:12px;background:#edf6f0;border:1px solid #d8e9dd}}.medicine-kpi b{{display:block;font-size:23px;margin-top:3px}}.medicine-kpi.alert{{background:#fff4e6;border-color:#f0c98e}}.medicine-tools{{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}}.medicine-tools input,.medicine-tools select{{max-width:330px}}.medicine-table-wrap{{overflow:auto}}.medicine-table{{min-width:900px}}tr.warn td{{background:#fff8df}}tr.bad td{{background:#fff0f0}}.medicine-drawer-backdrop{{position:fixed;inset:0;background:rgba(10,35,22,.42);z-index:2390;opacity:0;visibility:hidden;transition:.2s}}.medicine-drawer-backdrop.open{{opacity:1;visibility:visible}}.medicine-drawer{{position:fixed;right:0;top:0;bottom:0;width:min(760px,94vw);background:#f6f9f7;z-index:2400;transform:translateX(105%);visibility:hidden;transition:transform .23s,visibility 0s linear .23s;display:flex;flex-direction:column;box-shadow:-20px 0 55px rgba(10,40,24,.22)}}.medicine-drawer.open{{transform:translateX(0);visibility:visible;transition:transform .23s}}.medicine-drawer-head{{display:flex;justify-content:space-between;padding:19px 22px;background:#fff;border-bottom:1px solid #dbe7df}}.medicine-drawer-head h2{{margin:2px 0}}.medicine-drawer-close{{width:42px;height:42px;border:0;border-radius:50%;font-size:27px;background:#e9f2ec;color:#075f35;cursor:pointer}}.medicine-drawer-body{{padding:18px;overflow:auto}}.medicine-drawer-body .card{{margin:0;box-shadow:none}}.official-source{{display:flex;gap:10px;align-items:flex-start;background:#edf5ff;border:1px solid #c8dcf4;padding:12px;border-radius:10px;margin-bottom:14px}}
+            @media(max-width:1100px){{.medicine-actions{{grid-template-columns:1fr}}.medicine-kpis{{grid-template-columns:1fr 1fr}}}}@media(max-width:700px){{.medicine-kpis{{grid-template-columns:1fr}}.medicine-drawer{{width:100vw;max-width:100vw}}.medicine-drawer-body{{padding:10px}}}}
+            .catalog-tabs{{display:flex;gap:8px;overflow:auto;margin:14px 0;padding-bottom:3px}}.catalog-tab{{white-space:nowrap;padding:10px 14px;border-radius:999px;background:#edf4ef;color:#315a43;font-weight:800;border:1px solid #d6e4da}}.catalog-tab.on{{background:#176b3a;color:#fff;border-color:#176b3a}}.catalog-section{{display:none}}.catalog-section.on{{display:block}}
+            </style>
+            <h1>💊 İlaç & Veteriner Yönetimi</h1><p class="mut">Ürün bilgileri tedavi önerisi değildir. Doz ve uygulama veteriner reçetesine göre kaydedilir; arınma süresi ürünün doğrulanmış asgari süresidir.</p>
+            <div class="medicine-kpis"><div class="medicine-kpi">Katalog<b>{len(meds)}</b></div><div class="medicine-kpi {'alert' if critical_stock else ''}">Stoksuz ürün<b>{critical_stock}</b></div><div class="medicine-kpi {'alert' if expiring else ''}">60 günde SKT<b>{expiring}</b></div><div class="medicine-kpi {'alert' if active_withdrawal else ''}">Aktif arınma<b>{active_withdrawal}</b></div></div>
+            <div class="medicine-actions"><button class="medicine-action" onclick="openMedicineDrawer('catalog')"><b>➕ Kataloğa İlaç Ekle</b><span>Resmî kaynak ve ürün bilgileri</span></button><button class="medicine-action" onclick="openMedicineDrawer('stock')"><b>📦 Parti / Stok Girişi</b><span>Lot, SKT, maliyet ve finans</span></button><button class="medicine-action" onclick="openMedicineDrawer('treatment')"><b>🩺 Tedavi Kaydı</b><span>Hayvan, reçete, stok ve arınma</span></button></div>
+            <nav class="catalog-tabs"><a class="catalog-tab {'on' if active_tab=='products' else ''}" href="/medicines?tab=products">💊 Ticari İlaçlar</a><a class="catalog-tab {'on' if active_tab=='ingredients' else ''}" href="/medicines?tab=ingredients">🧪 Etken Maddeler</a><a class="catalog-tab {'on' if active_tab=='diseases' else ''}" href="/medicines?tab=diseases">🦠 Hastalıklar ({len(diseases)})</a><a class="catalog-tab {'on' if active_tab=='stock' else ''}" href="/medicines?tab=stock">📦 Stok</a><a class="catalog-tab {'on' if active_tab=='treatments' else ''}" href="/medicines?tab=treatments">🩺 Tedaviler</a></nav>
+            <div class="card catalog-section {'on' if active_tab=='products' else ''}" style="margin-top:14px"><h2>Ruhsatlı Ticari İlaç Kataloğu</h2><p class="mut">Yalnız Bakanlık ruhsat kaydı ve ürün özellikleri doğrulanan ticari ürünler burada tutulur.</p><div class="medicine-tools"><input id="medicineSearch" placeholder="🔎 Ürün, etkin madde veya firma ara"><select id="medicineGroup"><option value="">Tüm gruplar</option>{''.join(f'<option>{h(x)}</option>' for x in sorted({str(r['therapeutic_group'] or '') for r in meds if r['therapeutic_group']}))}</select><a class="btn alt" href="https://hbs.tarbil.gov.tr/Receipt/SearchProduct" target="_blank" rel="noopener">Bakanlık ruhsat sorgusu ↗</a></div><div class="medicine-table-wrap"><table id="medicineCatalogTable" class="medicine-table"><tr><th>Ürün</th><th>Etkin Madde</th><th>Grup</th><th>Uygulama</th><th>Et</th><th>Süt</th><th>Stok</th></tr>{med_rows}</table></div></div>
+            <div class="card catalog-section {'on' if active_tab=='ingredients' else ''}" style="margin-top:14px"><h2>Etken Madde Başlangıç Rehberi</h2><p class="mut">Bunlar ticari ürün veya tedavi önerisi değildir. Kullanılacak ruhsatlı ürün, reçete ve arınma süresi Bakanlık kaydından doğrulanmalıdır.</p><div class="medicine-table-wrap"><table><tr><th>Etken Madde</th><th>Grup</th><th>Güvenlik Notu</th></tr>{ingredient_rows}</table></div></div>
+            <div class="card catalog-section {'on' if active_tab=='diseases' else ''}" style="margin-top:14px"><h2>Hastalık Kataloğu</h2><p class="mut">Bir hastalığa tıklayarak tanım, belirtiler, ilk yapılacaklar, veteriner yaklaşımı ve korunma detayını açın.</p><div class="medicine-tools"><input id="diseaseSearch" placeholder="🔎 Hastalık, kategori veya belirti ara"></div><div class="medicine-table-wrap"><table id="diseaseCatalogTable" class="medicine-table"><tr><th>Hastalık</th><th>Grup</th><th>Bulaşıcı</th><th>Zoonoz</th><th>Öncelik</th><th>Sık Görülen Bulgular / Not</th></tr>{disease_rows}</table></div></div>
+            <div class="card catalog-section {'on' if active_tab=='stock' else ''}" style="margin-top:14px"><h2>Partiler ve Son Kullanma</h2><div class="medicine-table-wrap"><table><tr><th>Ürün</th><th>Lot</th><th>SKT</th><th>Kalan</th><th>Birim Maliyet</th></tr>{batch_rows}</table></div></div>
+            <div class="card catalog-section {'on' if active_tab=='treatments' else ''}" style="margin-top:14px"><h2>Tedavi ve Arınma Takibi</h2><div class="medicine-table-wrap"><table class="medicine-table"><tr><th>Tarih</th><th>Hayvan</th><th>Ürün / Doz</th><th>Teşhis</th><th>Et Güvenli</th><th>Süt Güvenli</th><th>Durum</th></tr>{treatment_rows}</table></div></div>
+            <div id="medicineDrawerBackdrop" class="medicine-drawer-backdrop" onclick="closeMedicineDrawer()"></div><aside id="medicineDrawer" class="medicine-drawer" aria-hidden="true"><div class="medicine-drawer-head"><div><span class="mut">İLAÇ & VETERİNER</span><h2 id="medicineDrawerTitle">Yeni Kayıt</h2></div><button class="medicine-drawer-close" type="button" onclick="closeMedicineDrawer()">×</button></div><div class="medicine-drawer-body">
+            <div id="medicinePanelCatalog" class="card medicine-panel"><div class="official-source"><span>🏛️</span><div><b>Resmî kayıt doğrulaması</b><br><span class="mut">Ürünü Bakanlık ruhsat sorgusundan kontrol edin; arınma süresini Ürün Özellikleri Özeti'nden girin.</span></div></div><form method="post" action="/medicine/create" class="form"><label>Ürün Adı<input name="product_name" required></label><label>Etkin Madde<input name="active_ingredient"></label><label>Ruhsat Sahibi / Firma<input name="company"></label><label>Terapötik Grup<input name="therapeutic_group"></label><label>Uygulama Yolu<input name="application_route" placeholder="Kas içi / Deri altı / Oral"></label><label>Farmasötik Şekil<input name="pharmaceutical_form"></label><label>Et Arınma (gün)<input type="number" min="0" name="meat_withdrawal_days" value="0"></label><label>Süt Arınma (saat)<input type="number" min="0" name="milk_withdrawal_hours" value="0"></label><label class="full">Resmî Ürün Kaynağı<input type="url" name="official_source_url" value="https://hbs.tarbil.gov.tr/Receipt/SearchProduct"></label><label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="withdrawal_verified" value="yes" style="width:auto"> Et ve süt arınma bilgilerini resmî ürün kaynağından doğruladım</label><label class="full">Saklama / Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">İlacı Kaydet</button></div></form></div>
+            <div id="medicinePanelStock" class="card medicine-panel"><form method="post" action="/medicine/stock" class="form"><label>İlaç<select name="medicine_id" required><option value="">Seçin…</option>{med_opts}</select></label><label>Parti / Lot<input name="lot_no"></label><label>Son Kullanma<input type="date" name="expiry_date"></label><label>Miktar<input type="number" min="0.001" step="0.001" name="quantity" required></label><label>Birim<select name="unit"><option>ml</option><option>doz</option><option>tablet</option><option>şişe</option><option>adet</option></select></label><label>Birim Maliyet<input type="number" min="0" step="0.01" name="unit_cost" value="0"></label><label>Tedarikçi<input name="supplier"></label><label><input type="checkbox" name="post_finance" value="yes"> Finansa gider yaz</label><div class="full"><button class="btn">Stok Girişi Yap</button></div></form></div>
+            <div id="medicinePanelTreatment" class="card medicine-panel"><form method="post" action="/treatment/create" class="form"><label class="full">Hayvan Ara<input id="treatmentSubjectSearch" placeholder="Küpe veya isim yazın" autocomplete="off"><select id="treatmentSubject" name="subject_key" required><option value="">Seçin…</option>{subject_opts}</select></label><label>İlaç<select name="medicine_id" required><option value="">Seçin…</option>{med_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{today}" required></label><label>Bitiş / Son Uygulama<input type="date" name="end_date" value="{today}" required></label><label>Doz<input type="number" min="0" step="0.001" name="dose_amount" required></label><label>Doz Birimi<select name="dose_unit"><option>ml</option><option>mg</option><option>tablet</option><option>doz</option></select></label><label>Günde Uygulama<input type="number" min="1" max="12" name="applications_per_day" value="1"></label><label>Uygulama Yolu<input name="application_route"></label><label>Hastalık / Teşhis<select name="disease_id"><option value="">Veteriner teşhisi seçin…</option>{disease_opts}</select></label><label>Teşhis Notu<input name="diagnosis"></label><label>Veteriner<input name="veterinarian"></label><label>Reçete No<input name="prescription_no"></label><label>Toplam Kullanım<input type="number" min="0" step="0.001" name="total_quantity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Tedaviyi Kaydet</button></div></form></div></div></aside>
+            <script>(function(){{var titles={{catalog:'➕ Kataloğa İlaç Ekle',stock:'📦 Parti / Stok Girişi',treatment:'🩺 Tedavi Kaydı'}};window.openMedicineDrawer=function(name){{document.querySelectorAll('.medicine-panel').forEach(function(x){{x.style.display='none'}});document.getElementById('medicinePanel'+name.charAt(0).toUpperCase()+name.slice(1)).style.display='block';document.getElementById('medicineDrawerTitle').textContent=titles[name];document.getElementById('medicineDrawer').classList.add('open');document.getElementById('medicineDrawerBackdrop').classList.add('open');document.body.classList.add('medicine-drawer-open')}};window.closeMedicineDrawer=function(){{document.getElementById('medicineDrawer').classList.remove('open');document.getElementById('medicineDrawerBackdrop').classList.remove('open');document.body.classList.remove('medicine-drawer-open')}};document.querySelectorAll('.medicine-panel').forEach(function(x){{x.style.display='none'}});document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeMedicineDrawer()}});var q=document.getElementById('medicineSearch'),g=document.getElementById('medicineGroup'),table=document.getElementById('medicineCatalogTable');function filterMeds(){{var s=(q.value||'').toLocaleLowerCase('tr-TR'),group=g.value;Array.from(table.querySelectorAll('tr')).slice(1).forEach(function(row){{var ok=row.textContent.toLocaleLowerCase('tr-TR').indexOf(s)>=0&&(!group||row.children[2].textContent.trim()===group);row.style.display=ok?'':'none'}})}}q.addEventListener('input',filterMeds);g.addEventListener('change',filterMeds);var dq=document.getElementById('diseaseSearch'),dt=document.getElementById('diseaseCatalogTable');dq.addEventListener('input',function(){{var s=this.value.toLocaleLowerCase('tr-TR');Array.from(dt.querySelectorAll('tr')).slice(1).forEach(function(row){{row.style.display=row.textContent.toLocaleLowerCase('tr-TR').indexOf(s)>=0?'':'none'}})}});var animalQ=document.getElementById('treatmentSubjectSearch'),animalS=document.getElementById('treatmentSubject');animalQ.addEventListener('input',function(){{var s=this.value.toLocaleLowerCase('tr-TR');Array.from(animalS.options).forEach(function(o,i){{if(i)o.hidden=o.textContent.toLocaleLowerCase('tr-TR').indexOf(s)<0}})}});{'openMedicineDrawer("treatment");' if selected_disease else ''}}})();</script>'''
+            return self.send_html(page('İlaç & Veteriner',body,'/medicines',u,msg))
         if path=='/health-edit':
             hid=q.get('id',[''])[0]
             with db() as c:
@@ -5978,7 +6382,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=f'''<h1>Finans Kaydını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form">
             <input type="hidden" name="id" value="{r["id"]}">
             <label>Tarih<input type="date" name="tx_date" value="{h(r["tx_date"])}" required></label>
-            <label>Tür<select name="tx_type"><option {"selected" if r["tx_type"]=="Gelir" else ""}>Gelir</option><option {"selected" if r["tx_type"]=="Gider" else ""}>Gider</option></select></label>
+            <label>Tür<select name="tx_type"><option {"selected" if r["tx_type"]=="Gelir" else ""}>Gelir</option><option {"selected" if r["tx_type"]=="Gider" else ""}>Gider</option><option {"selected" if r["tx_type"]=="Zarar" else ""}>Zarar</option></select></label>
             <label>Kategori<select name="category" id="financeCategory">{category_options}</select></label>
             <label>Tutar<input type="number" step="0.01" min="0" name="amount" value="{r["amount"]}" required></label>
             <label>Ödeme<select name="payment_method"><option {"selected" if r["payment_method"]=="Nakit" else ""}>Nakit</option><option {"selected" if r["payment_method"]=="Banka" else ""}>Banka</option><option {"selected" if r["payment_method"]=="Kredi Kartı" else ""}>Kredi Kartı</option><option {"selected" if r["payment_method"]=="Vadeli" else ""}>Vadeli</option></select></label>
@@ -6006,7 +6410,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 categories=c.execute("select distinct category from finance where coalesce(category,'')<>'' order by category").fetchall()
                 finance_feeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
                 rows=c.execute(sql,args).fetchall()
-                inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider')
+                inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider'); losses=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Zarar')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
             bulk_cards=''.join(f'''<label class="bulk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="bulk-check" value="{a["id"]}" onchange="syncBulkSelection()"><span class="tag">🐄 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in animals)
             milk_cards=''.join(f'''<label class="bulk-row milk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="milk-check" value="{a["id"]}" onchange="syncMilkSelection()"><span class="tag">🥛 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in milk_females)
@@ -6019,7 +6423,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
 <label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label>
-<label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option></select></label>
+<label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option><option>Zarar</option></select></label>
 <label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option><option>Diğer</option></select></label>
 <label>Toplam Tutar<input type="text" inputmode="decimal" name="amount" id="financeAmount" placeholder="Örn. 200.000 veya 200000" required></label>
 <label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
@@ -6029,6 +6433,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 <label class="full">Açıklama<input name="description"></label>
 <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Seçilen hayvanlar işlem türüne göre aktif sürüden çıkarılır; geçmiş bilgileri silinmez. Toplam tutar seçilen hayvan sayısına göre otomatik dağıtılır.</div>
 <div class="full finance-savebar"><button type="submit" class="btn" id="financeSubmitBtn">💾 Finans Kaydını Kaydet</button><span class="mut" id="financeSaveHint"></span></div></form></div></div></aside><div class="card finance-filter-card" id="financeRecords" style="margin-top:14px"><div class="finance-filter-title"><div><h2>🔎 Finans Filtreleri</h2><span class="mut">Tarih, işlem türü ve kategoriye göre kayıtları daraltın.</span></div><span class="filter-count-pill">{len(rows)} kayıt</span></div><form method="get" class="finance-toolbar finance-toolbar-modern"><label><span>📅 Başlangıç</span><input type="date" name="start" value="{h(start)}"></label><label><span>📅 Bitiş</span><input type="date" name="end" value="{h(end)}"></label><label><span>↕️ Tür</span><select name="type"><option value="">Gelir + Gider</option><option {'selected' if typ=='Gelir' else ''}>Gelir</option><option {'selected' if typ=='Gider' else ''}>Gider</option></select></label><label><span>🏷️ Kategori</span><select name="category"><option value="">Tüm Kategoriler</option>{category_opts}</select></label><div class="finance-filter-actions"><button class="btn blue">🔎 Filtrele</button><a class="btn alt" href="/finance">↺ Temizle</a><a class="btn export-btn" href="/finance/export?start={urllib.parse.quote(start)}&end={urllib.parse.quote(end)}&type={urllib.parse.quote(typ)}&category={urllib.parse.quote(category)}">⬇ CSV</a></div></form><div class="finance-table-wrap"><table class="finance-table"><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Hayvan</th><th>Durum</th><th>Ödeme</th><th>Tutar</th><th>İşlem</th></tr>{trs}</table></div></div>'''
+            body=body.replace(f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div>',f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Nakit Gider<b>{money(exp)}</b></div><div class="card stat">Zayiat / Zarar<b>{money(losses)}</b></div><div class="card stat">Nakit Net<b>{money(inc-exp)}</b></div>')
+            body=body.replace('<option value="">Gelir + Gider</option>', '<option value="">Tüm İşlemler</option>')
+            body=body.replace(f"<option {'selected' if typ=='Gider' else ''}>Gider</option></select>", f"<option {'selected' if typ=='Gider' else ''}>Gider</option><option {'selected' if typ=='Zarar' else ''}>Zarar</option></select>")
             body += f'''<script>
             function isBulkFinance(){{
               const t=document.getElementById('tx').value;
@@ -6869,6 +7276,13 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     gender=f.get('gender') if f.get('gender') in ('Dişi','Erkek') else rec['gender']
                     c.execute('update animals set tag=?,nickname=?,gender=?,breed=?,birth_date=?,notes=?,paddock=?,photo_url=?,sold_price=?,status=?,purchase_date=?,purchase_price=?,purchase_weight=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=? where id=?',
                               (tag,f.get('nickname',''),gender,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,float(f.get('sold_price') or 0),f.get('status') or 'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0),float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),aid))
+                    if (f.get('sync_purchase_finance') or '')=='yes':
+                        purchase_price=max(0,float(f.get('purchase_price') or 0));purchase_date=(f.get('purchase_date') or date.today().isoformat()).strip()
+                        linked=c.execute("select id from finance where category='Hayvan Alımı' and animal_id=? order by id limit 1",(aid,)).fetchone()
+                        if purchase_price>0 and linked:
+                            c.execute("update finance set tx_date=?,tx_type='Gider',amount=?,description=? where id=?",(purchase_date,purchase_price,f'Otomatik hayvan alımı · {tag}',linked['id']))
+                        elif purchase_price>0:
+                            c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gider','Hayvan Alımı',?,?,?,?,?,'')",(purchase_date,purchase_price,f'Otomatik hayvan alımı · {tag}','Nakit',aid,datetime.now().isoformat()))
                 audit(username,'Hayvan düzenledi',tag,self.client_ip())
                 return self.redirect('/animals' if gender=='Dişi' else '/males','Hayvan başarıyla güncellendi.')
             except sqlite3.IntegrityError:
@@ -6892,8 +7306,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         if len(upload['content'])>10*1024*1024:return self.redirect('/calf-edit?id='+cid,'Fotoğraf 10 MB sınırını aşıyor.')
                         name=save_optimized_upload(f'calf_{cid}',upload);photo_url='/uploads/'+name
                         c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(cid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
-                    c.execute('update calves set tag=?,nickname=?,mother_id=?,father_tag=?,birth_date=?,gender=?,breed=?,paddock=?,photo_url=?,purchase_date=?,purchase_price=?,purchase_payment_method=?,notes=? where id=?',
-                        (tag,f.get('nickname',''),f.get('mother_id'),f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',f.get('notes',''),cid))
+                    c.execute('update calves set tag=?,nickname=?,mother_id=?,father_tag=?,birth_date=?,gender=?,breed=?,paddock=?,photo_url=?,purchase_date=?,purchase_price=?,purchase_payment_method=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=?,notes=? where id=?',
+                        (tag,f.get('nickname',''),f.get('mother_id'),f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),f.get('notes',''),cid))
                 audit(username,'Buzağı düzenledi',tag,self.client_ip());return self.redirect('/calf?id='+cid,'Buzağı başarıyla güncellendi.')
             except sqlite3.IntegrityError:return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası zaten kullanılıyor.')
             except Exception as exc:return self.redirect('/calf-edit?id='+cid,'Güncelleme hatası: '+str(exc))
@@ -6910,7 +7324,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):return self.redirect('/animal-add','Desteklenmeyen fotoğraf biçimi.')
                             if len(upload['content'])>10*1024*1024:return self.redirect('/animal-add','Fotoğraf 10 MB sınırını aşıyor.')
                             name=save_optimized_upload('animal_new',upload);photo_url='/uploads/'+name
-                        cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(tag,f.get('nickname',''),kind,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,0,'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0) if kind=='Erkek' else 0,float(f.get('daily_feed_cost') or 0) if kind=='Erkek' else 0,float(f.get('daily_care_cost') or 0) if kind=='Erkek' else 0,float(f.get('target_sale_price') or 0) if kind=='Erkek' else 0))
+                        cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(tag,f.get('nickname',''),kind,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,0,'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0),float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0)))
                         aid=cur.lastrowid
                         if photo_url:c.execute('insert into animal_photos(animal_id,filename,created_at,caption) values(?,?,?,?)',(aid,photo_url.split('/uploads/',1)[1],datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
                         if kind=='Dişi' and (f.get('entry_pregnancy_status') or '')=='Gebe':
@@ -6940,7 +7354,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             c.execute('update animals set pregnancy_source=?,pregnancy_age_months_at_entry=?,pregnancy_entry_date=? where id=?',(source,age_months,entry_date,aid))
 
                         purchase_price=float(f.get('purchase_price') or 0)
-                        if purchase_price>0:
+                        if purchase_price>0 and (f.get('post_purchase_finance') or '')=='yes':
                             purchase_date=(f.get('purchase_date') or date.today().isoformat()).strip()
                             payment=(f.get('purchase_payment_method') or 'Nakit').strip()
                             desc=f'Otomatik hayvan alımı · {tag}'
@@ -6948,7 +7362,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                                       (purchase_date,'Gider','Hayvan Alımı',purchase_price,desc,payment,aid,datetime.now().isoformat(),''))
                             audit(username,'Hayvan alımı finansa otomatik işlendi',f'{tag} · {money(purchase_price)} · {payment}',self.client_ip())
 
-                        return self.redirect('/animals' if kind=='Dişi' else '/males',kind+' hayvan başarıyla kaydedildi.'+(' Alış bedeli Finans > Hayvan Alımı giderine otomatik işlendi.' if purchase_price>0 else ''))
+                        finance_posted=purchase_price>0 and (f.get('post_purchase_finance') or '')=='yes'
+                        return self.redirect('/animals' if kind=='Dişi' else '/males',kind+' hayvan başarıyla kaydedildi.'+(' Alış bedeli Finans > Hayvan Alımı giderine işlendi.' if finance_posted else ''))
                     if kind=='Buzağı':
                         mt=(f.get('mother_tag') or '').strip();bd=(f.get('birth_date') or '').strip()
                         if not mt:return self.redirect('/animal-add','Buzağı kaydı için anne küpesi zorunludur.')
@@ -7050,15 +7465,170 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except Exception as e: return self.redirect('/animal?id='+f.get('animal_id',''),'Fotoğraf yükleme hatası: '+str(e))
         try:
             with db() as c:
+                if path=='/medicine/create':
+                    name=(f.get('product_name') or '').strip()
+                    if not name:return self.redirect('/medicines','İlaç adı zorunludur.')
+                    verified=1 if (f.get('withdrawal_verified') or '')=='yes' else 0
+                    source_url=(f.get('official_source_url') or '').strip()
+                    if verified and not source_url:return self.redirect('/medicines','Arınma doğrulaması için resmî ürün kaynağı zorunludur.')
+                    try:
+                        c.execute('''insert into medicine_catalog(product_name,active_ingredient,company,therapeutic_group,target_species,application_route,pharmaceutical_form,meat_withdrawal_days,milk_withdrawal_hours,storage_conditions,prescription_required,official_source_url,source_checked_date,notes,withdrawal_verified,active,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)''',
+                                  (name,(f.get('active_ingredient') or '').strip(),(f.get('company') or '').strip(),(f.get('therapeutic_group') or '').strip(),'Sığır',(f.get('application_route') or '').strip(),(f.get('pharmaceutical_form') or '').strip(),max(0,int(f.get('meat_withdrawal_days') or 0)),max(0,int(f.get('milk_withdrawal_hours') or 0)),(f.get('storage_conditions') or '').strip(),1,source_url,date.today().isoformat(),(f.get('notes') or '').strip(),verified,datetime.now().isoformat(timespec='seconds')))
+                    except Exception as exc:
+                        if 'UNIQUE' in str(exc).upper():return self.redirect('/medicines','Bu ilaç katalogda zaten kayıtlı.')
+                        raise
+                    audit(username,'İlaç kataloğu kaydı ekledi',name,self.client_ip())
+                    return self.redirect('/medicines','İlaç kataloğa eklendi.')
+                if path=='/medicine/stock':
+                    mid=int(f.get('medicine_id') or 0);qty=float(f.get('quantity') or 0);unit_cost=max(0,float(f.get('unit_cost') or 0))
+                    med=c.execute('select * from medicine_catalog where id=? and active=1',(mid,)).fetchone()
+                    if not med or qty<=0:return self.redirect('/medicines','Geçerli ilaç ve miktar seçin.')
+                    received=date.today().isoformat();expiry=(f.get('expiry_date') or '').strip()
+                    if expiry:
+                        try:date.fromisoformat(expiry)
+                        except Exception:return self.redirect('/medicines','Son kullanma tarihi geçersiz.')
+                    finance_id=None;amount=qty*unit_cost
+                    if (f.get('post_finance') or '')=='yes' and amount>0:
+                        desc=f'{med["product_name"]} ilaç stok girişi · {qty:g} {f.get("unit") or "ml"} · Lot {(f.get("lot_no") or "-").strip()}'
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(received,'Gider','İlaç',amount,desc,'Nakit',None,datetime.now().isoformat(timespec='seconds')))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('''insert into medicine_batches(medicine_id,lot_no,expiry_date,quantity,unit,unit_cost,received_date,supplier,finance_id,notes,created_at) values(?,?,?,?,?,?,?,?,?,?,?)''',(mid,(f.get('lot_no') or '').strip(),expiry,qty,f.get('unit') or 'ml',unit_cost,received,(f.get('supplier') or '').strip(),finance_id,(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds')))
+                    bid=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,unit_cost,notes,created_at) values(?,?,?,'Giriş',?,?,?,?)",(mid,bid,received,qty,unit_cost,'İlaç parti girişi',datetime.now().isoformat(timespec='seconds')))
+                    audit(username,'İlaç stok girişi',f'{med["product_name"]} · {qty:g}',self.client_ip())
+                    return self.redirect('/medicines','İlaç stok girişi kaydedildi.'+(' Finans gideri oluşturuldu.' if finance_id else ''))
+                if path=='/treatment/create':
+                    mid=int(f.get('medicine_id') or 0);med=c.execute('select * from medicine_catalog where id=? and active=1',(mid,)).fetchone()
+                    if not med:return self.redirect('/medicines','İlaç bulunamadı.')
+                    if not int(med['withdrawal_verified'] or 0):return self.redirect('/medicines','Bu ürünün resmî et/süt arınma bilgisi doğrulanmadan tedavi kaydı açılamaz.')
+                    subject=(f.get('subject_key') or '').split(':',1)
+                    if len(subject)!=2 or subject[0] not in ('animal','calf'):return self.redirect('/medicines','Hayvan seçimi geçersiz.')
+                    sid=int(subject[1]);animal_id=sid if subject[0]=='animal' else None;calf_id=sid if subject[0]=='calf' else None
+                    subject_table='animals' if animal_id else 'calves'
+                    subject_row=c.execute(f'select id,tag,status,exit_date from {subject_table} where id=?',(sid,)).fetchone()
+                    loss_where='animal_id=?' if animal_id else 'calf_id=?'
+                    if not subject_row:return self.redirect('/medicines','Seçilen hayvan bulunamadı.')
+                    if str(subject_row['status'] or 'Aktif')!='Aktif' or c.execute(f'select 1 from animal_losses where {loss_where} limit 1',(sid,)).fetchone():
+                        return self.redirect('/medicines','Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılamaz.')
+                    start=(f.get('start_date') or '').strip();end=(f.get('end_date') or start).strip()
+                    try:
+                        start_day=date.fromisoformat(start);end_day=date.fromisoformat(end)
+                    except Exception:return self.redirect('/medicines','Tedavi tarihi geçersiz.')
+                    if end_day<start_day:return self.redirect('/medicines','Son uygulama tarihi başlangıçtan önce olamaz.')
+                    disease_id=int(f.get('disease_id') or 0) or None
+                    diagnosis_note=(f.get('diagnosis') or '').strip();diagnosis=diagnosis_note
+                    if disease_id:
+                        disease=c.execute('select name from disease_catalog where id=? and active=1',(disease_id,)).fetchone()
+                        if not disease:return self.redirect('/medicines','Hastalık kataloğu seçimi geçersiz.')
+                        diagnosis=str(disease['name'])+(((' · '+diagnosis_note) if diagnosis_note else ''))
+                    meat_safe,milk_safe=medicine_safe_dates(end,int(med['meat_withdrawal_days'] or 0),int(med['milk_withdrawal_hours'] or 0))
+                    total=max(0,float(f.get('total_quantity') or 0));batch=None;allocations=[];cost=0.0
+                    if total>0:
+                        if medicine_stock_balance(c,mid)+1e-9<total:return self.redirect('/medicines','İlaç stoğu tedavide girilen toplam kullanıma yetmiyor.')
+                        allocations=medicine_fefo_allocations(c,mid,total,end)
+                        if not allocations:return self.redirect('/medicines','Yeterli toplam stok var ancak tedavi tarihinde kullanılabilecek, son kullanma tarihi geçmemiş parti stoğu yetersiz.')
+                        batch=allocations[0][0]
+                        cost=sum(used*float(b['unit_cost'] or 0) for b,used in allocations)
+                    finance_id=None
+                    if cost>0:
+                        desc=f'{med["product_name"]} tedavisi · {diagnosis or "Teşhis belirtilmedi"}'
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(start,'Gider','İlaç',cost,desc,'Nakit',animal_id,datetime.now().isoformat(timespec='seconds')))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('''insert into treatments(animal_id,calf_id,medicine_id,batch_id,start_date,end_date,dose_amount,dose_unit,application_route,applications_per_day,diagnosis,veterinarian,prescription_no,meat_safe_date,milk_safe_date,total_quantity,cost,finance_id,status,notes,created_at,disease_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?)''',
+                              (animal_id,calf_id,mid,batch['id'] if batch else None,start,end,max(0,float(f.get('dose_amount') or 0)),f.get('dose_unit') or 'ml',(f.get('application_route') or med['application_route'] or '').strip(),max(1,int(f.get('applications_per_day') or 1)),diagnosis,(f.get('veterinarian') or '').strip(),(f.get('prescription_no') or '').strip(),meat_safe,milk_safe,total,cost,finance_id,'Tamamlandı' if end_day<=date.today() else 'Aktif',(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds'),disease_id))
+                    treatment_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    for used_batch,used_qty in allocations:
+                        c.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,unit_cost,treatment_id,notes,created_at) values(?,?,?,'Çıkış',?,?,?,?,?)",(mid,used_batch['id'],end,used_qty,float(used_batch['unit_cost'] or 0),treatment_id,'Tedavide kullanım · FEFO parti dağıtımı',datetime.now().isoformat(timespec='seconds')))
+                    note=f'Tedavi #{treatment_id} | Doz {f.get("dose_amount") or 0} {f.get("dose_unit") or "ml"} | Et güvenli {meat_safe} | Süt güvenli {milk_safe}'
+                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(animal_id,calf_id,'İlaç',med['product_name'],start,'',cost,note))
+                    audit(username,'Tedavi kaydı oluşturdu',f'{med["product_name"]} · Tedavi #{treatment_id}',self.client_ip())
+                    return self.redirect('/medicines',f'Tedavi kaydedildi. Et güvenli: {fmt_date(meat_safe)} · Süt güvenli: {fmt_date(milk_safe[:10])}.')
+                if path=='/loss-edit':
+                    lid=int(f.get('id') or 0)
+                    loss=c.execute('select * from animal_losses where id=?',(lid,)).fetchone()
+                    if not loss:return self.redirect('/archive/lost','Zayiat kaydı bulunamadı.')
+                    source=loss['subject_type'];sid=int(loss['animal_id'] or loss['calf_id'] or 0)
+                    table='animals' if source=='animal' else 'calves'
+                    rec=c.execute(f'select * from {table} where id=?',(sid,)).fetchone()
+                    if not rec:return self.redirect('/archive/lost','Bağlı hayvan kaydı bulunamadı.')
+                    event_type=(f.get('event_type') or '').strip()
+                    if event_type not in ('Öldü','Kayıp','Zorunlu İmha','İşletmeden Çıkarıldı'):return self.redirect('/loss-edit?id='+str(lid),'Çıkış türü geçersiz.')
+                    event_date=(f.get('event_date') or '').strip()
+                    try:event_day=date.fromisoformat(event_date)
+                    except Exception:return self.redirect('/loss-edit?id='+str(lid),'Olay tarihi geçersiz.')
+                    start=(rec['purchase_date'] or rec['birth_date'] or '')[:10]
+                    if start:
+                        try:
+                            if event_day<date.fromisoformat(start):return self.redirect('/loss-edit?id='+str(lid),'Olay tarihi alış/doğum tarihinden önce olamaz.')
+                        except Exception:pass
+                    tag=str(rec['tag'] or '');delete_loss_generated_finance(c,loss,tag)
+                    # Eski zayiatın otomatik satırları kaldırıldıktan sonra gerçek önceki finans kayıtlarıyla yeniden uzlaştır.
+                    costs=animal_loss_breakdown(c,rec,source,event_date)
+                    recovery=max(0,float(f.get('recovery_amount') or 0));total_cost=costs['gross_loss'];net_loss=max(0,total_cost-recovery)
+                    finance_id=None;recovery_finance_id=None
+                    if costs['new_expense']>0.005:
+                        c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gider','Hayvan Ölümü / Zayiat',?,?,?, ?,?,'')",(event_date,costs['new_expense'],f'{event_type} · {tag} · daha önce finansa yazılmamış maliyet (mükerrer alış/tedavi hariç)','Tahakkuk',sid if source=='animal' else None,datetime.now().isoformat()))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    if recovery>0:
+                        c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gelir','Sigorta / Zayiat Tazminatı',?,?,?, ?,?,'')",(event_date,recovery,f'{tag} · {event_type} tazminat/kurtarma geliri','Nakit',sid if source=='animal' else None,datetime.now().isoformat()))
+                        recovery_finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('''update animal_losses set event_date=?,event_type=?,cause=?,diagnosis=?,total_cost=?,recovery_amount=?,net_loss=?,finance_id=?,notes=?,purchase_cost=?,operating_cost=?,treatment_cost=?,other_cost=?,previously_financed=?,new_expense=?,recovery_finance_id=? where id=?''',(event_date,event_type,(f.get('cause') or '').strip(),(f.get('diagnosis') or '').strip(),total_cost,recovery,net_loss,finance_id,(f.get('notes') or '').strip(),costs['purchase_cost'],costs['operating_cost'],costs['treatment_cost'],costs['other_cost'],costs['previously_financed'],costs['new_expense'],recovery_finance_id,lid))
+                    c.execute(f'update {table} set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(event_type,event_date,(f.get('cause') or event_type).strip(),recovery,sid))
+                    audit(username,'Zayiat kaydı güncellendi',f'{tag} · {event_type}',self.client_ip())
+                    return self.redirect('/archive/lost',f'{tag} zayiat kaydı ve finans bağlantıları güncellendi.')
+                if path=='/loss-delete':
+                    if not self.require_admin():return
+                    lid=int(f.get('id') or 0);loss=c.execute('select * from animal_losses where id=?',(lid,)).fetchone()
+                    if not loss:return self.redirect('/archive/lost','Zayiat kaydı bulunamadı.')
+                    source=loss['subject_type'];sid=int(loss['animal_id'] or loss['calf_id'] or 0);table='animals' if source=='animal' else 'calves'
+                    rec=c.execute(f'select tag from {table} where id=?',(sid,)).fetchone();tag=str(rec['tag'] or '') if rec else ''
+                    delete_loss_generated_finance(c,loss,tag)
+                    c.execute('delete from animal_losses where id=?',(lid,))
+                    remaining=c.execute('select 1 from animal_losses where animal_id=? or calf_id=? limit 1',(sid if source=='animal' else -1,sid if source=='calf' else -1)).fetchone()
+                    if rec and not remaining:c.execute(f"update {table} set status='Aktif',exit_date=null,exit_reason=null,sold_price=0 where id=?",(sid,))
+                    audit(username,'Zayiat kaydı silindi/geri alındı',tag,self.client_ip())
+                    return self.redirect('/archive/lost',f'{tag} zayiat kaydı silindi; otomatik finans hareketleri geri alındı ve hayvan aktif sürüye döndü.')
+                if path=='/animal/loss':
+                    source=(f.get('subject_type') or '').strip();sid=int(f.get('subject_id') or 0)
+                    if source not in ('animal','calf') or sid<=0:return self.redirect('/','Hayvan seçimi geçersiz.')
+                    event_type=(f.get('event_type') or '').strip()
+                    if event_type not in ('Öldü','Kayıp','Zorunlu İmha','İşletmeden Çıkarıldı'):return self.redirect('/','Çıkış türü geçersiz.')
+                    event_date=(f.get('event_date') or '').strip()
+                    try:event_day=date.fromisoformat(event_date)
+                    except Exception:return self.redirect('/','Olay tarihi geçersiz.')
+                    table='animals' if source=='animal' else 'calves';rec=c.execute(f'select * from {table} where id=?',(sid,)).fetchone()
+                    back=('/animal?id='+str(sid)) if source=='animal' else ('/calf?id='+str(sid))
+                    if not rec:return self.redirect('/','Hayvan bulunamadı.')
+                    if str(rec['status'] or 'Aktif')!='Aktif':return self.redirect(back,'Hayvan aktif sürüde değil; ikinci çıkış kaydı engellendi.')
+                    start=(rec['purchase_date'] or rec['birth_date'] or '')[:10]
+                    if start:
+                        try:
+                            if event_day<date.fromisoformat(start):return self.redirect(back,'Olay tarihi hayvanın alış/doğum tarihinden önce olamaz.')
+                        except Exception:pass
+                    costs=animal_loss_breakdown(c,rec,source,event_date)
+                    total_cost=costs['gross_loss'];recovery=max(0,float(f.get('recovery_amount') or 0));net_loss=max(0,total_cost-recovery)
+                    tag=str(rec['tag'] or '');finance_id=None
+                    if costs['new_expense']>0.005:
+                        desc=f'{event_type} · {tag} · daha önce finansa yazılmamış maliyet (mükerrer alış/tedavi hariç)'
+                        c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gider','Hayvan Ölümü / Zayiat',?,?,?, ?,?,'')",(event_date,costs['new_expense'],desc,'Tahakkuk',sid if source=='animal' else None,datetime.now().isoformat()))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    recovery_finance_id=None
+                    if recovery>0:
+                        c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gelir','Sigorta / Zayiat Tazminatı',?,?,?, ?,?,'')",(event_date,recovery,f'{tag} · {event_type} tazminat/kurtarma geliri','Nakit',sid if source=='animal' else None,datetime.now().isoformat()))
+                        recovery_finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('''insert into animal_losses(subject_type,animal_id,calf_id,event_date,event_type,cause,diagnosis,total_cost,recovery_amount,net_loss,finance_id,notes,created_at,purchase_cost,operating_cost,treatment_cost,other_cost,previously_financed,new_expense,recovery_finance_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(source,sid if source=='animal' else None,sid if source=='calf' else None,event_date,event_type,(f.get('cause') or '').strip(),(f.get('diagnosis') or '').strip(),total_cost,recovery,net_loss,finance_id,(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds'),costs['purchase_cost'],costs['operating_cost'],costs['treatment_cost'],costs['other_cost'],costs['previously_financed'],costs['new_expense'],recovery_finance_id))
+                    c.execute(f'update {table} set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(event_type,event_date,(f.get('cause') or event_type).strip(),recovery,sid))
+                    audit(username,'Hayvan zayiat kaydı',f'{tag} · {event_type} · {money(net_loss)}',self.client_ip())
+                    return self.redirect('/archive/lost',f'{tag} için {event_type} kaydı oluşturuldu. Net zayiat: {money(net_loss)}.')
                 if path=='/animal/sale':
                     aid=f['animal_id']; sale_price=float(f['sale_price']); sale_date=f['sale_date']; sale_weight=float(f.get('sale_weight') or 0)
-                    a=c.execute("select * from animals where id=? and gender='Erkek'",(aid,)).fetchone()
-                    if not a:return self.redirect('/males','Erkek hayvan bulunamadı.')
+                    a=c.execute("select * from animals where id=?",(aid,)).fetchone()
+                    if not a:return self.redirect('/animals','Hayvan bulunamadı.')
                     if a['status']!='Aktif':return self.redirect('/animal?id='+aid,'Bu hayvan daha önce aktif sürüden çıkarılmış.')
                     days,daily,accumulated,current=animal_cost_values(a); profit=sale_price-current
                     desc=(f.get('description') or '').strip()
                     detail=f"{desc} | Satış kilosu: {sale_weight:.1f} kg | Anlık maliyet: {current:.2f} TL | Net kâr/zarar: {profit:.2f} TL"
-                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(sale_date,'Gelir','Hayvan Satışı',sale_price,detail,'Nakit',aid,datetime.now().isoformat(),'Satıldı'))
+                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(sale_date,'Gelir','Hayvan Satışı',sale_price,detail,f.get('payment_method') or 'Nakit',aid,datetime.now().isoformat(),'Satıldı'))
                     c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',('Satıldı',sale_date,'Hayvan Satışı',sale_price,aid))
                     if sale_weight>0:c.execute('insert into weights(animal_id,measure_date,weight,notes) values(?,?,?,?)',(aid,sale_date,sale_weight,'Satış kilosu'))
                     return self.redirect('/archive/sold','Satış tamamlandı. Net kâr/zarar: '+money(profit))

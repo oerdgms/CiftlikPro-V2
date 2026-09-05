@@ -1,4 +1,54 @@
-# ÇiftlikPro v3.9.20 — Solver DEV4.19.3 Canlı Kart Hotfix
+# ÇiftlikPro v3.9.21 DEV4 Hotfix2 — Aktif Sürü ve Zayiat Arşivi
+
+Hotfix2, zayiat kaydı bulunan hayvanı aktif dişi/erkek/buzağı ve tüm aktif
+hayvanlar listelerinden kesin olarak çıkarır. Önceki sürümde oluşmuş ancak
+durumu aktif kalmış kayıtlar uygulama açılışında otomatik onarılır.
+
+Ölen / Kayıp Hayvanlar arşivine `Düzenle` ve onaylı `Sil / Geri Al` işlemleri
+eklendi. Düzenleme tarih, olay, neden, teşhis ve kurtarma gelirini değiştirince
+maliyet ile otomatik finans bağlantılarını yeniden hesaplar. Sil/Geri Al yalnız
+zayiatın oluşturduğu finans satırlarını kaldırır; hayvan alış ve gerçek tedavi
+kayıtlarını korur, hayvanı yeniden aktif sürüye döndürür.
+
+## Hotfix1 kapsamı
+
+Hotfix1, ölüm/kayıp kaydında küpeye bağlı eski finans hareketlerini uzlaştırır.
+Önceden giderleştirilmiş hayvan alımı ve tedavi ikinci kez yazılmaz. Rasyon,
+bakım, henüz aktarılmamış tedavi ve diğer maliyetlerden yalnız eksik kalan tutar
+Finans'a `Hayvan Ölümü / Zayiat` gideri olarak eklenir. Sigorta, et ve kurtarma
+geliri ayrı gelir kaydıdır ve zayiat arşivindeki brüt kayıptan düşülür.
+
+Doğrulama örneği: 100.000 TL alış önceden finanstayken 60 gün × 180 TL rasyon
+ve henüz aktarılmamış 3.000 TL tedavi için yeni gider 13.800 TL; brüt ekonomik
+kayıp 113.800 TL'dir. Tedavi de önceden finanstaysa yeni gider yalnız 10.800 TL olur.
+
+## DEV4 kapsamı
+
+V3.9.21 DEV4 ile dişi, erkek ve buzağıların alış bedeli; günlük yem, bakım ve
+padok rasyon giderleri aynı maliyet motorunda birleştirilir. Ölüm, kayıp,
+zorunlu imha veya işletmeden çıkış kaydı maliyeti olay tarihinde dondurur;
+finansa nakit dışı zarar, varsa sigorta/kurtarma bedelini gelir olarak aktarır.
+Ölen ve kayıp hayvanlar ayrı arşivde geçmiş kayıtları silinmeden korunur.
+
+Finans ekranı nakit gelir-giderden ayrı bir `Zayiat / Zarar` toplamı gösterir;
+böylece daha önce ödenmiş alış ve işletme giderleri ikinci kez nakit gider
+sayılmaz.
+
+DEV4.19.3 solver çekirdeği değiştirilmeden korunmuştur.
+
+## Önceki DEV3 kapsamı
+
+V3.9.21 DEV3; ilaç kataloğu, parti/lot ve son kullanma tarihi, stok hareketi,
+hayvan/buzağı tedavi kaydı, doz ve uygulama yolu, et-süt arınma tarihleri ile
+ilaç giderinin finansa aktarılmasını ekler. Katalog ürünleri tedavi önerisi
+değildir; doz veteriner reçetesinden girilir. Arınma tarihi son uygulama ve
+ürünün doğrulanmış asgari bekleme süresinden hesaplanır.
+
+Kurulum, açık `CiftlikPro.exe` sürecini önce normal, gerekirse zorla kapatır;
+dosya değişiminden önce yerel veritabanının tarihli güvenlik kopyasını alır ve
+kurulum sonunda uygulamayı yeniden başlatabilir.
+
+DEV4.19.3 solver çekirdeği değiştirilmeden korunmuştur.
 
 DEV4.19.3, kaydedilmiş rasyon açıldığında tarayıcıdaki canlı hedef kartının
 türetilmiş NEm/NEg yerine ham sıfır alanlarını okuyarak doğru GCAA değerini
@@ -120,3 +170,6 @@ Rasyon modülünde besi dönemine göre nişasta hedefi, üst güvenlik sınır�
 - Tüm Hayvanlar raporu mobilde sıkışık geniş tablo yerine okunaklı hayvan kartları olarak gösterilir; web önizlemede de telefona özel kart düzeni ve doğrudan temiz PDF düğmesi bulunur.
 - “Excel / PDF'den Hayvan İçe Aktar” alanı Raporlar sayfasının en üstündedir ve Veri Aktarımı sayfasında ayrıca belirgin bir kısayolu vardır.
 - “Raporda Gösterilecek Sütunlar” seçimleri ekrandaki listeye, mobil kartlara, web önizlemeye, doğrudan PDF'ye ve Excel çıktısına birlikte uygulanır.
+# ÇiftlikPro v3.9.21 DEV2 — İlaç & Veteriner
+
+İlaç ve veteriner ana ekranı saha kullanımına uygun özet + işlem çekmeceleri düzenindedir. Katalog, stok/SKT, tedavi, arınma ve finans bağlantısı aynı modülde izlenir. Katalog kaydı tedavi önerisi değildir; doz veteriner reçetesinden, arınma süresi Bakanlık ruhsat sorgusundaki güncel Ürün Özellikleri Özeti'nden doğrulanarak girilir.

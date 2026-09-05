@@ -1,3 +1,57 @@
+# v3.9.21 DEV4 Hotfix2 — Zayiat Aktif Liste ve Arşiv İşlemleri
+
+- Zayiat arşivinde kaydı bulunan yetişkin ve buzağılar tüm aktif listelerden
+  ayrıca dışlanarak durum alanından bağımsız güvenlik sağlandı.
+- Eski zayiat kaydı olduğu halde `Aktif` kalmış hayvanların durumu uygulama
+  başlangıcında son olay ve olay tarihiyle otomatik onarılıyor.
+- Ölen / Kayıp Hayvanlar arşivine `Düzenle` ve `Sil / Geri Al` eklendi.
+- Düzenleme sonrası donmuş maliyet ve yalnız zayiatın otomatik finans satırları
+  güvenli şekilde yeniden oluşturuluyor.
+- Sil/Geri Al, alış ve tedavi geçmişini koruyup zayiat finans satırlarını kaldırır
+  ve hayvanı aktif sürüye döndürür.
+- DEV4.19.3 solver çekirdeği değiştirilmedi.
+
+# v3.9.21 DEV4 Hotfix1 — Mükerrersiz Zayiat Muhasebesi
+
+- Küpeye bağlı `Hayvan Alımı` gideri tespit edilerek ölüm anında ikinci kez
+  gider yazılması engellendi.
+- Tedavi ve veteriner maliyetleri hayvanın brüt ekonomik kaybına eklendi.
+- Finans bağlantılı tedavi/veteriner giderleri tanınarak mükerrer kayıt önlendi.
+- Finansa yalnız alış, rasyon/bakım veya tedaviden daha önce aktarılmamış kalan
+  tutar `Hayvan Ölümü / Zayiat` gideri olarak ekleniyor.
+- Sigorta, et ve kurtarma geliri ayrı gelir kaydıdır; zayiat arşivinde brüt
+  kayıptan düşülerek net zarar gösterilir.
+- Zayiat arşivine alış, rasyon/bakım, tedavi, diğer, önceden finans, yeni gider,
+  kurtarma geliri ve net zayiat sütunları eklendi.
+- DEV4.19.3 solver çekirdeği değiştirilmedi.
+
+# v3.9.21 DEV4 — Ortak Hayvan Maliyeti ve Ölüm / Zayiat
+
+- Dişi, erkek ve buzağılar aynı alış + günlük bakım + padok rasyonu maliyet
+  motoruna bağlandı.
+- Buzağı günlük yem/bakım ve hedef satış tutarı alanları eklendi; ergin hayvana
+  geçişte maliyet ve padok geçmişi korunuyor.
+- Ölüm, kayıp, zorunlu imha ve işletmeden çıkış işlemleri eklendi.
+- Çıkış tarihinde toplam maliyet donduruluyor; kayıt pasife alınarak geçmişi
+  değişmez hale geliyor.
+- Net zayiat finansa `Zarar` türünde, nakit dışı kayıt olarak aktarılıyor; varsa
+  sigorta veya kurtarma bedeli ayrıca gelir yazılıyor.
+- `Ölen / Kayıp Hayvanlar` arşivi ve finans zayiat özeti eklendi.
+- DEV4.19.3 solver çekirdeği değiştirilmedi.
+
+# v3.9.21 DEV3 — Dişi Hayvan Maliyet ve Satış Kârlılığı
+
+- İlaç kataloğu: ürün, etkin madde, firma, terapötik grup, uygulama yolu,
+  farmasötik şekil, resmî kaynak ve et/süt arınma süresi.
+- Parti/lot, SKT, miktar, birim, maliyet ve tedarikçi bazında ilaç stoğu.
+- Hayvan/buzağı tedavisi; doz, uygulama sıklığı, teşhis, veteriner, reçete,
+  toplam tüketim ve otomatik et/süt güvenli çıkış tarihleri.
+- Stok yetersizliği ve tedavi tarihinden önce dolan parti için kayıt engeli.
+- İlaç alışı ve tedavide kullanılan ürün maliyeti için finans bağlantısı.
+- Kurulum öncesi otomatik DB yedeği, güvenli süreç kapatma ve kurulum sonrası
+  yeniden başlatma akışı.
+- DEV4.19.3 solver çekirdeği dondurulmuş biçimde korundu.
+
 # v3.9.20 Solver DEV4.19.3 — Canlı Hedef Kartı Hotfix
 
 - Solverın yaklaşık `1,39 kg` hesapladığı GCAA değerinin rasyon detayında canlı
@@ -266,3 +320,36 @@
 - Kart adı “Enerjiye göre GCAA kapasitesi” oldu; gerçekleşen büyüme tahmini olmadığı
   ve yüksek protein/enerji kapasitesi durumları açıkça gösterildi.
 - 31 otomatik test başarıyla tamamlandı.
+## v3.9.21 DEV2 — İlaç & Veteriner saha ekranı
+- 1366 px ekranda taşan üçlü form düzeni kaldırıldı; katalog, stok ve tedavi işlemleri sağ çekmecelere alındı.
+- Ana ekrana katalog, stoksuz ürün, 60 gün içinde SKT ve aktif arınma özetleri eklendi.
+- İlaç kataloğuna ürün/etkin madde/firma araması ve terapötik grup filtresi eklendi.
+- Tedavi hayvan seçimine küpe/isim araması eklendi.
+- Bakanlığın resmî ruhsatlı veteriner ilaçları sorgusuna doğrudan bağlantı ve kaynak doğrulama uyarısı eklendi.
+- Tedavide stok tüketimi tek parti zorunluluğundan çıkarıldı; SKT'si en yakın uygun partiden başlayarak FEFO yöntemiyle birden çok partiye bölünebilir.
+- Solver DEV4.19.3 dondurulmuş haliyle korundu; rasyon matematiğine dokunulmadı.
+# v3.9.21 DEV3 — Dişi Hayvan Maliyet ve Satış Kârlılığı
+- Dişi hayvanlarda alış bedeli, tarihsel padok/rasyon gideri ve günlük bakım aynı maliyet motorunda birleştirildi.
+- Dişi hayvan listesine alış, birikmiş rasyon+bakım ve anlık toplam maliyet sütunları eklendi.
+- Hayvan kartındaki canlı maliyet paneli ve satış formu dişi hayvanlar için de açıldı.
+- Satış onaylandığında gelir ilgili küpeye Finans > Hayvan Satışı olarak kaydedilir; hayvan Satılanlar arşivine taşınır.
+- Satılanlar arşivinde alış, işletme gideri, toplam maliyet, satış geliri ve net kâr/zarar gösterilir.
+- Yeni hayvan alışında “Finansa gider olarak kaydet” onayı eklendi; düzenlemede bağlı alış finans kaydı oluşturulabilir veya güncellenebilir.
+- Maliyet satış tarihinde donar; geçmiş padok/rasyon fiyat revizyonları tarihsel olarak korunur.
+- Solver DEV4.19.3 değiştirilmedi.
+# V3.9.21 DEV5.1
+
+- İlaç ve veteriner ekranı beş sekmeye ayrıldı; uzun katalogların aynı anda açılması kaldırıldı.
+- Hastalık sayısı 47'ye çıkarıldı ve canlı arama eklendi.
+- Hastalık adları tıklanabilir yapıldı; tanım, etken, bulaşma, belirtiler, ayırıcı tanı, ilk yapılacaklar, veteriner yaklaşımı, korunma ve bildirim kartları eklendi.
+- Şap, bruselloz, şarbon, mastitis, hipokalsemi, timpani, buzağı ishali ve BRD için genişletilmiş güvenli bilgi kartları eklendi.
+- Hastalık detayından seçili teşhisle tedavi kayıt çekmecesi açılabilir.
+
+# V3.9.21 DEV5
+
+- Windows kullanıcı oturumunda ÇiftlikPro arka planda otomatik başlatılır; masaüstü kısayolu tarayıcıyı açmaya devam eder.
+- Bakanlık ruhsat sorgusuna bağlı, ticari marka olmayan 18 etken maddelik başlangıç rehberi eklendi.
+- Yaygın ve resmî bildirim önceliği bulunan 23 hastalık için operasyonel kayıt kataloğu eklendi.
+- Resmî kaynaktan doğrulanmayan et/süt arınma bilgisi “Doğrulanmadı” gösterilir ve tedavi kaydı engellenir.
+- Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılması hem listede hem sunucu tarafında engellendi.
+- Solver DEV4.19.3 donduruldu; matematik ve kısıt katmanına dokunulmadı.

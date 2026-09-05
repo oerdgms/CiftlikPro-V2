@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +28,38 @@ class ReportImportTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tag"], "TR380001234567")
         self.assertEqual(rows[0]["gender"], "DİŞİ")
+
+    def test_3921_dev5_reference_catalogs_and_verification_schema(self):
+        with server.db() as con:
+            ingredients=con.execute("select count(*) from medicine_ingredient_reference where active=1").fetchone()[0]
+            diseases=con.execute("select count(*) from disease_catalog where active=1").fetchone()[0]
+            med_cols={row[1] for row in con.execute("pragma table_info(medicine_catalog)").fetchall()}
+            treatment_cols={row[1] for row in con.execute("pragma table_info(treatments)").fetchall()}
+        self.assertGreaterEqual(ingredients,18)
+        self.assertGreaterEqual(diseases,20)
+        self.assertIn("withdrawal_verified",med_cols)
+        self.assertIn("disease_id",treatment_cols)
+
+    def test_3921_dev5_startup_and_inactive_treatment_guards_are_packaged(self):
+        root=Path(__file__).resolve().parents[1]
+        launcher=(root/"app"/"desktop_launcher.py").read_text(encoding="utf-8")
+        installer=(root/"installer.iss").read_text(encoding="utf-8")
+        source=(root/"app"/"server.py").read_text(encoding="utf-8")
+        self.assertIn('"--background" in sys.argv',launcher)
+        self.assertIn('{userstartup}\\ÇiftlikPro Arka Plan',installer)
+        self.assertIn('Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılamaz.',source)
+        self.assertIn("3.9.21 DEV5.1",source)
+
+    def test_3921_dev51_disease_catalog_has_clickable_detail_content(self):
+        with server.db() as con:
+            count=con.execute("select count(*) from disease_catalog where active=1").fetchone()[0]
+            foot=con.execute("select * from disease_catalog where name='Şap'").fetchone()
+        self.assertGreaterEqual(count,45)
+        self.assertIn("özgül tedavi yoktur",foot["veterinary_management"])
+        self.assertIn("hareketini durdurun",foot["immediate_actions"])
+        source=Path(server.__file__).read_text(encoding="utf-8")
+        self.assertIn("if path=='/disease':",source)
+        self.assertIn("Hastalık Kataloğuna Dön",source)
 
     def test_xlsx_parse_prepare_and_export(self):
         wb = Workbook(); ws = wb.active
@@ -574,6 +607,150 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('data-nem="{_solver_nutrient(x,\'nem_mcal_kg\'):.8f}"',source)
         self.assertIn('data-neg="{_solver_nutrient(x,\'neg_mcal_kg\'):.8f}"',source)
         self.assertNotIn('data-nem="{float(x[\'nem_mcal_kg\'] or 0):.8f}"',source)
+
+    def test_3921_medicine_veterinary_schema_is_migrated(self):
+        with server.db() as con:
+            tables={r['name'] for r in con.execute("select name from sqlite_master where type='table'")}
+        self.assertTrue({'medicine_catalog','medicine_batches','medicine_stock_transactions','veterinary_visits','treatments'}<=tables)
+
+    def test_3921_withdrawal_dates_start_from_last_application(self):
+        meat,milk=server.medicine_safe_dates('2026-09-01',7,72)
+        self.assertEqual(meat,'2026-09-08')
+        self.assertEqual(milk,'2026-09-04T00:00')
+
+    def test_3921_medicine_stock_balance_tracks_entry_and_treatment_use(self):
+        stamp=str(id(self))
+        with server.db() as con:
+            mid=con.execute("insert into medicine_catalog(product_name,created_at) values(?,?)",('Test İlaç '+stamp,'2026-09-01')).lastrowid
+            bid=con.execute("insert into medicine_batches(medicine_id,quantity,received_date,created_at) values(?,?,?,?)",(mid,100,'2026-09-01','2026-09-01')).lastrowid
+            con.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,created_at) values(?,?,?,?,?,?)",(mid,bid,'2026-09-01','Giriş',100,'2026-09-01'))
+            con.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,created_at) values(?,?,?,?,?,?)",(mid,bid,'2026-09-02','Çıkış',12.5,'2026-09-02'))
+            self.assertAlmostEqual(server.medicine_stock_balance(con,mid),87.5)
+            self.assertAlmostEqual(server.medicine_stock_balance(con,mid,bid),87.5)
+
+    def test_3921_dev2_fefo_can_split_treatment_across_batches(self):
+        stamp=str(time.time_ns())
+        with server.db() as con:
+            mid=con.execute("insert into medicine_catalog(product_name,created_at) values(?,?)",('FEFO Test '+stamp,'2026-09-01')).lastrowid
+            first=con.execute("insert into medicine_batches(medicine_id,lot_no,expiry_date,quantity,received_date,created_at) values(?,?,?,?,?,?)",(mid,'A','2026-10-01',4,'2026-09-01','2026-09-01')).lastrowid
+            second=con.execute("insert into medicine_batches(medicine_id,lot_no,expiry_date,quantity,received_date,created_at) values(?,?,?,?,?,?)",(mid,'B','2026-11-01',8,'2026-09-01','2026-09-01')).lastrowid
+            for bid,qty in ((first,4),(second,8)):
+                con.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,created_at) values(?,?,?,?,?,?)",(mid,bid,'2026-09-01','Giriş',qty,'2026-09-01'))
+            allocations=server.medicine_fefo_allocations(con,mid,10,'2026-09-15')
+            self.assertEqual([(x[0]['lot_no'],x[1]) for x in allocations],[('A',4.0),('B',6.0)])
+
+    def test_3921_dev2_fefo_excludes_expired_batch(self):
+        stamp=str(time.time_ns())
+        with server.db() as con:
+            mid=con.execute("insert into medicine_catalog(product_name,created_at) values(?,?)",('SKT Test '+stamp,'2026-09-01')).lastrowid
+            bid=con.execute("insert into medicine_batches(medicine_id,expiry_date,quantity,received_date,created_at) values(?,?,?,?,?)",(mid,'2026-08-31',20,'2026-08-01','2026-08-01')).lastrowid
+            con.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,created_at) values(?,?,?,?,?,?)",(mid,bid,'2026-08-01','Giriş',20,'2026-08-01'))
+            self.assertEqual(server.medicine_fefo_allocations(con,mid,1,'2026-09-01'),[])
+
+    def test_3921_dev3_female_cost_uses_same_engine_as_male(self):
+        animal={'id':-101,'purchase_price':50000,'daily_feed_cost':120,'daily_care_cost':30,
+                'purchase_date':'2026-08-25','birth_date':'2024-01-01','status':'Aktif',
+                'exit_date':'','paddock_id':None}
+        days,daily,operating,total=server.animal_cost_values(animal)
+        self.assertGreaterEqual(days,10)
+        self.assertAlmostEqual(daily,150.0)
+        self.assertAlmostEqual(operating,days*150.0)
+        self.assertAlmostEqual(total,50000+operating)
+
+    def test_3921_dev3_sold_female_cost_freezes_on_exit_date(self):
+        animal={'id':-102,'purchase_price':40000,'daily_feed_cost':100,'daily_care_cost':20,
+                'purchase_date':'2026-08-01','birth_date':'2024-01-01','status':'Satıldı',
+                'exit_date':'2026-08-11','paddock_id':None}
+        days,daily,operating,total=server.animal_cost_values(animal)
+        self.assertEqual(days,10)
+        self.assertAlmostEqual(operating,1200.0)
+        self.assertAlmostEqual(total,41200.0)
+
+    def test_3921_dev4_loss_and_calf_cost_schema_is_migrated(self):
+        with server.db() as con:
+            tables={r['name'] for r in con.execute("select name from sqlite_master where type='table'")}
+            calf_cols={r['name'] for r in con.execute('pragma table_info(calves)')}
+            loss_cols={r['name'] for r in con.execute('pragma table_info(animal_losses)')}
+        self.assertIn('animal_losses',tables)
+        self.assertTrue({'status','exit_date','exit_reason','sold_price','daily_feed_cost','daily_care_cost','target_sale_price'}<=calf_cols)
+        self.assertTrue({'purchase_cost','operating_cost','treatment_cost','other_cost','previously_financed','new_expense','recovery_finance_id'}<=loss_cols)
+
+    def test_3921_dev4_calf_uses_common_cost_engine_and_freezes(self):
+        calf={'id':-202,'purchase_price':15000,'daily_feed_cost':45,'daily_care_cost':15,
+              'purchase_date':'2026-08-01','birth_date':'2026-07-01','status':'Öldü',
+              'exit_date':'2026-08-11','paddock_id':None}
+        days,daily,operating,total=server.calf_cost_values(calf)
+        self.assertEqual(days,10)
+        self.assertAlmostEqual(daily,60.0)
+        self.assertAlmostEqual(operating,600.0)
+        self.assertAlmostEqual(total,15600.0)
+
+    def test_3921_dev4_hotfix_loss_avoids_duplicate_purchase_and_adds_unposted_treatment(self):
+        stamp=str(time.time_ns());tag='TR58DENEME'+stamp[-6:]
+        with server.db() as con:
+            aid=con.execute('''insert into animals(tag,nickname,gender,breed,birth_date,purchase_date,purchase_price,
+                daily_feed_cost,daily_care_cost,status) values(?,?,?,?,?,?,?,?,?,'Aktif')''',
+                (tag,'Deneme','Erkek','Simental','2024-01-01','2026-01-01',100000,180,0)).lastrowid
+            con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gider','Hayvan Alımı',?,?,?,?,?)",
+                ('2026-01-01',100000,tag+' hayvan alımı','Nakit',aid,'2026-01-01'))
+            con.execute("insert into treatments(animal_id,start_date,cost,created_at) values(?,?,?,?)",
+                (aid,'2026-02-01',3000,'2026-02-01'))
+            rec=con.execute('select * from animals where id=?',(aid,)).fetchone()
+            result=server.animal_loss_breakdown(con,rec,'animal','2026-03-02')
+        self.assertAlmostEqual(result['purchase_cost'],100000)
+        self.assertAlmostEqual(result['operating_cost'],10800)
+        self.assertAlmostEqual(result['treatment_cost'],3000)
+        self.assertAlmostEqual(result['gross_loss'],113800)
+        self.assertAlmostEqual(result['new_expense'],13800)
+
+    def test_3921_dev4_hotfix_financed_treatment_is_not_posted_twice(self):
+        stamp=str(time.time_ns());tag='TR58FINANS'+stamp[-6:]
+        with server.db() as con:
+            aid=con.execute('''insert into animals(tag,nickname,gender,breed,birth_date,purchase_date,purchase_price,
+                daily_feed_cost,daily_care_cost,status) values(?,?,?,?,?,?,?,?,?,'Aktif')''',
+                (tag,'Deneme','Erkek','Simental','2024-01-01','2026-01-01',100000,180,0)).lastrowid
+            con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gider','Hayvan Alımı',?,?,?,?,?)",
+                ('2026-01-01',100000,tag+' hayvan alımı','Nakit',aid,'2026-01-01'))
+            fid=con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gider','Sağlık & Veteriner',?,?,?,?,?)",
+                ('2026-02-01',3000,tag+' tedavi','Nakit',aid,'2026-02-01')).lastrowid
+            con.execute("insert into treatments(animal_id,start_date,cost,finance_id,created_at) values(?,?,?,?,?)",
+                (aid,'2026-02-01',3000,fid,'2026-02-01'))
+            rec=con.execute('select * from animals where id=?',(aid,)).fetchone()
+            result=server.animal_loss_breakdown(con,rec,'animal','2026-03-02')
+        self.assertAlmostEqual(result['gross_loss'],113800)
+        self.assertAlmostEqual(result['previously_financed'],103000)
+        self.assertAlmostEqual(result['new_expense'],10800)
+
+    def test_3921_dev4_hotfix2_init_repairs_active_animal_with_loss_record(self):
+        stamp=str(time.time_ns());tag='TR58KAYIP'+stamp[-6:]
+        with server.db() as con:
+            aid=con.execute("insert into animals(tag,nickname,gender,birth_date,status) values(?,?,? ,?,'Aktif')",
+                            (tag,'Arşiv','Dişi','2024-01-01')).lastrowid
+            con.execute("insert into animal_losses(subject_type,animal_id,event_date,event_type,created_at) values('animal',?,?,?,?)",
+                        (aid,'2026-09-04','Öldü','2026-09-04'))
+        server.init_db()
+        with server.db() as con:
+            rec=con.execute('select status,exit_date from animals where id=?',(aid,)).fetchone()
+        self.assertEqual(rec['status'],'Öldü')
+        self.assertEqual(rec['exit_date'],'2026-09-04')
+
+    def test_3921_dev4_hotfix2_loss_finance_cleanup_preserves_purchase(self):
+        stamp=str(time.time_ns());tag='TR58GERI'+stamp[-6:]
+        with server.db() as con:
+            aid=con.execute("insert into animals(tag,nickname,gender,birth_date,status) values(?,?,?,?,'Öldü')",
+                            (tag,'Geri Al','Erkek','2024-01-01')).lastrowid
+            purchase=con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gider','Hayvan Alımı',?,?,?,?,?)",
+                ('2026-01-01',100000,tag+' alım','Nakit',aid,'2026-01-01')).lastrowid
+            expense=con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gider','Hayvan Ölümü / Zayiat',?,?,?,?,?)",
+                ('2026-09-04',10800,tag+' zayiat','Tahakkuk',aid,'2026-09-04')).lastrowid
+            recovery=con.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,'Gelir','Sigorta / Zayiat Tazminatı',?,?,?,?,?)",
+                ('2026-09-04',20000,tag+' tazminat','Nakit',aid,'2026-09-04')).lastrowid
+            lid=con.execute("insert into animal_losses(subject_type,animal_id,event_date,event_type,finance_id,recovery_finance_id,created_at) values('animal',?,?,?,?,?,?)",
+                (aid,'2026-09-04','Öldü',expense,recovery,'2026-09-04')).lastrowid
+            loss=con.execute('select * from animal_losses where id=?',(lid,)).fetchone()
+            server.delete_loss_generated_finance(con,loss,tag)
+            ids={r['id'] for r in con.execute('select id from finance where id in (?,?,?)',(purchase,expense,recovery))}
+        self.assertEqual(ids,{purchase})
 
 
 if __name__ == "__main__":
