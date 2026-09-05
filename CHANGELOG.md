@@ -339,6 +339,11 @@
 - Solver DEV4.19.3 değiştirilmedi.
 # V3.9.21 DEV5.1
 
+- Hotfix2: Bakanlık HBS tablosundaki sığır/buzağı/dana/manda hedefli 1.241 benzersiz ruhsatlı ürün başlangıç kataloğuna aktarıldı.
+- Hotfix2: Ruhsatlı ürün ayrıntı sayfası, ATCvet, hedef tür, etken madde, firma ve Bakanlık ürün özeti bağlantısı eklendi.
+- Hotfix2: Resmî tabloda bulunmayan arınma süreleri tahmin edilmedi; ürün özetinden doğrulanana kadar tedavi kullanımı kilitli tutuldu.
+- Hotfix1: GitHub Actions sürüm ve kurulum dosyası doğrulamaları DEV5.1 adına güncellendi.
+- Hotfix1: Katalogdaki 46/47 hastalığın tamamında boş ayrıntı alanları güvenli operasyonel içerikle dolduruldu; yer tutucu metin kaldırıldı.
 - İlaç ve veteriner ekranı beş sekmeye ayrıldı; uzun katalogların aynı anda açılması kaldırıldı.
 - Hastalık sayısı 47'ye çıkarıldı ve canlı arama eklendi.
 - Hastalık adları tıklanabilir yapıldı; tanım, etken, bulaşma, belirtiler, ayırıcı tanı, ilk yapılacaklar, veteriner yaklaşımı, korunma ve bildirim kartları eklendi.

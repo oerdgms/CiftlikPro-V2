@@ -25,7 +25,7 @@ ANIMAL_IMPORT_LOCK=threading.Lock()
 APP_NAME='ÇiftlikPro Enterprise'
 APP_VERSION='3.9.21 DEV5.1'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.21 DEV4 Hotfix2'
+APP_LABEL='v3.9.21 DEV5.1'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -655,6 +655,28 @@ def init_db():
         medicine_cols={r[1] for r in c.execute('pragma table_info(medicine_catalog)').fetchall()}
         if 'withdrawal_verified' not in medicine_cols:
             c.execute("ALTER TABLE medicine_catalog ADD COLUMN withdrawal_verified INTEGER DEFAULT 0")
+        for col,typ in [('atcvet_code','TEXT'),('source_summary_file','TEXT'),('official_catalog_record','INTEGER DEFAULT 0')]:
+            if col not in medicine_cols:c.execute(f'ALTER TABLE medicine_catalog ADD COLUMN {col} {typ}')
+        # DEV5.1 Hotfix2: Kullanıcının Bakanlık HBS sonuç tablosundan alınan,
+        # sığır/buzağı/dana/manda hedefli ruhsatlı ürün başlangıç kataloğu.
+        official_catalog_file=PROGRAM_DIR/'official_medicine_catalog.json'
+        if official_catalog_file.exists():
+            try:
+                official_payload=json.loads(official_catalog_file.read_text(encoding='utf-8'))
+                for med in official_payload.get('records',[]):
+                    c.execute('''insert or ignore into medicine_catalog(
+                        product_name,active_ingredient,company,therapeutic_group,target_species,
+                        application_route,pharmaceutical_form,meat_withdrawal_days,milk_withdrawal_hours,
+                        prescription_required,official_source_url,source_checked_date,notes,
+                        withdrawal_verified,active,created_at,atcvet_code,source_summary_file,official_catalog_record)
+                        values(?,?,?,?,?,?,?,0,0,1,?,?,?,0,1,?,?,?,1)''',(
+                        med.get('product_name',''),med.get('active_ingredient',''),med.get('company',''),
+                        med.get('therapeutic_group',''),med.get('target_species',''),med.get('application_route',''),
+                        med.get('pharmaceutical_form',''),med.get('official_source_url',''),date.today().isoformat(),
+                        'T.C. Tarım ve Orman Bakanlığı HBS ruhsatlı veteriner ilaçları sonuç tablosundan aktarıldı. Et/süt arınma süresi ürün özeti üzerinden ayrıca doğrulanmalıdır.',
+                        datetime.now().isoformat(timespec='seconds'),med.get('atcvet_code',''),med.get('source_summary_file','')))
+            except Exception as exc:
+                print('Resmî ilaç başlangıç kataloğu yüklenemedi:',exc)
         treatment_cols={r[1] for r in c.execute('pragma table_info(treatments)').fetchall()}
         if 'disease_id' not in treatment_cols:
             c.execute("ALTER TABLE treatments ADD COLUMN disease_id INTEGER")
@@ -792,6 +814,21 @@ def init_db():
                 'Karantina, aşılama planı, havalandırma, düşük stresli nakil ve uygun barınak yoğunluğu.')}
         for disease_name,detail in disease_details.items():
             c.execute('''update disease_catalog set description=?,cause_agent=?,transmission=?,differential_notes=?,immediate_actions=?,veterinary_management=?,prevention=? where name=?''',(*detail,disease_name))
+        # DEV5.1 Hotfix: hiçbir hastalık kartı boş/yer tutucu açılmaz. Ayrıntılı özel
+        # kartı olmayan kayıtlar da güvenli, operasyonel bir veteriner çerçevesi alır.
+        for row in c.execute('select * from disease_catalog where active=1').fetchall():
+            contagious=bool(row['contagious']); urgency=str(row['urgency'] or '')
+            defaults={
+                'description':f"{row['name']}, sığırlarda {str(row['category'] or 'sağlık').lower()} başlığında izlenen bir hastalık veya klinik durumdur. Kesin tanı yalnız belirtilere bakılarak konulmaz; hayvan ve sürü geçmişi, muayene ve gerektiğinde laboratuvar sonuçları birlikte değerlendirilir.",
+                'cause_agent':'Neden; enfeksiyöz etken, parazit, metabolik dengesizlik, toksin, travma veya yönetim koşullarına göre değişebilir. Etken veteriner muayenesiyle belirlenmelidir.',
+                'transmission':('Hayvanlar arası temas, salgılar, dışkı, çevre, ekipman veya taşıyıcılar rol oynayabilir; şüpheli hayvan ayrılmalıdır.' if contagious else 'Bulaşıcı kabul edilmez; ancak ortak yem, çevre veya sürü yönetimi birden fazla hayvanı aynı anda etkileyebilir.'),
+                'differential_notes':f"{row['common_signs'] or 'Gözlenen bulgular'} başka hastalıklarda da görülebilir. Ateş, iştah, solunum, dışkı, süt, gebelik ve sürüde benzer vaka bilgileri birlikte değerlendirilmelidir.",
+                'immediate_actions':(('Hayvanı sürüden ayırın, hareketi sınırlayın ve acilen veteriner çağırın.' if urgency=='Acil' else 'Hayvanı yakından izleyin, mümkünse ayırın; bulguları ve başlangıç saatini kaydedip veterinerle aynı gün görüşün.')+' Kendi kendinize reçeteli ilaç veya bilinmeyen doz uygulamayın.'),
+                'veterinary_management':'Veteriner; klinik muayene ve gerekli testlerden sonra destekleyici bakımı ve gerekiyorsa ruhsatlı ürünü belirler. İlaç, doz, uygulama yolu, tekrar planı ve et/süt arınma süresi ürünün resmî kaydıyla birlikte ÇiftlikPro’ya yazılmalıdır.',
+                'prevention':'Temiz-kuru barınak, uygun besleme ve su, karantina, düzenli gözlem, aşı/parazit programının veterinerle planlanması ve ekipman biyogüvenliği.'}
+            updates={key:value for key,value in defaults.items() if not str(row[key] or '').strip()}
+            if updates:
+                c.execute('update disease_catalog set '+','.join(f'{key}=?' for key in updates)+' where id=?',(*updates.values(),row['id']))
         user_cols={r[1] for r in c.execute('pragma table_info(users)').fetchall()}
         for col,typ in [('full_name','TEXT'),('active','INTEGER DEFAULT 1'),('last_login','TEXT'),('password_changed_at','TEXT'),('recovery_email','TEXT')]:
             if col not in user_cols:c.execute(f'ALTER TABLE users ADD COLUMN {col} {typ}')
@@ -6204,6 +6241,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             result=str(rec['pregnancy_result'] or 'Bekleniyor')
             body=f'''<div class="actions"><a class="btn alt" href="/inseminations">← Tohumlamalara Dön</a></div><h1>Tohumlama Kaydını Düzenle</h1><div class="card"><form method="post" action="/insemination-edit" class="form"><input type="hidden" name="id" value="{rec['id']}"><label>Hayvan<div class="attempt-preview">{h(rec['tag'])} · {h(rec['nickname'])}</div></label><label>Deneme<div class="attempt-preview">{rec['attempt']}. Deneme</div></label><label>Tohumlama Tarihi<input type="date" name="insemination_date" required max="{date.today().isoformat()}" value="{h(rec['insemination_date'])}"></label><label>Baba Küpe / Boğa No<input name="bull_tag" maxlength="80" value="{h(rec['bull_tag'])}" placeholder="Örn. TR-BOGA-123"></label><label>Boğa Adı<input name="bull_name" maxlength="120" value="{h(rec['bull_name'])}" placeholder="Kullanılan boğanın adı"></label><label>Tohumlayan<input name="inseminator" maxlength="120" value="{h(rec['inseminator'])}" placeholder="Veteriner / teknisyen / kişi"></label><label>Gebelik Sonucu<select name="pregnancy_result"><option value="Bekleniyor" {'selected' if result=='Bekleniyor' else ''}>Kontrol Bekliyor</option><option value="Pozitif" {'selected' if is_pregnant_value(result) else ''}>Gebe</option><option value="Negatif" {'selected' if result=='Negatif' else ''}>Gebe Değil</option><option value="Belirsiz" {'selected' if result=='Belirsiz' else ''}>Belirsiz</option></select></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/inseminations">İptal</a></div></form></div>'''
             return self.send_html(page('Tohumlama Düzenle',body,'/inseminations',u,msg))
+        if path=='/medicine-detail':
+            medicine_id=q.get('id',[''])[0]
+            with db() as c:
+                med=c.execute('''select m.*,coalesce((select sum(case when s.tx_type in ('Giriş','İade','Düzeltme +') then s.quantity else -s.quantity end) from medicine_stock_transactions s where s.medicine_id=m.id),0) stock from medicine_catalog m where m.id=? and m.active=1''',(medicine_id,)).fetchone()
+            if not med:return self.redirect('/medicines?tab=products','İlaç kaydı bulunamadı.')
+            source_button=f'''<a class="btn alt" href="{h(med['official_source_url'])}" target="_blank" rel="noopener">🏛️ Ürün Özeti / Bakanlık Kaydı ↗</a>'''
+            withdrawal=('Doğrulandı · Et '+str(int(med['meat_withdrawal_days'] or 0))+' gün · Süt '+str(int(med['milk_withdrawal_hours'] or 0))+' saat') if med['withdrawal_verified'] else 'Ürün özetinden henüz doğrulanmadı — tedavi kaydında kullanılamaz'
+            body=f'''<div class="actions"><a class="btn alt" href="/medicines?tab=products">← İlaç Kataloğuna Dön</a></div><div class="hero"><div><div>RUHSATLI VETERİNER ÜRÜNÜ</div><h1>{h(med['product_name'])}</h1><p>{h(med['company'])}</p></div><div>{source_button}</div></div><div class="two"><div class="card"><h2>Ürün Bilgileri</h2><div class="kv"><div><b>Etken madde</b><span>{h(med['active_ingredient']) or '—'}</span></div><div><b>Terapötik grup</b><span>{h(med['therapeutic_group']) or '—'}</span></div><div><b>ATCvet</b><span>{h(med['atcvet_code']) or '—'}</span></div><div><b>Hedef türler</b><span>{h(med['target_species']) or '—'}</span></div><div><b>Uygulama</b><span>{h(med['application_route']) or '—'}</span></div><div><b>Farmasötik şekil</b><span>{h(med['pharmaceutical_form']) or '—'}</span></div><div><b>Arınma</b><span>{h(withdrawal)}</span></div><div><b>Stok</b><span>{float(med['stock'] or 0):.2f}</span></div></div></div><div class="card"><h2>Güvenli Kullanım</h2><div class="flash {'err' if not med['withdrawal_verified'] else ''}">{h(withdrawal)}</div><p>Doz, uygulama sıklığı, endikasyon ve arınma süresi yalnız ürün özellikleri özeti ve veteriner reçetesiyle belirlenir.</p><div class="actions">{source_button}<button class="btn" type="button" onclick="location.href='/medicines?tab=treatments'">🩺 Tedavi kaydına git</button></div></div></div>'''
+            return self.send_html(page(str(med['product_name']),body,'/medicines',u,msg))
         if path=='/disease':
             disease_id=q.get('id',[''])[0]
             with db() as c:disease=c.execute('select * from disease_catalog where id=? and active=1',(disease_id,)).fetchone()
@@ -6245,7 +6291,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     order by t.start_date desc,t.id desc limit 100""").fetchall()
             med_opts=''.join(f'<option value="{r["id"]}">{h(r["product_name"])} · stok {float(r["stock"] or 0):.2f}</option>' for r in meds)
             subject_opts=''.join(f'<option value="animal:{r["id"]}">{h(r["tag"])} · {h(r["nickname"])}</option>' for r in animals)+''.join(f'<option value="calf:{r["id"]}">{h(r["tag"])} · {h(r["nickname"])} (Buzağı)</option>' for r in calves)
-            med_rows=''.join(f'''<tr><td><b>{h(r['product_name'])}</b><div class="mut">{h(r['company'])}</div></td><td>{h(r['active_ingredient'])}</td><td>{h(r['therapeutic_group'])}</td><td>{h(r['application_route'])}</td><td>{(str(int(r['meat_withdrawal_days'] or 0))+' gün') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td>{(str(int(r['milk_withdrawal_hours'] or 0))+' saat') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td><b>{float(r['stock'] or 0):.2f}</b></td></tr>''' for r in meds) or '<tr><td colspan="7">Henüz ilaç kaydı yok.</td></tr>'
+            med_rows=''.join(f'''<tr><td><a class="animal-tag-btn" href="/medicine-detail?id={r['id']}">{h(r['product_name'])}</a><div class="mut">{h(r['company'])}</div></td><td>{h(r['active_ingredient'])}<div class="mut">ATCvet: {h(r['atcvet_code']) or '—'}</div></td><td>{h(r['therapeutic_group'])}</td><td>{h(r['application_route'])}</td><td>{(str(int(r['meat_withdrawal_days'] or 0))+' gün') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td>{(str(int(r['milk_withdrawal_hours'] or 0))+' saat') if r['withdrawal_verified'] else '<b style="color:#b56a00">Doğrulanmadı</b>'}</td><td><b>{float(r['stock'] or 0):.2f}</b></td></tr>''' for r in meds) or '<tr><td colspan="7">Henüz ilaç kaydı yok.</td></tr>'
             selected_disease=q.get('disease_id',[''])[0]
             disease_opts=''.join(f'<option value="{r["id"]}" {"selected" if str(r["id"])==selected_disease else ""}>{h(r["name"])} · {h(r["category"])}</option>' for r in diseases)
             disease_rows=''.join(f'''<tr><td><a class="animal-tag-btn" href="/disease?id={r['id']}">{h(r['name'])}</a></td><td>{h(r['category'])}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['contagious'] else 'Hayır'}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['zoonotic'] else 'Hayır'}</td><td><b>{h(r['urgency'])}</b></td><td>{h(r['common_signs'])}<div class="mut">{h(r['reportable_note'])}</div></td></tr>''' for r in diseases)

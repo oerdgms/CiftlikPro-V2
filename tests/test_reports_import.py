@@ -60,6 +60,32 @@ class ReportImportTests(unittest.TestCase):
         source=Path(server.__file__).read_text(encoding="utf-8")
         self.assertIn("if path=='/disease':",source)
         self.assertIn("Hastalık Kataloğuna Dön",source)
+        with server.db() as con:
+            missing=con.execute("""select count(*) from disease_catalog where active=1 and
+                (trim(coalesce(description,''))='' or trim(coalesce(cause_agent,''))='' or
+                 trim(coalesce(transmission,''))='' or trim(coalesce(immediate_actions,''))='' or
+                 trim(coalesce(veterinary_management,''))='' or trim(coalesce(prevention,''))='')""").fetchone()[0]
+        self.assertEqual(missing,0)
+
+    def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
+        root=Path(__file__).resolve().parents[1]
+        workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
+        self.assertIn("assert server.APP_VERSION == '3.9.21 DEV5.1'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_21_DEV5_1_Setup.exe",workflow)
+        self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
+
+    def test_3921_dev51_official_cattle_medicine_catalog_is_seeded(self):
+        with server.db() as con:
+            count=con.execute("select count(*) from medicine_catalog where official_catalog_record=1").fetchone()[0]
+            sample=con.execute("select * from medicine_catalog where product_name='Acralben 1500 mg'").fetchone()
+        self.assertGreaterEqual(count,1200)
+        self.assertEqual(sample['target_species'],'Sığır')
+        self.assertEqual(sample['atcvet_code'],'QP52AC11')
+        self.assertIn('hbs.tarbil.gov.tr',sample['official_source_url'])
+        self.assertEqual(sample['withdrawal_verified'],0)
+        root=Path(__file__).resolve().parents[1]
+        spec=(root/'CiftlikPro.spec').read_text(encoding='utf-8')
+        self.assertIn('official_medicine_catalog.json',spec)
 
     def test_xlsx_parse_prepare_and_export(self):
         wb = Workbook(); ws = wb.active

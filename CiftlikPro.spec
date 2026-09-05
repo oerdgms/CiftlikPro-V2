@@ -7,7 +7,7 @@ app_root = project_root / "app"
 
 datas = []
 datas += collect_data_files("reportlab", includes=["fonts/Vera*.ttf"])
-for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md", "feed_catalog.json"):
+for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md", "feed_catalog.json", "official_medicine_catalog.json"):
     optional_file = app_root / optional_name
     if optional_file.exists():
         datas.append((str(optional_file), "."))
