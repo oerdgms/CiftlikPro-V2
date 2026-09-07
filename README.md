@@ -1,4 +1,21 @@
-# ÇiftlikPro v3.9.21 DEV4 Hotfix2 — Aktif Sürü ve Zayiat Arşivi
+# ÇiftlikPro v3.9.22 DEV1 — Tarım & Ziraat
+
+Bu sürüm özmal ve kiralık tarla kartlarını, üretim sezonlarını, tarla işlemlerini,
+tohum/gübre/ilaç stoklarını, hasat lotlarını ve tarımsal kârlılığı ÇiftlikPro'ya
+ekler. Tarım finansı hayvancılık finansından ayrı tutulur.
+
+Çiftlikte kullanılacak mahsul için **Hayvancılığa İç Transfer** işlemi tek
+hareketle tarım iç satış geliri, hayvancılık yem gideri ve yem stok girişi
+oluşturur. Bu işlem kasa/banka hareketi değildir; transfer geri alındığında üç
+bağlı kayıt birlikte silinir. Dışarıya mahsul satışı ise tarım geliri ve mahsul
+stok çıkışı oluşturur.
+
+Hasat kaydı doğrudan gelir sayılmaz. Sezon raporu; gerçekleşen satış/transfer,
+kalan stok değeri, dekar verimi, üretim maliyeti ve ekonomik kâr/zararı ayrı
+gösterir. DEV4.19.3 solver, hayvan maliyet/zayiat hesapları ve DEV5.1
+ilaç-hastalık modülü korunmuştur.
+
+## Önceki DEV4 Hotfix2 kapsamı
 
 Hotfix2, zayiat kaydı bulunan hayvanı aktif dişi/erkek/buzağı ve tüm aktif
 hayvanlar listelerinden kesin olarak çıkarır. Önceki sürümde oluşmuş ancak

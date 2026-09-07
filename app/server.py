@@ -1,4 +1,5 @@
 import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl, random, re, unicodedata
+import agriculture as agri
 from email.parser import BytesParser
 from email.message import EmailMessage
 from email.policy import default
@@ -23,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.21 DEV5.1'
+APP_VERSION='3.9.22 DEV1'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.21 DEV5.1'
+APP_LABEL='v3.9.22 DEV1'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1207,6 +1208,8 @@ def init_db():
         except Exception as exc:
             print('4 fazlı hazır besi reçeteleri oluşturulamadı:',exc)
 
+        # V3.9.22 DEV1 — Tarım & Ziraat ayrı işletme kolu şeması.
+        agri.init_schema(c)
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         n=c.execute('select count(*) from users').fetchone()[0]
@@ -4193,6 +4196,7 @@ def page(title,body,path='/',user='admin',flash=''):
         ('🐄 Hayvanlar',[('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
         ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
         ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
+        ('🌾 Tarım & Ziraat',[('Genel Bakış','/agriculture'),('Tarlalar','/agriculture/fields'),('Üretim Sezonları','/agriculture/seasons'),('Tarla İşlemleri','/agriculture/operations'),('Girdi & Depo','/agriculture/inputs'),('Hasat & Mahsul','/agriculture/harvests'),('Satış & İç Transfer','/agriculture/transfers'),('Tarım Finans','/agriculture/finance'),('Tarım Raporları','/agriculture/reports')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('📝 Sürüm Notları','/version-notes')]),
         ('⚙️ Yönetim',[('⚙️ Program Ayarları','/farm-profile'),('🔐 Şifremi Değiştir','/password-change')]+([('🔐 Lisans Bilgileri','/license-info'),('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')] if role=='admin' else []))
@@ -5203,6 +5207,12 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        if path in agri.AGRI_PATHS:
+            with db() as c:
+                result=agri.render_get(c,path,q)
+            if result:
+                title,body=result
+                return self.send_html(page(title,body,path,u,msg))
         if path=='/license-info':
             if not self.require_admin():return
             ok,payload,status=license_status();payload=payload or {}
@@ -6415,6 +6425,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 animals=c.execute('select id,tag,nickname,status from animals order by tag').fetchall()
                 linked=c.execute('''select l.*,fc.name feed_name,st.tx_date stock_date,st.notes stock_notes from feed_finance_links l join feed_catalog fc on fc.id=l.feed_id left join feed_stock_transactions st on st.id=l.stock_tx_id where l.finance_id=?''',(record_id,)).fetchone()
             if not r:return self.redirect('/finance','Finans kaydı bulunamadı.')
+            if str(r['animal_status_action'] or '')=='AGRI_INTERNAL':
+                return self.redirect('/agriculture/transfers','Bu kayıt bağlı tarım iç transferidir. Düzenleme veya geri alma işlemini Tarım & Ziraat bölümünden yapın.')
             animal_options='<option value="">Hayvan seçmeden kaydet</option>'+''.join(
                 '<option value="{0}" {1}>{2} · {3} · {4}</option>'.format(
                     a["id"],'selected' if r["animal_id"]==a["id"] else '',h(a["tag"]),h(a["nickname"]),h(a["status"])
@@ -6463,8 +6475,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             category_opts=''.join(f'<option value="{h(r["category"])}" {"selected" if category==r["category"] else ""}>{h(r["category"])}</option>' for r in categories)
             finance_feed_opts=''.join(f'<option value="{r["id"]}">{h(r["name"])}</option>' for r in finance_feeds)
             trs=''.join(
-                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions"><a class="btn alt" href="/finance/edit?id={8}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{8}"><button class="btn danger">Sil</button></form></div></td></tr>'.format(
-                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),h(r["animal_status_action"]) or "-",h(r["payment_method"]),money(r["amount"]),r["id"]
+                '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td><b>{7}</b></td><td><div class="finance-actions">{8}</div></td></tr>'.format(
+                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),('Tarım İç Transferi' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (h(r["animal_status_action"]) or "-")),h(r["payment_method"]),money(r["amount"]),
+                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"]))
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
@@ -6829,6 +6842,30 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path.startswith('/agriculture/'):
+            try:
+                with db() as c:
+                    result=agri.handle_post(c,path,f)
+                if result:
+                    redirect_to,message,audit_action,audit_detail=result
+                    audit(username,audit_action,audit_detail,self.client_ip())
+                    return self.redirect(redirect_to,message)
+            except agri.AgricultureError as exc:
+                target={
+                    '/agriculture/field/save':'/agriculture/fields','/agriculture/field/archive':'/agriculture/fields',
+                    '/agriculture/season/save':'/agriculture/seasons','/agriculture/season/close':'/agriculture/seasons',
+                    '/agriculture/operation/save':'/agriculture/operations','/agriculture/operation/delete':'/agriculture/operations',
+                    '/agriculture/input/purchase':'/agriculture/inputs','/agriculture/input/delete':'/agriculture/inputs',
+                    '/agriculture/harvest/save':'/agriculture/harvests','/agriculture/harvest/delete':'/agriculture/harvests',
+                    '/agriculture/transfer/save':'/agriculture/transfers','/agriculture/transfer/delete':'/agriculture/transfers',
+                    '/agriculture/sale/save':'/agriculture/transfers','/agriculture/sale/delete':'/agriculture/transfers',
+                    '/agriculture/finance/save':'/agriculture/finance','/agriculture/finance/delete':'/agriculture/finance',
+                }.get(path,'/agriculture')
+                return self.redirect(target,'İşlem tamamlanamadı: '+str(exc))
+            except sqlite3.IntegrityError:
+                return self.redirect('/agriculture','Aynı tarla, sezon veya kayıt daha önce oluşturulmuş olabilir.')
+            except Exception as exc:
+                return self.redirect('/agriculture','Tarım modülü hatası: '+str(exc))
         if path=='/animals/import-preview':
             upload=f.get('animal_file')
             if not isinstance(upload,dict) or not upload.get('filename') or not upload.get('content'):
@@ -8034,6 +8071,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     record_id=int(f['id'])
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
+                    if str(old['animal_status_action'] or '')=='AGRI_INTERNAL':
+                        return self.redirect('/agriculture/transfers','Bağlı iç transfer yalnız Tarım & Ziraat bölümünden değiştirilebilir veya geri alınabilir.')
                     category=f['category']; animal_id=f.get('animal_id') or None
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     if action and not animal_id:return self.redirect(f'/finance/edit?id={record_id}','Satış veya kesim için ilgili hayvan seçilmelidir.')
@@ -8062,6 +8101,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     record_id=int(f.get('id') or 0)
                     old=c.execute('select * from finance where id=?',(record_id,)).fetchone()
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
+                    if str(old['animal_status_action'] or '')=='AGRI_INTERNAL':
+                        return self.redirect('/agriculture/transfers','Bağlı iç transfer yalnız Tarım & Ziraat bölümünden geri alınabilir.')
                     animal_id=old['animal_id']
                     link=c.execute('select stock_tx_id from feed_finance_links where finance_id=?',(record_id,)).fetchone()
                     if link and link['stock_tx_id']:c.execute('delete from feed_stock_transactions where id=?',(link['stock_tx_id'],))

@@ -1,3 +1,23 @@
+# V3.9.22 DEV1 — Tarım & Ziraat Yönetimi
+
+- Özmal ve kiralık tarla kartları; alan, sulama, ada/parsel, mevki ve kira
+  bilgilerinin kaydı eklendi.
+- Tarla başına yıllık üretim sezonu ve ürün planı oluşturuldu.
+- Sürme, ikileme, ekim, gübreleme, ilaçlama, sulama, hasat ve nakliye dahil
+  tarla işlemleri; mazot, işçilik, dış hizmet ve diğer maliyetlerle kaydediliyor.
+- Tohum, gübre, zirai ilaç ve diğer girdiler için ayrı tarım deposu eklendi.
+  Satın alma Tarım Finans'a gider yazılıyor; tarlada kullanım tekrar gider
+  üretmeden ilgili sezona maliyet dağıtıyor.
+- Hasat kaydı doğrudan gelir yazmak yerine mahsul stoğu ve tahmini stok değeri
+  oluşturuyor. Dış satışta gelir ve stok çıkışı birlikte kaydediliyor.
+- Hayvancılığa iç transfer tek bağlı işlemle tarım geliri, hayvancılık yem
+  gideri, mahsul stok çıkışı, yem stok girişi ve yem fiyat geçmişi oluşturuyor.
+- İç transfer kasa/banka hareketi sayılmıyor; bağlı hareketler yalnız tarım
+  modülünden birlikte geri alınabiliyor.
+- Tarım Finans, hayvancılık bilançosundan ayrıldı; tarla, ürün ve sezon bazlı
+  maliyet, verim, TL/kg ve ekonomik sonuç raporları eklendi.
+- Mevcut DEV4.19.3 solver ve DEV5.1 resmî ilaç/hastalık katalogları korunmuştur.
+
 # v3.9.21 DEV4 Hotfix2 — Zayiat Aktif Liste ve Arşiv İşlemleri
 
 - Zayiat arşivinde kaydı bulunan yetişkin ve buzağılar tüm aktif listelerden
