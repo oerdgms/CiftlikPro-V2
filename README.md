@@ -1,4 +1,4 @@
-# ÇiftlikPro v3.9.22 DEV1 — Tarım & Ziraat
+# ÇiftlikPro v3.9.22 DEV2 — Tarım & Ziraat Tam CRUD
 
 Bu sürüm özmal ve kiralık tarla kartlarını, üretim sezonlarını, tarla işlemlerini,
 tohum/gübre/ilaç stoklarını, hasat lotlarını ve tarımsal kârlılığı ÇiftlikPro'ya
@@ -14,6 +14,14 @@ Hasat kaydı doğrudan gelir sayılmaz. Sezon raporu; gerçekleşen satış/tran
 kalan stok değeri, dekar verimi, üretim maliyeti ve ekonomik kâr/zararı ayrı
 gösterir. DEV4.19.3 solver, hayvan maliyet/zayiat hesapları ve DEV5.1
 ilaç-hastalık modülü korunmuştur.
+
+DEV2 ile tarla, üretim sezonu, tarla işlemi, girdi alımı, hasat, dış satış,
+hayvancılığa iç transfer ve manuel Tarım Finans kayıtlarının tamamına
+`Düzenle` ile güvenli `Sil / Geri Al` işlemleri eklendi. Kaynak işlem
+değiştirildiğinde ona bağlı tarım finansı, hayvancılık finansı, mahsul stoğu,
+yem stoğu ve fiyat bağlantıları birlikte uzlaştırılır. Kullanılmış stoğu eksiye
+düşürecek değişiklik veya silme engellenir; otomatik finans satırları yalnız
+kendi kaynak işleminden değiştirilebilir.
 
 ## Önceki DEV4 Hotfix2 kapsamı
 

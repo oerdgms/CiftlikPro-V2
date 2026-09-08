@@ -1,3 +1,19 @@
+# V3.9.22 DEV2 — Tarım & Ziraat Tam Düzenle / Sil
+
+- Tarla, üretim sezonu, tarla işlemi, girdi alımı ve hasat kayıtlarına
+  düzenle ile güvenli silme/geri alma işlemleri eklendi.
+- Dış mahsul satışı düzenlendiğinde satış geliri ve mahsul stok çıkışı aynı
+  kaynak bağlantısıyla güncelleniyor.
+- Hayvancılığa iç transfer düzenlendiğinde tarım geliri, hayvancılık yem
+  gideri, mahsul çıkışı, yem stok girişi, yem fiyatı ve finans bağlantısı tek
+  işlem içinde birlikte güncelleniyor.
+- Kullanılmış girdi, mahsul veya yem stoğunu eksiye düşürecek miktar azaltma,
+  hedef değiştirme ve silme işlemleri engellendi.
+- Manuel Tarım Finans kayıtlarına düzenle/sil eklendi; otomatik satırlar yalnız
+  kaynak tarla, işlem, alım, satış veya transfer kaydından yönetiliyor.
+- DEV4.19.3 solver, hayvan maliyet/zayiat hesapları ve DEV5.1 resmî
+  ilaç-hastalık katalogları değiştirilmeden korundu.
+
 # V3.9.22 DEV1 — Tarım & Ziraat Yönetimi
 
 - Özmal ve kiralık tarla kartları; alan, sulama, ada/parsel, mevki ve kira

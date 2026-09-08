@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.22 DEV1'
+APP_VERSION='3.9.22 DEV2'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.22 DEV1'
+APP_LABEL='v3.9.22 DEV2'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -6852,8 +6852,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     return self.redirect(redirect_to,message)
             except agri.AgricultureError as exc:
                 target={
-                    '/agriculture/field/save':'/agriculture/fields','/agriculture/field/archive':'/agriculture/fields',
-                    '/agriculture/season/save':'/agriculture/seasons','/agriculture/season/close':'/agriculture/seasons',
+                    '/agriculture/field/save':'/agriculture/fields','/agriculture/field/archive':'/agriculture/fields','/agriculture/field/delete':'/agriculture/fields',
+                    '/agriculture/season/save':'/agriculture/seasons','/agriculture/season/close':'/agriculture/seasons','/agriculture/season/delete':'/agriculture/seasons',
                     '/agriculture/operation/save':'/agriculture/operations','/agriculture/operation/delete':'/agriculture/operations',
                     '/agriculture/input/purchase':'/agriculture/inputs','/agriculture/input/delete':'/agriculture/inputs',
                     '/agriculture/harvest/save':'/agriculture/harvests','/agriculture/harvest/delete':'/agriculture/harvests',
