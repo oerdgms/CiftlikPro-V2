@@ -1,4 +1,18 @@
-# V3.9.22 DEV2 — Tarım & Ziraat Tam Düzenle / Sil
+# V3.9.23 DEV1 — Akıllı Mobil Hayvan Ekle
+
+- Yeni kayıtta değiştirilemeyen `TR` ön eki ve TR sonrası 8–14 rakam doğrulaması.
+- Hayvanlar ile buzağılarda ortak, canlı mükerrer küpe sorgusu.
+- İlk kayıt sırasında en fazla 8 fotoğraf; ilk görsel profil, tamamı galeri kaydı.
+- Destekleyen tarayıcılarda canlı veya fotoğraftan barkod/karekod okuma.
+- Tür, ırk, cinsiyet, amaç, geliş kaynağı, doğum/giriş tarihi, kilo, padok,
+  karantina, sağlık, soy, maliyet ve not alanlarından oluşan akıllı mobil form.
+- Satın alma, çiftlikte doğum ve dış transfer seçimlerine göre koşullu alanlar.
+- 10 aydan küçük doğum tarihinde otomatik buzağı kaydı; çiftlikte doğumda anne zorunlu.
+- Yetişkin ve buzağı satın alımlarında tek seferlik Finans gider bağlantısı.
+
+## Önceki paket
+
+### V3.9.22 DEV2 — Tarım & Ziraat Tam Düzenle / Sil
 
 - Tarla, üretim sezonu, tarla işlemi, girdi alımı ve hasat kayıtlarına
   düzenle ile güvenli silme/geri alma işlemleri eklendi.

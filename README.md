@@ -1,4 +1,14 @@
-# ÇiftlikPro v3.9.22 DEV2 — Tarım & Ziraat Tam CRUD
+# ÇiftlikPro v3.9.23 DEV1 — Akıllı Mobil Hayvan Ekle
+
+DEV1 ile yeni hayvan kaydına sabit `TR` küpe ön eki, canlı mükerrer kontrolü,
+en fazla 8 kamera/galeri fotoğrafı, cihaz destekli barkod/karekod okuma ve
+cinsiyet–amaç–geliş kaynağı–yaşa göre değişen akıllı form eklendi. Satın alınan
+hayvanın alış bedeli isteğe bağlı olarak Finansa aktarılır; çiftlikte doğanlarda
+anne zorunludur ve 10 aydan küçük kayıtlar otomatik Buzağılar bölümüne gider.
+
+## Önceki paket
+
+### ÇiftlikPro v3.9.22 DEV2 — Tarım & Ziraat Tam CRUD
 
 Bu sürüm özmal ve kiralık tarla kartlarını, üretim sezonlarını, tarla işlemlerini,
 tohum/gübre/ilaç stoklarını, hasat lotlarını ve tarımsal kârlılığı ÇiftlikPro'ya

@@ -22,6 +22,26 @@ class ReportImportTests(unittest.TestCase):
     def setUpClass(cls):
         server.init_db()
 
+    def test_3923_dev1_smart_animal_add_schema_and_mobile_form(self):
+        with server.db() as con:
+            animal_cols={row[1] for row in con.execute("pragma table_info(animals)").fetchall()}
+            calf_cols={row[1] for row in con.execute("pragma table_info(calves)").fetchall()}
+            finance_cols={row[1] for row in con.execute("pragma table_info(finance)").fetchall()}
+            paddocks=con.execute("select id,name,code from paddocks where active=1 order by name").fetchall()
+        expected={'animal_type','purpose','arrival_source','entry_date','seller','purchase_payment_method','quarantine_status','health_status','purchase_weight'}
+        self.assertTrue(expected.issubset(animal_cols))
+        self.assertTrue(expected.issubset(calf_cols))
+        self.assertIn('calf_id',finance_cols)
+        html=server.render_smart_animal_add([],[],paddocks)
+        for marker in ('name="tag_digits"','photo_file_8','BarcodeDetector','Çiftlikte Doğdu','name="mother_id"','name="purpose"','name="quarantine_status"'):
+            self.assertIn(marker,html)
+
+    def test_3923_dev1_tr_tag_and_automatic_calf_rules(self):
+        self.assertEqual(server.normalize_tr_tag('tr 583-001-234'),'TR583001234')
+        with self.assertRaises(ValueError):server.normalize_tr_tag('583')
+        self.assertTrue(server.new_record_is_calf('2026-05-01',server.date(2026,9,13)))
+        self.assertFalse(server.new_record_is_calf('2025-05-01',server.date(2026,9,13)))
+
     def test_official_pdf_row_parser(self):
         text = "TR380001234567 1 SIĞIR Simental DİŞİ 20/05/2021 TR380009876543 26/10/2021"
         rows = server._official_pdf_rows(text)
@@ -48,7 +68,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('"--background" in sys.argv',launcher)
         self.assertIn('{userstartup}\\ÇiftlikPro Arka Plan',installer)
         self.assertIn('Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılamaz.',source)
-        self.assertIn("3.9.22 DEV2",source)
+        self.assertIn("3.9.23 DEV1",source)
 
     def test_3921_dev51_disease_catalog_has_clickable_detail_content(self):
         with server.db() as con:
@@ -70,8 +90,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.22 DEV2'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_22_DEV2_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV1'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV1_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3921_dev51_official_cattle_medicine_catalog_is_seeded(self):

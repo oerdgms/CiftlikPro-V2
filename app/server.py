@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.22 DEV2'
+APP_VERSION='3.9.23 DEV1'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.22 DEV2'
+APP_LABEL='v3.9.23 DEV1'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -901,7 +901,7 @@ def init_db():
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
-        for col,typ in [('nickname','TEXT'),('breed','TEXT'),('paddock','TEXT'),('photo_url','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('sold_price','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0')]:
+        for col,typ in [('nickname','TEXT'),('breed','TEXT'),('paddock','TEXT'),('photo_url','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('sold_price','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_weight','REAL DEFAULT 0'),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT')]:
             if col not in calf_cols:c.execute(f'ALTER TABLE calves ADD COLUMN {col} {typ}')
         c.execute("update calves set status='Aktif' where status is null or trim(status)=''")
         loss_cols={r[1] for r in c.execute('pragma table_info(animal_losses)').fetchall()}
@@ -913,7 +913,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS calf_weights(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,measure_date TEXT NOT NULL,weight REAL NOT NULL,notes TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS calf_photos(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,filename TEXT NOT NULL,created_at TEXT NOT NULL,caption TEXT)")
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
-        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\'')]:
+        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\''),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT'),('mother_id','INTEGER'),('father_tag','TEXT')]:
             if col not in cols:c.execute(f'ALTER TABLE animals ADD COLUMN {col} {typ}')
         # V3.9.0 Padok + Yem/Rasyon veri modeli
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
@@ -1212,6 +1212,7 @@ def init_db():
         agri.init_schema(c)
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
+        if 'calf_id' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN calf_id INTEGER")
         n=c.execute('select count(*) from users').fetchone()[0]
         if not n:
             c.execute('insert into users(username,password,role,full_name,active,password_changed_at) values(?,?,?,?,?,?)',('admin',password_hash('admin123'),'admin','Yönetici',1,datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
@@ -4864,6 +4865,40 @@ def save_optimized_upload(prefix,upload):
     (UPLOADS/name).write_bytes(data)
     return name
 
+def normalize_tr_tag(value):
+    """Yeni kayıtta küpeyi tek biçime getir: TR + yalnız rakam."""
+    raw=str(value or '').upper().strip()
+    if raw.startswith('TR'):raw=raw[2:]
+    digits=re.sub(r'\D','',raw)
+    if not digits:raise ValueError('Küpe numarasının TR sonrasındaki rakamlarını girin.')
+    if len(digits)<8 or len(digits)>14:raise ValueError('Küpe numarası TR sonrası 8-14 rakam olmalıdır.')
+    return 'TR'+digits
+
+def animal_age_months(birth_date,as_of=None):
+    if not birth_date:return None
+    try:born=date.fromisoformat(str(birth_date)[:10])
+    except Exception:return None
+    today=as_of or date.today()
+    months=(today.year-born.year)*12+today.month-born.month-(1 if today.day<born.day else 0)
+    return max(0,months)
+
+def new_record_is_calf(birth_date,as_of=None):
+    age=animal_age_months(birth_date,as_of)
+    return age is not None and age<10
+
+def animal_add_uploads(form):
+    uploads=[]
+    for index in range(1,9):
+        upload=form.get(f'photo_file_{index}')
+        if upload and isinstance(upload,dict) and upload.get('content'):
+            ext=Path(upload.get('filename') or '').suffix.lower()
+            if ext not in ('.jpg','.jpeg','.png','.webp','.gif'):
+                raise ValueError(f'{index}. fotoğrafın biçimi desteklenmiyor.')
+            if len(upload['content'])>10*1024*1024:
+                raise ValueError(f'{index}. fotoğraf 10 MB sınırını aşıyor.')
+            uploads.append(upload)
+    return uploads
+
 def optimize_existing_uploads():
     if not UPLOADS.exists():return {'count':0,'saved':0,'before':0,'after':0}
     before=after=count=0
@@ -4898,6 +4933,47 @@ def clean_text(v):
     if v is None:return ''
     t=str(v).strip()
     return '' if t.lower() in ('undefined','null','none') else t
+
+def render_smart_animal_add(mothers,breeds,paddocks):
+    canonical=['Simental','Holstein','Angus','Şarole','Montofon','Yerli Kara','Jersey','Limuzin','Melez','Diğer']
+    breed_values=[]
+    for value in canonical+list(breeds):
+        value=str(value or '').strip()
+        if value and value.casefold() not in [x.casefold() for x in breed_values]:breed_values.append(value)
+    breed_buttons=''.join(f'<button type="button" class="breed-choice" data-breed="{h(x)}">○ {h(x)}</button>' for x in breed_values)
+    mother_options='<option value="">Anne seçin</option>'+''.join(f'<option value="{h(r["id"])}" data-tag="{h(r["tag"])}">{h(r["tag"])} · {h(r["nickname"] or "Adsız")}</option>' for r in mothers)
+    paddock_options='<option value="">Padoksuz</option>'+''.join(f'<option value="{h(r["id"])}">{h(r["name"])}{(" · "+h(r["code"])) if r["code"] else ""}</option>' for r in paddocks)
+    photo_slots=''.join(f'''<label class="photo-slot"><input type="file" name="photo_file_{i}" accept="image/*"><span class="photo-slot-icon">📷</span><b>{i}. fotoğraf</b><small>Kamera / galeri</small><img alt="{i}. fotoğraf önizleme"></label>''' for i in range(1,9))
+    return f'''<style>
+.smart-animal-shell{{max-width:1040px;margin:0 auto}}.smart-animal-head{{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}}.smart-animal-head h1{{margin:0}}.smart-card{{background:#fff;border:1px solid #dce8df;border-radius:19px;padding:20px;margin-bottom:14px;box-shadow:0 5px 20px #173b2810}}.smart-card h2{{margin:0 0 14px;font-size:19px}}.smart-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.smart-field{{display:block;font-size:13px;font-weight:850;color:#263b30}}.smart-field input,.smart-field select,.smart-field textarea{{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid #cbd9cf;border-radius:12px;background:#fff;font-size:16px;min-height:46px}}.smart-full{{grid-column:1/-1}}.tag-wrap{{display:flex;align-items:center;margin-top:6px;border:2px solid #bfd4c5;border-radius:14px;overflow:hidden;background:#fff}}.tag-prefix{{padding:12px 15px;background:#1f7b45;color:white;font-weight:950;font-size:19px}}.tag-wrap input{{border:0!important;margin:0!important;border-radius:0!important;letter-spacing:1.2px;font-weight:850}}.tag-scan{{border:0;background:#e7f5e9;color:#176b3a;min-width:54px;align-self:stretch;font-size:23px;cursor:pointer}}.field-help{{display:block;margin-top:5px;color:#728177;font-size:12px;font-weight:600}}.tag-state{{margin-top:6px;font-size:12px;font-weight:800;min-height:16px}}.choice-row{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}}.choice-row.three{{grid-template-columns:repeat(3,minmax(0,1fr))}}.choice-card{{border:2px solid #dfe8e1;background:#fbfdfb;border-radius:14px;padding:13px;text-align:left;cursor:pointer;font:inherit;color:#24382c;min-height:62px}}.choice-card b{{display:block;font-size:15px}}.choice-card small{{display:block;color:#718176;margin-top:2px}}.choice-card.active{{border-color:#228b4f;background:#eaf8ee;color:#126437;box-shadow:0 0 0 2px #228b4f17}}.breed-open{{width:100%;text-align:left;background:#fff;border:1px solid #cbd9cf;border-radius:12px;padding:13px;font-size:16px;cursor:pointer;margin-top:6px}}.photo-count{{display:inline-flex;padding:5px 9px;border-radius:999px;background:#eaf5ed;color:#176b3a;font-size:12px}}.photo-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}}.photo-slot{{position:relative;min-height:126px;border:2px dashed #a9c7b2;border-radius:14px;background:#f4faf5;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;text-align:center;padding:8px}}.photo-slot input{{position:absolute;inset:0;opacity:0;cursor:pointer}}.photo-slot-icon{{font-size:25px}}.photo-slot b{{font-size:12px}}.photo-slot small{{font-size:11px;color:#728177}}.photo-slot img{{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}}.photo-slot.has-photo img{{display:block}}.photo-slot.has-photo:after{{content:'✓';position:absolute;right:6px;top:6px;background:#168044;color:#fff;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:900}}.conditional[hidden]{{display:none!important}}.smart-savebar{{position:sticky;bottom:0;z-index:15;background:#fffffff2;backdrop-filter:blur(8px);border:1px solid #dbe8de;border-radius:16px;padding:11px;display:flex;gap:9px;align-items:center;box-shadow:0 -6px 25px #173b2815}}.smart-savebar .btn{{flex:1;min-height:50px;font-size:16px}}.record-hint{{font-size:13px;color:#536d5d}}.breed-sheet,.scan-sheet{{display:none;position:fixed;inset:0;background:#10271b9c;z-index:3000;align-items:flex-end;justify-content:center;padding:0}}.breed-sheet.open,.scan-sheet.open{{display:flex}}.sheet-panel{{background:#fff;width:min(680px,100%);max-height:88vh;border-radius:24px 24px 0 0;padding:20px;overflow:auto}}.sheet-head{{display:flex;justify-content:space-between;align-items:center;gap:12px}}.sheet-close{{border:0;background:#edf4ef;border-radius:50%;width:42px;height:42px;font-size:21px}}.breed-search{{width:100%;padding:13px;border:1px solid #cbd9cf;border-radius:12px;font-size:16px;margin:12px 0}}.breed-choice{{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #e8eee9;background:#fff;padding:14px;font-size:16px;font-weight:800}}.scan-video{{width:100%;max-height:48vh;background:#102018;border-radius:14px;margin:10px 0}}.scan-status{{padding:10px;border-radius:10px;background:#eef6f0;color:#315844}}.scan-capture{{display:block;margin-top:10px;border:2px dashed #a9c7b2;padding:12px;border-radius:12px;text-align:center;font-weight:800}}.scan-capture input{{display:none}}
+@media(max-width:700px){{.smart-animal-shell{{margin:-5px}}.smart-card{{padding:15px;border-radius:15px}}.smart-grid{{grid-template-columns:1fr}}.smart-full{{grid-column:auto}}.choice-row.three{{grid-template-columns:1fr}}.photo-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.smart-animal-head{{align-items:flex-start}}.smart-animal-head h1{{font-size:25px}}}}
+</style>
+<div class="smart-animal-shell"><div class="smart-animal-head"><div><h1>🐄 Yeni Hayvan</h1><div class="mut">Akıllı alanlar seçiminize göre açılır.</div></div><span id="recordTypeBadge" class="type-chip">Yetişkin kaydı</span></div>
+<form id="smartAnimalForm" method="post" action="/animal-add" enctype="multipart/form-data" data-smart-photo-form="1"><input type="hidden" id="recordType" name="record_type" value="Dişi"><input type="hidden" id="genderValue" name="gender" value="Dişi"><input type="hidden" id="purposeValue" name="purpose" value="Süt"><input type="hidden" id="arrivalValue" name="arrival_source" value="Satın Alındı">
+<section class="smart-card"><h2>📷 Fotoğraflar <span id="photoCount" class="photo-count">0 / 8</span></h2><div class="photo-grid">{photo_slots}</div><span class="field-help">En fazla 8 fotoğraf. İlk fotoğraf profil fotoğrafı olur; büyük görseller otomatik küçültülür.</span></section>
+<section class="smart-card"><h2>Kimlik</h2><div class="smart-grid"><label class="smart-field smart-full">Küpe Numarası *<div class="tag-wrap"><span class="tag-prefix">TR</span><input id="tagDigits" name="tag_digits" inputmode="numeric" pattern="[0-9]{{8,14}}" minlength="8" maxlength="14" placeholder="583001234" required autocomplete="off"><button class="tag-scan" id="openScanner" type="button" title="Karekod veya barkod tara">⌗</button></div><span class="field-help">TR ön eki sabittir ve otomatik kaydedilir.</span><span id="tagState" class="tag-state"></span></label><label class="smart-field">Lakap / Takma Ad<input name="nickname" placeholder="Karabaş, Boncuk…"></label><label class="smart-field">Tür<select name="animal_type"><option>Sığır</option><option>Manda</option></select></label><label class="smart-field">Irk *<input id="openBreed" class="breed-open" name="breed" placeholder="Irk seçin ▾" readonly required><input id="breedValue" type="hidden"></label><div class="smart-field"><span>Cinsiyet *</span><div class="choice-row" data-choice-group="gender"><button type="button" class="choice-card" data-value="Erkek"><b>♂ Erkek</b></button><button type="button" class="choice-card active" data-value="Dişi"><b>♀ Dişi</b></button></div></div><div class="smart-field smart-full"><span>Amaç *</span><div id="purposeChoices" class="choice-row three" data-choice-group="purpose"></div></div></div></section>
+<section class="smart-card"><h2>Geliş ve Temel Bilgiler</h2><div class="smart-grid"><div class="smart-field smart-full"><span>Geliş Kaynağı *</span><div class="choice-row three" data-choice-group="arrival"><button type="button" class="choice-card active" data-value="Satın Alındı"><b>🛒 Satın Alındı</b><small>Alış ve finans bilgileri</small></button><button type="button" class="choice-card" data-value="Çiftlikte Doğdu"><b>🐮 Çiftlikte Doğdu</b><small>Anne kaydı zorunlu</small></button><button type="button" class="choice-card" data-value="Dış Transfer"><b>⇄ Dış Transfer</b><small>Başka işletmeden geldi</small></button></div></div><label class="smart-field">Doğum Tarihi<input id="birthDate" type="date" name="birth_date"><span id="ageHint" class="field-help">Girildiğinde yaş ve buzağı durumu hesaplanır.</span></label><label class="smart-field">Giriş Tarihi<input id="entryDate" type="date" name="entry_date" value="{date.today().isoformat()}" required></label><label class="smart-field">Giriş Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" placeholder="Örn. 250"></label><label class="smart-field">Padok<select name="paddock_id">{paddock_options}</select></label><label class="smart-field conditional purchase-field">Satıcı / Firma<input name="seller"></label><label class="smart-field conditional transfer-field" hidden>Geldiği İşletme<input name="transfer_from"></label><label class="smart-field conditional purchase-field">Alış Fiyatı (₺)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="smart-field conditional purchase-field">Ödeme Yöntemi<select name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="smart-field smart-full conditional purchase-field"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="post_purchase_finance" value="yes" checked style="width:auto;min-height:auto;margin:0"> Alış bedelini Finansa gider olarak kaydet</span></label><label class="smart-field conditional born-field" hidden>Anne Küpesi *<select id="motherId" name="mother_id">{mother_options}</select></label><label class="smart-field conditional born-field" hidden>Baba / Boğa Küpesi<input name="father_tag" placeholder="TR…"></label></div></section>
+<section class="smart-card"><h2>Sağlık ve Yönetim</h2><div class="smart-grid"><label class="smart-field">Karantina Durumu<select name="quarantine_status"><option>Hayır</option><option>Karantinada</option><option>Karantina Tamamlandı</option></select></label><label class="smart-field">Genel Sağlık Durumu<select name="health_status"><option>Normal</option><option>Takip Edilecek</option><option>Veteriner Kontrolü Gerekli</option><option>Tedavi Altında</option></select></label><label class="smart-field">Günlük Yem / Rasyon (₺)<input type="number" min="0" step="0.01" name="daily_feed_cost"><span class="field-help">Padokta aktif rasyon varsa maliyet otomatik hesaplanır.</span></label><label class="smart-field">Günlük Bakım (₺)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="smart-field">Hedef Satış Fiyatı (₺)<input type="number" min="0" step="0.01" name="target_sale_price"></label><label class="smart-field smart-full">Notlar<textarea name="notes" rows="4" placeholder="Sağlık durumu, özel notlar…"></textarea></label></div></section>
+<section id="femalePregnancyBox" class="smart-card conditional female-pregnancy"><h2>🤰 Üreme Durumu</h2><div class="smart-grid"><label class="smart-field">Hayvanın Durumu<select id="entryPregnancyStatus" name="entry_pregnancy_status" onchange="toggleEntryPregnancy()"><option value="Bos">Boş / Gebe Değil</option><option value="Gebe">Gebe</option><option value="Bilinmiyor">Bilinmiyor</option></select></label><label id="pregnancyInfoModeLabel" class="smart-field" style="display:none">Gebelik Bilgisi<select id="pregnancyInfoMode" name="pregnancy_info_mode" onchange="toggleEntryPregnancy()"><option value="date">Son Tohumlama Tarihi Biliniyor</option><option value="age">Sadece Gebelik Yaşı Biliniyor</option></select></label><label id="knownInseminationLabel" class="smart-field" style="display:none">Son Tohumlama Tarihi<input type="date" name="known_insemination_date"></label><label id="pregnancyAgeLabel" class="smart-field" style="display:none">Gebelik Yaşı (Ay)<input type="number" name="pregnancy_age_months" min="1" max="9" step="0.5"></label><label id="pregnancyEntryDateLabel" class="smart-field" style="display:none">Bilgi Tarihi<input type="date" name="pregnancy_entry_date" value="{date.today().isoformat()}"></label><div id="pregnancyEntryHint" class="smart-full mut" style="display:none">Gebelik kaydı üreme takvimine hazırlanır.</div></div></section>
+<div class="photo-upload-status" data-upload-status><span data-upload-text>Kayıt hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div><div class="smart-savebar"><span id="recordHint" class="record-hint">Dişi · Süt · Yetişkin</span><button class="btn" type="submit">✓ Sürüye Ekle</button></div></form></div>
+<div id="breedSheet" class="breed-sheet"><div class="sheet-panel"><div class="sheet-head"><h2>Irk Seç</h2><button type="button" class="sheet-close" data-close-sheet>×</button></div><input id="breedSearch" class="breed-search" placeholder="Ara: Simental, Holstein…">{breed_buttons}</div></div>
+<div id="scanSheet" class="scan-sheet"><div class="sheet-panel"><div class="sheet-head"><h2>Küpe Barkod / Karekod Oku</h2><button type="button" class="sheet-close" data-close-scan>×</button></div><video id="scanVideo" class="scan-video" playsinline muted></video><div id="scanStatus" class="scan-status">Kamera hazırlanıyor…</div><label class="scan-capture">📷 Etiketi kamerayla çek<input id="scanImage" type="file" accept="image/*" capture="environment"></label><p class="field-help">Okuma desteklenmiyorsa fotoğraf açılır; küpe rakamlarını elle doğrulayabilirsiniz.</p></div></div>
+<script>
+(function(){{
+ const form=document.getElementById('smartAnimalForm'),gender=document.getElementById('genderValue'),purpose=document.getElementById('purposeValue'),arrival=document.getElementById('arrivalValue'),birth=document.getElementById('birthDate'),badge=document.getElementById('recordTypeBadge'),hint=document.getElementById('recordHint');
+ const purposeMap={{'Erkek':[['Besi','🥩 Besi','Et için besleme'],['Damızlık','🐂 Damızlık','Üreme amaçlı'],['Diğer','📋 Diğer','Diğer amaç']],'Dişi':[['Süt','🥛 Süt','Süt üretimi'],['Damızlık','🐄 Damızlık','Üreme amaçlı'],['Besi','🥩 Besi','Et için besleme'],['Diğer','📋 Diğer','Diğer amaç']]}};
+ function setChoice(group,value){{document.querySelectorAll('[data-choice-group="'+group+'"] .choice-card').forEach(function(b){{b.classList.toggle('active',b.dataset.value===value)}});}}
+ function renderPurposes(){{const box=document.getElementById('purposeChoices'),items=purposeMap[gender.value];if(!items.some(x=>x[0]===purpose.value))purpose.value=items[0][0];box.innerHTML=items.map(x=>'<button type="button" class="choice-card '+(x[0]===purpose.value?'active':'')+'" data-value="'+x[0]+'"><b>'+x[1]+'</b><small>'+x[2]+'</small></button>').join('');}}
+ function ageMonths(){{if(!birth.value)return null;const d=new Date(birth.value+'T12:00:00'),n=new Date();return Math.max(0,(n.getFullYear()-d.getFullYear())*12+n.getMonth()-d.getMonth()-(n.getDate()<d.getDate()?1:0));}}
+ function update(){{renderPurposes();const age=ageMonths(),calf=age!==null&&age<10;document.getElementById('recordType').value=calf?'Buzağı':gender.value;badge.textContent=calf?'Buzağı kaydı':'Yetişkin kaydı';document.getElementById('ageHint').textContent=age===null?'Girildiğinde yaş ve buzağı durumu hesaplanır.':age+' aylık · '+(calf?'Buzağı bölümüne kaydedilecek':'Yetişkin bölümüne kaydedilecek');hint.textContent=gender.value+' · '+purpose.value+' · '+(calf?'Buzağı':'Yetişkin');document.querySelectorAll('.purchase-field').forEach(e=>e.hidden=arrival.value!=='Satın Alındı');document.querySelectorAll('.born-field').forEach(e=>e.hidden=arrival.value!=='Çiftlikte Doğdu');document.querySelectorAll('.transfer-field').forEach(e=>e.hidden=arrival.value!=='Dış Transfer');document.getElementById('motherId').required=arrival.value==='Çiftlikte Doğdu';document.querySelectorAll('.female-pregnancy').forEach(e=>e.hidden=gender.value!=='Dişi'||calf);toggleEntryPregnancy();}}
+ form.addEventListener('click',function(e){{const b=e.target.closest('.choice-card');if(!b)return;const group=b.closest('[data-choice-group]').dataset.choiceGroup;if(group==='gender')gender.value=b.dataset.value;if(group==='purpose')purpose.value=b.dataset.value;if(group==='arrival')arrival.value=b.dataset.value;setChoice(group,b.dataset.value);update();}});birth.addEventListener('change',update);
+ const digits=document.getElementById('tagDigits'),state=document.getElementById('tagState');let checkTimer;digits.addEventListener('input',function(){{digits.value=digits.value.replace(/\\D/g,'').slice(0,14);digits.setCustomValidity('');state.textContent='';clearTimeout(checkTimer);if(digits.value.length<8)return;checkTimer=setTimeout(async function(){{try{{const r=await fetch('/api/animal-tag-check?tag='+encodeURIComponent('TR'+digits.value)),j=await r.json();digits.setCustomValidity(j.exists?'Bu küpe zaten kayıtlı.':'');state.textContent=j.exists?'⚠ Bu küpe zaten kayıtlı.':'✓ Küpe kullanılabilir.';state.style.color=j.exists?'#b33128':'#176b3a';}}catch(e){{state.textContent='Küpe kayıtta yeniden doğrulanacak.'}}}},350)}});
+ const breedSheet=document.getElementById('breedSheet'),breedValue=document.getElementById('breedValue'),breedOpen=document.getElementById('openBreed');breedOpen.onclick=()=>breedSheet.classList.add('open');document.querySelector('[data-close-sheet]').onclick=()=>breedSheet.classList.remove('open');breedSheet.addEventListener('click',function(e){{const b=e.target.closest('.breed-choice');if(b){{breedValue.value=b.dataset.breed;breedOpen.value=b.dataset.breed;breedSheet.classList.remove('open')}}}});document.getElementById('breedSearch').addEventListener('input',function(){{const q=this.value.toLocaleLowerCase('tr-TR');document.querySelectorAll('.breed-choice').forEach(b=>b.hidden=!b.textContent.toLocaleLowerCase('tr-TR').includes(q))}});
+ function photoCount(){{let n=0;document.querySelectorAll('.photo-slot input').forEach(function(i){{const slot=i.closest('.photo-slot'),img=slot.querySelector('img');if(i.files&&i.files[0]){{n++;img.src=URL.createObjectURL(i.files[0]);slot.classList.add('has-photo')}}else slot.classList.remove('has-photo')}});document.getElementById('photoCount').textContent=n+' / 8';}}document.querySelectorAll('.photo-slot input').forEach(i=>i.addEventListener('change',photoCount));
+ let stream=null,scanTimer=null;const scanSheet=document.getElementById('scanSheet'),video=document.getElementById('scanVideo'),scanStatus=document.getElementById('scanStatus');function applyScan(text){{const raw=String(text||'').toUpperCase(),m=raw.match(/TR\\D*([0-9]{{8,14}})/)||raw.match(/([0-9]{{8,14}})/);if(!m)return false;digits.value=m[1];digits.dispatchEvent(new Event('input'));closeScan();return true}}function closeScan(){{scanSheet.classList.remove('open');if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;if(scanTimer)clearInterval(scanTimer)}}document.querySelector('[data-close-scan]').onclick=closeScan;document.getElementById('openScanner').onclick=async function(){{scanSheet.classList.add('open');if(!('BarcodeDetector' in window)){{scanStatus.textContent='Bu tarayıcı canlı okumayı desteklemiyor. Aşağıdan etiketi fotoğrafla çekin veya rakamları elle girin.';return}}try{{stream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}}}});video.srcObject=stream;await video.play();const detector=new BarcodeDetector();scanStatus.textContent='Karekod veya barkodu çerçeveye getirin…';scanTimer=setInterval(async function(){{try{{const codes=await detector.detect(video);if(codes[0]&&!applyScan(codes[0].rawValue))scanStatus.textContent='Kod okundu fakat TR küpe numarası bulunamadı.'}}catch(e){{}}}},400)}}catch(e){{scanStatus.textContent='Canlı kamera açılamadı. Aşağıdan etiketi fotoğrafla çekebilirsiniz.'}}}};document.getElementById('scanImage').onchange=async function(){{if(!this.files[0])return;if(!('BarcodeDetector' in window)){{scanStatus.textContent='Tarayıcı fotoğraftan kod okumayı desteklemiyor; küpe rakamlarını elle yazın.';return}}try{{const bitmap=await createImageBitmap(this.files[0]),codes=await new BarcodeDetector().detect(bitmap);if(!codes[0]||!applyScan(codes[0].rawValue))scanStatus.textContent='Kod bulunamadı; daha net çekin veya rakamları elle girin.'}}catch(e){{scanStatus.textContent='Fotoğraf okunamadı; küpe rakamlarını elle girin.'}}}};
+ form.addEventListener('submit',function(e){{if(state.textContent.includes('zaten kayıtlı')){{e.preventDefault();digits.reportValidity();}}}});update();
+}})();
+</script>'''
 
 def create_backup(label='manuel'):
     target_dir=configured_backup_dir()
@@ -5207,6 +5283,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        if path=='/api/animal-tag-check':
+            try:tag=normalize_tr_tag((q.get('tag') or [''])[0])
+            except ValueError:
+                payload={'ok':False,'exists':False,'tag':''}
+            else:
+                with db() as c:
+                    exists=bool(c.execute('select 1 from animals where upper(tag)=upper(?)',(tag,)).fetchone() or c.execute('select 1 from calves where upper(tag)=upper(?)',(tag,)).fetchone())
+                payload={'ok':True,'exists':exists,'tag':tag}
+            raw=json.dumps(payload,ensure_ascii=False).encode('utf-8')
+            self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
         if path in agri.AGRI_PATHS:
             with db() as c:
                 result=agri.render_get(c,path,q)
@@ -5780,6 +5866,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<label>Fotoğraf Yükle', f'''<label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{float(rec['daily_feed_cost'] or 0)}"><span class="mut">Padokta aktif rasyon varsa otomatik maliyet kullanılır.</span></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{float(rec['daily_care_cost'] or 0)}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{float(rec['target_sale_price'] or 0)}"></label><label>Fotoğraf Yükle''')
             return self.send_html(page('Buzağı Düzenle',body,'/calves',u,msg))
         if path=='/animal-add':
+            with db() as c:
+                smart_mothers=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                smart_breeds=[r[0] for r in c.execute("select distinct breed from animals where trim(coalesce(breed,''))<>'' order by breed").fetchall()]
+                smart_paddocks=c.execute("select id,name,code from paddocks where active=1 order by name").fetchall()
+            return self.send_html(page('Yeni Hayvan',render_smart_animal_add(smart_mothers,smart_breeds,smart_paddocks),'/animal-add',u,msg))
             with db() as c:
                 mothers=c.execute("select tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 breeds=[r[0] for r in c.execute("select distinct breed from animals where trim(coalesce(breed,''))<>'' order by breed").fetchall()]
@@ -7395,6 +7486,87 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except sqlite3.IntegrityError:return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası zaten kullanılıyor.')
             except Exception as exc:return self.redirect('/calf-edit?id='+cid,'Güncelleme hatası: '+str(exc))
         if path=='/animal-add':
+            try:
+                tag=normalize_tr_tag(f.get('tag_digits') or f.get('tag'))
+                gender=(f.get('gender') or '').strip()
+                if gender not in ('Dişi','Erkek'):raise ValueError('Cinsiyet seçin.')
+                breed=(f.get('breed') or '').strip()
+                if not breed:raise ValueError('Irk seçin.')
+                birth_date=(f.get('birth_date') or '').strip()
+                kind='Buzağı' if new_record_is_calf(birth_date) else gender
+                arrival=(f.get('arrival_source') or 'Satın Alındı').strip()
+                if arrival not in ('Satın Alındı','Çiftlikte Doğdu','Dış Transfer'):raise ValueError('Geliş kaynağı geçersiz.')
+                if arrival=='Çiftlikte Doğdu' and not birth_date:raise ValueError('Çiftlikte doğan hayvan için doğum tarihi zorunludur.')
+                uploads=animal_add_uploads(f)
+                entry_date=(f.get('entry_date') or (birth_date if arrival=='Çiftlikte Doğdu' else date.today().isoformat())).strip()
+                try:date.fromisoformat(entry_date)
+                except Exception:raise ValueError('Geçerli giriş tarihi seçin.')
+                purpose=(f.get('purpose') or '').strip()
+                animal_type=(f.get('animal_type') or 'Sığır').strip()
+                purchase_price=max(0.0,float(f.get('purchase_price') or 0)) if arrival=='Satın Alındı' else 0.0
+                purchase_weight=max(0.0,float(f.get('purchase_weight') or 0))
+                daily_feed=max(0.0,float(f.get('daily_feed_cost') or 0));daily_care=max(0.0,float(f.get('daily_care_cost') or 0));target_sale=max(0.0,float(f.get('target_sale_price') or 0))
+                payment=(f.get('purchase_payment_method') or 'Nakit').strip();seller=((f.get('seller') or '').strip() if arrival=='Satın Alındı' else (f.get('transfer_from') or '').strip())
+                quarantine=(f.get('quarantine_status') or 'Hayır').strip();health_status=(f.get('health_status') or 'Normal').strip();notes=(f.get('notes') or '').strip()
+                try:paddock_id=int(f.get('paddock_id') or 0) or None
+                except Exception:raise ValueError('Padok seçimi geçersiz.')
+                try:mother_id=int(f.get('mother_id') or 0) or 0
+                except Exception:mother_id=0
+                father_tag=(f.get('father_tag') or '').strip().upper()
+                with db() as c:
+                    if c.execute('select 1 from animals where upper(tag)=upper(?)',(tag,)).fetchone() or c.execute('select 1 from calves where upper(tag)=upper(?)',(tag,)).fetchone():raise ValueError('Bu küpe numarası zaten kayıtlı.')
+                    paddock_name=''
+                    if paddock_id:
+                        paddock=c.execute('select id,name from paddocks where id=? and active=1',(paddock_id,)).fetchone()
+                        if not paddock:raise ValueError('Seçilen padok bulunamadı.')
+                        paddock_name=paddock['name']
+                    mother=None
+                    if mother_id:
+                        mother=c.execute("select id,tag from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mother_id,)).fetchone()
+                    if arrival=='Çiftlikte Doğdu' and not mother:raise ValueError('Çiftlikte doğan hayvan için aktif anne kaydı seçin.')
+                    photo_names=[]
+                    if kind=='Buzağı':
+                        cur=c.execute('''insert into calves(tag,mother_id,father_tag,birth_date,gender,notes,nickname,breed,paddock,paddock_id,photo_url,purchase_date,purchase_price,purchase_payment_method,status,daily_feed_cost,daily_care_cost,target_sale_price,animal_type,purpose,arrival_source,entry_date,seller,purchase_weight,quarantine_status,health_status)
+                            values(?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?)''',(tag,mother['id'] if mother else 0,father_tag,birth_date,gender,notes,f.get('nickname',''),breed,paddock_name,paddock_id,'',entry_date,purchase_price,payment,'Aktif',daily_feed,daily_care,target_sale,animal_type,purpose,arrival,entry_date,seller,purchase_weight,quarantine,health_status))
+                        subject_id=cur.lastrowid;source='calf'
+                        for upload in uploads:
+                            name=save_optimized_upload(f'calf_{subject_id}',upload);photo_names.append(name)
+                            c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(subject_id,name,datetime.now().isoformat(timespec='seconds'),'Profil fotoğrafı' if len(photo_names)==1 else f'Kayıt fotoğrafı {len(photo_names)}'))
+                        if photo_names:c.execute('update calves set photo_url=? where id=?',('/uploads/'+photo_names[0],subject_id))
+                    else:
+                        cur=c.execute('''insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,paddock_id,photo_url,sold_price,status,purchase_date,purchase_price,purchase_weight,daily_feed_cost,daily_care_cost,target_sale_price,animal_type,purpose,arrival_source,entry_date,seller,purchase_payment_method,quarantine_status,health_status,mother_id,father_tag)
+                            values(?,?,?,?,?,?,?,?,?,0,'Aktif',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(tag,f.get('nickname',''),gender,breed,birth_date,notes,paddock_name,paddock_id,'',entry_date,purchase_price,purchase_weight,daily_feed,daily_care,target_sale,animal_type,purpose,arrival,entry_date,seller,payment,quarantine,health_status,mother['id'] if mother else None,father_tag))
+                        subject_id=cur.lastrowid;source='animal'
+                        for upload in uploads:
+                            name=save_optimized_upload(f'animal_{subject_id}',upload);photo_names.append(name)
+                            c.execute('insert into animal_photos(animal_id,filename,created_at,caption) values(?,?,?,?)',(subject_id,name,datetime.now().isoformat(timespec='seconds'),'Profil fotoğrafı' if len(photo_names)==1 else f'Kayıt fotoğrafı {len(photo_names)}'))
+                        if photo_names:c.execute('update animals set photo_url=? where id=?',('/uploads/'+photo_names[0],subject_id))
+                        if gender=='Dişi' and (f.get('entry_pregnancy_status') or '')=='Gebe':
+                            mode=(f.get('pregnancy_info_mode') or 'date').strip();ref_text=(f.get('pregnancy_entry_date') or date.today().isoformat()).strip()
+                            try:ref_day=date.fromisoformat(ref_text)
+                            except Exception:ref_day=date.today();ref_text=ref_day.isoformat()
+                            age_months=0.0
+                            if mode=='date':
+                                ins_text=(f.get('known_insemination_date') or '').strip()
+                                try:ins_day=date.fromisoformat(ins_text)
+                                except Exception:raise ValueError('Gebe hayvan için geçerli son tohumlama tarihi girin.')
+                                result='Gebe (Girişte · Tohumlama Tarihi Biliniyor)';preg_source='Girişte Gebe · Tohumlama Tarihi'
+                            else:
+                                age_months=float(f.get('pregnancy_age_months') or 0)
+                                if age_months<=0 or age_months>9:raise ValueError('Gebelik yaşını 1-9 ay arasında girin.')
+                                ins_day=ref_day-timedelta(days=round(age_months*(280/9)));ins_text=ins_day.isoformat();result='Gebe (Girişte · Gebelik Yaşından Tahmini)';preg_source='Girişte Gebe · Yaklaşık'
+                            due=(ins_day+timedelta(days=280)).isoformat()
+                            c.execute('insert into inseminations(animal_id,attempt,insemination_date,pregnancy_result,due_date) values(?,?,?,?,?)',(subject_id,1,ins_text,result,due))
+                            c.execute('update animals set pregnancy_source=?,pregnancy_age_months_at_entry=?,pregnancy_entry_date=? where id=?',(preg_source,age_months,ref_text,subject_id))
+                    if paddock_id:c.execute('insert into paddock_history(animal_source,animal_id,from_paddock_id,to_paddock_id,moved_at,notes) values(?,?,?,?,?,?)',(source,subject_id,None,paddock_id,datetime.now().isoformat(timespec='seconds'),'İlk kayıt padoku'))
+                    finance_posted=purchase_price>0 and (f.get('post_purchase_finance') or '')=='yes'
+                    if finance_posted:
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,calf_id) values(?,?,?,?,?,?,?,?,?,?)',(entry_date,'Gider','Hayvan Alımı',purchase_price,f'Otomatik hayvan alımı · {tag}'+(f' · {seller}' if seller else ''),payment,subject_id if source=='animal' else None,datetime.now().isoformat(timespec='seconds'),'',None if source=='animal' else subject_id))
+                audit(username,'Akıllı hayvan kaydı',f'{tag} · {kind} · {arrival} · {len(uploads)} fotoğraf',self.client_ip())
+                target='/calves' if kind=='Buzağı' else ('/animals' if gender=='Dişi' else '/males')
+                return self.redirect(target,f'{tag} başarıyla kaydedildi.'+(' Alış bedeli Finansa gider olarak işlendi.' if finance_posted else ''))
+            except (ValueError,sqlite3.IntegrityError) as exc:return self.redirect('/animal-add',str(exc))
+            except Exception as exc:return self.redirect('/animal-add','Kayıt hatası: '+str(exc))
             kind=(f.get('record_type') or '').strip();tag=(f.get('tag') or '').strip()
             if not tag:return self.redirect('/animal-add','Küpe numarası zorunludur.')
             try:
