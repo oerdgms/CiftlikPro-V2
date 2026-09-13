@@ -1,3 +1,22 @@
+# V3.9.23 DEV3 — Sağlık, Padok ve Mobil Kart Hotfix
+
+- Aşı/ilaç programı oluşturma ve “Yapıldı” işlemlerinde düğme ilk dokunuşta
+  pasifleşir; `Yapılıyor…` durumu görünür ve ikinci gönderim istemci ile sunucu
+  tarafında engellenir.
+- Aynı sağlık görevi yalnız bir kez tamamlanabilir; padok toplu uygulamalarında
+  da atomik görev sahiplenme kullanılır.
+- Sağlık planlarına ve tamamlanmış aşı/muayene kayıtlarına `Düzenle` / `Sil`
+  eklendi. Plan silme, tamamlanmış geçmişi koruyup bekleyen işleri iptal eder.
+- İlaç tedavileri düzenlenirken veya silinirken FEFO stok çıkışları, arınma
+  tarihleri, sağlık geçmişi ve bağlı finans gideri tek işlemde uzlaştırılır.
+- Padok Yönetimi; doluluk kartları, içindeki hayvanların küpe/ad listesi, hızlı
+  taşıma, aktif rasyon, günlük maliyet, padoksuz hayvanlar ve hareket geçmişiyle
+  mobil uyumlu olarak yenilendi.
+- Dolu padok silme ve kapasiteyi aşan taşıma engellendi; boş padok güvenli biçimde
+  arşivlenebilir.
+- Mobil hayvan/buzağı profil fotoğrafı 88×88 önizlemeye sınırlandı; fotoğrafın
+  bilgi ve maliyet kartlarının üstüne taşması önlendi.
+
 # V3.9.23 DEV2 — Annesiz Buzağı Kartı Hotfix
 
 - Anne küpesi olmayan / bilinmeyen buzağıların detay kartı artık açılır.

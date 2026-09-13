@@ -1,12 +1,24 @@
-# ÇiftlikPro v3.9.23 DEV2 — Akıllı Mobil Hayvan Ekle
+# ÇiftlikPro v3.9.23 DEV3 — Sağlık, Padok ve Mobil Kart İyileştirmeleri
+
+DEV3; aşı/ilaç işlemlerinde çift dokunmayı hem arayüzde hem sunucuda engeller,
+işlem sırasında düğmeyi pasifleştirip durum metni gösterir. Sağlık planları,
+tamamlanmış sağlık kayıtları ve ilaç tedavileri düzenlenebilir veya güvenli
+biçimde silinebilir; bağlı stok ve finans kayıtları birlikte uzlaştırılır.
+
+Padok Yönetimi artık geniş bir tablo yerine doluluk, aktif rasyon, günlük
+maliyet ve padoktaki gerçek hayvanları gösteren duyarlı kartlardan oluşur.
+Hayvanlar kart üzerinden taşınabilir; boş padoklar silinebilir. Mobil hayvan ve
+buzağı profil fotoğrafı bilgi alanını kapatmayacak sabit küçük önizlemeye alındı.
+
+## Önceki paket
+
+### ÇiftlikPro v3.9.23 DEV2 — Akıllı Mobil Hayvan Ekle
 
 DEV1 ile yeni hayvan kaydına sabit `TR` küpe ön eki, canlı mükerrer kontrolü,
 en fazla 8 kamera/galeri fotoğrafı, cihaz destekli barkod/karekod okuma ve
 cinsiyet–amaç–geliş kaynağı–yaşa göre değişen akıllı form eklendi. Satın alınan
 hayvanın alış bedeli isteğe bağlı olarak Finansa aktarılır; çiftlikte doğanlarda
 anne zorunludur ve 10 aydan küçük kayıtlar otomatik Buzağılar bölümüne gider.
-
-## Önceki paket
 
 ### ÇiftlikPro v3.9.22 DEV2 — Tarım & Ziraat Tam CRUD
 

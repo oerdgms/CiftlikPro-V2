@@ -68,7 +68,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('"--background" in sys.argv',launcher)
         self.assertIn('{userstartup}\\ÇiftlikPro Arka Plan',installer)
         self.assertIn('Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılamaz.',source)
-        self.assertIn("3.9.23 DEV2",source)
+        self.assertIn("3.9.23 DEV3",source)
 
     def test_3921_dev51_disease_catalog_has_clickable_detail_content(self):
         with server.db() as con:
@@ -90,9 +90,53 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV2'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV2_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV3'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV3_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
+
+    def test_3923_dev3_health_schedule_and_duplicate_claims(self):
+        vaccine=server.health_schedule_slots('Aşı','2026-09-13',dose_count=3,interval_days=21)
+        medicine=server.health_schedule_slots('İlaç','2026-09-13',treatment_days=3,times_per_day=2)
+        self.assertEqual([x['planned_date'] for x in vaccine],['2026-09-13','2026-10-04','2026-10-25'])
+        self.assertEqual(len(medicine),6)
+        self.assertEqual((medicine[-1]['day_no'],medicine[-1]['application_no']),(3,2))
+        with server.db() as con:
+            fingerprint='dev3-test-health-dedupe'
+            con.execute('delete from request_dedupe where fingerprint=?',(fingerprint,))
+            self.assertTrue(server.claim_request_once(con,fingerprint,30))
+            self.assertFalse(server.claim_request_once(con,fingerprint,30))
+            action='dev3-test-completion'
+            con.execute('delete from action_completion_claims where action_key=?',(action,))
+            self.assertTrue(server.claim_completion_once(con,action))
+            self.assertFalse(server.claim_completion_once(con,action))
+
+    def test_3923_dev3_health_links_and_mobile_guards_are_packaged(self):
+        with server.db() as con:
+            health_cols={row[1] for row in con.execute('pragma table_info(health)').fetchall()}
+            course_cols={row[1] for row in con.execute('pragma table_info(health_courses)').fetchall()}
+        self.assertTrue({'finance_id','course_id','task_id','treatment_id'}.issubset(health_cols))
+        self.assertIn('active',course_cols)
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('data-submit-lock="1"','⏳ Yapılıyor…',"status='İşleniyor'",
+                       "if path=='/health-plan-edit':","if path=='/treatment/edit':",
+                       "if path=='/treatment/delete':",'.profile .photo>img'):
+            self.assertIn(marker,source)
+
+    def test_3923_dev3_paddock_cards_show_real_occupants(self):
+        paddock_id=None;animal_id=None
+        try:
+            with server.db() as con:
+                cur=con.execute("insert into paddocks(name,code,type,capacity,notes,active,created_at) values('DEV3 Test Padok','D3','Besi',8,'Kart testi',1,'2026-09-13T00:00:00')")
+                paddock_id=cur.lastrowid
+                cur=con.execute("insert into animals(tag,nickname,gender,breed,paddock,paddock_id,status) values('TRDEV300000001','Deneme','Erkek','Simental','DEV3 Test Padok',?,'Aktif')",(paddock_id,))
+                animal_id=cur.lastrowid
+            html=server.render_paddock_management()
+            for marker in ('DEV3 Test Padok','TRDEV300000001','Deneme','İçerideki Hayvanlar','Hayvanı Padoka Ata'):
+                self.assertIn(marker,html)
+        finally:
+            with server.db() as con:
+                if animal_id:con.execute('delete from animals where id=?',(animal_id,))
+                if paddock_id:con.execute('delete from paddocks where id=?',(paddock_id,))
 
     def test_3921_dev51_official_cattle_medicine_catalog_is_seeded(self):
         with server.db() as con:

@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV2'
+APP_VERSION='3.9.23 DEV3'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV2'
+APP_LABEL='v3.9.23 DEV3'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -379,6 +379,22 @@ tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td
 .linked-feed-box{grid-column:1/-1;border:1px solid #bddbc7;background:linear-gradient(180deg,#f3fbf6,#edf7f1);border-radius:12px;padding:13px 14px}.linked-feed-box h3{margin:0 0 5px;font-size:15px}.linked-feed-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;margin-top:10px}.linked-total{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;border:1px solid #d7e7dc;border-radius:10px;padding:10px 12px;margin-top:9px}.linked-total b{font-size:18px;color:#176b3a}
 @media(max-width:700px){.summary-grid .summary-link.card{height:116px!important;min-height:116px!important;padding:9px 10px!important}.summary-grid .metric-icon{width:27px;height:27px;font-size:15px!important;margin-bottom:3px!important}.summary-grid .stat b{font-size:21px!important}.summary-grid .metric-title{font-size:12px!important}.linked-feed-grid{grid-template-columns:1fr}.linked-total{align-items:flex-start;flex-direction:column}}
 
+/* V3.9.23 DEV3 — profil fotoğrafı hiçbir ekranda bilgi katmanının üstüne taşmaz. */
+.profile .photo{overflow:hidden!important;position:relative!important;flex:none!important}
+.profile .photo>img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;object-fit:cover!important}
+.profile>div:last-child{min-width:0!important}
+@media(max-width:650px){
+  .profile{grid-template-columns:88px minmax(0,1fr)!important;gap:11px!important;padding:12px!important;align-items:start!important}
+  .profile .photo{width:88px!important;height:88px!important;border-radius:9px!important}
+  .profile h1{font-size:20px!important;overflow-wrap:anywhere!important}
+  .profile h2{font-size:14px!important}
+  .profile .pill{font-size:11px!important;padding:4px 6px!important}
+  .profile .quick-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .profile .quick-metrics .pill{margin:2px 0!important}
+  .gallery{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .gallery img{height:125px!important}
+}
+
 '''
 
 def db():
@@ -530,12 +546,36 @@ def finance_request_fingerprint(username,form):
     payload='|'.join(str(form.get(k,'')).strip() for k in keys)
     return hashlib.sha256((str(username)+'|'+payload).encode('utf-8')).hexdigest()
 
+def health_request_fingerprint(username,form):
+    """Aynı sağlık planının çift dokunma/yeniden gönderimle iki kez açılmasını engeller."""
+    keys=('scope_type','subject_key','paddock_id','kind','product','applied_date',
+          'dose_count','dose_interval_days','treatment_days','times_per_day','cost','notes')
+    payload='|'.join(str(form.get(k,'')).strip() for k in keys)
+    return hashlib.sha256(('health-plan|'+str(username)+'|'+payload).encode('utf-8')).hexdigest()
+
+def treatment_request_fingerprint(username,form):
+    """Mobil çift dokunmada aynı tedavi/stok/finans zincirini yeniden kurmayı engeller."""
+    keys=('subject_key','medicine_id','start_date','end_date','dose_amount','dose_unit',
+          'applications_per_day','application_route','disease_id','diagnosis','veterinarian',
+          'prescription_no','total_quantity','notes')
+    payload='|'.join(str(form.get(k,'')).strip() for k in keys)
+    return hashlib.sha256(('treatment|'+str(username)+'|'+payload).encode('utf-8')).hexdigest()
+
 def claim_request_once(con,fingerprint,ttl_seconds=15):
     cutoff=(datetime.now()-timedelta(seconds=ttl_seconds)).isoformat(timespec='seconds')
     con.execute('delete from request_dedupe where created_at<?',(cutoff,))
     try:
         con.execute('insert into request_dedupe(fingerprint,created_at) values(?,?)',
                     (fingerprint,datetime.now().isoformat(timespec='seconds')))
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+def claim_completion_once(con,action_key):
+    """Bir tamamla eylemini kalıcı ve atomik biçimde yalnız bir kez sahiplenir."""
+    try:
+        con.execute('insert into action_completion_claims(action_key,created_at) values(?,?)',
+                    (str(action_key),datetime.now().isoformat(timespec='seconds')))
         return True
     except sqlite3.IntegrityError:
         return False
@@ -592,8 +632,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS estrus_records(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, estrus_date TEXT NOT NULL, signs TEXT, notes TEXT, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS estrus_decisions(id INTEGER PRIMARY KEY, estrus_id INTEGER NOT NULL, cycle_no INTEGER NOT NULL, decision TEXT NOT NULL, decision_date TEXT NOT NULL, insemination_id INTEGER, notes TEXT, UNIQUE(estrus_id,cycle_no));
         CREATE TABLE IF NOT EXISTS calves(id INTEGER PRIMARY KEY, tag TEXT UNIQUE NOT NULL, mother_id INTEGER NOT NULL, father_tag TEXT, birth_date TEXT NOT NULL, gender TEXT, notes TEXT);
-        CREATE TABLE IF NOT EXISTS health(id INTEGER PRIMARY KEY, animal_id INTEGER, kind TEXT, product TEXT, applied_date TEXT, next_date TEXT, cost REAL DEFAULT 0, notes TEXT);
-        CREATE TABLE IF NOT EXISTS health_courses(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,product TEXT NOT NULL,scope_type TEXT NOT NULL DEFAULT 'single',paddock_id INTEGER,start_date TEXT NOT NULL,treatment_days INTEGER DEFAULT 1,times_per_day INTEGER DEFAULT 1,dose_count INTEGER DEFAULT 1,interval_days INTEGER DEFAULT 0,cost_per_application REAL DEFAULT 0,notes TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS health(id INTEGER PRIMARY KEY, animal_id INTEGER, kind TEXT, product TEXT, applied_date TEXT, next_date TEXT, cost REAL DEFAULT 0, notes TEXT,finance_id INTEGER,course_id INTEGER,task_id INTEGER,treatment_id INTEGER);
+        CREATE TABLE IF NOT EXISTS health_courses(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,product TEXT NOT NULL,scope_type TEXT NOT NULL DEFAULT 'single',paddock_id INTEGER,start_date TEXT NOT NULL,treatment_days INTEGER DEFAULT 1,times_per_day INTEGER DEFAULT 1,dose_count INTEGER DEFAULT 1,interval_days INTEGER DEFAULT 0,cost_per_application REAL DEFAULT 0,notes TEXT,created_at TEXT NOT NULL,active INTEGER DEFAULT 1);
         CREATE TABLE IF NOT EXISTS health_tasks(id INTEGER PRIMARY KEY,course_id INTEGER NOT NULL,animal_id INTEGER,calf_id INTEGER,planned_date TEXT NOT NULL,dose_no INTEGER DEFAULT 1,dose_total INTEGER DEFAULT 1,day_no INTEGER DEFAULT 1,day_total INTEGER DEFAULT 1,application_no INTEGER DEFAULT 1,applications_per_day INTEGER DEFAULT 1,status TEXT DEFAULT 'Bekliyor',completed_date TEXT,cost REAL DEFAULT 0,notes TEXT);
         CREATE INDEX IF NOT EXISTS idx_health_tasks_due ON health_tasks(status,planned_date,course_id);
         CREATE TABLE IF NOT EXISTS medicine_catalog(
@@ -652,6 +692,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS ration_item_history(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,kg_per_head_day REAL NOT NULL,created_at TEXT NOT NULL,notes TEXT);
         CREATE INDEX IF NOT EXISTS idx_ration_item_history_lookup ON ration_item_history(ration_id,feed_id,effective_date,id);
         CREATE TABLE IF NOT EXISTS paddock_rations(id INTEGER PRIMARY KEY,paddock_id INTEGER NOT NULL,ration_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT,active INTEGER DEFAULT 1,notes TEXT);
+        CREATE TABLE IF NOT EXISTS action_completion_claims(action_key TEXT PRIMARY KEY,created_at TEXT NOT NULL);
         ''')
         medicine_cols={r[1] for r in c.execute('pragma table_info(medicine_catalog)').fetchall()}
         if 'withdrawal_verified' not in medicine_cols:
@@ -898,6 +939,20 @@ def init_db():
 
         health_cols={r[1] for r in c.execute('pragma table_info(health)').fetchall()}
         if 'calf_id' not in health_cols:c.execute('ALTER TABLE health ADD COLUMN calf_id INTEGER')
+        for col,typ in [('finance_id','INTEGER'),('course_id','INTEGER'),('task_id','INTEGER'),('treatment_id','INTEGER')]:
+            if col not in health_cols:c.execute(f'ALTER TABLE health ADD COLUMN {col} {typ}')
+        course_cols={r[1] for r in c.execute('pragma table_info(health_courses)').fetchall()}
+        if 'active' not in course_cols:c.execute('ALTER TABLE health_courses ADD COLUMN active INTEGER DEFAULT 1')
+        c.execute("update health_courses set active=1 where active is null")
+        c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_health_completed_task ON health(task_id) WHERE task_id IS NOT NULL')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_health_course_link ON health(course_id)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_health_treatment_link ON health(treatment_id)')
+        # Önceki sürümlerin "Tedavi #ID" notuyla bıraktığı sağlık satırlarını
+        # gerçek tedavi/finans kaydına bağla; böylece düzenle/sil stok zincirini atlamaz.
+        for treatment_link in c.execute('select id,finance_id from treatments').fetchall():
+            c.execute('''update health set treatment_id=?,finance_id=coalesce(finance_id,?)
+                where treatment_id is null and notes like ?''',
+                (treatment_link['id'],treatment_link['finance_id'],f'Tedavi #{treatment_link["id"]} |%'))
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
         if 'promoted_animal_id' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_animal_id INTEGER')
         if 'promoted_at' not in calf_cols:c.execute('ALTER TABLE calves ADD COLUMN promoted_at TEXT')
@@ -3859,7 +3914,7 @@ def paddock_population(paddock_id, con=None):
     c=con or db().__enter__()
     try:
         adults=c.execute("select count(*) n from animals where paddock_id=? and coalesce(status,'Aktif')='Aktif'",(paddock_id,)).fetchone()['n']
-        calves=c.execute("select count(*) n from calves where paddock_id=? and promoted_animal_id is null",(paddock_id,)).fetchone()['n']
+        calves=c.execute("select count(*) n from calves where paddock_id=? and promoted_animal_id is null and coalesce(status,'Aktif')='Aktif'",(paddock_id,)).fetchone()['n']
         return int(adults or 0)+int(calves or 0)
     finally:
         if own:c.close()
@@ -3870,6 +3925,133 @@ def sync_paddock_text(c, source, animal_id, paddock_id):
         r=c.execute('select name from paddocks where id=?',(paddock_id,)).fetchone(); name=r['name'] if r else ''
     table='animals' if source=='animal' else 'calves'
     c.execute(f'update {table} set paddock_id=?,paddock=? where id=?',(paddock_id or None,name,animal_id))
+
+def health_schedule_slots(kind,start_date,dose_count=1,interval_days=15,treatment_days=1,times_per_day=1):
+    """Aşı/ilaç planını tekrarlanabilir görev yuvalarına dönüştürür."""
+    start_day=date.fromisoformat(str(start_date))
+    slots=[]
+    if kind=='Aşı':
+        doses=max(1,min(10,int(dose_count or 1)))
+        interval=max(1,min(365,int(interval_days or 15)))
+        for dose_no in range(1,doses+1):
+            slots.append({
+                'planned_date':(start_day+timedelta(days=(dose_no-1)*interval)).isoformat(),
+                'dose_no':dose_no,'dose_total':doses,'day_no':1,'day_total':1,
+                'application_no':1,'applications_per_day':1,
+            })
+        return slots
+    days=max(1,min(60,int(treatment_days or 1)))
+    daily=max(1,min(6,int(times_per_day or 1)))
+    for day_no in range(1,days+1):
+        planned=(start_day+timedelta(days=day_no-1)).isoformat()
+        for application_no in range(1,daily+1):
+            slots.append({
+                'planned_date':planned,'dose_no':1,'dose_total':1,
+                'day_no':day_no,'day_total':days,'application_no':application_no,
+                'applications_per_day':daily,
+            })
+    return slots
+
+def create_health_course_tasks(c,course_id,targets,kind,start_date,cost,notes,
+                               dose_count=1,interval_days=15,treatment_days=1,times_per_day=1,
+                               preserve_completed=False):
+    """Bir planın görevlerini oluşturur; düzenlemede tamamlanan görevleri korur."""
+    slots=health_schedule_slots(kind,start_date,dose_count,interval_days,treatment_days,times_per_day)
+    created=0
+    for animal_id,calf_id,_tag in targets:
+        for slot in slots:
+            if preserve_completed:
+                existing=c.execute('''select id from health_tasks where course_id=?
+                    and coalesce(animal_id,0)=? and coalesce(calf_id,0)=?
+                    and dose_no=? and day_no=? and application_no=? and status='Tamamlandı' limit 1''',
+                    (course_id,int(animal_id or 0),int(calf_id or 0),slot['dose_no'],slot['day_no'],slot['application_no'])).fetchone()
+                if existing:continue
+            c.execute('''insert into health_tasks(course_id,animal_id,calf_id,planned_date,dose_no,dose_total,
+                day_no,day_total,application_no,applications_per_day,status,cost,notes)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?)''',(
+                course_id,animal_id,calf_id,slot['planned_date'],slot['dose_no'],slot['dose_total'],
+                slot['day_no'],slot['day_total'],slot['application_no'],slot['applications_per_day'],
+                'Bekliyor',float(cost or 0),notes or ''))
+            created+=1
+    return created
+
+def render_paddock_management():
+    """Padokları özet sayı yerine gerçek hayvan listeleriyle yönetilebilir kartlar olarak gösterir."""
+    with db() as c:
+        paddocks=c.execute("select * from paddocks where active=1 order by name").fetchall()
+        rations=c.execute("select id,name from rations where active=1 order by name").fetchall()
+        adults=c.execute("""select id,tag,nickname,gender,breed,paddock_id from animals
+            where coalesce(status,'Aktif')='Aktif'
+            and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag""").fetchall()
+        calves=c.execute("""select id,tag,nickname,gender,breed,paddock_id from calves
+            where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif'
+            and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag""").fetchall()
+        subjects=[]
+        for x in adults:
+            subjects.append({'source':'animal','id':x['id'],'tag':x['tag'],'nickname':x['nickname'],
+                             'gender':x['gender'],'breed':x['breed'],'paddock_id':x['paddock_id'],'kind':'Yetişkin'})
+        for x in calves:
+            subjects.append({'source':'calf','id':x['id'],'tag':x['tag'],'nickname':x['nickname'],
+                             'gender':x['gender'],'breed':x['breed'],'paddock_id':x['paddock_id'],'kind':'Buzağı'})
+        occupants={int(pd['id']):[] for pd in paddocks};unassigned=[]
+        for item in subjects:
+            pid=int(item['paddock_id'] or 0)
+            (occupants[pid] if pid in occupants else unassigned).append(item)
+        active_rations={}
+        for pd in paddocks:
+            ar=c.execute("""select pr.*,r.name ration_name from paddock_rations pr
+                join rations r on r.id=pr.ration_id where pr.paddock_id=? and pr.active=1
+                and (pr.end_date is null or pr.end_date='') order by pr.id desc limit 1""",(pd['id'],)).fetchone()
+            active_rations[int(pd['id'])]=(ar,ration_summary(ar['ration_id'],c) if ar else None)
+        history=c.execute("""select ph.*,case when ph.animal_source='animal' then a.tag else ca.tag end tag,
+            fp.name from_name,tp.name to_name from paddock_history ph
+            left join animals a on ph.animal_source='animal' and a.id=ph.animal_id
+            left join calves ca on ph.animal_source='calf' and ca.id=ph.animal_id
+            left join paddocks fp on fp.id=ph.from_paddock_id
+            left join paddocks tp on tp.id=ph.to_paddock_id
+            order by ph.moved_at desc,ph.id desc limit 25""").fetchall()
+
+    pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
+    ration_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in rations)
+    animal_opts=''.join(f'<option value="{x["source"]}:{x["id"]}">{"🐄" if x["source"]=="animal" else "🐮"} {h(x["tag"])} · {h(x["nickname"])} · {h(x["kind"])}</option>' for x in subjects)
+
+    def destination_options(current_id=None):
+        options=['<option value="">Padoksuz</option>']
+        options.extend(f'<option value="{pd["id"]}">{h(pd["name"])}</option>'
+                       for pd in paddocks if int(pd['id'])!=int(current_id or 0))
+        return ''.join(options)
+
+    def occupant_row(item,current_id=None):
+        href=('/animal?id='+str(item['id'])) if item['source']=='animal' else ('/calf?id='+str(item['id']))
+        icon='🐄' if item['source']=='animal' else '🐮'
+        return f'''<div class="paddock-animal-row"><div class="paddock-animal-id"><a class="animal-tag-btn" href="{href}">{h(item['tag'])}</a><div><b>{h(item['nickname']) or 'Takma ad yok'}</b><span>{icon} {h(item['kind'])} · {h(item['gender']) or '-'} · {h(item['breed']) or 'Irk girilmemiş'}</span></div></div><form method="post" action="/paddock/assign" class="paddock-quick-move" data-submit-lock="1" data-submit-text="⏳ Taşınıyor…"><input type="hidden" name="animal_ref" value="{item['source']}:{item['id']}"><select name="paddock_id" aria-label="Yeni padok">{destination_options(current_id)}</select><button class="btn alt">Taşı</button></form></div>'''
+
+    cards=[];assigned_total=0;capacity_total=0;overloaded=0
+    for pd in paddocks:
+        pid=int(pd['id']);items=occupants.get(pid,[]);pop=len(items);assigned_total+=pop
+        cap=int(pd['capacity'] or 0);capacity_total+=cap;pct=(pop/cap*100) if cap else 0
+        if cap and pop>cap:overloaded+=1
+        ar,summary=active_rations.get(pid,(None,None))
+        animal_html=''.join(occupant_row(x,pid) for x in items) or '<div class="paddock-empty">Bu padokta aktif hayvan yok.</div>'
+        search_blob=' '.join([str(pd['name'] or ''),str(pd['code'] or ''),str(pd['type'] or '')]+[str(x['tag'] or '')+' '+str(x['nickname'] or '') for x in items])
+        cards.append(f'''<article class="paddock-card" data-paddock-search="{h(search_blob.casefold())}"><header><div><div class="paddock-title">🏠 {h(pd['name'])} <span>{h(pd['code']) or 'Kod yok'}</span></div><div class="paddock-badges"><span>{h(pd['type']) or 'Genel'}</span><span class="{'over' if cap and pop>cap else ''}">{pop}{('/'+str(cap)) if cap else ''} hayvan</span></div></div><div class="paddock-card-actions"><a class="btn alt" href="/paddock-edit?id={pid}">Düzenle</a><form method="post" action="/paddock/delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm('Bu boş padok silinsin mi?')"><input type="hidden" name="id" value="{pid}"><button class="btn red">Sil</button></form></div></header><div class="paddock-progress"><i style="width:{min(100,pct):.1f}%" class="{'over' if cap and pop>cap else ''}"></i></div><div class="paddock-metrics"><div><span>Doluluk</span><b>{(f'{pct:.0f}%' if cap else 'Kapasite yok')}</b></div><div><span>Aktif Rasyon</span><b>{h(ar['ration_name']) if ar else '—'}</b></div><div><span>Yem / Baş</span><b>{(money(summary['cost'])+'/gün') if summary else '—'}</b></div><div><span>Padok Toplamı</span><b>{(money(summary['cost']*pop)+'/gün') if summary else '—'}</b></div></div>{('<p class="paddock-note">📝 '+h(pd['notes'])+'</p>') if pd['notes'] else ''}<details class="paddock-occupants" open><summary>İçerideki Hayvanlar <b>{pop}</b></summary><div>{animal_html}</div></details></article>''')
+
+    unassigned_html=''.join(occupant_row(x,None) for x in unassigned) or '<div class="paddock-empty">Tüm aktif hayvanlar bir padoka atanmış.</div>'
+    history_rows=''.join(f'<tr><td>{fmt_datetime(r["moved_at"])}</td><td><b>{h(r["tag"] or "-")}</b></td><td>{h(r["from_name"] or "Padoksuz")}</td><td>{h(r["to_name"] or "Padoksuz")}</td><td>{h(r["notes"] or "-")}</td></tr>' for r in history) or '<tr><td colspan="5">Henüz padok hareketi yok.</td></tr>'
+    known_free=max(0,capacity_total-assigned_total) if capacity_total else 0
+    return f'''<style>
+    .paddock-kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:13px 0}}.paddock-kpi{{background:#fff;border:1px solid #dce8df;border-radius:14px;padding:13px 15px}}.paddock-kpi span{{display:block;color:#6d7c72;font-size:12px;font-weight:800}}.paddock-kpi b{{display:block;font-size:24px;margin-top:3px;color:#173f2b}}.paddock-tools{{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:14px 0}}.paddock-tools input{{max-width:430px}}.paddock-create-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}}.paddock-tool-card{{background:#fff;border:1px solid #dce8df;border-radius:14px;padding:0;overflow:hidden}}.paddock-tool-card summary{{padding:14px 16px;font-weight:900;cursor:pointer;background:#f8fbf9}}.paddock-tool-card>div{{padding:14px}}.paddock-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}}.paddock-card{{background:#fff;border:1px solid #d9e6dd;border-radius:17px;padding:16px;box-shadow:0 4px 15px #173b280b;min-width:0}}.paddock-card>header{{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}}.paddock-title{{font-size:21px;font-weight:950;color:#183d29}}.paddock-title span{{font-size:11px;background:#eef5f0;color:#587063;border-radius:999px;padding:5px 8px;vertical-align:middle}}.paddock-badges{{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}}.paddock-badges span{{font-size:12px;font-weight:800;background:#edf6f0;color:#276043;border-radius:8px;padding:5px 8px}}.paddock-badges .over{{background:#fff0ee;color:#a83228}}.paddock-card-actions{{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}.paddock-card-actions .btn{{padding:7px 9px;font-size:12px}}.paddock-progress{{height:9px;background:#e7eee9;border-radius:99px;overflow:hidden;margin:13px 0}}.paddock-progress i{{display:block;height:100%;background:linear-gradient(90deg,#2b9a59,#70bd73);border-radius:inherit}}.paddock-progress i.over{{background:#d44a3a}}.paddock-metrics{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}}.paddock-metrics>div{{background:#f5f9f6;border-radius:9px;padding:8px;min-width:0}}.paddock-metrics span{{display:block;font-size:10px;color:#728077;font-weight:800}}.paddock-metrics b{{display:block;font-size:12px;margin-top:3px;overflow-wrap:anywhere}}.paddock-note{{font-size:12px;background:#fff8e8;border-radius:9px;padding:8px 10px}}.paddock-occupants{{margin-top:13px;border-top:1px solid #e3ebe5;padding-top:10px}}.paddock-occupants summary{{cursor:pointer;font-weight:900;color:#235b3b}}.paddock-occupants summary b{{display:inline-grid;place-items:center;min-width:25px;height:25px;border-radius:50%;background:#e7f3eb;margin-left:5px}}.paddock-animal-row{{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #edf1ee}}.paddock-animal-id{{display:flex;align-items:center;gap:9px;min-width:0}}.paddock-animal-id>div{{min-width:0}}.paddock-animal-id b,.paddock-animal-id span{{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}.paddock-animal-id span{{font-size:11px;color:#718077;margin-top:3px}}.paddock-quick-move{{display:flex;gap:6px;align-items:center;min-width:230px}}.paddock-quick-move select{{padding:8px;border:1px solid #cbd9cf;border-radius:8px;min-width:0;flex:1}}.paddock-quick-move .btn{{padding:8px 9px}}.paddock-empty{{padding:15px;text-align:center;color:#718077;background:#f7faf8;border-radius:10px;margin-top:9px}}.paddock-unassigned{{margin-top:14px}}.paddock-unassigned>summary{{cursor:pointer;font-size:18px;font-weight:900;padding:4px}}.paddock-history{{overflow:auto}}.paddock-history table{{min-width:680px}}
+    @media(max-width:1100px){{.paddock-grid{{grid-template-columns:1fr}}.paddock-create-grid{{grid-template-columns:1fr}}}}@media(max-width:700px){{.paddock-kpis{{grid-template-columns:1fr 1fr}}.paddock-kpi b{{font-size:19px}}.paddock-tools input{{max-width:none;width:100%}}.paddock-card{{padding:12px}}.paddock-card>header{{display:block}}.paddock-card-actions{{justify-content:flex-start;margin-top:9px}}.paddock-metrics{{grid-template-columns:1fr 1fr}}.paddock-animal-row{{display:block}}.paddock-animal-id{{align-items:flex-start}}.paddock-quick-move{{min-width:0;width:100%;margin-top:8px}}.paddock-quick-move select{{width:100%}}}}
+    </style><h1>🏠 Padok Yönetimi</h1><p class="mut">Her padokta kimlerin bulunduğunu görün, hayvanı doğrudan taşıyın; rasyon ve günlük maliyeti aynı karttan izleyin.</p>
+    <div class="paddock-kpis"><div class="paddock-kpi"><span>Aktif Padok</span><b>{len(paddocks)}</b></div><div class="paddock-kpi"><span>Padokta Hayvan</span><b>{assigned_total}</b></div><div class="paddock-kpi"><span>Padoksuz Hayvan</span><b>{len(unassigned)}</b></div><div class="paddock-kpi"><span>{'Kapasite Aşan Padok' if overloaded else 'Bilinen Boş Kapasite'}</span><b>{overloaded if overloaded else known_free}</b></div></div>
+    <div class="paddock-tools"><input id="paddockSearch" type="search" placeholder="🔎 Padok, kod, küpe veya takma ad ara"><span class="mut" id="paddockSearchCount"></span></div>
+    <div class="paddock-create-grid"><details class="paddock-tool-card"><summary>➕ Yeni Padok</summary><div><form method="post" action="/paddock/create" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><label>Padok Adı<input name="name" required placeholder="Besi B-01"></label><label>Kod<input name="code" placeholder="B01"></label><label>Tür<select name="type"><option>Genel</option><option>Besi</option><option>Dişi</option><option>Buzağı</option><option>Doğum</option><option>Karantina</option></select></label><label>Kapasite<input type="number" min="0" name="capacity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Padoku Kaydet</button></div></form></div></details>
+    <details class="paddock-tool-card"><summary>🐄 Hayvanı Padoka Ata</summary><div><form method="post" action="/paddock/assign" class="form" data-submit-lock="1" data-submit-text="⏳ Taşınıyor…"><label class="full">Hayvan<select name="animal_ref" required><option value="">Seçin</option>{animal_opts}</select></label><label class="full">Padok<select name="paddock_id"><option value="">Padoksuz</option>{pd_opts}</select></label><label class="full">Taşıma Notu<input name="notes" placeholder="Grup değişimi"></label><div class="full"><button class="btn blue">Padoka Ata / Taşı</button></div></form></div></details>
+    <details class="paddock-tool-card"><summary>🥣 Padoka Rasyon Ata</summary><div><form method="post" action="/ration/assign" class="form" data-submit-lock="1" data-submit-text="⏳ Atanıyor…"><label>Padok<select name="paddock_id" required><option value="">Seçin</option>{pd_opts}</select></label><label>Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes"></label><div class="full"><button class="btn orange">Rasyonu Padoka Ata</button> <a class="btn alt" href="/rations">Rasyon Yönetimi →</a></div></form></div></details></div>
+    <section class="paddock-grid" id="paddockGrid">{''.join(cards) if cards else '<div class="card">Henüz padok tanımlanmadı.</div>'}</section>
+    <details class="card paddock-unassigned" {'open' if unassigned else ''}><summary>⚠️ Padoksuz Aktif Hayvanlar ({len(unassigned)})</summary><div>{unassigned_html}</div></details>
+    <details class="card paddock-unassigned"><summary>↔ Son Padok Hareketleri</summary><div class="paddock-history"><table><tr><th>Tarih</th><th>Hayvan</th><th>Önceki</th><th>Yeni</th><th>Not</th></tr>{history_rows}</table></div></details>
+    <script>(function(){{const input=document.getElementById('paddockSearch'),cards=[...document.querySelectorAll('[data-paddock-search]')],count=document.getElementById('paddockSearchCount');if(!input)return;function run(){{const q=(input.value||'').toLocaleLowerCase('tr-TR').trim();let n=0;cards.forEach(card=>{{const ok=!q||(card.dataset.paddockSearch||'').includes(q);card.style.display=ok?'':'none';if(ok)n++;}});count.textContent=n+' padok gösteriliyor';}}input.addEventListener('input',run);run();}})();</script>'''
 
 def male_weight_performance(animal_id, con=None):
     own=con is None
@@ -4659,6 +4841,28 @@ function bindSmartPhotoForms(){{
  }});
 }}
 
+function bindSubmitLocks(){{
+ document.querySelectorAll('form[data-submit-lock="1"]').forEach(function(form){{
+   if(form.dataset.submitLockBound==='1')return;form.dataset.submitLockBound='1';
+   form.addEventListener('submit',function(ev){{
+     if(form.dataset.submitting==='1'){{ev.preventDefault();return;}}
+     if(ev.defaultPrevented||!form.checkValidity())return;
+     form.dataset.submitting='1';
+     const btn=(ev.submitter&&ev.submitter.tagName==='BUTTON')?ev.submitter:form.querySelector('button[type="submit"],button:not([type])');
+     if(btn){{
+       btn.dataset.oldText=btn.textContent;btn.disabled=true;btn.setAttribute('aria-busy','true');
+       btn.textContent=form.dataset.submitText||'⏳ Yapılıyor…';
+     }}
+   }});
+ }});
+ window.addEventListener('pageshow',function(){{
+   document.querySelectorAll('form[data-submit-lock="1"]').forEach(function(form){{
+     form.dataset.submitting='0';const btn=form.querySelector('button[aria-busy="true"]');
+     if(btn){{btn.disabled=false;btn.removeAttribute('aria-busy');btn.textContent=btn.dataset.oldText||'Kaydet';}}
+   }});
+ }});
+}}
+
 function moneyRaw(v){{
   v=String(v||'').trim().replace(/[₺\\s]/g,'');
   if(!v)return '';
@@ -4793,6 +4997,7 @@ document.addEventListener('DOMContentLoaded',bindRationFloatingSummary);
 document.addEventListener('DOMContentLoaded',bindSmartMoney);
 
 document.addEventListener('DOMContentLoaded',bindSmartPhotoForms);
+document.addEventListener('DOMContentLoaded',bindSubmitLocks);
 </script>{DEV10_GLOBAL_FIX}</body></html>"""
 
 
@@ -5464,7 +5669,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 else:label=f'{days} gün kaldı';style='border-left-color:#e2a21f;background:#fff9e8'
                 action=''
                 if str(r["kind"] or '')=='Aşı' and 'IKINCI_DOZ_PLAN' in str(r["notes"] or ''):
-                    action=f'<form method="post" action="/health/second-dose-done" class="actions" style="margin-top:8px"><input type="hidden" name="source_id" value="{r["id"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ 2. Doz Yapıldı</button><a class="btn alt" href="/health">Sağlığı Aç</a></form>'
+                    action=f'<form method="post" action="/health/second-dose-done" class="actions" style="margin-top:8px" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="source_id" value="{r["id"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ 2. Doz Yapıldı</button><a class="btn alt" href="/health">Sağlığı Aç</a></form>'
                 return f'<div class="alertitem" style="{style}"><b>💉 {h(tag)} · {h(r["kind"])}</b><br><span class="mut">{h(r["product"])} · {fmt_date(r["next_date"])} · {label}</span>{action}</div>'
             health_html=''.join(health_task_html(r) for r in health_rows) or '<p class="mut">30 gün içinde planlanan/geciken sağlık işlemi yok.</p>'
             def vaccine_task_html(t):
@@ -5474,7 +5679,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     label='BUGÜN YAPILMALI'; style='border-left-color:#e27b1f;background:#fff6e8'
                 else:
                     label=f"{t['days_left']} gün kaldı"; style='border-left-color:#e2a21f;background:#fff9e8'
-                return f'<div class="alertitem" style="{style}"><b>💉 {h(t["tag"])} · {t["month"]}. Ay Gebelik Aşısı</b><br><span class="mut">Planlanan: {fmt_date(t["task_date"])} · {label}</span><form method="post" action="/pregnancy-vaccine/done" class="actions" style="margin-top:8px"><input type="hidden" name="animal_id" value="{t["animal_id"]}"><input type="hidden" name="insemination_id" value="{t["insemination_id"]}"><input type="hidden" name="month" value="{t["month"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ Aşı Yapıldı</button><a class="btn alt" href="/animal?id={t["animal_id"]}">Hayvanı Aç</a></form></div>'
+                return f'<div class="alertitem" style="{style}"><b>💉 {h(t["tag"])} · {t["month"]}. Ay Gebelik Aşısı</b><br><span class="mut">Planlanan: {fmt_date(t["task_date"])} · {label}</span><form method="post" action="/pregnancy-vaccine/done" class="actions" style="margin-top:8px" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="animal_id" value="{t["animal_id"]}"><input type="hidden" name="insemination_id" value="{t["insemination_id"]}"><input type="hidden" name="month" value="{t["month"]}"><input type="hidden" name="return_to" value="/"><button class="btn">✅ Aşı Yapıldı</button><a class="btn alt" href="/animal?id={t["animal_id"]}">Hayvanı Aç</a></form></div>'
             pregnancy_vaccine_html=''.join(vaccine_task_html(t) for t in pregnancy_vaccines) or '<p class="mut">7 gün içinde 7./8. ay gebelik aşısı görevi yok.</p>'
             dash_cards={
                 'active_total':f'<a class="card stat metric green summary-link" href="/all-animals"><span class="metric-icon">🐄</span><span class="metric-title">Toplam Aktif Hayvan</span><b>{active_total}</b><small>Tüm hayvanları aç →</small></a>',
@@ -5601,27 +5806,21 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             target=setting_float('male_min_daily_gain',1.0); ratio=setting_float('male_warning_ratio',0.90)
             body=f"""<h1>Besi Performans Ayarları</h1><div class="card setting-box"><form method="post" action="/performance-settings" class="form"><label>Minimum Günlük Canlı Ağırlık Artışı (kg/gün)<input type="number" min="0.01" step="0.01" name="male_min_daily_gain" value="{target:.2f}" required></label><label>Sarı Uyarı Başlangıcı (% hedef)<input type="number" min="1" max="100" step="1" name="warning_percent" value="{ratio*100:.0f}" required></label><div class="full"><p class="mut">Örnek: hedef 1,00 kg/gün ve sarı sınır %90 ise; 0,90-0,99 sarı, 0,90 altı kırmızı olur.</p><button class="btn">Ayarları Kaydet</button> <a class="btn alt" href="/performance">İptal</a></div></form></div>"""
             return self.send_html(page('Besi Performans Ayarları',body,path,u,msg))
-        if path=='/paddocks':
+        if path=='/paddock-edit':
+            try:pid=int(q.get('id',['0'])[0])
+            except Exception:pid=0
             with db() as c:
-                paddocks=c.execute("select * from paddocks where active=1 order by name").fetchall()
-                rations=c.execute("select id,name from rations where active=1 order by name").fetchall()
-                adults=c.execute("select id,tag,nickname,gender,paddock_id from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                calves=c.execute("select id,tag,nickname,gender,paddock_id from calves where promoted_animal_id is null order by tag").fetchall()
-                rows=[]
-                for pd in paddocks:
-                    pop=paddock_population(pd['id'],c)
-                    ar=c.execute("select pr.*,r.name ration_name from paddock_rations pr join rations r on r.id=pr.ration_id where pr.paddock_id=? and pr.active=1 and (pr.end_date is null or pr.end_date='') order by pr.id desc limit 1",(pd['id'],)).fetchone()
-                    sm=ration_summary(ar['ration_id'],c) if ar else None
-                    cap=int(pd['capacity'] or 0); doluluk=(pop/cap*100) if cap else 0
-                    rows.append(f'''<tr><td><b>{h(pd['name'])}</b><div class="mut">{h(pd['code']) or '-'}</div></td><td>{h(pd['type']) or 'Genel'}</td><td>{pop}{('/'+str(cap)) if cap else ''}</td><td>{f'{doluluk:.0f}%' if cap else '-'}</td><td>{h(ar['ration_name']) if ar else '-'}</td><td>{(money(sm['cost'])+'/baş/gün · '+money(sm['cost']*pop)+'/padok/gün') if sm else '-'}</td><td>{h(pd['notes']) or '-'}</td></tr>''')
-                pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
-                ration_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in rations)
-                animal_opts=''.join(f'<option value="animal:{x["id"]}">🐄 {h(x["tag"])} · {h(x["nickname"])} · {h(x["gender"])}</option>' for x in adults)+''.join(f'<option value="calf:{x["id"]}">🐮 {h(x["tag"])} · {h(x["nickname"])} · Buzağı</option>' for x in calves)
-            body=f'''<h1>🏠 Padok Yönetimi</h1><p class="mut">Hayvanları padoklara yerleştirin; rasyonu padoka bağlayınca günlük yem ihtiyacı ve maliyet otomatik hesaplanır.</p>
-            <div class="two"><div class="card"><h2>➕ Yeni Padok</h2><form method="post" action="/paddock/create" class="form"><label>Padok Adı<input name="name" required placeholder="Besi B-01"></label><label>Kod<input name="code" placeholder="B01"></label><label>Tür<select name="type"><option>Genel</option><option>Besi</option><option>Dişi</option><option>Buzağı</option><option>Doğum</option><option>Karantina</option></select></label><label>Kapasite<input type="number" min="0" name="capacity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Padoku Kaydet</button></div></form></div>
-            <div class="card"><h2>🐄 Hayvanı Padoka Ata</h2><form method="post" action="/paddock/assign" class="form"><label class="full">Hayvan<select name="animal_ref" required><option value="">Seçin</option>{animal_opts}</select></label><label class="full">Padok<select name="paddock_id"><option value="">Padoksuz</option>{pd_opts}</select></label><label class="full">Taşıma Notu<input name="notes" placeholder="Grup değişimi"></label><div class="full"><button class="btn blue">Padoka Ata / Taşı</button></div></form></div></div>
-            <div class="card" style="margin-top:14px"><h2>🥣 Padoka Rasyon Ata</h2><form method="post" action="/ration/assign" class="form"><label>Padok<select name="paddock_id" required><option value="">Seçin</option>{pd_opts}</select></label><label>Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes"></label><div class="full"><button class="btn orange">Rasyonu Padoka Ata</button> <a class="btn alt" href="/rations">Rasyon Yönetimi →</a></div></form></div>
-            <div class="card" style="margin-top:14px;overflow:auto"><h2>Padoklar</h2><table><tr><th>Padok</th><th>Tür</th><th>Hayvan</th><th>Doluluk</th><th>Aktif Rasyon</th><th>Yem Maliyeti</th><th>Not</th></tr>{''.join(rows) if rows else '<tr><td colspan="7">Henüz padok tanımlanmadı.</td></tr>'}</table></div>'''
+                pd=c.execute('select * from paddocks where id=? and active=1',(pid,)).fetchone()
+                pop=paddock_population(pid,c) if pd else 0
+            if not pd:return self.redirect('/paddocks','Padok bulunamadı.')
+            type_options=''.join(f'<option {"selected" if str(pd["type"] or "Genel")==x else ""}>{h(x)}</option>' for x in ('Genel','Besi','Dişi','Buzağı','Doğum','Karantina'))
+            body=f'''<div class="actions"><a class="btn alt" href="/paddocks">← Padok Yönetimine Dön</a></div><h1>🏠 {h(pd['name'])} Padok Bilgileri</h1>
+            <div class="card"><form method="post" action="/paddock/edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="id" value="{pid}">
+            <label>Padok Adı<input name="name" required value="{h(pd['name'])}"></label><label>Kod<input name="code" value="{h(pd['code'])}"></label><label>Tür<select name="type">{type_options}</select></label><label>Kapasite<input type="number" min="0" name="capacity" value="{int(pd['capacity'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(pd['notes'])}</textarea></label>
+            <div class="full"><p class="mut">Bu padokta şu anda <b>{pop} hayvan</b> bulunuyor. Ad veya kod değişikliği hayvan kartlarına otomatik yansır.</p><button class="btn">Değişiklikleri Kaydet</button></div></form></div>'''
+            return self.send_html(page('Padok Düzenle',body,'/paddocks',u,msg))
+        if path=='/paddocks':
+            body=render_paddock_management()
             return self.send_html(page('Padok Yönetimi',body,'/paddocks',u,msg))
         if path=='/feeds':
             search=(q.get('q',[''])[0] or '').strip()
@@ -6371,6 +6570,21 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             {detail_card('🛡️','Korunma',disease['prevention'])}{detail_card('🏛️','Resmî bildirim notu',disease['reportable_note'] or 'Özel bildirim notu bulunmuyor; güncel durum veteriner ve İl/İlçe Müdürlüğünden doğrulanmalıdır.')}
             </div><div class="card" style="margin-top:14px"><b>Güvenlik:</b> Bu kart tanı veya reçete değildir. Doz ve ilaç yalnız veteriner reçetesi ve ruhsatlı ürün bilgisiyle kaydedilir.<div class="actions"><a class="btn" href="/medicines?tab=treatments&disease_id={disease['id']}">🩺 Bu hastalık için tedavi kaydı aç</a><a class="btn alt" href="{h(disease['official_source_url'])}" target="_blank" rel="noopener">Resmî kaynağı aç ↗</a></div></div>'''
             return self.send_html(page(str(disease['name']),body,'/medicines',u,msg))
+        if path=='/treatment-edit':
+            try:treatment_id=int(q.get('id',['0'])[0])
+            except Exception:treatment_id=0
+            with db() as c:
+                treatment=c.execute("""select t.*,m.product_name,a.tag animal_tag,ca.tag calf_tag
+                    from treatments t left join medicine_catalog m on m.id=t.medicine_id
+                    left join animals a on a.id=t.animal_id left join calves ca on ca.id=t.calf_id where t.id=?""",(treatment_id,)).fetchone()
+                medicines=c.execute("select id,product_name,withdrawal_verified from medicine_catalog where active=1 order by product_name").fetchall()
+                diseases=c.execute("select id,name,category from disease_catalog where active=1 order by category,name").fetchall()
+            if not treatment:return self.redirect('/medicines?tab=treatments','Tedavi kaydı bulunamadı.')
+            medicine_options=''.join(f'<option value="{r["id"]}" {"selected" if int(r["id"])==int(treatment["medicine_id"] or 0) else ""}>{h(r["product_name"])}{" · arınma doğrulanmadı" if not r["withdrawal_verified"] else ""}</option>' for r in medicines)
+            disease_options='<option value="">Hastalık seçilmedi</option>'+''.join(f'<option value="{r["id"]}" {"selected" if int(r["id"])==int(treatment["disease_id"] or 0) else ""}>{h(r["name"])} · {h(r["category"])}</option>' for r in diseases)
+            subject=treatment['animal_tag'] or treatment['calf_tag'] or '-'
+            body=f'''<div class="actions"><a class="btn alt" href="/medicines?tab=treatments">← Tedavilere Dön</a></div><h1>🩺 Tedavi Kaydını Düzenle</h1><div class="card"><div class="flash">Hayvan: <b>{h(subject)}</b> · Stok, sağlık geçmişi ve bağlı finans hareketi birlikte güncellenir.</div><form method="post" action="/treatment/edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="id" value="{treatment_id}"><label>Hayvan<input value="{h(subject)}" disabled></label><label>İlaç<select name="medicine_id" required>{medicine_options}</select></label><label>Başlangıç<input type="date" name="start_date" value="{h(treatment['start_date'])}" required></label><label>Bitiş / Son Uygulama<input type="date" name="end_date" value="{h(treatment['end_date'] or treatment['start_date'])}" required></label><label>Doz<input type="number" min="0" step="0.001" name="dose_amount" value="{float(treatment['dose_amount'] or 0)}" required></label><label>Doz Birimi<select name="dose_unit">{''.join(f'<option {"selected" if str(treatment["dose_unit"] or "ml")==x else ""}>{x}</option>' for x in ("ml","mg","tablet","doz"))}</select></label><label>Günde Uygulama<input type="number" min="1" max="12" name="applications_per_day" value="{int(treatment['applications_per_day'] or 1)}"></label><label>Uygulama Yolu<input name="application_route" value="{h(treatment['application_route'])}"></label><label>Hastalık / Teşhis<select name="disease_id">{disease_options}</select></label><label>Teşhis Notu<input name="diagnosis" value="{h(treatment['diagnosis'])}"></label><label>Veteriner<input name="veterinarian" value="{h(treatment['veterinarian'])}"></label><label>Reçete No<input name="prescription_no" value="{h(treatment['prescription_no'])}"></label><label>Toplam Kullanım<input type="number" min="0" step="0.001" name="total_quantity" value="{float(treatment['total_quantity'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(treatment['notes'])}</textarea></label><div class="full actions"><button class="btn">Tedaviyi Güncelle</button><a class="btn alt" href="/medicines?tab=treatments">İptal</a></div></form></div>'''
+            return self.send_html(page('Tedavi Düzenle',body,'/medicines',u,msg))
         if path=='/medicines':
             today=date.today().isoformat(); soon=(date.today()+timedelta(days=60)).isoformat()
             with db() as c:
@@ -6399,7 +6613,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             disease_rows=''.join(f'''<tr><td><a class="animal-tag-btn" href="/disease?id={r['id']}">{h(r['name'])}</a></td><td>{h(r['category'])}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['contagious'] else 'Hayır'}</td><td>{'<span class="status-badge status-neg">Evet</span>' if r['zoonotic'] else 'Hayır'}</td><td><b>{h(r['urgency'])}</b></td><td>{h(r['common_signs'])}<div class="mut">{h(r['reportable_note'])}</div></td></tr>''' for r in diseases)
             ingredient_rows=''.join(f'''<tr><td><b>{h(r['generic_name'])}</b></td><td>{h(r['therapeutic_group'])}</td><td>{h(r['caution'])}</td></tr>''' for r in ingredients)
             batch_rows=''.join(f'''<tr class="{'bad' if r['expiry_date'] and r['expiry_date']<today else ('warn' if r['expiry_date'] and r['expiry_date']<=soon else '')}"><td>{h(r['product_name'])}</td><td>{h(r['lot_no']) or '—'}</td><td>{fmt_date(r['expiry_date']) or '—'}</td><td>{float(r['balance'] or 0):.2f} {h(r['unit'])}</td><td>{money(r['unit_cost'])}</td></tr>''' for r in batches) or '<tr><td colspan="5">Parti/stok kaydı yok.</td></tr>'
-            treatment_rows=''.join(f'''<tr><td>{fmt_date(r['start_date'])}</td><td>{h(r['animal_tag'] or r['calf_tag'])}</td><td><b>{h(r['product_name'])}</b><div class="mut">{h(r['dose_amount'])} {h(r['dose_unit'])} · {h(r['application_route'])}</div></td><td>{h(r['diagnosis'])}</td><td>{fmt_date(r['meat_safe_date'])}</td><td>{fmt_date(str(r['milk_safe_date'] or '')[:10])}</td><td>{h(r['status'])}</td></tr>''' for r in treatments) or '<tr><td colspan="7">Tedavi kaydı yok.</td></tr>'
+            treatment_rows=''.join(f'''<tr><td>{fmt_date(r['start_date'])}</td><td>{h(r['animal_tag'] or r['calf_tag'])}</td><td><b>{h(r['product_name'])}</b><div class="mut">{h(r['dose_amount'])} {h(r['dose_unit'])} · {h(r['application_route'])}</div></td><td>{h(r['diagnosis'])}</td><td>{fmt_date(r['meat_safe_date'])}</td><td>{fmt_date(str(r['milk_safe_date'] or '')[:10])}</td><td>{h(r['status'])}</td><td><div class="actions" style="flex-wrap:nowrap"><a class="btn alt" href="/treatment-edit?id={r['id']}">Düzenle</a><form method="post" action="/treatment/delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm('Bu tedavi; sağlık, stok ve bağlı finans hareketiyle birlikte silinsin mi?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red">Sil</button></form></div></td></tr>''' for r in treatments) or '<tr><td colspan="8">Tedavi kaydı yok.</td></tr>'
             critical_stock=sum(1 for r in meds if float(r['stock'] or 0)<=0)
             expiring=sum(1 for r in batches if float(r['balance'] or 0)>0 and r['expiry_date'] and r['expiry_date']<=soon)
             active_withdrawal=sum(1 for r in treatments if (r['meat_safe_date'] and r['meat_safe_date']>today) or (r['milk_safe_date'] and str(r['milk_safe_date'])[:10]>today))
@@ -6418,20 +6632,39 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <div class="card catalog-section {'on' if active_tab=='ingredients' else ''}" style="margin-top:14px"><h2>Etken Madde Başlangıç Rehberi</h2><p class="mut">Bunlar ticari ürün veya tedavi önerisi değildir. Kullanılacak ruhsatlı ürün, reçete ve arınma süresi Bakanlık kaydından doğrulanmalıdır.</p><div class="medicine-table-wrap"><table><tr><th>Etken Madde</th><th>Grup</th><th>Güvenlik Notu</th></tr>{ingredient_rows}</table></div></div>
             <div class="card catalog-section {'on' if active_tab=='diseases' else ''}" style="margin-top:14px"><h2>Hastalık Kataloğu</h2><p class="mut">Bir hastalığa tıklayarak tanım, belirtiler, ilk yapılacaklar, veteriner yaklaşımı ve korunma detayını açın.</p><div class="medicine-tools"><input id="diseaseSearch" placeholder="🔎 Hastalık, kategori veya belirti ara"></div><div class="medicine-table-wrap"><table id="diseaseCatalogTable" class="medicine-table"><tr><th>Hastalık</th><th>Grup</th><th>Bulaşıcı</th><th>Zoonoz</th><th>Öncelik</th><th>Sık Görülen Bulgular / Not</th></tr>{disease_rows}</table></div></div>
             <div class="card catalog-section {'on' if active_tab=='stock' else ''}" style="margin-top:14px"><h2>Partiler ve Son Kullanma</h2><div class="medicine-table-wrap"><table><tr><th>Ürün</th><th>Lot</th><th>SKT</th><th>Kalan</th><th>Birim Maliyet</th></tr>{batch_rows}</table></div></div>
-            <div class="card catalog-section {'on' if active_tab=='treatments' else ''}" style="margin-top:14px"><h2>Tedavi ve Arınma Takibi</h2><div class="medicine-table-wrap"><table class="medicine-table"><tr><th>Tarih</th><th>Hayvan</th><th>Ürün / Doz</th><th>Teşhis</th><th>Et Güvenli</th><th>Süt Güvenli</th><th>Durum</th></tr>{treatment_rows}</table></div></div>
+            <div class="card catalog-section {'on' if active_tab=='treatments' else ''}" style="margin-top:14px"><h2>Tedavi ve Arınma Takibi</h2><div class="medicine-table-wrap"><table class="medicine-table"><tr><th>Tarih</th><th>Hayvan</th><th>Ürün / Doz</th><th>Teşhis</th><th>Et Güvenli</th><th>Süt Güvenli</th><th>Durum</th><th>İşlem</th></tr>{treatment_rows}</table></div></div>
             <div id="medicineDrawerBackdrop" class="medicine-drawer-backdrop" onclick="closeMedicineDrawer()"></div><aside id="medicineDrawer" class="medicine-drawer" aria-hidden="true"><div class="medicine-drawer-head"><div><span class="mut">İLAÇ & VETERİNER</span><h2 id="medicineDrawerTitle">Yeni Kayıt</h2></div><button class="medicine-drawer-close" type="button" onclick="closeMedicineDrawer()">×</button></div><div class="medicine-drawer-body">
             <div id="medicinePanelCatalog" class="card medicine-panel"><div class="official-source"><span>🏛️</span><div><b>Resmî kayıt doğrulaması</b><br><span class="mut">Ürünü Bakanlık ruhsat sorgusundan kontrol edin; arınma süresini Ürün Özellikleri Özeti'nden girin.</span></div></div><form method="post" action="/medicine/create" class="form"><label>Ürün Adı<input name="product_name" required></label><label>Etkin Madde<input name="active_ingredient"></label><label>Ruhsat Sahibi / Firma<input name="company"></label><label>Terapötik Grup<input name="therapeutic_group"></label><label>Uygulama Yolu<input name="application_route" placeholder="Kas içi / Deri altı / Oral"></label><label>Farmasötik Şekil<input name="pharmaceutical_form"></label><label>Et Arınma (gün)<input type="number" min="0" name="meat_withdrawal_days" value="0"></label><label>Süt Arınma (saat)<input type="number" min="0" name="milk_withdrawal_hours" value="0"></label><label class="full">Resmî Ürün Kaynağı<input type="url" name="official_source_url" value="https://hbs.tarbil.gov.tr/Receipt/SearchProduct"></label><label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="withdrawal_verified" value="yes" style="width:auto"> Et ve süt arınma bilgilerini resmî ürün kaynağından doğruladım</label><label class="full">Saklama / Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">İlacı Kaydet</button></div></form></div>
             <div id="medicinePanelStock" class="card medicine-panel"><form method="post" action="/medicine/stock" class="form"><label>İlaç<select name="medicine_id" required><option value="">Seçin…</option>{med_opts}</select></label><label>Parti / Lot<input name="lot_no"></label><label>Son Kullanma<input type="date" name="expiry_date"></label><label>Miktar<input type="number" min="0.001" step="0.001" name="quantity" required></label><label>Birim<select name="unit"><option>ml</option><option>doz</option><option>tablet</option><option>şişe</option><option>adet</option></select></label><label>Birim Maliyet<input type="number" min="0" step="0.01" name="unit_cost" value="0"></label><label>Tedarikçi<input name="supplier"></label><label><input type="checkbox" name="post_finance" value="yes"> Finansa gider yaz</label><div class="full"><button class="btn">Stok Girişi Yap</button></div></form></div>
-            <div id="medicinePanelTreatment" class="card medicine-panel"><form method="post" action="/treatment/create" class="form"><label class="full">Hayvan Ara<input id="treatmentSubjectSearch" placeholder="Küpe veya isim yazın" autocomplete="off"><select id="treatmentSubject" name="subject_key" required><option value="">Seçin…</option>{subject_opts}</select></label><label>İlaç<select name="medicine_id" required><option value="">Seçin…</option>{med_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{today}" required></label><label>Bitiş / Son Uygulama<input type="date" name="end_date" value="{today}" required></label><label>Doz<input type="number" min="0" step="0.001" name="dose_amount" required></label><label>Doz Birimi<select name="dose_unit"><option>ml</option><option>mg</option><option>tablet</option><option>doz</option></select></label><label>Günde Uygulama<input type="number" min="1" max="12" name="applications_per_day" value="1"></label><label>Uygulama Yolu<input name="application_route"></label><label>Hastalık / Teşhis<select name="disease_id"><option value="">Veteriner teşhisi seçin…</option>{disease_opts}</select></label><label>Teşhis Notu<input name="diagnosis"></label><label>Veteriner<input name="veterinarian"></label><label>Reçete No<input name="prescription_no"></label><label>Toplam Kullanım<input type="number" min="0" step="0.001" name="total_quantity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Tedaviyi Kaydet</button></div></form></div></div></aside>
+            <div id="medicinePanelTreatment" class="card medicine-panel"><form method="post" action="/treatment/create" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><label class="full">Hayvan Ara<input id="treatmentSubjectSearch" placeholder="Küpe veya isim yazın" autocomplete="off"><select id="treatmentSubject" name="subject_key" required><option value="">Seçin…</option>{subject_opts}</select></label><label>İlaç<select name="medicine_id" required><option value="">Seçin…</option>{med_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{today}" required></label><label>Bitiş / Son Uygulama<input type="date" name="end_date" value="{today}" required></label><label>Doz<input type="number" min="0" step="0.001" name="dose_amount" required></label><label>Doz Birimi<select name="dose_unit"><option>ml</option><option>mg</option><option>tablet</option><option>doz</option></select></label><label>Günde Uygulama<input type="number" min="1" max="12" name="applications_per_day" value="1"></label><label>Uygulama Yolu<input name="application_route"></label><label>Hastalık / Teşhis<select name="disease_id"><option value="">Veteriner teşhisi seçin…</option>{disease_opts}</select></label><label>Teşhis Notu<input name="diagnosis"></label><label>Veteriner<input name="veterinarian"></label><label>Reçete No<input name="prescription_no"></label><label>Toplam Kullanım<input type="number" min="0" step="0.001" name="total_quantity" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn">Tedaviyi Kaydet</button></div></form></div></div></aside>
             <script>(function(){{var titles={{catalog:'➕ Kataloğa İlaç Ekle',stock:'📦 Parti / Stok Girişi',treatment:'🩺 Tedavi Kaydı'}};window.openMedicineDrawer=function(name){{document.querySelectorAll('.medicine-panel').forEach(function(x){{x.style.display='none'}});document.getElementById('medicinePanel'+name.charAt(0).toUpperCase()+name.slice(1)).style.display='block';document.getElementById('medicineDrawerTitle').textContent=titles[name];document.getElementById('medicineDrawer').classList.add('open');document.getElementById('medicineDrawerBackdrop').classList.add('open');document.body.classList.add('medicine-drawer-open')}};window.closeMedicineDrawer=function(){{document.getElementById('medicineDrawer').classList.remove('open');document.getElementById('medicineDrawerBackdrop').classList.remove('open');document.body.classList.remove('medicine-drawer-open')}};document.querySelectorAll('.medicine-panel').forEach(function(x){{x.style.display='none'}});document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeMedicineDrawer()}});var q=document.getElementById('medicineSearch'),g=document.getElementById('medicineGroup'),table=document.getElementById('medicineCatalogTable');function filterMeds(){{var s=(q.value||'').toLocaleLowerCase('tr-TR'),group=g.value;Array.from(table.querySelectorAll('tr')).slice(1).forEach(function(row){{var ok=row.textContent.toLocaleLowerCase('tr-TR').indexOf(s)>=0&&(!group||row.children[2].textContent.trim()===group);row.style.display=ok?'':'none'}})}}q.addEventListener('input',filterMeds);g.addEventListener('change',filterMeds);var dq=document.getElementById('diseaseSearch'),dt=document.getElementById('diseaseCatalogTable');dq.addEventListener('input',function(){{var s=this.value.toLocaleLowerCase('tr-TR');Array.from(dt.querySelectorAll('tr')).slice(1).forEach(function(row){{row.style.display=row.textContent.toLocaleLowerCase('tr-TR').indexOf(s)>=0?'':'none'}})}});var animalQ=document.getElementById('treatmentSubjectSearch'),animalS=document.getElementById('treatmentSubject');animalQ.addEventListener('input',function(){{var s=this.value.toLocaleLowerCase('tr-TR');Array.from(animalS.options).forEach(function(o,i){{if(i)o.hidden=o.textContent.toLocaleLowerCase('tr-TR').indexOf(s)<0}})}});{'openMedicineDrawer("treatment");' if selected_disease else ''}}})();</script>'''
             return self.send_html(page('İlaç & Veteriner',body,'/medicines',u,msg))
+        if path=='/health-plan-edit':
+            try:course_id=int(q.get('id',['0'])[0])
+            except Exception:course_id=0
+            with db() as c:
+                course=c.execute("select hc.*,p.name paddock_name from health_courses hc left join paddocks p on p.id=hc.paddock_id where hc.id=? and coalesce(hc.active,1)=1",(course_id,)).fetchone()
+                task_stats=c.execute("select count(*) total,sum(case when status='Tamamlandı' then 1 else 0 end) completed from health_tasks where course_id=?",(course_id,)).fetchone() if course else None
+                target_rows=c.execute("""select distinct t.animal_id,t.calf_id,a.tag animal_tag,ca.tag calf_tag
+                    from health_tasks t left join animals a on a.id=t.animal_id left join calves ca on ca.id=t.calf_id
+                    where t.course_id=? order by coalesce(a.tag,ca.tag)""",(course_id,)).fetchall() if course else []
+            if not course:return self.redirect('/health','Sağlık planı bulunamadı veya daha önce silinmiş.')
+            target_names=', '.join(str(r['animal_tag'] or r['calf_tag'] or '-') for r in target_rows)
+            subject_label=('Padok: '+str(course['paddock_name'] or '-')) if course['scope_type']=='paddock' else ('Hayvan: '+target_names)
+            completed=int(task_stats['completed'] or 0);total=int(task_stats['total'] or 0)
+            if course['kind']=='Aşı':
+                schedule_fields=f'''<label>Kaç Doz?<input type="number" name="dose_count" min="1" max="10" value="{int(course['dose_count'] or 1)}" required></label><label>Dozlar Arası Gün<input type="number" name="dose_interval_days" min="1" max="365" value="{int(course['interval_days'] or 15)}" required></label>'''
+            else:
+                schedule_fields=f'''<label>Tedavi Kaç Gün?<input type="number" name="treatment_days" min="1" max="60" value="{int(course['treatment_days'] or 1)}" required></label><label>Günde Kaç Uygulama?<input type="number" name="times_per_day" min="1" max="6" value="{int(course['times_per_day'] or 1)}" required></label>'''
+            body=f'''<div class="actions"><a class="btn alt" href="/health">← Sağlığa Dön</a></div><h1>💉 Sağlık Planını Düzenle</h1><div class="card"><div class="flash">{h(subject_label)} · {len(target_rows)} hayvan · {completed}/{total} uygulama tamamlandı</div><form method="post" action="/health-plan-edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="course_id" value="{course_id}"><label>Tür<input value="{h(course['kind'])}" disabled></label><label>Kapsam<input value="{'Padok bazında' if course['scope_type']=='paddock' else 'Tek hayvan'}" disabled></label><label class="full">Ürün / İşlem<input name="product" value="{h(course['product'])}" required></label><label>Başlangıç Tarihi<input type="date" name="start_date" value="{h(course['start_date'])}" required></label>{schedule_fields}<label>Uygulama Başı / Hayvan Başı Maliyet<input type="number" step="0.01" min="0" name="cost" value="{float(course['cost_per_application'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(course['notes'])}</textarea></label><div class="full"><p class="mut">Tamamlanmış uygulamalar değişmeden korunur; yalnız bekleyen tarihler ve bilgiler yeniden oluşturulur.</p><button class="btn">Değişiklikleri Kaydet</button></div></form></div>'''
+            return self.send_html(page('Sağlık Planı Düzenle',body,'/health',u,msg))
         if path=='/health-edit':
             hid=q.get('id',[''])[0]
             with db() as c:
                 r=c.execute("select h.*,a.tag as animal_tag,ca.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where h.id=?",(hid,)).fetchone()
             if not r:return self.redirect('/health','Sağlık kaydı bulunamadı.')
             subject=r['animal_tag'] or r['calf_tag'] or '-'
-            body=f'''<h1>Sağlık Kaydını Düzenle</h1><div class="card"><form method="post" action="/health-edit" class="form">
+            body=f'''<h1>Sağlık Kaydını Düzenle</h1><div class="card"><form method="post" action="/health-edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…">
             <input type="hidden" name="id" value="{r["id"]}">
             <label>Hayvan / Buzağı<input value="{h(subject)}" disabled></label>
             <label>Tür<select name="kind"><option {"selected" if r["kind"]=="Aşı" else ""}>Aşı</option><option {"selected" if r["kind"]=="İlaç" else ""}>İlaç</option><option {"selected" if r["kind"]=="Muayene" else ""}>Muayene</option></select></label>
@@ -6445,15 +6678,18 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             return self.send_html(page('Sağlık Kaydı Düzenle',body,'/health',u,msg))
         if path=='/health':
             with db() as c:
-                active_animals=c.execute("select id,tag,nickname,gender,paddock_id from animals where coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                active_calves=c.execute("select id,tag,gender,paddock_id from calves where promoted_animal_id is null order by tag").fetchall()
+                active_animals=c.execute("""select id,tag,nickname,gender,paddock_id from animals
+                    where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag""").fetchall()
+                active_calves=c.execute("""select id,tag,gender,paddock_id from calves
+                    where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif'
+                    and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag""").fetchall()
                 paddocks=c.execute("select id,name,code from paddocks where active=1 order by name").fetchall()
                 rows=c.execute("select h.*,a.tag as animal_tag,a.nickname,c.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves c on c.id=h.calf_id order by h.applied_date desc,h.id desc").fetchall()
                 legacy_plans=c.execute("select h.*,a.tag as animal_tag,a.nickname,c.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves c on c.id=h.calf_id where coalesce(h.next_date,'')<>'' order by h.next_date,h.id").fetchall()
                 task_rows=c.execute("""select t.*,hc.kind,hc.product,hc.scope_type,hc.paddock_id,p.name as paddock_name,a.tag as animal_tag,a.nickname,c.tag as calf_tag
                     from health_tasks t join health_courses hc on hc.id=t.course_id left join paddocks p on p.id=hc.paddock_id
                     left join animals a on a.id=t.animal_id left join calves c on c.id=t.calf_id
-                    where t.status='Bekliyor' order by t.planned_date,t.course_id,t.dose_no,t.day_no,t.application_no,t.id""").fetchall()
+                    where t.status='Bekliyor' and coalesce(hc.active,1)=1 order by t.planned_date,t.course_id,t.dose_no,t.day_no,t.application_no,t.id""").fetchall()
             subject_items=[]
             for a in active_animals:
                 label=str(a['tag'])+' · '+(str(a['nickname'] or '').strip() or str(a['gender'] or 'Hayvan'))
@@ -6468,7 +6704,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 health_groups.setdefault(key,{'tag':tag,'nickname':nickname,'rows':[]})['rows'].append(r)
             group_cards=[]
             for g in health_groups.values():
-                inner=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{money(r["cost"])}</td><td><a class="btn alt" href="/health-edit?id={r["id"]}">Düzenle</a> <form method="post" action="/health-delete" class="inline-form" onsubmit="return confirm(\'Bu sağlık kaydı silinsin mi?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form></td></tr>' for r in g['rows'])
+                def health_row_actions(r):
+                    if r['treatment_id']:
+                        return f'<a class="btn alt" href="/treatment-edit?id={r["treatment_id"]}">Düzenle</a> <form method="post" action="/treatment/delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm(\'Bu tedavi kaydı; stok ve bağlı finans hareketiyle birlikte silinsin mi?\')"><input type="hidden" name="id" value="{r["treatment_id"]}"><input type="hidden" name="return_to" value="/health"><button class="btn red">Sil</button></form>'
+                    return f'<a class="btn alt" href="/health-edit?id={r["id"]}">Düzenle</a> <form method="post" action="/health-delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm(\'Bu sağlık kaydı silinsin mi?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn red">Sil</button></form>'
+                inner=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{money(r["cost"])}</td><td>{health_row_actions(r)}</td></tr>' for r in g['rows'])
                 latest=g['rows'][0]['applied_date'] if g['rows'] else ''
                 group_cards.append(f'''<details class="health-group"><summary><span><b>🐄 {h(g['tag'])}</b> · {h(g['nickname'])}</span><span class="mut">{len(g['rows'])} kayıt · Son işlem {fmt_date(latest)} ▾</span></summary><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Maliyet</th><th>İşlem</th></tr>{inner}</table></div></details>''')
             grouped_health_html=''.join(group_cards) or '<p class="mut">Henüz sağlık kaydı yok.</p>'
@@ -6489,18 +6729,19 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 detail=(f'{int(r["dose_no"] or 1)} / {int(r["dose_total"] or 1)}. doz' if r['kind']=='Aşı' else f'{int(r["day_no"] or 1)} / {int(r["day_total"] or 1)}. gün · {int(r["application_no"] or 1)} / {int(r["applications_per_day"] or 1)} uygulama')
                 if r['scope_type']=='paddock':
                     title='🏠 '+str(r['paddock_name'] or 'Padok');meta=f'{len(items)} hayvan · {detail}'
-                    action=f'''<form method="post" action="/health/task-batch-done"><input type="hidden" name="course_id" value="{r['course_id']}"><input type="hidden" name="planned_date" value="{h(r['planned_date'])}"><input type="hidden" name="dose_no" value="{int(r['dose_no'] or 1)}"><input type="hidden" name="day_no" value="{int(r['day_no'] or 1)}"><input type="hidden" name="application_no" value="{int(r['application_no'] or 1)}"><button class="btn">✅ {len(items)} Hayvan Yapıldı</button></form>'''
+                    action=f'''<form method="post" action="/health/task-batch-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="course_id" value="{r['course_id']}"><input type="hidden" name="planned_date" value="{h(r['planned_date'])}"><input type="hidden" name="dose_no" value="{int(r['dose_no'] or 1)}"><input type="hidden" name="day_no" value="{int(r['day_no'] or 1)}"><input type="hidden" name="application_no" value="{int(r['application_no'] or 1)}"><button class="btn">✅ {len(items)} Hayvan Yapıldı</button></form>'''
                 else:
                     title='🐄 '+str(r['animal_tag'] or r['calf_tag'] or '-');meta=detail
-                    action=f'''<form method="post" action="/health/task-done"><input type="hidden" name="task_id" value="{r['id']}"><button class="btn">✅ Yapıldı</button></form>'''
+                    action=f'''<form method="post" action="/health/task-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="task_id" value="{r['id']}"><button class="btn">✅ Yapıldı</button></form>'''
+                action+=f'''<div class="health-plan-controls"><a class="btn alt" href="/health-plan-edit?id={r['course_id']}">Düzenle</a><form method="post" action="/health-plan-delete" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm('Bu planın bekleyen uygulamaları silinsin mi? Tamamlanmış sağlık geçmişi korunur.')"><input type="hidden" name="course_id" value="{r['course_id']}"><button class="btn red">Sil</button></form></div>'''
                 task_cards.append(f'''<div class="health-plan-card"><div class="health-plan-main"><div><b>{h(title)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">{h(meta)} · {fmt_date(r['planned_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
             for r in legacy_plans:
                 tag=r['animal_tag'] or r['calf_tag'] or '-';badge=due_badge(r['next_date'])
-                action=(f'''<form method="post" action="/health/second-dose-done"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ 2. Doz Yapıldı</button></form>''' if str(r['kind'] or '')=='Aşı' and 'IKINCI_DOZ_PLAN' in str(r['notes'] or '') else f'''<form method="post" action="/health/plan-done"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ Yapıldı</button></form>''')
+                action=(f'''<form method="post" action="/health/second-dose-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ 2. Doz Yapıldı</button></form>''' if str(r['kind'] or '')=='Aşı' and 'IKINCI_DOZ_PLAN' in str(r['notes'] or '') else f'''<form method="post" action="/health/plan-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ Yapıldı</button></form>''')
                 task_cards.append(f'''<div class="health-plan-card"><div class="health-plan-main"><div><b>🐄 {h(tag)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">Eski plan · {fmt_date(r['next_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
             planned_html=''.join(task_cards) or '<p class="mut">Planlanmış sağlık işlemi yok.</p>'
-            body=f'''<style>.health-mode-box{{background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px}}.health-plan-list{{display:grid;gap:10px}}.health-plan-card{{border:1px solid #dfe9e2;border-radius:15px;padding:14px;background:#fff}}.health-plan-main{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.health-plan-product{{font-weight:800;margin:5px 0}}.health-due{{white-space:nowrap;font-weight:800}}.health-plan-action{{margin-top:12px}}.health-plan-action form{{margin:0}}@media(max-width:700px){{.health-plan-main{{display:block}}.health-due{{display:inline-block;margin-top:8px}}.health-plan-action .btn{{width:100%}}.health-group summary{{align-items:flex-start;flex-direction:column}}}}</style><h1>Sağlık</h1>
-            <div class="card"><form method="post" class="form" id="healthForm"><label>Uygulama Kapsamı<select name="scope_type" id="healthScope"><option value="single">Tek Hayvan / Buzağı</option><option value="paddock">Padok Bazında Aşılama</option></select></label><label>Tür<select name="kind" id="healthKind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label>
+            body=f'''<style>.health-mode-box{{background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px}}.health-plan-list{{display:grid;gap:10px}}.health-plan-card{{border:1px solid #dfe9e2;border-radius:15px;padding:14px;background:#fff}}.health-plan-main{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.health-plan-product{{font-weight:800;margin:5px 0}}.health-due{{white-space:nowrap;font-weight:800}}.health-plan-action{{margin-top:12px}}.health-plan-action>form{{margin:0}}.health-plan-controls{{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}}.health-plan-controls form{{margin:0}}.health-plan-controls .btn{{padding:8px 11px}}@media(max-width:700px){{.health-plan-main{{display:block}}.health-due{{display:inline-block;margin-top:8px}}.health-plan-action>form>.btn{{width:100%}}.health-plan-controls{{display:grid;grid-template-columns:1fr 1fr}}.health-plan-controls .btn{{width:100%;text-align:center}}.health-group summary{{align-items:flex-start;flex-direction:column}}}}</style><h1>Sağlık</h1>
+            <div class="card"><form method="post" class="form" id="healthForm" data-submit-lock="1" data-submit-text="⏳ Oluşturuluyor…"><label>Uygulama Kapsamı<select name="scope_type" id="healthScope"><option value="single">Tek Hayvan / Buzağı</option><option value="paddock">Padok Bazında Aşılama</option></select></label><label>Tür<select name="kind" id="healthKind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label>
             <div class="full" id="singleSubjectBox"><label>Hayvan / Buzağı</label><div style="position:relative"><input type="search" id="healthSubjectSearch" placeholder="Küpe veya takma ad yazın…" autocomplete="off"><input type="hidden" name="subject_key" id="healthSubjectKey"><div id="healthSubjectResults" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid #d7e4da;border-radius:12px;max-height:280px;overflow:auto;box-shadow:0 12px 28px #173b2822"></div></div><div class="mut">Aktif hayvanlar ve buzağılar listelenir.</div></div>
             <div class="full" id="paddockSubjectBox" style="display:none"><label>Padok<select name="paddock_id" id="healthPaddock"><option value="">Padok seçin…</option>{paddock_options}</select></label><div class="mut">Plan oluşturulduğu anda padoktaki aktif hayvan listesi sabitlenir. Sonradan padoka giren hayvanlar bu plana eklenmez.</div></div>
             <label>Ürün/İşlem<input name="product" required placeholder="Örn. Şap aşısı / antibiyotik"></label><label>Başlangıç / Uygulama Tarihi<input type="date" name="applied_date" id="healthAppliedDate" required value="{date.today().isoformat()}"></label>
@@ -7019,6 +7260,39 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 with db() as c:c.execute('insert into paddocks(name,code,type,capacity,notes,active,created_at) values(?,?,?,?,?,1,?)',(name,(f.get('code') or '').strip(),(f.get('type') or 'Genel').strip(),cap,(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds')))
             except sqlite3.IntegrityError:return self.redirect('/paddocks','Bu padok adı zaten kayıtlı.')
             audit(username,'Padok oluşturdu',name,self.client_ip());return self.redirect('/paddocks','Padok oluşturuldu.')
+        if path=='/paddock/edit':
+            try:pid=int(f.get('id') or 0)
+            except Exception:pid=0
+            name=(f.get('name') or '').strip()
+            if not name:return self.redirect('/paddock-edit?id='+str(pid),'Padok adı zorunludur.')
+            try:cap=max(0,int(float(f.get('capacity') or 0)))
+            except Exception:cap=0
+            try:
+                with db() as c:
+                    old=c.execute('select * from paddocks where id=? and active=1',(pid,)).fetchone()
+                    if not old:return self.redirect('/paddocks','Padok bulunamadı.')
+                    pop=paddock_population(pid,c)
+                    if cap and cap<pop:return self.redirect('/paddock-edit?id='+str(pid),f'Kapasite {pop} mevcut hayvandan az olamaz.')
+                    c.execute('update paddocks set name=?,code=?,type=?,capacity=?,notes=? where id=?',
+                              (name,(f.get('code') or '').strip(),(f.get('type') or 'Genel').strip(),cap,(f.get('notes') or '').strip(),pid))
+                    c.execute('update animals set paddock=? where paddock_id=?',(name,pid))
+                    c.execute('update calves set paddock=? where paddock_id=?',(name,pid))
+            except sqlite3.IntegrityError:return self.redirect('/paddock-edit?id='+str(pid),'Bu padok adı başka bir kayıtta kullanılıyor.')
+            audit(username,'Padok güncelledi',f'{old["name"]} -> {name}',self.client_ip())
+            return self.redirect('/paddocks','Padok bilgileri ve bağlı hayvan kartları güncellendi.')
+        if path=='/paddock/delete':
+            try:pid=int(f.get('id') or 0)
+            except Exception:pid=0
+            with db() as c:
+                pd=c.execute('select * from paddocks where id=? and active=1',(pid,)).fetchone()
+                if not pd:return self.redirect('/paddocks','Padok bulunamadı veya daha önce silindi.')
+                pop=paddock_population(pid,c)
+                if pop:return self.redirect('/paddocks',f'{pd["name"]} içinde {pop} hayvan var. Önce hayvanları başka padoka taşıyın.')
+                archived_name=f'{pd["name"]} [Arşiv #{pid}]'
+                c.execute('update paddocks set active=0,name=? where id=?',(archived_name,pid))
+                c.execute("update paddock_rations set active=0,end_date=coalesce(nullif(end_date,''),?) where paddock_id=? and active=1",(date.today().isoformat(),pid))
+            audit(username,'Padok sildi/arşivledi',str(pd['name']),self.client_ip())
+            return self.redirect('/paddocks','Boş padok silindi; geçmiş hareket ve rasyon kayıtları korundu.')
         if path=='/paddock/assign':
             ref=(f.get('animal_ref') or '').strip();pid=int(f.get('paddock_id') or 0) or None
             if ':' not in ref:return self.redirect('/paddocks','Hayvan seçin.')
@@ -7028,8 +7302,11 @@ setTimeout(()=>setFinanceDrawer(false),0);
             with db() as c:
                 rec=c.execute(f'select id,tag,paddock_id from {table} where id=?',(aid,)).fetchone()
                 if not rec:return self.redirect('/paddocks','Hayvan bulunamadı.')
-                if pid and not c.execute('select id from paddocks where id=? and active=1',(pid,)).fetchone():return self.redirect('/paddocks','Padok bulunamadı.')
+                target=c.execute('select id,name,capacity from paddocks where id=? and active=1',(pid,)).fetchone() if pid else None
+                if pid and not target:return self.redirect('/paddocks','Padok bulunamadı.')
                 old=rec['paddock_id'];sync_paddock_text(c,source,aid,pid)
+                if target and old!=pid and int(target['capacity'] or 0)>0 and paddock_population(pid,c)>int(target['capacity'] or 0):
+                    c.rollback();return self.redirect('/paddocks',f'{target["name"]} kapasitesi dolu. Hayvan taşınmadı.')
                 if old!=pid:c.execute('insert into paddock_history(animal_source,animal_id,from_paddock_id,to_paddock_id,moved_at,notes) values(?,?,?,?,?,?)',(source,aid,old,pid,datetime.now().isoformat(timespec='seconds'),(f.get('notes') or '').strip()))
             audit(username,'Hayvan padok taşıma',f'{rec["tag"]} -> {pid or "Padoksuz"}',self.client_ip());return self.redirect('/paddocks','Hayvanın padoku güncellendi.')
         if path=='/feed/create':
@@ -7788,10 +8065,13 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         if not allocations:return self.redirect('/medicines','Yeterli toplam stok var ancak tedavi tarihinde kullanılabilecek, son kullanma tarihi geçmemiş parti stoğu yetersiz.')
                         batch=allocations[0][0]
                         cost=sum(used*float(b['unit_cost'] or 0) for b,used in allocations)
+                    fingerprint=treatment_request_fingerprint(username,f)
+                    if not claim_request_once(c,fingerprint,30):
+                        return self.redirect('/medicines?tab=treatments','⚠️ Aynı tedavi ikinci kez gönderildi; mükerrer kayıt engellendi.')
                     finance_id=None
                     if cost>0:
                         desc=f'{med["product_name"]} tedavisi · {diagnosis or "Teşhis belirtilmedi"}'
-                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(start,'Gider','İlaç',cost,desc,'Nakit',animal_id,datetime.now().isoformat(timespec='seconds')))
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(start,'Gider','İlaç',cost,desc,'Nakit',animal_id,calf_id,datetime.now().isoformat(timespec='seconds')))
                         finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
                     c.execute('''insert into treatments(animal_id,calf_id,medicine_id,batch_id,start_date,end_date,dose_amount,dose_unit,application_route,applications_per_day,diagnosis,veterinarian,prescription_no,meat_safe_date,milk_safe_date,total_quantity,cost,finance_id,status,notes,created_at,disease_id) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?)''',
                               (animal_id,calf_id,mid,batch['id'] if batch else None,start,end,max(0,float(f.get('dose_amount') or 0)),f.get('dose_unit') or 'ml',(f.get('application_route') or med['application_route'] or '').strip(),max(1,int(f.get('applications_per_day') or 1)),diagnosis,(f.get('veterinarian') or '').strip(),(f.get('prescription_no') or '').strip(),meat_safe,milk_safe,total,cost,finance_id,'Tamamlandı' if end_day<=date.today() else 'Aktif',(f.get('notes') or '').strip(),datetime.now().isoformat(timespec='seconds'),disease_id))
@@ -7799,9 +8079,77 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     for used_batch,used_qty in allocations:
                         c.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,unit_cost,treatment_id,notes,created_at) values(?,?,?,'Çıkış',?,?,?,?,?)",(mid,used_batch['id'],end,used_qty,float(used_batch['unit_cost'] or 0),treatment_id,'Tedavide kullanım · FEFO parti dağıtımı',datetime.now().isoformat(timespec='seconds')))
                     note=f'Tedavi #{treatment_id} | Doz {f.get("dose_amount") or 0} {f.get("dose_unit") or "ml"} | Et güvenli {meat_safe} | Süt güvenli {milk_safe}'
-                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(animal_id,calf_id,'İlaç',med['product_name'],start,'',cost,note))
+                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id,treatment_id) values(?,?,?,?,?,?,?,?,?,?)',(animal_id,calf_id,'İlaç',med['product_name'],start,'',cost,note,finance_id,treatment_id))
                     audit(username,'Tedavi kaydı oluşturdu',f'{med["product_name"]} · Tedavi #{treatment_id}',self.client_ip())
                     return self.redirect('/medicines',f'Tedavi kaydedildi. Et güvenli: {fmt_date(meat_safe)} · Süt güvenli: {fmt_date(milk_safe[:10])}.')
+                if path=='/treatment/edit':
+                    treatment_id=int(f.get('id') or 0)
+                    old=c.execute('select * from treatments where id=?',(treatment_id,)).fetchone()
+                    if not old:return self.redirect('/medicines?tab=treatments','Tedavi kaydı bulunamadı.')
+                    mid=int(f.get('medicine_id') or 0);med=c.execute('select * from medicine_catalog where id=? and active=1',(mid,)).fetchone()
+                    if not med:return self.redirect('/treatment-edit?id='+str(treatment_id),'İlaç bulunamadı.')
+                    if not int(med['withdrawal_verified'] or 0):return self.redirect('/treatment-edit?id='+str(treatment_id),'Bu ürünün resmî et/süt arınma bilgisi doğrulanmadan tedavide kullanılamaz.')
+                    start=(f.get('start_date') or '').strip();end=(f.get('end_date') or start).strip()
+                    try:
+                        start_day=date.fromisoformat(start);end_day=date.fromisoformat(end)
+                        dose=max(0,float(f.get('dose_amount') or 0));total=max(0,float(f.get('total_quantity') or 0))
+                        applications=max(1,min(12,int(f.get('applications_per_day') or 1)))
+                    except Exception:return self.redirect('/treatment-edit?id='+str(treatment_id),'Tarih, doz veya toplam kullanım değeri geçersiz.')
+                    if end_day<start_day:return self.redirect('/treatment-edit?id='+str(treatment_id),'Son uygulama tarihi başlangıçtan önce olamaz.')
+                    disease_id=int(f.get('disease_id') or 0) or None
+                    diagnosis_note=(f.get('diagnosis') or '').strip();diagnosis=diagnosis_note
+                    if disease_id:
+                        disease=c.execute('select name from disease_catalog where id=? and active=1',(disease_id,)).fetchone()
+                        if not disease:return self.redirect('/treatment-edit?id='+str(treatment_id),'Hastalık kataloğu seçimi geçersiz.')
+                        disease_name=str(disease['name'])
+                        if diagnosis_note.startswith(disease_name+' · '):diagnosis_note=diagnosis_note[len(disease_name)+3:]
+                        elif diagnosis_note==disease_name:diagnosis_note=''
+                        diagnosis=disease_name+((' · '+diagnosis_note) if diagnosis_note else '')
+                    meat_safe,milk_safe=medicine_safe_dates(end,int(med['meat_withdrawal_days'] or 0),int(med['milk_withdrawal_hours'] or 0))
+                    c.execute('savepoint treatment_update')
+                    c.execute('delete from medicine_stock_transactions where treatment_id=?',(treatment_id,))
+                    allocations=[];batch=None;cost=0.0
+                    if total>0:
+                        allocations=medicine_fefo_allocations(c,mid,total,end)
+                        if not allocations:
+                            c.execute('rollback to treatment_update');c.execute('release treatment_update')
+                            return self.redirect('/treatment-edit?id='+str(treatment_id),'Tedaviyi güncellemek için yeterli, tarihi geçmemiş parti stoğu yok. Eski kayıt korunmuştur.')
+                        batch=allocations[0][0]
+                        cost=sum(used*float(batch_row['unit_cost'] or 0) for batch_row,used in allocations)
+                    finance_id=old['finance_id'];description=f'{med["product_name"]} tedavisi · {diagnosis or "Teşhis belirtilmedi"}'
+                    if cost>0 and finance_id:
+                        updated=c.execute('update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,animal_id=?,calf_id=? where id=?',(start,'Gider','İlaç',cost,description,old['animal_id'],old['calf_id'],finance_id))
+                        if updated.rowcount!=1:finance_id=None
+                    if cost>0 and not finance_id:
+                        cur=c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(start,'Gider','İlaç',cost,description,'Nakit',old['animal_id'],old['calf_id'],datetime.now().isoformat(timespec='seconds')))
+                        finance_id=cur.lastrowid
+                    if cost<=0 and finance_id:
+                        c.execute('delete from finance where id=?',(finance_id,));finance_id=None
+                    status='Tamamlandı' if end_day<=date.today() else 'Aktif'
+                    c.execute('''update treatments set medicine_id=?,batch_id=?,start_date=?,end_date=?,dose_amount=?,dose_unit=?,application_route=?,applications_per_day=?,diagnosis=?,veterinarian=?,prescription_no=?,meat_safe_date=?,milk_safe_date=?,total_quantity=?,cost=?,finance_id=?,status=?,notes=?,disease_id=? where id=?''',
+                              (mid,batch['id'] if batch else None,start,end,dose,f.get('dose_unit') or 'ml',(f.get('application_route') or med['application_route'] or '').strip(),applications,diagnosis,(f.get('veterinarian') or '').strip(),(f.get('prescription_no') or '').strip(),meat_safe,milk_safe,total,cost,finance_id,status,(f.get('notes') or '').strip(),disease_id,treatment_id))
+                    for batch_row,used_qty in allocations:
+                        c.execute("insert into medicine_stock_transactions(medicine_id,batch_id,tx_date,tx_type,quantity,unit_cost,treatment_id,notes,created_at) values(?,?,?,'Çıkış',?,?,?,?,?)",(mid,batch_row['id'],end,used_qty,float(batch_row['unit_cost'] or 0),treatment_id,'Tedavi düzenlemesi · FEFO parti dağıtımı',datetime.now().isoformat(timespec='seconds')))
+                    note=f'Tedavi #{treatment_id} | Doz {dose:g} {f.get("dose_unit") or "ml"} | Et güvenli {meat_safe} | Süt güvenli {milk_safe}'
+                    health_row=c.execute('select id from health where treatment_id=? or (treatment_id is null and notes like ?) order by id limit 1',(treatment_id,f'Tedavi #{treatment_id} |%')).fetchone()
+                    if health_row:
+                        c.execute('''update health set animal_id=?,calf_id=?,kind='İlaç',product=?,applied_date=?,next_date='',cost=?,notes=?,finance_id=?,treatment_id=? where id=?''',(old['animal_id'],old['calf_id'],med['product_name'],start,cost,note,finance_id,treatment_id,health_row['id']))
+                    else:
+                        c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id,treatment_id) values(?,?,?,?,?,?,?,?,?,?)',(old['animal_id'],old['calf_id'],'İlaç',med['product_name'],start,'',cost,note,finance_id,treatment_id))
+                    c.execute('release treatment_update')
+                    audit(username,'Tedavi kaydını düzenledi',f'{med["product_name"]} · Tedavi #{treatment_id}',self.client_ip())
+                    return self.redirect('/medicines?tab=treatments','Tedavi; stok, sağlık geçmişi ve finans bağlantısıyla birlikte güncellendi.')
+                if path=='/treatment/delete':
+                    treatment_id=int(f.get('id') or 0);old=c.execute('select * from treatments where id=?',(treatment_id,)).fetchone()
+                    return_to='/health' if (f.get('return_to') or '')=='/health' else '/medicines?tab=treatments'
+                    if not old:return self.redirect(return_to,'Tedavi kaydı daha önce silinmiş veya bulunamadı.')
+                    med=c.execute('select product_name from medicine_catalog where id=?',(old['medicine_id'],)).fetchone()
+                    c.execute('delete from medicine_stock_transactions where treatment_id=?',(treatment_id,))
+                    c.execute('delete from health where treatment_id=? or (treatment_id is null and notes like ?)',(treatment_id,f'Tedavi #{treatment_id} |%'))
+                    if old['finance_id']:c.execute('delete from finance where id=?',(old['finance_id'],))
+                    c.execute('delete from treatments where id=?',(treatment_id,))
+                    audit(username,'Tedavi kaydını sildi',f'{med["product_name"] if med else "İlaç"} · Tedavi #{treatment_id}',self.client_ip())
+                    return self.redirect(return_to,'Tedavi kaydı silindi; kullanılan stok geri alındı, bağlı sağlık ve finans kayıtları kaldırıldı.')
                 if path=='/loss-edit':
                     lid=int(f.get('id') or 0)
                     loss=c.execute('select * from animal_losses where id=?',(lid,)).fetchone()
@@ -8096,6 +8444,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     ins=c.execute("select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=? and i.animal_id=?",(ins_id,aid)).fetchone()
                     if not ins or not is_pregnant_value(ins['pregnancy_result']):return self.redirect('/','Gebelik kaydı bulunamadı veya aktif değil.')
                     token=f'GEBELIK_ASI|{ins_id}|{month}'
+                    if not claim_completion_once(c,f'pregnancy-vaccine:{ins_id}:{month}'):
+                        return self.redirect(f.get('return_to') or '/',f'{ins["tag"]} · {month}. ay gebelik aşısı daha önce tamamlanmış; ikinci kayıt engellendi.')
                     existing=c.execute("select id from health where animal_id=? and notes like ? limit 1",(aid,token+'%')).fetchone()
                     if not existing:
                         product=f'{month}. Ay Gebelik Aşısı'
@@ -8108,17 +8458,82 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     hid=int(f.get('id') or 0)
                     old=c.execute('select * from health where id=?',(hid,)).fetchone()
                     if not old:return self.redirect('/health','Sağlık kaydı bulunamadı.')
-                    c.execute('update health set kind=?,product=?,applied_date=?,next_date=?,cost=?,notes=? where id=?',
-                              (f.get('kind'),f.get('product'),f.get('applied_date'),f.get('next_date') or '',float(f.get('cost') or 0),f.get('notes') or '',hid))
+                    if old['treatment_id']:return self.redirect('/treatment-edit?id='+str(old['treatment_id']),'İlaç tedavisi stok ve arınmayla bağlantılıdır; bu ekrandan birlikte düzenleyin.')
+                    kind=(f.get('kind') or '').strip();product=(f.get('product') or '').strip();applied=(f.get('applied_date') or '').strip()
+                    if kind not in ('Aşı','İlaç','Muayene') or not product:return self.redirect('/health-edit?id='+str(hid),'Tür ve ürün / işlem adı zorunludur.')
+                    next_date=(f.get('next_date') or '').strip()
+                    try:
+                        date.fromisoformat(applied);new_cost=max(0,float(f.get('cost') or 0))
+                        if next_date:date.fromisoformat(next_date)
+                    except Exception:return self.redirect('/health-edit?id='+str(hid),'Tarih veya maliyet geçersiz.')
+                    finance_id=old['finance_id']
+                    if finance_id and new_cost>0:
+                        updated=c.execute('update finance set tx_date=?,category=?,amount=?,description=? where id=?',(applied,kind,new_cost,product,finance_id))
+                        if updated.rowcount!=1:finance_id=None
+                    if finance_id and new_cost<=0:
+                        c.execute('delete from finance where id=?',(finance_id,));finance_id=None
+                    elif new_cost>0 and not finance_id:
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(applied,'Gider',kind,new_cost,product,'Nakit',old['animal_id'],old['calf_id'],datetime.now().isoformat(timespec='seconds')))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('update health set kind=?,product=?,applied_date=?,next_date=?,cost=?,notes=?,finance_id=? where id=?',
+                              (kind,product,applied,next_date,new_cost,f.get('notes') or '',finance_id,hid))
                     audit(username,'Sağlık kaydı düzenledi',f'#{hid} · {f.get("product")}',self.client_ip())
                     return self.redirect('/health','Sağlık kaydı güncellendi.')
                 if path=='/health-delete':
                     hid=int(f.get('id') or 0)
                     old=c.execute('select * from health where id=?',(hid,)).fetchone()
                     if not old:return self.redirect('/health','Sağlık kaydı bulunamadı.')
+                    if old['treatment_id']:return self.redirect('/medicines?tab=treatments','Bu kayıt bağlı bir ilaç tedavisidir; Tedaviler sekmesinden stok ve finansıyla birlikte silinmelidir.')
+                    if old['finance_id']:c.execute('delete from finance where id=?',(old['finance_id'],))
+                    if old['task_id']:
+                        active=c.execute('select active from health_courses where id=?',(old['course_id'],)).fetchone()
+                        if active and int(active['active'] or 0)==1:
+                            c.execute("update health_tasks set status='Bekliyor',completed_date=null where id=?",(old['task_id'],))
+                    match=re.search(r'GEBELIK_ASI\|(\d+)\|(7|8)',str(old['notes'] or ''))
+                    if match:c.execute('delete from action_completion_claims where action_key=?',(f'pregnancy-vaccine:{match.group(1)}:{match.group(2)}',))
                     c.execute('delete from health where id=?',(hid,))
                     audit(username,'Sağlık kaydı sildi',f'#{hid} · {old["product"]}',self.client_ip())
-                    return self.redirect('/health','Sağlık kaydı silindi.')
+                    return self.redirect('/health','Sağlık kaydı ve bağlı finans hareketi silindi.'+(' Plan uygulaması yeniden beklemeye alındı.' if old['task_id'] else ''))
+                if path=='/health-plan-edit':
+                    course_id=int(f.get('course_id') or 0)
+                    course=c.execute("select * from health_courses where id=? and coalesce(active,1)=1",(course_id,)).fetchone()
+                    if not course:return self.redirect('/health','Sağlık planı bulunamadı veya silinmiş.')
+                    product=(f.get('product') or '').strip();start=(f.get('start_date') or '').strip();notes=(f.get('notes') or '').strip()
+                    if not product:return self.redirect('/health-plan-edit?id='+str(course_id),'Ürün / işlem adı zorunludur.')
+                    try:date.fromisoformat(start);cost=max(0,float(f.get('cost') or 0))
+                    except Exception:return self.redirect('/health-plan-edit?id='+str(course_id),'Tarih veya maliyet geçersiz.')
+                    target_rows=c.execute('select distinct animal_id,calf_id from health_tasks where course_id=?',(course_id,)).fetchall()
+                    targets=[]
+                    for row in target_rows:
+                        tag_row=c.execute('select tag from animals where id=?',(row['animal_id'],)).fetchone() if row['animal_id'] else c.execute('select tag from calves where id=?',(row['calf_id'],)).fetchone()
+                        targets.append((row['animal_id'],row['calf_id'],tag_row['tag'] if tag_row else '-'))
+                    if not targets:return self.redirect('/health','Planın bağlı hayvan kaydı bulunamadı.')
+                    if course['kind']=='Aşı':
+                        dose_count=max(1,min(10,int(f.get('dose_count') or 1)));interval=max(1,min(365,int(f.get('dose_interval_days') or 15)))
+                        completed_max=int(c.execute("select coalesce(max(dose_no),0) n from health_tasks where course_id=? and status='Tamamlandı'",(course_id,)).fetchone()['n'] or 0)
+                        if dose_count<completed_max:return self.redirect('/health-plan-edit?id='+str(course_id),f'{completed_max}. doz tamamlandığı için doz sayısı bunun altına indirilemez.')
+                        treatment_days=1;times_per_day=1
+                    else:
+                        treatment_days=max(1,min(60,int(f.get('treatment_days') or 1)));times_per_day=max(1,min(6,int(f.get('times_per_day') or 1)))
+                        completed=c.execute("select coalesce(max(day_no),0) max_day,coalesce(max(application_no),0) max_app from health_tasks where course_id=? and status='Tamamlandı'",(course_id,)).fetchone()
+                        if treatment_days<int(completed['max_day'] or 0) or times_per_day<int(completed['max_app'] or 0):
+                            return self.redirect('/health-plan-edit?id='+str(course_id),'Tamamlanmış gün/uygulama sayısının altına inilemez.')
+                        dose_count=1;interval=0
+                    c.execute('''update health_courses set product=?,start_date=?,treatment_days=?,times_per_day=?,dose_count=?,interval_days=?,cost_per_application=?,notes=? where id=?''',(product,start,treatment_days,times_per_day,dose_count,interval,cost,notes,course_id))
+                    c.execute("delete from health_tasks where course_id=? and status='Bekliyor'",(course_id,))
+                    created=create_health_course_tasks(c,course_id,targets,course['kind'],start,dose_count=dose_count,interval_days=interval,treatment_days=treatment_days,times_per_day=times_per_day,cost=cost,notes=notes,preserve_completed=True)
+                    audit(username,'Sağlık planını düzenledi',f'Plan #{course_id} · {product} · {created} bekleyen uygulama',self.client_ip())
+                    return self.redirect('/health',f'Plan güncellendi; tamamlanan geçmiş korundu, {created} bekleyen uygulama yeniden oluşturuldu.')
+                if path=='/health-plan-delete':
+                    course_id=int(f.get('course_id') or 0)
+                    course=c.execute("select * from health_courses where id=? and coalesce(active,1)=1",(course_id,)).fetchone()
+                    if not course:return self.redirect('/health','Sağlık planı daha önce silinmiş veya bulunamadı.')
+                    pending=int(c.execute("select count(*) n from health_tasks where course_id=? and status='Bekliyor'",(course_id,)).fetchone()['n'] or 0)
+                    completed=int(c.execute("select count(*) n from health_tasks where course_id=? and status='Tamamlandı'",(course_id,)).fetchone()['n'] or 0)
+                    c.execute("update health_tasks set status='İptal' where course_id=? and status='Bekliyor'",(course_id,))
+                    c.execute('update health_courses set active=0 where id=?',(course_id,))
+                    audit(username,'Sağlık planını sildi',f'Plan #{course_id} · {course["product"]} · {pending} bekleyen iptal',self.client_ip())
+                    return self.redirect('/health',f'Sağlık planı silindi; {pending} bekleyen uygulama kaldırıldı.'+((f' {completed} tamamlanmış kayıt sağlık geçmişinde korundu.') if completed else ''))
                 if path=='/health/plan-done':
                     source_id=int(f.get('source_id') or 0)
                     src=c.execute("select h.*,a.tag as animal_tag,ca.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where h.id=?",(source_id,)).fetchone()
@@ -8128,8 +8543,9 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     product=str(src['product'] or '')
                     if src['kind']=='Aşı' and 'IKINCI_DOZ_PLAN' in str(src['notes'] or ''): product += ' · 2. Doz'
                     notes=f'Planlanan sağlık işlemi tamamlandı | Kaynak sağlık #{source_id} | Planlanan {planned}'
+                    claimed=c.execute("update health set next_date='',notes=coalesce(notes,'')||? where id=? and coalesce(next_date,'')<>''",(' | Tamamlandı: '+actual,source_id))
+                    if claimed.rowcount!=1:return self.redirect(f.get('return_to') or '/health','Bu plan daha önce tamamlanmış; ikinci kayıt engellendi.')
                     c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(src['animal_id'],src['calf_id'],src['kind'],product,actual,'',0,notes))
-                    c.execute("update health set next_date='',notes=coalesce(notes,'')||? where id=?",(' | Tamamlandı: '+actual,source_id))
                     audit(username,'Planlanan sağlık işlemini tamamladı',f'{tag} · {product}',self.client_ip())
                     return self.redirect(f.get('return_to') or '/health',f'{tag} · işlem {fmt_date(actual)} tarihinde yapıldı olarak kaydedildi.')
                 if path=='/health/second-dose-done':
@@ -8142,8 +8558,9 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     actual=date.today().isoformat()
                     product=str(src['product'] or '')+' · 2. Doz'
                     notes=f'2. doz tamamlandı | Kaynak sağlık #{source_id} | Planlanan {src["next_date"]}'
+                    claimed=c.execute("update health set next_date='',notes=coalesce(notes,'')||? where id=? and coalesce(next_date,'')<>''",(' | 2. doz tamamlandı: '+actual,source_id))
+                    if claimed.rowcount!=1:return self.redirect(f.get('return_to') or '/health','Bu ikinci doz daha önce tamamlanmış; ikinci kayıt engellendi.')
                     c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(src['animal_id'],src['calf_id'],'Aşı',product,actual,'',0,notes))
-                    c.execute("update health set next_date='',notes=coalesce(notes,'')||? where id=?",(' | 2. doz tamamlandı: '+actual,source_id))
                     audit(username,'Aşı ikinci dozu tamamladı',f'{tag} · {product}',self.client_ip())
                     return self.redirect(f.get('return_to') or '/health',f'{tag} · 2. doz sağlık geçmişine kaydedildi.')
                 if path=='/health/task-done':
@@ -8155,14 +8572,21 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if t['kind']=='Aşı':product+=f' · {int(t["dose_no"] or 1)}. Doz'
                     elif t['kind']=='İlaç':product+=f' · Gün {int(t["day_no"] or 1)}/{int(t["day_total"] or 1)} · Uygulama {int(t["application_no"] or 1)}/{int(t["applications_per_day"] or 1)}'
                     notes=f'Planlı uygulama tamamlandı | Plan #{t["course_id"]} | Planlanan {t["planned_date"]}'
-                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(t['animal_id'],t['calf_id'],t['kind'],product,actual,'',float(t['cost'] or 0),notes))
-                    c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=?",(actual,tid))
-                    if float(t['cost'] or 0)>0:c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(actual,'Gider',t['kind'],float(t['cost'] or 0),product,'Nakit',t['animal_id'],datetime.now().isoformat()))
+                    claimed=c.execute("update health_tasks set status='İşleniyor' where id=? and status='Bekliyor'",(tid,))
+                    if claimed.rowcount!=1:return self.redirect('/health','Bu uygulama daha önce tamamlanmış; ikinci kayıt engellendi.')
+                    finance_id=None
+                    if float(t['cost'] or 0)>0:
+                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(actual,'Gider',t['kind'],float(t['cost'] or 0),product,'Nakit',t['animal_id'],t['calf_id'],datetime.now().isoformat()))
+                        finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id,course_id,task_id) values(?,?,?,?,?,?,?,?,?,?,?)',(t['animal_id'],t['calf_id'],t['kind'],product,actual,'',float(t['cost'] or 0),notes,finance_id,t['course_id'],tid))
+                    c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=? and status='İşleniyor'",(actual,tid))
                     audit(username,'Planlı sağlık uygulaması tamamlandı',f'Görev #{tid} · {product}',self.client_ip())
                     return self.redirect('/health','Sağlık uygulaması Yapıldı olarak kaydedildi.')
                 if path=='/health/task-batch-done':
                     course_id=int(f.get('course_id') or 0);planned=(f.get('planned_date') or '').strip();dose_no=int(f.get('dose_no') or 1);day_no=int(f.get('day_no') or 1);app_no=int(f.get('application_no') or 1)
-                    tasks=c.execute("""select t.*,hc.kind,hc.product from health_tasks t join health_courses hc on hc.id=t.course_id where t.course_id=? and t.planned_date=? and t.dose_no=? and t.day_no=? and t.application_no=? and t.status='Bekliyor'""",(course_id,planned,dose_no,day_no,app_no)).fetchall()
+                    claimed=c.execute("""update health_tasks set status='İşleniyor' where course_id=? and planned_date=? and dose_no=? and day_no=? and application_no=? and status='Bekliyor'""",(course_id,planned,dose_no,day_no,app_no))
+                    if claimed.rowcount<1:return self.redirect('/health','Bu toplu uygulama daha önce tamamlanmış; ikinci kayıt engellendi.')
+                    tasks=c.execute("""select t.*,hc.kind,hc.product from health_tasks t join health_courses hc on hc.id=t.course_id where t.course_id=? and t.planned_date=? and t.dose_no=? and t.day_no=? and t.application_no=? and t.status='İşleniyor'""",(course_id,planned,dose_no,day_no,app_no)).fetchall()
                     if not tasks:return self.redirect('/health','Bu toplu uygulama daha önce tamamlanmış veya bulunamadı.')
                     actual=date.today().isoformat();count=0
                     for t in tasks:
@@ -8170,9 +8594,12 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         if t['kind']=='Aşı':product+=f' · {int(t["dose_no"] or 1)}. Doz'
                         else:product+=f' · Gün {int(t["day_no"] or 1)}/{int(t["day_total"] or 1)} · Uygulama {int(t["application_no"] or 1)}/{int(t["applications_per_day"] or 1)}'
                         notes=f'Padok bazlı plan tamamlandı | Plan #{course_id} | Planlanan {planned}'
-                        c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(t['animal_id'],t['calf_id'],t['kind'],product,actual,'',float(t['cost'] or 0),notes))
-                        c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=?",(actual,t['id']))
-                        if float(t['cost'] or 0)>0:c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(actual,'Gider',t['kind'],float(t['cost'] or 0),product,'Nakit',t['animal_id'],datetime.now().isoformat()))
+                        finance_id=None
+                        if float(t['cost'] or 0)>0:
+                            c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(actual,'Gider',t['kind'],float(t['cost'] or 0),product,'Nakit',t['animal_id'],t['calf_id'],datetime.now().isoformat()))
+                            finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                        c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id,course_id,task_id) values(?,?,?,?,?,?,?,?,?,?,?)',(t['animal_id'],t['calf_id'],t['kind'],product,actual,'',float(t['cost'] or 0),notes,finance_id,course_id,t['id']))
+                        c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=? and status='İşleniyor'",(actual,t['id']))
                         count+=1
                     audit(username,'Padok sağlık uygulaması tamamlandı',f'Plan #{course_id} · {count} hayvan',self.client_ip())
                     return self.redirect('/health',f'{count} hayvan için uygulama Yapıldı olarak sağlık geçmişine işlendi.')
@@ -8190,8 +8617,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         except:paddock_id=0
                         pd=c.execute('select id,name from paddocks where id=? and active=1',(paddock_id,)).fetchone()
                         if not pd:return self.redirect('/health','Geçerli bir padok seçin.')
-                        for r in c.execute("select id,tag from animals where paddock_id=? and coalesce(status,'Aktif')='Aktif'",(paddock_id,)).fetchall():targets.append((r['id'],None,r['tag']))
-                        for r in c.execute("select id,tag from calves where paddock_id=? and promoted_animal_id is null",(paddock_id,)).fetchall():targets.append((None,r['id'],r['tag']))
+                        for r in c.execute("select id,tag from animals where paddock_id=? and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)",(paddock_id,)).fetchall():targets.append((r['id'],None,r['tag']))
+                        for r in c.execute("select id,tag from calves where paddock_id=? and promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id)",(paddock_id,)).fetchall():targets.append((None,r['id'],r['tag']))
                         if not targets:return self.redirect('/health','Seçilen padokta aktif hayvan bulunamadı.')
                     else:
                         subject=(f.get('subject_key') or '').strip()
@@ -8200,14 +8627,17 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         try:sid=int(sid)
                         except:return self.redirect('/health','Hayvan seçimi geçersiz.')
                         if stype=='A':
-                            rec=c.execute("select id,tag from animals where id=? and coalesce(status,'Aktif')='Aktif'",(sid,)).fetchone()
+                            rec=c.execute("select id,tag from animals where id=? and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)",(sid,)).fetchone()
                             if not rec:return self.redirect('/health','Seçilen hayvan aktif sürüde değil.')
                             targets=[(sid,None,rec['tag'])]
                         elif stype=='C':
-                            rec=c.execute("select id,tag from calves where id=? and promoted_animal_id is null",(sid,)).fetchone()
+                            rec=c.execute("select id,tag from calves where id=? and promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id)",(sid,)).fetchone()
                             if not rec:return self.redirect('/health','Seçilen buzağı aktif kayıtlarda değil.')
                             targets=[(None,sid,rec['tag'])]
                         else:return self.redirect('/health','Hayvan seçimi geçersiz.')
+                    fingerprint=health_request_fingerprint(username,f)
+                    if not claim_request_once(c,fingerprint,30):
+                        return self.redirect('/health','⚠️ Aynı aşı / ilaç programı ikinci kez gönderildi; mükerrer plan engellendi.')
                     if kind in ('Aşı','İlaç'):
                         if kind=='Aşı':
                             try:dose_count=max(1,min(10,int(f.get('dose_count') or 1)))
@@ -8222,25 +8652,21 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             except:times_per_day=1
                             dose_count=1;interval=0
                         cur=c.execute('''insert into health_courses(kind,product,scope_type,paddock_id,start_date,treatment_days,times_per_day,dose_count,interval_days,cost_per_application,notes,created_at) values(?,?,?,?,?,?,?,?,?,?,?,?)''',(kind,product,scope,paddock_id,applied,treatment_days,times_per_day,dose_count,interval,cost,notes,datetime.now().isoformat(timespec='seconds')))
-                        course_id=cur.lastrowid;start_day=date.fromisoformat(applied);task_count=0
-                        for animal_id,calf_id,tag in targets:
-                            if kind=='Aşı':
-                                for dn in range(1,dose_count+1):
-                                    planned=(start_day+timedelta(days=(dn-1)*interval)).isoformat()
-                                    c.execute('''insert into health_tasks(course_id,animal_id,calf_id,planned_date,dose_no,dose_total,day_no,day_total,application_no,applications_per_day,status,cost,notes) values(?,?,?,?,?,?,?,?,?,?,?,?,?)''',(course_id,animal_id,calf_id,planned,dn,dose_count,1,1,1,1,'Bekliyor',cost,notes));task_count+=1
-                            else:
-                                for day_no in range(1,treatment_days+1):
-                                    planned=(start_day+timedelta(days=day_no-1)).isoformat()
-                                    for app_no in range(1,times_per_day+1):
-                                        c.execute('''insert into health_tasks(course_id,animal_id,calf_id,planned_date,dose_no,dose_total,day_no,day_total,application_no,applications_per_day,status,cost,notes) values(?,?,?,?,?,?,?,?,?,?,?,?,?)''',(course_id,animal_id,calf_id,planned,1,1,day_no,treatment_days,app_no,times_per_day,'Bekliyor',cost,notes));task_count+=1
+                        course_id=cur.lastrowid
+                        task_count=create_health_course_tasks(
+                            c,course_id,targets,kind,applied,cost,notes,
+                            dose_count,interval,treatment_days,times_per_day
+                        )
                         audit(username,'Sağlık planı oluşturdu',f'{kind} · {product} · {len(targets)} hayvan · {task_count} uygulama',self.client_ip())
                         if scope=='paddock':return self.redirect('/health',f'{len(targets)} hayvan için {dose_count} dozluk padok aşı planı oluşturuldu.')
                         if kind=='Aşı':return self.redirect('/health',f'{dose_count} dozluk aşı planı oluşturuldu. Her doz Yapıldı olarak işaretlenebilir.')
                         return self.redirect('/health',f'{treatment_days} gün × günde {times_per_day} uygulamalık tedavi planı oluşturuldu.')
                     if scope!='single':return self.redirect('/health','Muayene kaydı tek hayvan üzerinden oluşturulmalıdır.')
-                    animal_id,calf_id,subject_tag=targets[0];next_date=(f.get('next_date') or '').strip()
-                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes) values(?,?,?,?,?,?,?,?)',(animal_id,calf_id,kind,product,applied,next_date,cost,notes))
-                    if cost>0:c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at) values(?,?,?,?,?,?,?,?)',(applied,'Gider',kind,cost,product,'Nakit',animal_id,datetime.now().isoformat()))
+                    animal_id,calf_id,subject_tag=targets[0];next_date=(f.get('next_date') or '').strip();finance_id=None
+                    if cost>0:
+                        cur=c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(applied,'Gider',kind,cost,product,'Nakit',animal_id,calf_id,datetime.now().isoformat()))
+                        finance_id=cur.lastrowid
+                    c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id) values(?,?,?,?,?,?,?,?,?)',(animal_id,calf_id,kind,product,applied,next_date,cost,notes,finance_id))
                     audit(username,'Sağlık kaydı oluşturdu',f'{subject_tag} · {kind} · {product}',self.client_ip())
                     return self.redirect('/health','Sağlık kaydı oluşturuldu.')
                 if path=='/finance/edit':
