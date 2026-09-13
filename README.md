@@ -1,4 +1,4 @@
-# ÇiftlikPro v3.9.23 DEV1 — Akıllı Mobil Hayvan Ekle
+# ÇiftlikPro v3.9.23 DEV2 — Akıllı Mobil Hayvan Ekle
 
 DEV1 ile yeni hayvan kaydına sabit `TR` küpe ön eki, canlı mükerrer kontrolü,
 en fazla 8 kamera/galeri fotoğrafı, cihaz destekli barkod/karekod okuma ve

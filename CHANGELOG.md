@@ -1,3 +1,11 @@
+# V3.9.23 DEV2 — Annesiz Buzağı Kartı Hotfix
+
+- Anne küpesi olmayan / bilinmeyen buzağıların detay kartı artık açılır.
+- Buzağı liste ve rapor sorguları anne kaydına `LEFT JOIN` ile bağlanır; anne olmadığı için kayıt kaybolmaz.
+- Buzağı kartında anne bilgisi yoksa `Girilmemiş` gösterilir.
+- Buzağı düzenleme ekranında anne artık opsiyoneldir; sonradan eklenebilir veya boş bırakılabilir.
+- Çiftlikte doğdu akışındaki anne zorunluluğu korunur; satın alınan / dış transfer genç hayvanlarda anne bilinmeyebilir.
+
 # V3.9.23 DEV1 — Akıllı Mobil Hayvan Ekle
 
 - Yeni kayıtta değiştirilemeyen `TR` ön eki ve TR sonrası 8–14 rakam doğrulaması.

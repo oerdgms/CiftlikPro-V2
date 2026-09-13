@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV1'
+APP_VERSION='3.9.23 DEV2'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV1'
+APP_LABEL='v3.9.23 DEV2'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -1389,7 +1389,7 @@ def animal_report_rows(group='all',status='Aktif',search='',paddock=''):
         adults=c.execute('''select a.*,
             (select m.tag from calves oldc join animals m on m.id=oldc.mother_id where oldc.promoted_animal_id=a.id limit 1) mother_tag
             from animals a order by a.tag''').fetchall()
-        calves=c.execute('''select ca.*,m.tag mother_tag from calves ca join animals m on m.id=ca.mother_id
+        calves=c.execute('''select ca.*,m.tag mother_tag from calves ca left join animals m on m.id=ca.mother_id
                             where ca.promoted_animal_id is null order by ca.tag''').fetchall()
     result=[]
     for r in adults:
@@ -5850,11 +5850,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 rec=c.execute('select * from calves where id=?',(cid,)).fetchone()
                 mothers=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
             if not rec:return self.send_html('Buzağı bulunamadı',404)
-            opts=''.join(f'<option value="{m["id"]}" {"selected" if rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
+            opts='<option value="" '+('selected' if not rec['mother_id'] else '')+'>— Anne bilgisi girilmemiş —</option>'+''.join(f'<option value="{m["id"]}" {"selected" if rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
             body=f'''<h1>Buzağı Düzenle</h1><div class="card"><form method="post" action="/calf-edit" enctype="multipart/form-data" class="form" data-smart-photo-form="1">
             <input type="hidden" name="id" value="{rec["id"]}"><input type="hidden" name="photo_url" value="{h(rec["photo_url"])}">
             <label>Buzağı Küpesi<input name="tag" required value="{h(rec["tag"])}"></label><label>Takma Ad<input name="nickname" value="{h(rec["nickname"])}"></label>
-            <label>Anne<select name="mother_id" required>{opts}</select></label><label>Baba Küpesi<input name="father_tag" value="{h(rec["father_tag"])}"></label>
+            <label>Anne<select name="mother_id">{opts}</select><span class="mut">Anne bilinmiyorsa boş bırakabilirsiniz.</span></label><label>Baba Küpesi<input name="father_tag" value="{h(rec["father_tag"])}"></label>
             <label>Doğum Tarihi<input type="date" name="birth_date" required value="{h(rec["birth_date"])}"></label>
             <label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label>
             <label>Irk<input name="breed" value="{h(rec["breed"])}"></label><label>Padok / Ahır<input name="paddock" value="{h(rec["paddock"])}"></label>
@@ -6128,7 +6128,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     like=f"%{term}%"
                     rows=c.execute(
                         '''select calves.*,animals.tag mother_tag,animals.nickname mother_name
-                           from calves join animals on animals.id=calves.mother_id
+                           from calves left join animals on animals.id=calves.mother_id
                            where calves.promoted_animal_id is null and coalesce(calves.status,'Aktif')='Aktif'
                            and not exists(select 1 from animal_losses l where l.calf_id=calves.id) and
                            (calves.tag like ? or animals.tag like ? or animals.nickname like ?)
@@ -6137,7 +6137,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     ).fetchall()
                 else:
                     rows=c.execute(
-                        "select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves join animals on animals.id=calves.mother_id where calves.promoted_animal_id is null and coalesce(calves.status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by calves.birth_date desc"
+                        "select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves left join animals on animals.id=calves.mother_id where calves.promoted_animal_id is null and coalesce(calves.status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by calves.birth_date desc"
                     ).fetchall()
                 rec=c.execute('select * from calves where id=?',(edit,)).fetchone() if edit else None
             opts=''.join(f'<option value="{m["id"]}" {"selected" if rec and rec["mother_id"]==m["id"] else ""}>{h(m["tag"])} - {h(m["nickname"])}</option>' for m in mothers)
@@ -6149,7 +6149,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
         if path=='/calf':
             cid=q.get('id',[''])[0]
             with db() as c:
-                calf=c.execute('select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves join animals on animals.id=calves.mother_id where calves.id=?',(cid,)).fetchone()
+                calf=c.execute('select calves.*,animals.tag mother_tag,animals.nickname mother_name from calves left join animals on animals.id=calves.mother_id where calves.id=?',(cid,)).fetchone()
                 if not calf:return self.send_html('Buzağı bulunamadı',404)
                 health_rows=c.execute('select * from health where calf_id=? order by applied_date desc,id desc',(cid,)).fetchall()
                 weight_rows=c.execute('select * from calf_weights where calf_id=? order by measure_date desc,id desc',(cid,)).fetchall()
@@ -6160,6 +6160,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             last_weight=float(weight_rows[0]['weight']) if weight_rows else None
             calf_days,calf_daily,calf_operating,calf_total=calf_cost_values(calf)
             calf_feed=animal_current_feed_context(calf)
+            mother_html=(f'<a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a>' if calf['mother_id'] and calf['mother_tag'] else '<span class="mut">Girilmemiş</span>')
             calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış / Başlangıç<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">Rasyon + Bakım<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}</p></div>'''
             calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
             health_html=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{h(r["notes"])}</td></tr>' for r in health_rows) or '<tr><td colspan="5">Henüz sağlık/tedavi kaydı yok.</td></tr>'
@@ -6167,7 +6168,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=f'''<div class="actions"><a class="btn alt" href="/calves">← Buzağılara Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}
             <div class="card profile"><div class="photo">{photo}</div><div><h1>{h(calf["tag"])}</h1><span class="pill">{h(calf["gender"])}</span><span class="pill">Yaş: {age_text(calf["birth_date"])}</span>
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
-            <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: <a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a></p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
+            <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: {mother_html}</p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
             <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p><p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
             <div class="grid" style="margin-top:14px"><div class="card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
             <div class="card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
@@ -7469,8 +7470,11 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 with db() as c:
                     rec=c.execute('select * from calves where id=?',(cid,)).fetchone()
                     if not rec:return self.redirect('/calves','Buzağı kaydı bulunamadı.')
-                    mother=c.execute("select id from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(f.get('mother_id'),)).fetchone()
-                    if not mother:return self.redirect('/calf-edit?id='+cid,'Anne olarak aktif bir dişi hayvan seçilmelidir.')
+                    try: mother_id=int(f.get('mother_id') or 0)
+                    except Exception: mother_id=0
+                    if mother_id:
+                        mother=c.execute("select id from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mother_id,)).fetchone()
+                        if not mother:return self.redirect('/calf-edit?id='+cid,'Seçilen anne kaydı bulunamadı veya aktif değil.')
                     tag=(f.get('tag') or '').strip()
                     if c.execute('select id from calves where tag=? and id<>?',(tag,cid)).fetchone() or c.execute('select id from animals where tag=?',(tag,)).fetchone():return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
                     photo_url=f.get('photo_url') or rec['photo_url'] or '';upload=f.get('photo_file')
@@ -7481,7 +7485,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         name=save_optimized_upload(f'calf_{cid}',upload);photo_url='/uploads/'+name
                         c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(cid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
                     c.execute('update calves set tag=?,nickname=?,mother_id=?,father_tag=?,birth_date=?,gender=?,breed=?,paddock=?,photo_url=?,purchase_date=?,purchase_price=?,purchase_payment_method=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=?,notes=? where id=?',
-                        (tag,f.get('nickname',''),f.get('mother_id'),f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),f.get('notes',''),cid))
+                        (tag,f.get('nickname',''),mother_id,f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),f.get('notes',''),cid))
                 audit(username,'Buzağı düzenledi',tag,self.client_ip());return self.redirect('/calf?id='+cid,'Buzağı başarıyla güncellendi.')
             except sqlite3.IntegrityError:return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası zaten kullanılıyor.')
             except Exception as exc:return self.redirect('/calf-edit?id='+cid,'Güncelleme hatası: '+str(exc))

@@ -68,7 +68,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('"--background" in sys.argv',launcher)
         self.assertIn('{userstartup}\\ÇiftlikPro Arka Plan',installer)
         self.assertIn('Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılamaz.',source)
-        self.assertIn("3.9.23 DEV1",source)
+        self.assertIn("3.9.23 DEV2",source)
 
     def test_3921_dev51_disease_catalog_has_clickable_detail_content(self):
         with server.db() as con:
@@ -90,8 +90,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV1'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV1_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV2'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV2_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3921_dev51_official_cattle_medicine_catalog_is_seeded(self):
