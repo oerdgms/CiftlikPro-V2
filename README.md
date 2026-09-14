@@ -1,4 +1,4 @@
-# ÇiftlikPro v3.9.23 DEV4 Hotfix1.3 — Yem Alım Faturası ve Tarihli Stok Maliyeti
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.5 — Yem Alım Faturası ve Tarihli Stok Maliyeti
 
 Bu sürümde **Yem** kategorisi gerçek alım faturası akışına alındı. Tek faturada birden fazla yem kalemi; miktar, birim, torba kg, birim fiyat, tedarikçi, fatura no ve vade bilgisiyle kaydedilir. Finans tarafında tek gider oluşur, her ürün stoğa ayrı girer.
 

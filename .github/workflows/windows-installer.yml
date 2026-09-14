@@ -37,7 +37,7 @@ jobs:
           python -m py_compile app/server.py
           python -m py_compile app/agriculture.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.3'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.5'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Regresyon testleri
         shell: pwsh
@@ -150,7 +150,7 @@ jobs:
       - name: Windows kurulum paketini yukle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.23-DEV4-Hotfix1.3-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.23-DEV4-Hotfix1.5-Windows-Setup
           path: |
             release/CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_3_Setup.exe
             release/SHA256.txt

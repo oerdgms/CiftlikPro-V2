@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.3'
+APP_VERSION='3.9.23 DEV4 Hotfix1.5'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV4 Hotfix1.3'
+APP_LABEL='v3.9.23 DEV4 Hotfix1.5'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -6994,7 +6994,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             finance_feed_opts=''.join(f'<option value="{r["id"]}">{h(r["name"])}</option>' for r in finance_feeds)
             def finance_due_cell(r):
                 if str(r['payment_method'] or '')!='Vadeli':return '<span class="mut">-</span>'
-                if str(r['payment_status'] or '')=='Ödendi':return f'<span class="pill">✅ Ödendi<br>{fmt_date(r["paid_date"])}</span><form method="post" action="/finance/unmark-paid" style="margin-top:5px" onsubmit="return confirm(\'Ödeme durumunu geri alıp Bekliyor yapmak istiyor musunuz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn alt" style="padding:5px 8px">Geri Al</button></form>'
+                if str(r['payment_status'] or '')=='Ödendi':return f'<span class="pill">✅ Ödendi<br>{fmt_date(r["paid_date"])}</span>'
                 try:days=(date.fromisoformat(str(r['due_date']))-date.today()).days
                 except Exception:days=9999
                 badge=('🔴 Gecikmiş' if days<0 else '🟠 Bugün' if days==0 else f'🟡 {days} gün')
@@ -7009,13 +7009,23 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 lines=''.join(f'<div class="feed-invoice-line"><b>{h(x["feed_name"])}</b><span>{float(x["quantity"] or 0):g} {h(x["unit"])} × {money(x["purchase_unit_price"])} = <b>{money(x["line_total"])}</b></span><small>{float(x["quantity_kg"] or 0):g} kg · stok maliyeti {money(x["unit_price"])}/kg</small></div>' for x in items)
                 meta_html=' · '.join(meta) if meta else 'Fatura bilgisi'
                 tail=('<div class="mut">'+base+'</div>') if base else ''
-                return f'<details class="feed-invoice-detail"><summary>🧾 Yem Faturası · {len(items)} kalem</summary><div class="feed-invoice-meta">{meta_html}</div>{lines}<div class="feed-invoice-total">Toplam <b>{money(r["amount"])}</b></div></details>{tail}'
+                preview_id=f'feedInvoicePreview{int(r["id"])}'
+                panel=f'<div class="feed-invoice-meta">{meta_html}</div>{lines}<div class="feed-invoice-total">Toplam <b>{money(r["amount"])}</b></div>'
+                return f'<button type="button" class="feed-invoice-preview-btn" onclick="openFeedInvoicePreview(\'{preview_id}\')">🧾 Yem Faturası · {len(items)} kalem</button><template id="{preview_id}">{panel}</template>{tail}'
 
+            def finance_actions_cell(r):
+                if str(r["animal_status_action"] or '')=='AGRI_INTERNAL':
+                    return '<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>'
+                edit=('<a class="btn alt" href="/finance/edit?id={0}">🧾 Faturayı Düzenle</a>'.format(r["id"]) if int(r['feed_item_count'] or 0) else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a>'.format(r["id"]))
+                undo=''
+                if str(r['payment_method'] or '')=='Vadeli' and str(r['payment_status'] or '')=='Ödendi':
+                    undo='<form method="post" action="/finance/unmark-paid" data-submit-lock="1" data-submit-text="⏳ Geri alınıyor…" onsubmit="return confirm(\'Bu ödemenin Ödendi durumunu geri alıp tekrar Bekliyor yapmak istiyor musunuz? Finans gideri silinmeyecek; yalnızca ödeme durumu geri alınacak.\')"><input type="hidden" name="id" value="{0}"><button class="btn alt">↩ Ödemeyi Geri Al</button></form>'.format(r["id"])
+                delete='<form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi? Bağlı yem stokları da geri alınır.\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"])
+                return edit+undo+delete
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td><b>{8}</b></td><td><div class="finance-actions">{9}</div></td></tr>'.format(
                     fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),finance_description_cell(r),h(r["related_tags"]),('Tarım İç Transferi' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (h(r["animal_status_action"]) or "-")),h(r["payment_method"]),
-                    finance_due_cell(r),money(r["amount"]),
-                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (('<a class="btn alt" href="/finance/edit?id={0}">🧾 Faturayı Düzenle</a>'.format(r["id"]) if int(r['feed_item_count'] or 0) else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a>'.format(r["id"])) + '<form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi? Bağlı yem stokları da geri alınır.\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"])))
+                    finance_due_cell(r),money(r["amount"]),finance_actions_cell(r)
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
@@ -7037,7 +7047,19 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<th>Ödeme</th><th>Tutar</th><th>İşlem</th>','<th>Ödeme</th><th>Vade</th><th>Tutar</th><th>İşlem</th>')
             body=body.replace('<option value="">Gelir + Gider</option>', '<option value="">Tüm İşlemler</option>')
             body=body.replace(f"<option {'selected' if typ=='Gider' else ''}>Gider</option></select>", f"<option {'selected' if typ=='Gider' else ''}>Gider</option><option {'selected' if typ=='Zarar' else ''}>Zarar</option></select>")
-            body += '''<style>.feed-invoice-detail{min-width:230px}.feed-invoice-detail summary{cursor:pointer;font-weight:800;color:#1f5d39}.feed-invoice-meta{font-size:11px;color:#6b786f;margin:7px 0}.feed-invoice-line{display:grid;grid-template-columns:1fr;gap:2px;padding:7px 0;border-top:1px solid #edf2ee}.feed-invoice-line span,.feed-invoice-line small{font-size:11px}.feed-invoice-total{padding-top:7px;border-top:1px solid #dbe5de;text-align:right}.feed-invoice-row label{min-width:0}.feed-invoice-row output{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9;min-height:42px}@media(max-width:700px){.feed-invoice-row{grid-template-columns:1fr 1fr!important}.feed-invoice-row label:first-child,.feed-invoice-row .ffi-line-label{grid-column:1/-1}.feed-invoice-row .ffi-remove{grid-column:1/-1;width:100%}}</style>'''
+            body += '''<div id="feedInvoicePreviewBackdrop" class="feed-invoice-preview-backdrop" onclick="if(event.target===this)closeFeedInvoicePreview()"><div class="feed-invoice-preview-card"><div class="feed-invoice-preview-head"><div><span class="mut">YEM ALIMI</span><h3>🧾 Fatura Detayı</h3></div><button type="button" class="feed-invoice-preview-close" onclick="closeFeedInvoicePreview()">×</button></div><div id="feedInvoicePreviewBody" class="feed-invoice-preview-body"></div></div></div><style>
+.feed-invoice-preview-btn{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid #d7e5db;background:#f6faf7;color:#1f5d39;border-radius:9px;padding:7px 9px;font:inherit;font-weight:800;cursor:pointer;white-space:nowrap}
+.feed-invoice-preview-btn:hover{background:#eaf6ee;border-color:#b9d4c1}
+.feed-invoice-preview-backdrop{display:none;position:fixed;inset:0;background:rgba(11,35,23,.38);z-index:1500;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(2px)}
+.feed-invoice-preview-backdrop.open{display:flex}.feed-invoice-preview-card{width:min(560px,96vw);max-height:82vh;overflow:hidden;background:#fff;border-radius:18px;box-shadow:0 24px 70px rgba(7,32,18,.28);border:1px solid #dce8df}
+.feed-invoice-preview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid #e4ece6;background:#f8fbf9}.feed-invoice-preview-head h3{margin:3px 0 0}.feed-invoice-preview-close{width:38px;height:38px;border:0;border-radius:50%;background:#e8f2eb;color:#165d37;font-size:26px;cursor:pointer}.feed-invoice-preview-body{padding:16px 18px 20px;overflow:auto;max-height:calc(82vh - 72px)}
+.feed-invoice-meta{font-size:12px;color:#6b786f;margin:0 0 10px}.feed-invoice-line{display:grid;grid-template-columns:1fr;gap:3px;padding:10px 0;border-top:1px solid #edf2ee}.feed-invoice-line span,.feed-invoice-line small{font-size:12px}.feed-invoice-total{padding-top:10px;border-top:1px solid #dbe5de;text-align:right;font-size:15px}.feed-invoice-row label{min-width:0}.feed-invoice-row output{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9;min-height:42px}
+.finance-table td:nth-child(4){overflow:hidden}.finance-table td:nth-child(4)>.mut{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.finance-table .finance-actions{max-width:100%}.finance-table td:last-child,.finance-table th:last-child{width:225px;min-width:225px}.finance-table .finance-actions{flex-wrap:wrap!important;row-gap:5px!important}.finance-table .finance-actions .btn{font-size:11px!important;padding:6px 8px!important}
+@media(max-width:700px){.feed-invoice-row{grid-template-columns:1fr 1fr!important}.feed-invoice-row label:first-child,.feed-invoice-row .ffi-line-label{grid-column:1/-1}.feed-invoice-row .ffi-remove{grid-column:1/-1;width:100%}.feed-invoice-preview-backdrop{padding:8px}.feed-invoice-preview-card{width:100%;max-height:90vh;border-radius:14px}.feed-invoice-preview-body{max-height:calc(90vh - 72px)}.finance-table td:last-child,.finance-table th:last-child{width:190px;min-width:190px}}</style><script>
+function openFeedInvoicePreview(id){const t=document.getElementById(id),b=document.getElementById('feedInvoicePreviewBackdrop'),body=document.getElementById('feedInvoicePreviewBody');if(!t||!b||!body)return;body.innerHTML=t.innerHTML;b.classList.add('open');document.body.style.overflow='hidden';}
+function closeFeedInvoicePreview(){const b=document.getElementById('feedInvoicePreviewBackdrop'),body=document.getElementById('feedInvoicePreviewBody');if(b)b.classList.remove('open');if(body)body.innerHTML='';document.body.style.overflow='';}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFeedInvoicePreview();});
+</script>'''
             body += f'''<script>
             const financeIncomeCategories=new Set(['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme']);
             const financeExpenseCategories=new Set(['Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı']);
@@ -9015,10 +9037,13 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     return self.redirect('/finance','Finans kaydı silindi.')
                 if path=='/finance/unmark-paid':
                     record_id=int(f.get('id') or 0)
-                    row=c.execute("select id from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()
-                    if not row:return self.redirect('/finance','Vadeli ödeme kaydı bulunamadı.')
+                    row=c.execute("select id,payment_method,payment_status,amount,category from finance where id=?",(record_id,)).fetchone()
+                    if not row:return self.redirect('/finance','Finans kaydı bulunamadı.')
+                    if str(row['payment_method'] or '')!='Vadeli':return self.redirect('/finance','Yalnız vadeli ödemelerin ödeme durumu geri alınabilir.')
+                    if str(row['payment_status'] or '')!='Ödendi':return self.redirect('/finance','Bu vadeli kayıt zaten Bekliyor durumunda.')
                     c.execute("update finance set payment_status='Bekliyor',paid_date='',paid_amount=0 where id=?",(record_id,))
-                    return self.redirect('/finance','Ödeme geri alındı; vadeli kayıt tekrar Bekliyor durumuna getirildi.')
+                    audit(username,'Vadeli ödeme geri alındı',f"Finans #{record_id} · {row['category']} · {money(row['amount'])}",self.client_ip())
+                    return self.redirect('/finance','Ödendi işlemi geri alındı. Kayıt tekrar Bekliyor durumunda; finans gideri ve yem stokları değişmedi.')
                 if path=='/finance/mark-paid':
                     record_id=int(f.get('id') or 0);paid_date=(f.get('paid_date') or date.today().isoformat()).strip()
                     row=c.execute("select id,amount,payment_status from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()

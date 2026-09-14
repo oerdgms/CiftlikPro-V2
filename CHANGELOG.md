@@ -1,4 +1,18 @@
-# V3.9.23 DEV4 Hotfix1.3 — Yem Faturası Düzenleme + Vadeli Ödeme Güvenliği
+# V3.9.23 DEV4 Hotfix1.5 — Finans Tablosu Görsel Düzeltme
+
+- Yem faturası detayı artık tablo satırını büyütmiyor; ayrı, kompakt bir fatura önizleme penceresinde açılıyor.
+- Finans tablosunda açıklama hücresinin taşması engellendi.
+- İşlem sütunu Faturayı Düzenle / Ödemeyi Geri Al / Sil butonlarını bozulmadan gösterecek şekilde genişletildi ve gerektiğinde kontrollü satır kırıyor.
+- Fatura önizlemesi masaüstü ve mobilde uyumlu hale getirildi; ESC ve dış alana tıklama ile kapanır.
+- Hotfix1.4 ödeme geri alma davranışı korunur.
+
+# V3.9.23 DEV4 Hotfix1.4 — Vadeli Ödeme Geri Alma Hotfix
+
+- Yanlışlıkla **Ödendi** yapılan vadeli kayıtlar için Finans tablosunun **İşlem** sütununa belirgin **↩ Ödemeyi Geri Al** butonu eklendi.
+- Geri alma işlemi yalnızca ödeme durumunu `Bekliyor` yapar; **finans giderini, yem faturasını ve stok hareketlerini silmez/değiştirmez**.
+- İşlem öncesi açık onay mesajı ve çift tıklama kilidi eklendi.
+- Geri alma işlemi denetim kaydına (audit) yazılır.
+
 
 - Çoklu yem faturalarına gerçek **Faturayı Düzenle** ekranı eklendi.
 - Tarih, tedarikçi, fatura no, vade ve tüm yem kalemleri değiştirilebilir.
