@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.2'
+APP_VERSION='3.9.23 DEV4 Hotfix1.3'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV4 Hotfix1.2'
+APP_LABEL='v3.9.23 DEV4 Hotfix1.3'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -5823,7 +5823,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 cls='overdue' if days<0 else 'today' if days==0 else ''
                 label=f'{abs(days)} gün gecikti' if days<0 else 'Bugün ödenecek' if days==0 else f'{days} gün kaldı'
                 title=(r['supplier'] or r['description'] or r['category'] or 'Vadeli ödeme')
-                return f'''<div class="alertitem payment-due-card {cls}"><b>₺ {h(title)}</b><br><span class="mut">{fmt_date(r['due_date'])} · {h(label)} · {money(r['amount'])}</span><form method="post" action="/finance/mark-paid" class="actions" style="margin-top:7px"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><button class="btn">✅ Ödendi</button><a class="btn alt" href="/finance/edit?id={r['id']}">Düzenle</a></form></div>'''
+                return f'''<div class="alertitem payment-due-card {cls}"><b>₺ {h(title)}</b><br><span class="mut">{fmt_date(r['due_date'])} · {h(label)} · {money(r['amount'])}</span><form method="post" action="/finance/mark-paid" class="actions" style="margin-top:7px" data-submit-lock="1" data-submit-text="⏳ İşleniyor…" onsubmit="return confirm(&quot;Bu vadeli borç gerçekten ödendi mi? Ödeme durumunu Ödendi olarak kapatmak üzeresiniz.&quot;)"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><button class="btn">✅ Ödendi</button><a class="btn alt" href="/finance/edit?id={r['id']}">Düzenle</a></form></div>'''
             payment_due_html=''.join(payment_due_item(r) for r in payment_due_rows) or '<p class="mut">Önümüzdeki 7 gün içinde vadeli ödeme yok.</p>'
             def health_task_html(r):
                 tag=r["animal_tag"] or r["calf_tag"] or "Genel"
@@ -6929,6 +6929,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 r=c.execute('select f.*,a.tag,a.nickname from finance f left join animals a on a.id=f.animal_id where f.id=?',(record_id,)).fetchone()
                 animals=c.execute('select id,tag,nickname,status from animals order by tag').fetchall()
                 linked=c.execute('''select l.*,fc.name feed_name,st.tx_date stock_date,st.notes stock_notes from feed_finance_links l join feed_catalog fc on fc.id=l.feed_id left join feed_stock_transactions st on st.id=l.stock_tx_id where l.finance_id=?''',(record_id,)).fetchone()
+                invoice_items=c.execute('''select ffi.*,fc.name feed_name from finance_feed_items ffi join feed_catalog fc on fc.id=ffi.feed_id where ffi.finance_id=? order by ffi.id''',(record_id,)).fetchall()
+                finance_feeds=c.execute('select id,name from feed_catalog where active=1 order by name').fetchall()
             if not r:return self.redirect('/finance','Finans kaydı bulunamadı.')
             if str(r['animal_status_action'] or '')=='AGRI_INTERNAL':
                 return self.redirect('/agriculture/transfers','Bu kayıt bağlı tarım iç transferidir. Düzenleme veya geri alma işlemini Tarım & Ziraat bölümünden yapın.')
@@ -6939,6 +6941,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             )
             categories=['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme','Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı','Diğer']
             category_options=''.join('<option {0}>{1}</option>'.format('selected' if r["category"]==x else '',h(x)) for x in categories)
+            if invoice_items:
+                feed_options=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in finance_feeds)
+                initial_items=json.dumps([{'feed_id':int(x['feed_id']),'quantity':float(x['quantity'] or 0),'unit':str(x['unit'] or 'kg'),'package_kg':float(x['package_kg'] or 1),'unit_price':float(x['purchase_unit_price'] or 0)} for x in invoice_items],ensure_ascii=False)
+                body=f'''<h1>🧾 Yem Faturasını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form" id="invoiceEditForm" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="invoice_edit" value="yes"><input type="hidden" name="feed_items_json" id="editFeedItemsJson"><label>Fatura Tarihi<input type="date" name="tx_date" value="{h(r['tx_date'])}" required></label><label>Tedarikçi / Firma<input name="supplier" value="{h(r['supplier'])}"></label><label>Fatura No<input name="invoice_no" value="{h(r['invoice_no'])}"></label><label>Ödeme Yöntemi<select name="payment_method" id="editInvoicePayment"><option {'selected' if r['payment_method']=='Nakit' else ''}>Nakit</option><option {'selected' if r['payment_method']=='Banka' else ''}>Banka</option><option {'selected' if r['payment_method']=='Kredi Kartı' else ''}>Kredi Kartı</option><option {'selected' if r['payment_method']=='Vadeli' else ''}>Vadeli</option></select></label><label id="editInvoiceDueLabel">Vade Tarihi<input type="date" name="due_date" id="editInvoiceDue" value="{h(r['due_date'])}"></label><label class="full">Açıklama<input name="description" value="{h(r['description'])}"></label><div class="full"><h3>🌾 Fatura Kalemleri</h3><div id="editFeedRows"></div><button type="button" class="btn alt" id="editAddFeed">＋ Yem Ekle</button><div style="margin-top:12px;text-align:right;font-size:18px">Fatura Toplamı: <b id="editInvoiceTotal">₺0,00</b></div></div><div class="full"><button class="btn">💾 Faturayı Güncelle</button> <a class="btn alt" href="/finance">İptal</a></div></form></div><style>.invoice-edit-row{{display:grid;grid-template-columns:2fr .7fr .75fr .8fr 1fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px}}.invoice-edit-row output{{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9}}@media(max-width:700px){{.invoice-edit-row{{grid-template-columns:1fr 1fr}}.invoice-edit-row label:first-child,.invoice-edit-row .line-total,.invoice-edit-row button{{grid-column:1/-1}}}}</style><script>const feedOptions=`<option value="">Yem seçin…</option>{feed_options}`;const initialItems={initial_items};function moneyNum(v){{v=String(v||'').trim().replace(/\s/g,'').replace(/₺/g,'');if(!v)return 0;if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');else{{const a=v.split('.');if(a.length>1&&a.slice(1).every(x=>x.length===3))v=a.join('');}}const n=Number(v);return Number.isFinite(n)?n:0}}function fmt(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0)}}function addRow(item={{}}){{const row=document.createElement('div');row.className='invoice-edit-row';row.innerHTML='<label>Yem<select class="feed">'+feedOptions+'</select></label><label>Miktar<input class="qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="unit"><option value="torba">Torba</option><option value="kg">kg</option><option value="ton">Ton</option></select></label><label class="pkg-label">Torba kg<input class="pkg" type="number" min="0.01" step="0.01" value="50"></label><label><span class="price-cap">Birim Fiyat</span><input class="price" type="number" min="0.01" step="0.01"></label><label class="line-total">Kalem Toplamı<output>₺0,00</output></label><button type="button" class="btn danger">Sil</button>';row.querySelector('.feed').value=String(item.feed_id||'');row.querySelector('.qty').value=item.quantity||'';row.querySelector('.unit').value=item.unit||'kg';row.querySelector('.pkg').value=item.package_kg||50;row.querySelector('.price').value=item.unit_price||'';row.querySelector('button').onclick=()=>{{row.remove();syncRows()}};row.querySelectorAll('input,select').forEach(x=>{{x.oninput=syncRows;x.onchange=syncRows}});document.getElementById('editFeedRows').appendChild(row);syncRows()}}function syncRows(){{let total=0,items=[];document.querySelectorAll('.invoice-edit-row').forEach(row=>{{const unit=row.querySelector('.unit').value,qty=Number(row.querySelector('.qty').value||0),price=moneyNum(row.querySelector('.price').value),pkg=row.querySelector('.pkg');row.querySelector('.pkg-label').style.display=unit==='torba'?'block':'none';row.querySelector('.price-cap').textContent='Birim Fiyat (₺/'+unit+')';const line=Math.round(qty*price*100)/100;row.querySelector('output').textContent=fmt(line);total+=line;items.push({{feed_id:row.querySelector('.feed').value,quantity:qty,unit:unit,package_kg:Number(pkg.value||0),unit_price:price}})}});document.getElementById('editFeedItemsJson').value=JSON.stringify(items);document.getElementById('editInvoiceTotal').textContent=fmt(total)}}initialItems.forEach(addRow);document.getElementById('editAddFeed').onclick=()=>addRow();const pm=document.getElementById('editInvoicePayment'),dl=document.getElementById('editInvoiceDueLabel'),dd=document.getElementById('editInvoiceDue');function syncDue(){{const on=pm.value==='Vadeli';dl.style.display=on?'block':'none';dd.required=on;if(!on)dd.value=''}}pm.onchange=syncDue;syncDue();</script>'''
+                return self.send_html(page('Yem Faturasını Düzenle',body,path,u,msg))
             linked_html=''
             if linked:
                 linked_html=f'''<div class="linked-feed-box"><h3>🔗 Bağlı Yem Stok Hareketi</h3><div class="mut">Bu finans kaydı <b>{h(linked['feed_name'])}</b> stok girişiyle bağlıdır. Miktar veya birim fiyatı burada değiştirirseniz stok kaydı da birlikte güncellenir.</div><div class="linked-feed-grid"><label>Yem<input value="{h(linked['feed_name'])}" disabled></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" name="linked_feed_qty" id="linkedFeedQty" value="{linked['quantity_kg']}" required></label><label>Birim Fiyat (₺/kg)<input type="number" step="0.0001" min="0.0001" name="linked_feed_unit" id="linkedFeedUnit" value="{linked['unit_price']}" required></label></div><div class="linked-total"><span>Finansa kaydedilecek yeni toplam</span><b id="linkedFeedTotal">{money(float(linked['quantity_kg'])*float(linked['unit_price']))}</b></div><input type="hidden" name="linked_feed" value="yes"></div>'''
@@ -6987,11 +6994,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             finance_feed_opts=''.join(f'<option value="{r["id"]}">{h(r["name"])}</option>' for r in finance_feeds)
             def finance_due_cell(r):
                 if str(r['payment_method'] or '')!='Vadeli':return '<span class="mut">-</span>'
-                if str(r['payment_status'] or '')=='Ödendi':return f'<span class="pill">✅ Ödendi<br>{fmt_date(r["paid_date"])}</span>'
+                if str(r['payment_status'] or '')=='Ödendi':return f'<span class="pill">✅ Ödendi<br>{fmt_date(r["paid_date"])}</span><form method="post" action="/finance/unmark-paid" style="margin-top:5px" onsubmit="return confirm(\'Ödeme durumunu geri alıp Bekliyor yapmak istiyor musunuz?\')"><input type="hidden" name="id" value="{r["id"]}"><button class="btn alt" style="padding:5px 8px">Geri Al</button></form>'
                 try:days=(date.fromisoformat(str(r['due_date']))-date.today()).days
                 except Exception:days=9999
                 badge=('🔴 Gecikmiş' if days<0 else '🟠 Bugün' if days==0 else f'🟡 {days} gün')
-                return f'<span class="pill">{badge}<br>{fmt_date(r["due_date"])}</span><form method="post" action="/finance/mark-paid" style="margin-top:5px"><input type="hidden" name="id" value="{r["id"]}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><button class="btn" style="padding:5px 8px">Ödendi</button></form>'
+                return f'<span class="pill">{badge}<br>{fmt_date(r["due_date"])}</span><form method="post" action="/finance/mark-paid" style="margin-top:5px" data-submit-lock="1" data-submit-text="⏳ İşleniyor…" onsubmit="return confirm(&quot;Bu vadeli borç gerçekten ödendi mi?&quot;)"><input type="hidden" name="id" value="{r["id"]}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><button class="btn" style="padding:5px 8px">Ödendi</button></form>'
             def finance_description_cell(r):
                 base=h(r['description']) or '<span class="mut">-</span>'
                 items=feed_invoice_items.get(int(r['id']),[])
@@ -7008,7 +7015,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td><b>{8}</b></td><td><div class="finance-actions">{9}</div></td></tr>'.format(
                     fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),finance_description_cell(r),h(r["related_tags"]),('Tarım İç Transferi' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (h(r["animal_status_action"]) or "-")),h(r["payment_method"]),
                     finance_due_cell(r),money(r["amount"]),
-                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (('<span class="pill">🧾 Fatura</span>' if int(r['feed_item_count'] or 0) else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a>'.format(r["id"])) + '<form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi? Bağlı yem stokları da geri alınır.\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"])))
+                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (('<a class="btn alt" href="/finance/edit?id={0}">🧾 Faturayı Düzenle</a>'.format(r["id"]) if int(r['feed_item_count'] or 0) else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a>'.format(r["id"])) + '<form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi? Bağlı yem stokları da geri alınır.\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"])))
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
@@ -8928,8 +8935,35 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     if str(old['animal_status_action'] or '')=='AGRI_INTERNAL':
                         return self.redirect('/agriculture/transfers','Bağlı iç transfer yalnız Tarım & Ziraat bölümünden değiştirilebilir veya geri alınabilir.')
-                    if c.execute('select 1 from finance_feed_items where finance_id=? limit 1',(record_id,)).fetchone():
-                        return self.redirect('/finance','Yem faturası kalem bazlı stok ve maliyet geçmişine bağlıdır. Değişiklik gerekiyorsa faturayı silip doğru kalemlerle yeniden kaydedin; böylece stok maliyeti bozulmaz.')
+                    invoice_rows=c.execute('select feed_id,stock_tx_id from finance_feed_items where finance_id=?',(record_id,)).fetchall()
+                    if invoice_rows:
+                        if (f.get('invoice_edit') or '')!='yes':return self.redirect(f'/finance/edit?id={record_id}','Yem faturası düzenleme ekranından güncellenmelidir.')
+                        try:new_items=parse_finance_feed_items(f.get('feed_items_json'))
+                        except ValueError as exc:return self.redirect(f'/finance/edit?id={record_id}',str(exc))
+                        payment_method=(f.get('payment_method') or 'Nakit').strip();due_date=(f.get('due_date') or '').strip() if payment_method=='Vadeli' else ''
+                        if payment_method=='Vadeli':
+                            try:date.fromisoformat(due_date)
+                            except Exception:return self.redirect(f'/finance/edit?id={record_id}','Vadeli kayıtta vade tarihi zorunludur.')
+                        affected={int(x['feed_id']) for x in invoice_rows}
+                        for x in invoice_rows:
+                            if x['stock_tx_id']:c.execute('delete from feed_stock_transactions where id=?',(x['stock_tx_id'],))
+                        c.execute('delete from finance_feed_items where finance_id=?',(record_id,))
+                        for item in new_items:
+                            feedrow=c.execute('select name from feed_catalog where id=? and active=1',(item['feed_id'],)).fetchone()
+                            if not feedrow:return self.redirect(f'/finance/edit?id={record_id}','Faturadaki yemlerden biri katalogda bulunamadı.')
+                            affected.add(item['feed_id']);note=f"Finans faturası #{record_id} · {item['quantity']:g} {item['unit']} × {item['purchase_unit_price']:g} TL/{item['unit']}"+(f" · {item['package_kg']:g} kg/torba" if item['unit']=='torba' else '')
+                            c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(item['feed_id'],f['tx_date'],'Giriş',item['quantity_kg'],item['price_per_kg'],note));stock_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                            c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(item['feed_id'],f['tx_date'],item['price_per_kg'],'Düzenlenen yem faturası alış fiyatı'))
+                            c.execute('''insert into finance_feed_items(finance_id,feed_id,stock_tx_id,quantity,unit,package_kg,quantity_kg,unit_price,purchase_unit_price,line_total,created_at) values(?,?,?,?,?,?,?,?,?,?,?)''',(record_id,item['feed_id'],stock_id,item['quantity'],item['unit'],item['package_kg'],item['quantity_kg'],item['price_per_kg'],item['purchase_unit_price'],item['line_total'],datetime.now().isoformat(timespec='seconds')))
+                        for fid in affected:rebuild_feed_cost_history(c,fid)
+                        # Yeni/degisen kalemlerin ekrandaki stok maliyetini guncelle.
+                        for x in c.execute('select id,feed_id from finance_feed_items where finance_id=?',(record_id,)).fetchall():c.execute('update finance_feed_items set unit_price=? where id=?',(feed_weighted_cost(x['feed_id'],c,f['tx_date']),x['id']))
+                        new_amount=round(sum(x['line_total'] for x in new_items),2)
+                        # Vadeli bir kayit ödeme islemi yapilmadan otomatik kapanmaz. Mevcut gerçekten ödenmiş kayıt korunur.
+                        was_paid=str(old['payment_status'] or '')=='Ödendi' and bool(str(old['paid_date'] or '').strip()) and float(old['paid_amount'] or 0)>0
+                        status='Ödendi' if (payment_method!='Vadeli' or was_paid) else 'Bekliyor';paid_date=(old['paid_date'] if was_paid else (f['tx_date'] if payment_method!='Vadeli' else ''));paid_amount=(new_amount if payment_method!='Vadeli' else (new_amount if was_paid else 0))
+                        c.execute("update finance set tx_date=?,tx_type='Gider',category='Yem',amount=?,description=?,payment_method=?,due_date=?,payment_status=?,paid_date=?,paid_amount=?,supplier=?,invoice_no=? where id=?",(f['tx_date'],new_amount,f.get('description'),payment_method,due_date,status,paid_date,paid_amount,(f.get('supplier') or '').strip(),(f.get('invoice_no') or '').strip(),record_id))
+                        return self.redirect('/finance','Yem faturası güncellendi; stok hareketleri ve ağırlıklı ortalama maliyetler yeniden hesaplandı.')
                     category=f['category'];tx_type=normalize_finance_type(category,f.get('tx_type')); animal_id=f.get('animal_id') or None
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     if action and not animal_id:return self.redirect(f'/finance/edit?id={record_id}','Satış veya kesim için ilgili hayvan seçilmelidir.')
@@ -8979,6 +9013,12 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     c.execute('delete from finance where id=?',(record_id,))
                     if animal_id:recalculate_animal_exit_status(c,animal_id)
                     return self.redirect('/finance','Finans kaydı silindi.')
+                if path=='/finance/unmark-paid':
+                    record_id=int(f.get('id') or 0)
+                    row=c.execute("select id from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()
+                    if not row:return self.redirect('/finance','Vadeli ödeme kaydı bulunamadı.')
+                    c.execute("update finance set payment_status='Bekliyor',paid_date='',paid_amount=0 where id=?",(record_id,))
+                    return self.redirect('/finance','Ödeme geri alındı; vadeli kayıt tekrar Bekliyor durumuna getirildi.')
                 if path=='/finance/mark-paid':
                     record_id=int(f.get('id') or 0);paid_date=(f.get('paid_date') or date.today().isoformat()).strip()
                     row=c.execute("select id,amount,payment_status from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()

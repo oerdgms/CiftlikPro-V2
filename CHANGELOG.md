@@ -1,3 +1,11 @@
+# V3.9.23 DEV4 Hotfix1.3 — Yem Faturası Düzenleme + Vadeli Ödeme Güvenliği
+
+- Çoklu yem faturalarına gerçek **Faturayı Düzenle** ekranı eklendi.
+- Tarih, tedarikçi, fatura no, vade ve tüm yem kalemleri değiştirilebilir.
+- Düzenlemede eski stok hareketleri geri alınır; yeni kalemler yazılır ve ağırlıklı ortalama maliyet yeniden hesaplanır.
+- Vadeli borcu **Ödendi** yapmadan önce onay istenir ve çift tıklama kilidi uygulanır.
+- Yanlış kapatılmış vadeli kayıtlar için **Geri Al** işlemi eklendi.
+
 # V3.9.23 DEV4 Hotfix1.2 — Yem Faturası + Hareketli Ortalama Maliyet
 
 - Yem alımı tek finans gideri + çoklu fatura kalemi olarak kaydediliyor.
