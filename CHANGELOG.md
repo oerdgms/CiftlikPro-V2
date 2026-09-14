@@ -1,3 +1,11 @@
+## 3.9.23 DEV4 Hotfix1.6 — Yem Faturası Ödeme Akışı + Finans Rapor Düzeni
+- Yem faturasında Ödendi / Ödenmedi işlemi finans tablosundan kaldırılıp Fatura Detayı penceresine taşındı.
+- Ödenmiş faturada “Ödenmedi Yap”, bekleyen faturada “Ödendi Yap” işlemi aynı detay penceresinde gösterilir.
+- Finans listesindeki işlem adı tüm kayıtlarda sade “Düzenle” olarak standardize edildi.
+- Finans tablosunda eksik Vade başlığı düzeltilerek sütun kayması giderildi.
+- Finans Raporları masaüstü/tablet/mobil düzeni sabitlendi; kategori tablosu ve grafik taşmaları yatay güvenli alanlara alındı.
+- Build, installer ve GitHub Actions sürüm referansları Hotfix1.6 ile eşitlendi.
+
 
 ## 3.9.23 DEV4 Hotfix1.5 Build Fix
 - GitHub Actions sürüm doğrulama testi Hotfix1.5 ile eşitlendi.

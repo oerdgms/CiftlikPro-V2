@@ -132,8 +132,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.5'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_5_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.6'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_6_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_dev3_health_schedule_and_duplicate_claims(self):
