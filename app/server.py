@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1'
+APP_VERSION='3.9.23 DEV4 Hotfix1.2'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV4 Hotfix1'
+APP_LABEL='v3.9.23 DEV4 Hotfix1.2'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -322,7 +322,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .finance-primary-actions{display:flex;align-items:center;gap:14px;margin:14px 0 18px;flex-wrap:wrap}.finance-new-btn{font-size:15px;padding:13px 20px;border-radius:12px;box-shadow:0 8px 20px rgba(15,112,61,.18)}
 .finance-drawer-backdrop{position:fixed;inset:0;background:rgba(13,38,26,.38);backdrop-filter:blur(2px);z-index:1090;display:none}.finance-drawer-backdrop.open{display:block}.finance-drawer{position:fixed;top:0;right:0;height:100vh;width:min(760px,94vw);background:#f5f8f6;z-index:1100;transform:translateX(105%);transition:transform .22s ease;box-shadow:-20px 0 50px rgba(12,45,28,.20);display:flex;flex-direction:column}.finance-drawer.open{transform:translateX(0)}.finance-drawer-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;padding:22px 24px 17px;background:#fff;border-bottom:1px solid #dce8df;position:sticky;top:0;z-index:2}.finance-drawer-close{width:42px;height:42px;border:0;border-radius:50%;font-size:29px;background:#eaf3ed;color:#145b34;cursor:pointer}.finance-drawer-body{padding:18px 20px 35px;overflow:auto}.finance-entry-card{margin:0!important;box-shadow:none!important}.finance-drawer .bulk-list{max-height:310px;overflow:auto}
 @media(max-width:700px){.finance-primary-actions{position:sticky;top:62px;z-index:15;background:#f4f7f5;padding:8px 0;margin:5px 0 12px}.finance-new-btn{width:100%}.finance-primary-actions .mut{display:none}.finance-drawer{width:100vw}.finance-drawer-head{padding:16px}.finance-drawer-body{padding:12px 12px 28px}.finance-drawer .bulk-list{max-height:42vh}}
-.feed-invoice-row label{font-size:11px!important}.feed-invoice-row input,.feed-invoice-row select{min-height:40px!important;padding:7px!important}.payment-due-card{border-left:5px solid #e0a11b!important}.payment-due-card.overdue{border-left-color:#c8392b!important;background:#fff4f3!important}.payment-due-card.today{border-left-color:#e27b1f!important;background:#fff8ec!important}
+.feed-invoice-row label{font-size:11px!important}.feed-invoice-row input,.feed-invoice-row select{min-height:40px!important;padding:7px!important}.ffi-line-total{display:flex;align-items:center;min-height:40px;padding:7px;border:1px solid #d5e2d9;border-radius:9px;background:#f4f8f5;color:#17452d;font-size:12px;font-weight:900;white-space:nowrap}.payment-due-card{border-left:5px solid #e0a11b!important}.payment-due-card.overdue{border-left-color:#c8392b!important;background:#fff4f3!important}.payment-due-card.today{border-left-color:#e27b1f!important;background:#fff8ec!important}
 @media(max-width:700px){.feed-invoice-row{grid-template-columns:1fr 1fr!important}.feed-invoice-row label:first-child{grid-column:1/-1}.feed-invoice-row .ffi-remove{grid-column:1/-1;width:100%}}
 .finance-filter-card{background:linear-gradient(180deg,#fff,#f8fbf9);border:1px solid #dce8df}
 .finance-filter-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.finance-filter-title h2{margin:0 0 3px}
@@ -554,7 +554,7 @@ def reset_code_hash(salt,code):return hashlib.sha256((str(salt)+'|'+str(code)).e
 def reset_token_hash(token):return hashlib.sha256(str(token).encode('utf-8')).hexdigest()
 
 def finance_request_fingerprint(username,form):
-    keys=('tx_date','tx_type','category','amount','description','payment_method','due_date','animal_id','animal_ids','milk_animal_ids','feed_items_json')
+    keys=('tx_date','tx_type','category','amount','description','payment_method','due_date','supplier','invoice_no','animal_id','animal_ids','milk_animal_ids','feed_items_json')
     payload='|'.join(str(form.get(k,'')).strip() for k in keys)
     return hashlib.sha256((str(username)+'|'+payload).encode('utf-8')).hexdigest()
 
@@ -590,6 +590,34 @@ def parse_money_value(value):
     if amount!=amount or amount in (float('inf'),float('-inf')):
         raise ValueError('Tutar geçerli bir sayı olmalıdır.')
     return amount
+
+def parse_finance_feed_items(raw_value):
+    """Çoklu yem faturasını seçilen birim fiyatından TL/kg stok fiyatına dönüştürür."""
+    try:raw_items=json.loads(raw_value or '[]')
+    except Exception:raise ValueError('Yem kalemleri okunamadı; lütfen kalemleri yeniden ekleyin.')
+    if not isinstance(raw_items,list):raise ValueError('Yem kalemleri geçersiz biçimde gönderildi.')
+    items=[]
+    for raw in raw_items:
+        try:
+            feed_id=int(raw.get('feed_id') or 0)
+            quantity=float(raw.get('quantity') or 0)
+            unit=(raw.get('unit') or 'kg').strip()
+            package_kg=float(raw.get('package_kg') or 1)
+            purchase_unit_price=parse_money_value(raw.get('unit_price'))
+        except Exception:raise ValueError('Yem kalemlerinden birinin miktar veya birim fiyatı geçersiz.')
+        if not feed_id or quantity<=0 or unit not in ('kg','torba','ton') or (unit=='torba' and package_kg<=0) or purchase_unit_price<=0:
+            raise ValueError('Her yem kaleminde yem, miktar, birim ve 0’dan büyük birim fiyat zorunludur.')
+        unit_factor=(package_kg if unit=='torba' else 1000 if unit=='ton' else 1)
+        quantity_kg=quantity*unit_factor
+        price_per_kg=purchase_unit_price/unit_factor
+        line_total=round(quantity*purchase_unit_price,2)
+        items.append({
+            'feed_id':feed_id,'quantity':quantity,'unit':unit,'package_kg':package_kg,
+            'quantity_kg':quantity_kg,'purchase_unit_price':purchase_unit_price,
+            'price_per_kg':round(price_per_kg,6),'line_total':line_total,
+        })
+    if not items:raise ValueError('Yem giderinde en az bir yem kalemi ekleyin.')
+    return items
 
 def general_request_fingerprint(username,path,form):
     """Dosya gövdelerini taşımadan tüm yazma istekleri için kısa süreli kimlik üretir."""
@@ -752,6 +780,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS paddock_history(id INTEGER PRIMARY KEY,animal_source TEXT NOT NULL,animal_id INTEGER NOT NULL,from_paddock_id INTEGER,to_paddock_id INTEGER,moved_at TEXT NOT NULL,notes TEXT);
         CREATE TABLE IF NOT EXISTS feed_catalog(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,category TEXT,dm_pct REAL DEFAULT 0,ndf_pct REAL DEFAULT 0,effective_ndf_pct REAL DEFAULT 0,cp_pct REAL DEFAULT 0,tdn_pct REAL DEFAULT 0,me_mcal_kg REAL DEFAULT 0,nem_mcal_kg REAL DEFAULT 0,neg_mcal_kg REAL DEFAULT 0,starch_pct REAL DEFAULT 0,fat_pct REAL DEFAULT 0,ash_pct REAL DEFAULT 0,ca_pct REAL DEFAULT 0,p_pct REAL DEFAULT 0,mg_pct REAL DEFAULT 0,k_pct REAL DEFAULT 0,na_pct REAL DEFAULT 0,s_pct REAL DEFAULT 0,label_cp_pct_as_fed REAL DEFAULT 0,label_me_kcal_kg_as_fed REAL DEFAULT 0,label_crude_fiber_pct_as_fed REAL DEFAULT 0,label_fat_pct_as_fed REAL DEFAULT 0,label_ash_pct_as_fed REAL DEFAULT 0,label_sodium_pct_as_fed REAL DEFAULT 0,starch_degradability_pct REAL DEFAULT 0,ndf_digestibility_pct REAL DEFAULT 0,rdp_pct_cp REAL DEFAULT 0,rup_pct_cp REAL DEFAULT 0,inra_ufv REAL DEFAULT 0,inra_pdi_g_kg_dm REAL DEFAULT 0,inra_pdia_g_kg_dm REAL DEFAULT 0,inra_rpb_g_kg_dm REAL DEFAULT 0,inra_fill_unit REAL DEFAULT 0,processing_method TEXT,solver_min_kg_day REAL DEFAULT 0,solver_max_kg_day REAL DEFAULT 0,constraint_source TEXT,source TEXT,active INTEGER DEFAULT 1);
         CREATE TABLE IF NOT EXISTS feed_prices(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,price_per_kg REAL NOT NULL,notes TEXT);
+        CREATE TABLE IF NOT EXISTS feed_cost_history(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,cost_per_kg REAL NOT NULL,stock_qty_kg REAL DEFAULT 0,source TEXT,created_at TEXT NOT NULL);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_feed_cost_history_day ON feed_cost_history(feed_id,effective_date);
         CREATE TABLE IF NOT EXISTS feed_stock_transactions(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,tx_date TEXT NOT NULL,tx_type TEXT NOT NULL,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,notes TEXT);
         CREATE TABLE IF NOT EXISTS rations(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,target_group TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS ration_items(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,kg_per_head_day REAL NOT NULL,UNIQUE(ration_id,feed_id));
@@ -1000,13 +1030,22 @@ def init_db():
             id INTEGER PRIMARY KEY,finance_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,
             stock_tx_id INTEGER UNIQUE,quantity REAL NOT NULL,unit TEXT DEFAULT 'kg',
             package_kg REAL DEFAULT 1,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,
-            line_total REAL DEFAULT 0,created_at TEXT NOT NULL)""")
+            purchase_unit_price REAL DEFAULT 0,line_total REAL DEFAULT 0,created_at TEXT NOT NULL)""")
+        finance_feed_cols={r[1] for r in c.execute('pragma table_info(finance_feed_items)').fetchall()}
+        if 'purchase_unit_price' not in finance_feed_cols:
+            c.execute('ALTER TABLE finance_feed_items ADD COLUMN purchase_unit_price REAL DEFAULT 0')
+            c.execute("""update finance_feed_items set purchase_unit_price=case
+                         when unit='torba' then coalesce(unit_price,0)*coalesce(package_kg,1)
+                         else coalesce(unit_price,0) end
+                         where coalesce(purchase_unit_price,0)=0""")
         c.execute('CREATE INDEX IF NOT EXISTS idx_finance_feed_items_finance ON finance_feed_items(finance_id)')
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         for col,typ in [('due_date','TEXT'),('payment_status',"TEXT DEFAULT 'Ödendi'"),
-                        ('paid_date','TEXT'),('paid_amount','REAL DEFAULT 0'),('supplier','TEXT')]:
+                        ('paid_date','TEXT'),('paid_amount','REAL DEFAULT 0'),('supplier','TEXT'),('invoice_no','TEXT')]:
             if col not in finance_cols:c.execute(f'ALTER TABLE finance ADD COLUMN {col} {typ}')
         c.execute("update finance set payment_status=case when payment_method='Vadeli' and coalesce(due_date,'')<>'' then 'Bekliyor' else 'Ödendi' end where payment_status is null or trim(payment_status)='' ")
+        for _fid in [r['feed_id'] for r in c.execute('select distinct feed_id from feed_stock_transactions').fetchall()]:
+            rebuild_feed_cost_history(c,_fid)
         for k,v in [('smtp_host','smtp.gmail.com'),('smtp_port','587'),('smtp_security','starttls'),('smtp_username',''),('smtp_password',''),('smtp_sender','')]:
             c.execute("insert or ignore into settings(setting_key,setting_value) values(?,?)",(k,v))
         c.execute("""CREATE TABLE IF NOT EXISTS request_dedupe(
@@ -1779,7 +1818,8 @@ def ration_cost_between(c, ration_id, start_day, end_day):
         except Exception:pass
     if feed_ids:
         ph=','.join('?'*len(feed_ids))
-        rows=c.execute(f'select distinct effective_date from feed_prices where feed_id in ({ph}) and effective_date>? and effective_date<?',(*feed_ids,s0,e0)).fetchall()
+        rows=c.execute(f'''select distinct effective_date from feed_cost_history where feed_id in ({ph}) and effective_date>? and effective_date<?
+                             union select distinct effective_date from feed_prices where feed_id in ({ph}) and effective_date>? and effective_date<?''',(*feed_ids,s0,e0,*feed_ids,s0,e0)).fetchall()
         for r in rows:
             try:bounds.add(date.fromisoformat(r['effective_date'][:10]))
             except Exception:pass
@@ -1990,15 +2030,50 @@ def setting_float(key, default):
         return float(default)
 
 
-def current_feed_price(feed_id, con=None, on_date=None):
-    own=con is None
-    c=con or db().__enter__()
+def rebuild_feed_cost_history(c, feed_id):
+    """Stok hareketlerinden hareketli ağırlıklı ortalama yem maliyeti geçmişi üretir."""
+    fid=int(feed_id)
+    rows=c.execute("""select id,tx_date,tx_type,quantity_kg,unit_price
+                      from feed_stock_transactions where feed_id=?
+                      order by tx_date,id""",(fid,)).fetchall()
+    c.execute('delete from feed_cost_history where feed_id=?',(fid,))
+    qty=0.0; value=0.0; avg=0.0; day_state={}
+    for r in rows:
+        q=max(0.0,float(r['quantity_kg'] or 0)); typ=str(r['tx_type'] or '')
+        if typ in ('Giriş','Sayım +'):
+            unit=float(r['unit_price'] or 0)
+            if unit<=0: unit=avg
+            value += q*unit; qty += q
+            avg=(value/qty) if qty>1e-9 else avg
+        elif typ in ('Çıkış','Tüketim','Sayım -'):
+            out=min(q,qty) if qty>0 else q
+            qty=max(0.0,qty-out); value=max(0.0,value-out*avg)
+            if qty<=1e-9: qty=0.0; value=0.0
+        d=str(r['tx_date'] or '')[:10]
+        if d: day_state[d]=(avg,qty)
+    created=datetime.now().isoformat(timespec='seconds')
+    for d,(cost,stock_qty) in sorted(day_state.items()):
+        c.execute('''insert into feed_cost_history(feed_id,effective_date,cost_per_kg,stock_qty_kg,source,created_at)
+                     values(?,?,?,?,?,?)''',(fid,d,round(float(cost or 0),6),round(float(stock_qty or 0),6),'Hareketli ağırlıklı ortalama',created))
+    return avg
+
+
+def feed_weighted_cost(feed_id, con=None, on_date=None):
+    own=con is None; c=con or db().__enter__()
     try:
         d=(on_date or date.today().isoformat())[:10]
+        r=c.execute("""select cost_per_kg from feed_cost_history
+                       where feed_id=? and effective_date<=?
+                       order by effective_date desc,id desc limit 1""",(feed_id,d)).fetchone()
+        if r:return float(r['cost_per_kg'] or 0)
         r=c.execute("select price_per_kg from feed_prices where feed_id=? and effective_date<=? order by effective_date desc,id desc limit 1",(feed_id,d)).fetchone()
         return float(r['price_per_kg'] or 0) if r else 0.0
     finally:
         if own:c.close()
+
+
+def current_feed_price(feed_id, con=None, on_date=None):
+    return feed_weighted_cost(feed_id,con,on_date)
 
 def feed_stock_kg(feed_id, con=None):
     own=con is None
@@ -2033,7 +2108,7 @@ def ration_summary(ration_id, con=None):
     own=con is None
     c=con or db().__enter__()
     try:
-        sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
+        sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
                  from ration_items ri join feed_catalog f on f.id=ri.feed_id where ri.ration_id=? order by f.name"""
         rows=c.execute(sql,(date.today().isoformat(),ration_id)).fetchall()
         out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,
@@ -3743,7 +3818,7 @@ def ration_smart_recommendations(rr, sm, con=None, limit=6):
             'ca':max(0,t['ca_g']-sm['ca_g'])/max(t['ca_g'],.01),
             'p':max(0,t['p_g']-sm['p_g'])/max(t['p_g'],.01),
         }
-        rows=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1""",(date.today().isoformat(),)).fetchall()
+        rows=c.execute("""select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1""",(date.today().isoformat(),)).fetchall()
         out=[]
         for f in rows:
             dm=float(f['dm_pct'] or 0)/100; cp=float(f['cp_pct'] or 0)/100; ndf=float(f['ndf_pct'] or 0)/100; neg=float(f['neg_mcal_kg'] or 0); ca=float(f['ca_pct'] or 0); ph=float(f['p_pct'] or 0)
@@ -3855,7 +3930,7 @@ def ration_addition_recommendations(rr, sm, con=None, limit=30):
         base_dmi=_predicted_dmi_for_metrics(sm,t); mw=_mineral_windows(t,base_dmi)
         base_adg=_achievable_adg(sm,t)
         base_err=ration_balance_error(t,sm)
-        rows=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
+        rows=c.execute("""select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
             coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock
             from feed_catalog f where f.active=1""",(date.today().isoformat(),)).fetchall()
         out=[]
@@ -3897,7 +3972,7 @@ def ration_simulated_multi_summary(ration_id, changes, con=None):
         base=ration_summary(ration_id,c)
         out={k:v for k,v in base.items() if k!='items'}; out['items']=base['items']
         for feed_id,delta_kg in changes:
-            f=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),int(feed_id))).fetchone()
+            f=c.execute("""select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),int(feed_id))).fetchone()
             if not f: continue
             kg=float(delta_kg or 0); dm=kg*float(f['dm_pct'] or 0)/100
             feed_starch=dm*_solver_starch_pct(f)/100
@@ -3963,7 +4038,7 @@ def ration_simulated_summary(ration_id, feed_id, delta_kg, con=None):
     own=con is None; c=con or db().__enter__()
     try:
         base=ration_summary(ration_id,c); out={k:v for k,v in base.items() if k!='items'}; out['items']=base['items']
-        f=c.execute("""select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),feed_id)).fetchone()
+        f=c.execute("""select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.id=?""",(date.today().isoformat(),feed_id)).fetchone()
         if not f:return base
         kg=float(delta_kg); dm=kg*float(f['dm_pct'] or 0)/100
         feed_starch=dm*_solver_starch_pct(f)/100
@@ -4956,7 +5031,7 @@ function moneyGroupDigits(digits){{
 function bindSmartMoney(){{
   const names=new Set(['amount','cost','purchase_price','sale_price','sold_price','target_sale_price','daily_feed_cost','daily_care_cost']);
   document.querySelectorAll('input[name]').forEach(function(el){{
-    if(!names.has(el.name)||el.dataset.moneyBound==='1')return;
+    if(!names.has(el.name)||el.dataset.moneyBound==='1'||el.dataset.moneySkip==='1')return;
     el.dataset.moneyBound='1';
     el.type='text';
     el.inputMode='numeric';
@@ -5918,7 +5993,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             with db() as c:
                 params=[]; where='where f.active=1'
                 if search: where+=' and (f.name like ? or f.category like ?)';params=[f'%{search}%',f'%{search}%']
-                feeds=c.execute(f'''select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
+                feeds=c.execute(f'''select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
                     coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock
                     from feed_catalog f {where} order by f.category,f.name limit 250''',[date.today().isoformat()]+params).fetchall()
                 allfeeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
@@ -6003,7 +6078,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 return self.redirect('/ration-workbench?'+urllib.parse.urlencode(keep),msg or '')
             with db() as c:
                 rations=c.execute("select * from rations where active=1 order by name").fetchall()
-                feeds=c.execute("""select f.id,f.name,f.category,f.dm_pct,f.cp_pct,f.ndf_pct,f.effective_ndf_pct,f.starch_pct,f.me_mcal_kg,f.ca_pct,f.p_pct, coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price, coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 order by f.name""",(date.today().isoformat(),)).fetchall()
+                feeds=c.execute("""select f.id,f.name,f.category,f.dm_pct,f.cp_pct,f.ndf_pct,f.effective_ndf_pct,f.starch_pct,f.me_mcal_kg,f.ca_pct,f.p_pct, coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price, coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 order by f.name""",(date.today().isoformat(),)).fetchall()
                 paddocks=c.execute("select id,name from paddocks where active=1 order by name").fetchall()
                 cards=[]
                 for r in rations:
@@ -6887,7 +6962,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             sql='''select f.*,a.tag,
             case when f.category='Süt Satışı'
                  then coalesce((select group_concat(a2.tag, ', ') from finance_animals fa join animals a2 on a2.id=fa.animal_id where fa.finance_id=f.id and fa.relation_type='Süt Satışı'),a.tag)
-                 else a.tag end as related_tags
+                 else a.tag end as related_tags,
+            (select count(*) from finance_feed_items ffi where ffi.finance_id=f.id) as feed_item_count
             from finance f left join animals a on a.id=f.animal_id where tx_date between ? and ?'''; args=[start,end]
             if typ: sql+=' and tx_type=?'; args.append(typ)
             if category: sql+=' and category=?'; args.append(category)
@@ -6899,6 +6975,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 categories=c.execute("select distinct category from finance where coalesce(category,'')<>'' order by category").fetchall()
                 finance_feeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
                 rows=c.execute(sql,args).fetchall()
+                feed_invoice_items={}
+                for rr in rows:
+                    if int(rr['feed_item_count'] or 0):
+                        feed_invoice_items[int(rr['id'])]=c.execute('''select ffi.*,fc.name feed_name from finance_feed_items ffi join feed_catalog fc on fc.id=ffi.feed_id where ffi.finance_id=? order by ffi.id''',(rr['id'],)).fetchall()
                 inc=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gelir'); exp=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Gider'); losses=sum(float(r['amount'] or 0) for r in rows if r['tx_type']=='Zarar')
             opts=''.join(f'<option value="{a["id"]}">{h(a["tag"])} - {h(a["nickname"])}</option>' for a in animals)
             bulk_cards=''.join(f'''<label class="bulk-row" data-search="{h((str(a["tag"])+" "+str(a["nickname"] or "")).lower())}"><input type="checkbox" class="bulk-check" value="{a["id"]}" onchange="syncBulkSelection()"><span class="tag">🐄 {h(a["tag"])}</span><span class="nick">{h(a["nickname"]) or "Takma ad yok"}</span></label>''' for a in animals)
@@ -6912,21 +6992,35 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 except Exception:days=9999
                 badge=('🔴 Gecikmiş' if days<0 else '🟠 Bugün' if days==0 else f'🟡 {days} gün')
                 return f'<span class="pill">{badge}<br>{fmt_date(r["due_date"])}</span><form method="post" action="/finance/mark-paid" style="margin-top:5px"><input type="hidden" name="id" value="{r["id"]}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><button class="btn" style="padding:5px 8px">Ödendi</button></form>'
+            def finance_description_cell(r):
+                base=h(r['description']) or '<span class="mut">-</span>'
+                items=feed_invoice_items.get(int(r['id']),[])
+                if not items:return base
+                meta=[]
+                if str(r['supplier'] or '').strip():meta.append('Tedarikçi: '+h(r['supplier']))
+                if str(r['invoice_no'] or '').strip():meta.append('Fatura No: '+h(r['invoice_no']))
+                lines=''.join(f'<div class="feed-invoice-line"><b>{h(x["feed_name"])}</b><span>{float(x["quantity"] or 0):g} {h(x["unit"])} × {money(x["purchase_unit_price"])} = <b>{money(x["line_total"])}</b></span><small>{float(x["quantity_kg"] or 0):g} kg · stok maliyeti {money(x["unit_price"])}/kg</small></div>' for x in items)
+                meta_html=' · '.join(meta) if meta else 'Fatura bilgisi'
+                tail=('<div class="mut">'+base+'</div>') if base else ''
+                return f'<details class="feed-invoice-detail"><summary>🧾 Yem Faturası · {len(items)} kalem</summary><div class="feed-invoice-meta">{meta_html}</div>{lines}<div class="feed-invoice-total">Toplam <b>{money(r["amount"])}</b></div></details>{tail}'
+
             trs=''.join(
                 '<tr><td>{0}</td><td>{1}</td><td>{2}</td><td>{3}</td><td>{4}</td><td>{5}</td><td>{6}</td><td>{7}</td><td><b>{8}</b></td><td><div class="finance-actions">{9}</div></td></tr>'.format(
-                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),h(r["description"]),h(r["related_tags"]),('Tarım İç Transferi' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (h(r["animal_status_action"]) or "-")),h(r["payment_method"]),
+                    fmt_date(r["tx_date"]),h(r["tx_type"]),h(r["category"]),finance_description_cell(r),h(r["related_tags"]),('Tarım İç Transferi' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (h(r["animal_status_action"]) or "-")),h(r["payment_method"]),
                     finance_due_cell(r),money(r["amount"]),
-                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a><form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi?\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"]))
+                    ('<a class="btn alt" href="/agriculture/transfers">Tarım Transferine Git</a>' if str(r["animal_status_action"] or '')=='AGRI_INTERNAL' else (('<span class="pill">🧾 Fatura</span>' if int(r['feed_item_count'] or 0) else '<a class="btn alt" href="/finance/edit?id={0}">Düzenle</a>'.format(r["id"])) + '<form method="post" action="/finance/delete" onsubmit="return confirm(\'Bu finans kaydı silinsin mi? Bağlı yem stokları da geri alınır.\')"><input type="hidden" name="id" value="{0}"><button class="btn danger">Sil</button></form>'.format(r["id"])))
                 ) for r in rows
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
 <label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label>
 <label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option><option>Zarar</option></select><span class="field-help" id="financeTypeHint">Kategoriye göre otomatik ayarlanır.</span></label>
 <label>Kategori<select name="category" id="financeCategory"><optgroup label="Gelir kategorileri"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option></optgroup><optgroup label="Gider kategorileri"><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option></optgroup><optgroup label="Serbest"><option>Diğer</option></optgroup></select></label>
-<label>Toplam Tutar<input type="text" inputmode="decimal" name="amount" id="financeAmount" placeholder="Örn. 200.000 veya 200000" required></label>
+<label>Toplam Tutar<input type="text" inputmode="decimal" name="amount" id="financeAmount" data-money-skip="1" placeholder="Örn. 200.000 veya 200000" required><span class="field-help" id="financeAmountHint">Tutarı yazın.</span></label>
 <label>Ödeme Yöntemi<select name="payment_method" id="financePaymentMethod"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
 <label id="financeDueDateLabel" style="display:none">Vade Tarihi *<input type="date" name="due_date" id="financeDueDate"><span class="field-help">Bu tarih yaklaşınca Dashboard ve Bildirimler alanında, günü geçince “Gecikmiş” olarak hatırlatılır.</span></label>
-<label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label><div class="full" id="financeFeedBox" style="display:none;padding:12px;background:#f0f7f2;border:1px solid #d5e7da;border-radius:11px"><h3 style="margin-top:0">🌾 Faturadaki Yemler</h3><div class="mut">Aynı faturadaki tüm yemleri ekleyin. Torba seçerseniz torba kilosunu da yazın.</div><input type="hidden" name="feed_items_json" id="feedItemsJson"><div id="feedItemRows"></div><button type="button" class="btn alt" id="addFeedItemBtn">＋ Yem Ekle</button><div class="mut" style="margin-top:8px">Kalem tutarları boşsa toplam fatura tutarı yemlerin kilogramlarına göre otomatik dağıtılır.</div></div>
+<label id="financeSupplierLabel" style="display:none">Tedarikçi / Firma<input name="supplier" id="financeSupplier" placeholder="Örn. Yem Bayii"></label>
+<label id="financeInvoiceNoLabel" style="display:none">Fatura No<input name="invoice_no" id="financeInvoiceNo" placeholder="Opsiyonel"></label>
+<label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label><div class="full" id="financeFeedBox" style="display:none;padding:12px;background:#f0f7f2;border:1px solid #d5e7da;border-radius:11px"><h3 style="margin-top:0">🌾 Faturadaki Yemler</h3><div class="mut">Her ürünün miktarını ve seçtiğiniz birime göre fiyatını girin. Torba alımında torba kilosu, rasyon için gerçek ₺/kg maliyetine çevrilir.</div><input type="hidden" name="feed_items_json" id="feedItemsJson"><div id="feedItemRows"></div><button type="button" class="btn alt" id="addFeedItemBtn">＋ Yem Ekle</button><div class="mut" style="margin-top:8px">Kalem toplamları otomatik hesaplanır. Fatura finansta tek gider olarak görünür; her yem ayrı stok hareketi oluşturur ve alış tarihinden itibaren hareketli ağırlıklı ortalama stok maliyetine katılır.</div></div>
 <input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
 <div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı Gelir</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div><input type="hidden" name="milk_animal_ids" id="milkAnimalIds" value=""><div class="full bulk-animal-box" id="milkAnimalBox" style="display:none"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🥛 Süt Gelirine Dahil Dişi Hayvanlar</h3><div class="mut">Yalnızca aktif dişi hayvanlar gösterilir. Toplam süt geliri bölünmez; seçilen hayvanlar kayda ilişkilendirilir.</div></div><input class="bulk-search" id="milkSearch" placeholder="Dişi küpe veya takma ad ara…" oninput="filterMilkAnimals()"></div><div class="bulk-list" id="milkList">{milk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="milkCount">0</b> dişi</span><span class="pill">Toplam gelir <b id="milkTotal">₺0,00</b></span><button type="button" class="btn alt" onclick="clearMilkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="milkSelectedPreview">Henüz dişi hayvan seçilmedi.</div></div></div>
 <label class="full">Açıklama<input name="description"></label>
@@ -6936,6 +7030,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<th>Ödeme</th><th>Tutar</th><th>İşlem</th>','<th>Ödeme</th><th>Vade</th><th>Tutar</th><th>İşlem</th>')
             body=body.replace('<option value="">Gelir + Gider</option>', '<option value="">Tüm İşlemler</option>')
             body=body.replace(f"<option {'selected' if typ=='Gider' else ''}>Gider</option></select>", f"<option {'selected' if typ=='Gider' else ''}>Gider</option><option {'selected' if typ=='Zarar' else ''}>Zarar</option></select>")
+            body += '''<style>.feed-invoice-detail{min-width:230px}.feed-invoice-detail summary{cursor:pointer;font-weight:800;color:#1f5d39}.feed-invoice-meta{font-size:11px;color:#6b786f;margin:7px 0}.feed-invoice-line{display:grid;grid-template-columns:1fr;gap:2px;padding:7px 0;border-top:1px solid #edf2ee}.feed-invoice-line span,.feed-invoice-line small{font-size:11px}.feed-invoice-total{padding-top:7px;border-top:1px solid #dbe5de;text-align:right}.feed-invoice-row label{min-width:0}.feed-invoice-row output{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9;min-height:42px}@media(max-width:700px){.feed-invoice-row{grid-template-columns:1fr 1fr!important}.feed-invoice-row label:first-child,.feed-invoice-row .ffi-line-label{grid-column:1/-1}.feed-invoice-row .ffi-remove{grid-column:1/-1;width:100%}}</style>'''
             body += f'''<script>
             const financeIncomeCategories=new Set(['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme']);
             const financeExpenseCategories=new Set(['Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı']);
@@ -6949,10 +7044,24 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             }}
             function isMilkFinance(){{return document.getElementById('tx').value==='Gelir' && document.getElementById('financeCategory').value==='Süt Satışı';}}
             const financeFeedOptions=`<option value="">Yem seçin…</option>{finance_feed_opts}`;let feedItemSeq=0;
-            function addFinanceFeedItem(){{feedItemSeq++;const row=document.createElement('div');row.className='feed-invoice-row';row.style.cssText='display:grid;grid-template-columns:2fr .7fr .8fr .8fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px';row.innerHTML='<label>Yem<select class="ffi-feed">'+financeFeedOptions+'</select></label><label>Miktar<input class="ffi-qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="ffi-unit"><option value="torba">Torba</option><option value="kg">kg</option></select></label><label>Torba kg<input class="ffi-package" type="number" min="0.01" step="0.01" value="50"></label><label>Kalem Tutarı ₺<input class="ffi-total" type="text" inputmode="decimal" placeholder="İsteğe bağlı"></label><button type="button" class="btn danger ffi-remove">Sil</button>';row.querySelector('.ffi-remove').onclick=()=>{{row.remove();syncFeedItems();}};row.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',syncFeedItems));document.getElementById('feedItemRows').appendChild(row);syncFeedItems();}}
-            function syncFeedItems(){{const items=Array.from(document.querySelectorAll('.feed-invoice-row')).map(row=>({{feed_id:row.querySelector('.ffi-feed').value,quantity:row.querySelector('.ffi-qty').value,unit:row.querySelector('.ffi-unit').value,package_kg:row.querySelector('.ffi-package').value,line_total:row.querySelector('.ffi-total').value}})).filter(x=>x.feed_id||x.quantity);document.getElementById('feedItemsJson').value=JSON.stringify(items);document.querySelectorAll('.feed-invoice-row').forEach(row=>{{row.querySelector('.ffi-package').closest('label').style.display=row.querySelector('.ffi-unit').value==='torba'?'block':'none';}});}}
+            function addFinanceFeedItem(){{feedItemSeq++;const row=document.createElement('div');row.className='feed-invoice-row';row.style.cssText='display:grid;grid-template-columns:2fr .7fr .75fr .8fr 1fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px';row.innerHTML='<label>Yem<select class="ffi-feed">'+financeFeedOptions+'</select></label><label>Adet / Miktar<input class="ffi-qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="ffi-unit"><option value="torba">Torba</option><option value="kg">kg</option><option value="ton">Ton</option></select></label><label class="ffi-package-label">Torba kg<input class="ffi-package" type="number" min="0.01" step="0.01" value="50"></label><label><span class="ffi-price-caption">Birim Fiyat (₺/torba)</span><input class="ffi-unit-price" type="text" inputmode="decimal" placeholder="Örn. 1.000"></label><label class="ffi-line-label">Kalem Toplamı<output class="ffi-line-total">₺0,00</output></label><button type="button" class="btn danger ffi-remove">Sil</button>';row.querySelector('.ffi-remove').onclick=()=>{{row.remove();syncFeedItems();}};row.querySelectorAll('input,select').forEach(x=>{{x.addEventListener('input',syncFeedItems);x.addEventListener('change',syncFeedItems);}});document.getElementById('feedItemRows').appendChild(row);syncFeedItems();}}
+            function formatMoneyInput(v){{return new Intl.NumberFormat('tr-TR',{{minimumFractionDigits:2,maximumFractionDigits:2}}).format(v||0);}}
+            function syncFeedItems(){{
+              const rows=Array.from(document.querySelectorAll('.feed-invoice-row'));
+              const items=rows.map(row=>{{
+                const unit=row.querySelector('.ffi-unit').value,quantity=Number(row.querySelector('.ffi-qty').value||0),unitPrice=parseMoneyInput(row.querySelector('.ffi-unit-price').value),packageInput=row.querySelector('.ffi-package'),packageKg=Number(packageInput.value||0),lineTotal=Math.round(quantity*unitPrice*100)/100;
+                row.querySelector('.ffi-package-label').style.display=unit==='torba'?'block':'none';
+                row.querySelector('.ffi-price-caption').textContent='Birim Fiyat (₺/'+unit+')';
+                row.querySelector('.ffi-line-total').textContent=formatTRY(lineTotal);
+                return {{feed_id:row.querySelector('.ffi-feed').value,quantity:row.querySelector('.ffi-qty').value,unit:unit,package_kg:packageInput.value,unit_price:row.querySelector('.ffi-unit-price').value,line_total:lineTotal.toFixed(2)}};
+              }}).filter(x=>x.feed_id||x.quantity||x.unit_price);
+              document.getElementById('feedItemsJson').value=JSON.stringify(items);
+              const feedMode=document.getElementById('financeCategory').value==='Yem',amount=document.getElementById('financeAmount'),hint=document.getElementById('financeAmountHint');
+              if(feedMode){{const invoiceTotal=items.reduce((sum,item)=>sum+Number(item.line_total||0),0);amount.readOnly=true;amount.value=invoiceTotal>0?formatMoneyInput(invoiceTotal):'';if(hint)hint.textContent='Yem satırlarından otomatik hesaplanır.';}}
+              else{{amount.readOnly=false;if(hint)hint.textContent='Tutarı yazın.';}}
+            }}
             document.getElementById('addFeedItemBtn').addEventListener('click',addFinanceFeedItem);
-            function refreshFinanceFeed(){{const on=document.getElementById('financeCategory').value==='Yem';const b=document.getElementById('financeFeedBox');if(b)b.style.display=on?'block':'none';if(on&&!document.querySelector('.feed-invoice-row'))addFinanceFeedItem();syncFeedItems();}}
+            function refreshFinanceFeed(){{const on=document.getElementById('financeCategory').value==='Yem';const b=document.getElementById('financeFeedBox'),supplier=document.getElementById('financeSupplierLabel'),inv=document.getElementById('financeInvoiceNoLabel'),type=document.getElementById('tx');if(b)b.style.display=on?'block':'none';if(supplier)supplier.style.display=on?'block':'none';if(inv)inv.style.display=on?'block':'none';if(on){{type.value='Gider';type.style.pointerEvents='none';type.setAttribute('aria-disabled','true');if(!document.querySelector('.feed-invoice-row'))addFinanceFeedItem();}}else{{type.style.pointerEvents='';type.removeAttribute('aria-disabled');}}syncFeedItems();}}
             function refreshFinanceDue(){{const payment=document.getElementById('financePaymentMethod'),label=document.getElementById('financeDueDateLabel'),field=document.getElementById('financeDueDate'),on=payment.value==='Vadeli';label.style.display=on?'block':'none';field.required=on;if(!on)field.value='';}}
             function parseMoneyInput(v){{v=String(v||'').trim().replace(/\\s/g,'').replace(/₺/g,'');if(!v)return 0;if(v.includes(',')){{v=v.replace(/\\./g,'').replace(',','.');}}else{{const parts=v.split('.');if(parts.length>1&&parts.slice(1).every(x=>x.length===3))v=parts.join('');}}const n=Number(v);return Number.isFinite(n)?n:0;}}
             function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
@@ -7019,8 +7128,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               syncBulkSelection();
               if(document.getElementById('financeCategory').value==='Yem'){{
                 const rows=Array.from(document.querySelectorAll('.feed-invoice-row'));
-                const invalid=rows.length===0||rows.some(row=>{{const feed=row.querySelector('.ffi-feed').value,qty=Number(row.querySelector('.ffi-qty').value||0),unit=row.querySelector('.ffi-unit').value,packageKg=Number(row.querySelector('.ffi-package').value||0);return !feed||qty<=0||(unit==='torba'&&packageKg<=0);}});
-                if(invalid){{e.preventDefault();alert('Her yem satırında yem, miktar ve torba seçildiyse torba kilosunu doldurun. Yeni ürün için “+ Yem Ekle”yi kullanın.');return false;}}
+                const invalid=rows.length===0||rows.some(row=>{{const feed=row.querySelector('.ffi-feed').value,qty=Number(row.querySelector('.ffi-qty').value||0),unit=row.querySelector('.ffi-unit').value,packageKg=Number(row.querySelector('.ffi-package').value||0),unitPrice=parseMoneyInput(row.querySelector('.ffi-unit-price').value);return !feed||qty<=0||unitPrice<=0||(unit==='torba'&&packageKg<=0);}});
+                if(invalid){{e.preventDefault();alert('Her yem satırında yem, adet/miktar, birim fiyat ve torba seçildiyse torba kilosunu doldurun. Yeni ürün için “+ Yem Ekle”yi kullanın.');return false;}}
               }}
               if(isBulkFinance()) document.getElementById('financeAnimal').required=false;
               if(isBulkFinance() && selectedChecks().length===0){{
@@ -7528,6 +7637,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(fid,d,typ,qty,unit,(f.get('notes') or '').strip()))
                 stock_id=c.execute('select last_insert_rowid()').fetchone()[0]
                 if typ=='Giriş' and unit>0:c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,unit,'Stok girişinden otomatik fiyat'))
+                rebuild_feed_cost_history(c,fid)
                 finance_created=False
                 if typ=='Giriş' and (f.get('post_to_finance') or '')=='yes':
                     if unit<=0:return self.redirect('/feeds','Finansa aktarım için alış ₺/kg 0’dan büyük olmalıdır.')
@@ -7556,7 +7666,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     except:pass
             if len(ids)<2:return self.redirect('/rations?solve=1','Rasyon çözmek için en az 2 yem seçin.')
             with db() as c:
-                marks=','.join('?'*len(ids)); rows=c.execute(f"select f.*,coalesce((select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1 and f.id in ({marks})",(date.today().isoformat(),*ids)).fetchall()
+                marks=','.join('?'*len(ids)); rows=c.execute(f"select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price from feed_catalog f where f.active=1 and f.id in ({marks})",(date.today().isoformat(),*ids)).fetchall()
                 if rtype=='Süt':
                     solved,t,warn=solve_smart_dairy_ration(rows,w,milk)
                 else:
@@ -8818,6 +8928,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     if str(old['animal_status_action'] or '')=='AGRI_INTERNAL':
                         return self.redirect('/agriculture/transfers','Bağlı iç transfer yalnız Tarım & Ziraat bölümünden değiştirilebilir veya geri alınabilir.')
+                    if c.execute('select 1 from finance_feed_items where finance_id=? limit 1',(record_id,)).fetchone():
+                        return self.redirect('/finance','Yem faturası kalem bazlı stok ve maliyet geçmişine bağlıdır. Değişiklik gerekiyorsa faturayı silip doğru kalemlerle yeniden kaydedin; böylece stok maliyeti bozulmaz.')
                     category=f['category'];tx_type=normalize_finance_type(category,f.get('tx_type')); animal_id=f.get('animal_id') or None
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     if action and not animal_id:return self.redirect(f'/finance/edit?id={record_id}','Satış veya kesim için ilgili hayvan seçilmelidir.')
@@ -8856,9 +8968,12 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     animal_id=old['animal_id']
                     link=c.execute('select stock_tx_id from feed_finance_links where finance_id=?',(record_id,)).fetchone()
                     if link and link['stock_tx_id']:c.execute('delete from feed_stock_transactions where id=?',(link['stock_tx_id'],))
-                    for item in c.execute('select stock_tx_id from finance_feed_items where finance_id=?',(record_id,)).fetchall():
+                    affected_feed_ids=[]
+                    for item in c.execute('select feed_id,stock_tx_id from finance_feed_items where finance_id=?',(record_id,)).fetchall():
+                        affected_feed_ids.append(int(item['feed_id']))
                         if item['stock_tx_id']:c.execute('delete from feed_stock_transactions where id=?',(item['stock_tx_id'],))
                     c.execute('delete from finance_feed_items where finance_id=?',(record_id,))
+                    for fid in set(affected_feed_ids):rebuild_feed_cost_history(c,fid)
                     c.execute('delete from feed_finance_links where finance_id=?',(record_id,))
                     c.execute('delete from finance_animals where finance_id=?',(record_id,))
                     c.execute('delete from finance where id=?',(record_id,))
@@ -8876,9 +8991,11 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if path=='/finance':
                     category=f['category']; tx_type=normalize_finance_type(category,f.get('tx_type','Gelir'))
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
-                    try:amount=round(parse_money_value(f['amount']),2)
-                    except ValueError as exc:return self.redirect('/finance',str(exc))
-                    if amount<=0:return self.redirect('/finance','Tutar 0’dan büyük olmalıdır.')
+                    try:amount=round(parse_money_value(f.get('amount')),2)
+                    except ValueError as exc:
+                        if category!='Yem':return self.redirect('/finance',str(exc))
+                        amount=0
+                    if amount<=0 and category!='Yem':return self.redirect('/finance','Tutar 0’dan büyük olmalıdır.')
                     payment_method=(f.get('payment_method') or 'Nakit').strip()
                     due_date=(f.get('due_date') or '').strip() if payment_method=='Vadeli' else ''
                     if payment_method=='Vadeli':
@@ -8886,27 +9003,10 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         except Exception:return self.redirect('/finance','Vadeli kayıtta vade tarihi zorunludur.')
                     feed_items=[]
                     if tx_type=='Gider' and category=='Yem':
-                        try:raw_feed_items=json.loads(f.get('feed_items_json') or '[]')
-                        except Exception:return self.redirect('/finance','Yem kalemleri okunamadı; lütfen kalemleri yeniden ekleyin.')
-                        for item in raw_feed_items:
-                            try:
-                                feed_id=int(item.get('feed_id') or 0);quantity=float(item.get('quantity') or 0)
-                                unit=(item.get('unit') or 'kg').strip();package_kg=float(item.get('package_kg') or 1);line_total=parse_money_value(item.get('line_total')) if str(item.get('line_total') or '').strip() else 0
-                            except Exception:return self.redirect('/finance','Yem kalemlerinden birinin miktar veya fiyatı geçersiz.')
-                            if not feed_id or quantity<=0 or unit not in ('kg','torba') or (unit=='torba' and package_kg<=0):return self.redirect('/finance','Her yem kaleminde yem, miktar, birim ve geçerli torba kilosu zorunludur.')
-                            quantity_kg=quantity*(package_kg if unit=='torba' else 1)
-                            feed_items.append({'feed_id':feed_id,'quantity':quantity,'unit':unit,'package_kg':package_kg,'quantity_kg':quantity_kg,'line_total':max(0,line_total)})
-                        if not feed_items:return self.redirect('/finance','Yem giderinde en az bir yem kalemi ekleyin.')
-                        known=sum(x['line_total'] for x in feed_items);missing=[x for x in feed_items if x['line_total']<=0]
-                        if missing:
-                            remaining=amount-known
-                            if remaining<=0:return self.redirect('/finance','Girilen yem kalem tutarları fatura toplamını aşıyor.')
-                            weight=sum(x['quantity_kg'] for x in missing)
-                            assigned=0.0
-                            for index,item in enumerate(missing):
-                                share=round(remaining-assigned,2) if index==len(missing)-1 else round(remaining*item['quantity_kg']/weight,2)
-                                item['line_total']=share;assigned+=share
-                        elif abs(known-amount)>0.02:return self.redirect('/finance','Yem kalem tutarları toplamı ile fatura toplamı eşleşmiyor.')
+                        try:feed_items=parse_finance_feed_items(f.get('feed_items_json'))
+                        except ValueError as exc:return self.redirect('/finance',str(exc))
+                        # Finans toplamının tarayıcıdan değiştirilmesine güvenme; miktar × birim fiyat toplamı esastır.
+                        amount=round(sum(item['line_total'] for item in feed_items),2)
                     milk_mode=tx_type=='Gelir' and category=='Süt Satışı'
                     if milk_mode:
                         raw_ids=[x.strip() for x in (f.get('milk_animal_ids') or '').split(',') if x.strip()];animal_ids=[]
@@ -8967,22 +9067,24 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     fingerprint=finance_request_fingerprint(username,f)
                     if not claim_request_once(c,fingerprint,15):
                         return self.redirect('/finance','⚠️ Aynı finans kaydı ikinci kez gönderildi; mükerrer kayıt engellendi.')
-                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,due_date,payment_status,paid_date,paid_amount) values(?,?,?,?,?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,f.get('description'),payment_method,animal_id,datetime.now().isoformat(),action,due_date,'Bekliyor' if due_date else 'Ödendi','' if due_date else f['tx_date'],0 if due_date else amount))
+                    c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,due_date,payment_status,paid_date,paid_amount,supplier,invoice_no) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,f.get('description'),payment_method,animal_id,datetime.now().isoformat(),action,due_date,'Bekliyor' if due_date else 'Ödendi','' if due_date else f['tx_date'],0 if due_date else amount,(f.get('supplier') or '').strip(),(f.get('invoice_no') or '').strip()))
                     finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
                     stock_created=False
                     if feed_items:
                         for item in feed_items:
                             feedrow=c.execute('select name from feed_catalog where id=? and active=1',(item['feed_id'],)).fetchone()
                             if not feedrow:raise ValueError('Faturadaki yemlerden biri katalogda bulunamadı.')
-                            feed_unit=round(item['line_total']/item['quantity_kg'],4)
-                            note=f"Finans faturası #{finance_id} · {item['quantity']:g} {item['unit']}"+(f" × {item['package_kg']:g} kg" if item['unit']=='torba' else '')
+                            feed_unit=item['price_per_kg']
+                            note=f"Finans faturası #{finance_id} · {item['quantity']:g} {item['unit']} × {item['purchase_unit_price']:g} TL/{item['unit']}"+(f" · {item['package_kg']:g} kg/torba" if item['unit']=='torba' else '')
                             c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(item['feed_id'],f['tx_date'],'Giriş',item['quantity_kg'],feed_unit,note))
                             stock_id=c.execute('select last_insert_rowid()').fetchone()[0]
-                            c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(item['feed_id'],f['tx_date'],feed_unit,'Çoklu yem faturasından otomatik fiyat'))
-                            c.execute('''insert into finance_feed_items(finance_id,feed_id,stock_tx_id,quantity,unit,package_kg,quantity_kg,unit_price,line_total,created_at) values(?,?,?,?,?,?,?,?,?,?)''',(finance_id,item['feed_id'],stock_id,item['quantity'],item['unit'],item['package_kg'],item['quantity_kg'],feed_unit,item['line_total'],datetime.now().isoformat(timespec='seconds')))
+                            c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(item['feed_id'],f['tx_date'],feed_unit,'Yem faturası alış fiyatı'))
+                            rebuild_feed_cost_history(c,item['feed_id'])
+                            weighted_cost=feed_weighted_cost(item['feed_id'],c,f['tx_date'])
+                            c.execute('''insert into finance_feed_items(finance_id,feed_id,stock_tx_id,quantity,unit,package_kg,quantity_kg,unit_price,purchase_unit_price,line_total,created_at) values(?,?,?,?,?,?,?,?,?,?,?)''',(finance_id,item['feed_id'],stock_id,item['quantity'],item['unit'],item['package_kg'],item['quantity_kg'],weighted_cost,item['purchase_unit_price'],item['line_total'],datetime.now().isoformat(timespec='seconds')))
                         stock_created=True
                     if action:c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,amount,animal_id))
-                    return self.redirect('/finance','Finans kaydı eklendi.' + (' Yem stoğu da otomatik artırıldı.' if stock_created else '') + (' Hayvan aktif sürüden çıkarıldı.' if action else ''))
+                    return self.redirect('/finance',(('Yem faturası kaydedildi; finans gideri, stoklar ve tarihli ağırlıklı ortalama maliyetler güncellendi.' if stock_created else 'Finans kaydı eklendi.')) + (' Hayvan aktif sürüden çıkarıldı.' if action else ''))
         except sqlite3.IntegrityError as e:return self.redirect(path,'Aynı küpe numarası daha önce kaydedilmiş olabilir.')
         except Exception as e:
             if path in ('/finance/delete','/finance-delete'):

@@ -1,3 +1,28 @@
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.2 — Yem Alım Faturası ve Tarihli Stok Maliyeti
+
+Bu sürümde **Yem** kategorisi gerçek alım faturası akışına alındı. Tek faturada birden fazla yem kalemi; miktar, birim, torba kg, birim fiyat, tedarikçi, fatura no ve vade bilgisiyle kaydedilir. Finans tarafında tek gider oluşur, her ürün stoğa ayrı girer.
+
+- `Yem` seçildiğinde işlem türü otomatik ve zorunlu olarak **Gider** olur.
+- Fatura toplamı satırların `miktar × birim fiyat` toplamından hesaplanır; elle girilen toplam esas alınmaz.
+- Vadeli alımda vade tarihi zorunludur ve ödeme kapatılana kadar Finans/Dashboard uyarısında kalır.
+- Her yem kalemi alım tarihinde stoğa girer.
+- Rasyon maliyeti artık stok hareketlerinden hesaplanan **hareketli ağırlıklı ortalama maliyeti** kullanır; geriye dönük fatura eklendiğinde sonraki maliyet geçmişi yeniden hesaplanır.
+- Finans listesinde yem faturası açılır detay olarak ürün satırları, tedarikçi, fatura no ve toplamla görünür.
+- Çoklu fatura silinirse bağlı stok hareketleri ve maliyet geçmişi birlikte geri alınır.
+- Mobilde fatura satırları iki sütunlu kompakt düzene geçer.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.1 — Çoklu Yem Birim Fiyatı
+
+Hotfix1.1, çoklu yem faturasında her satıra `Adet / Miktar`, `Birim`,
+`Torba kg` ve seçilen birime göre `Birim Fiyat` alanlarını ekler. Kalem tutarı
+`miktar × birim fiyat`, fatura toplamı ise bütün kalemlerin toplamı olarak
+otomatik hesaplanır ve sunucu tarafından yeniden doğrulanır.
+
+Torba fiyatı gerçek kg fiyatına dönüştürülür. Örneğin 50 kg'lık torba 1.000 TL
+ise stok ve tarihsel yem fiyatına 20 TL/kg yazılır. Rasyon maliyetleri ilgili
+tarihteki son `feed_prices` kaydını kullandığından yeni alış fiyatı, alım
+tarihinden itibaren rasyon ve hayvan maliyet hesaplarına otomatik yansır.
+
 # ÇiftlikPro v3.9.23 DEV4 Hotfix1 — Finans Formu Güvenilirlik Düzeltmesi
 
 Hotfix1, sahada görülen finans formu koşul hatalarını giderir. Ödeme yöntemi

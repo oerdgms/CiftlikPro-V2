@@ -41,7 +41,7 @@ class ReportImportTests(unittest.TestCase):
             finance_cols={row[1] for row in con.execute("pragma table_info(finance)").fetchall()}
             feed_item_cols={row[1] for row in con.execute("pragma table_info(finance_feed_items)").fetchall()}
         self.assertTrue({'due_date','payment_status','paid_date','paid_amount','supplier'}.issubset(finance_cols))
-        self.assertTrue({'finance_id','feed_id','quantity','unit','package_kg','quantity_kg','line_total'}.issubset(feed_item_cols))
+        self.assertTrue({'finance_id','feed_id','quantity','unit','package_kg','quantity_kg','unit_price','purchase_unit_price','line_total'}.issubset(feed_item_cols))
         html=server.render_smart_animal_add([],[],[])
         self.assertIn('purchaseDueDate',html)
         self.assertIn('İlk fotoğraf profil fotoğrafı olur',html)
@@ -56,12 +56,26 @@ class ReportImportTests(unittest.TestCase):
         self.assertEqual(server.normalize_finance_type('Diğer','Zarar'),'Zarar')
         with self.assertRaises(ValueError):server.parse_money_value('abc')
 
+    def test_3923_dev4_hotfix11_feed_invoice_converts_purchase_unit_to_ration_kg_price(self):
+        items=server.parse_finance_feed_items('[{"feed_id":1,"quantity":"100","unit":"torba","package_kg":"50","unit_price":"1.000"},{"feed_id":2,"quantity":"2500","unit":"kg","package_kg":"1","unit_price":"18,50"}]')
+        self.assertEqual(items[0]['quantity_kg'],5000)
+        self.assertEqual(items[0]['purchase_unit_price'],1000)
+        self.assertEqual(items[0]['price_per_kg'],20)
+        self.assertEqual(items[0]['line_total'],100000)
+        self.assertEqual(items[1]['price_per_kg'],18.5)
+        self.assertEqual(items[1]['line_total'],46250)
+        self.assertEqual(sum(x['line_total'] for x in items),146250)
+        with self.assertRaises(ValueError):
+            server.parse_finance_feed_items('[{"feed_id":1,"quantity":"100","unit":"torba","package_kg":"50","unit_price":"0"}]')
+
     def test_3923_dev4_hotfix1_finance_ui_has_unconditional_due_and_multi_feed_guards(self):
         source=Path(server.__file__).read_text(encoding='utf-8')
         self.assertIn("on=payment.value==='Vadeli'",source)
         self.assertNotIn("on=payment.value==='Vadeli'&&document.getElementById('tx').value==='Gider'",source)
         self.assertIn("const on=document.getElementById('financeCategory').value==='Yem'",source)
         self.assertIn('＋ Yem Ekle',source)
+        self.assertIn('Birim Fiyat (₺/torba)',source)
+        self.assertIn("amount=round(sum(item['line_total'] for item in feed_items),2)",source)
         self.assertIn("tx_type=normalize_finance_type(category",source)
 
     def test_3923_dev1_tr_tag_and_automatic_calf_rules(self):
@@ -118,8 +132,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.2'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_2_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_dev3_health_schedule_and_duplicate_claims(self):

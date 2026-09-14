@@ -1,3 +1,26 @@
+# V3.9.23 DEV4 Hotfix1.2 — Yem Faturası + Hareketli Ortalama Maliyet
+
+- Yem alımı tek finans gideri + çoklu fatura kalemi olarak kaydediliyor.
+- Tedarikçi ve fatura no alanları eklendi.
+- Yem kategorisi backend ve arayüzde Gider yönüne kilitlendi.
+- Kalemlerden stok girişi ve tarihli alış fiyatı otomatik oluşuyor.
+- Yeni `feed_cost_history` ile stok hareketlerinden hareketli ağırlıklı ortalama maliyet tutuluyor.
+- Rasyon geçmiş maliyet hesabı bu tarihli stok maliyetini kullanıyor.
+- Geri tarihli alım veya fatura silme sonrası ilgili yemin maliyet geçmişi yeniden hesaplanıyor.
+- Finans listesinde yem faturası kalemleri açılır detay olarak gösteriliyor.
+
+# V3.9.23 DEV4 Hotfix1.1 — Çoklu Yem Birim Fiyatı ve Rasyon Maliyeti
+
+- Her yem satırına seçilen birime göre zorunlu Birim Fiyat alanı eklendi.
+- Kalem toplamı ve tek finans fatura toplamı canlı ve otomatik hesaplanır.
+- Sunucu, gönderilen fatura toplamına güvenmeyip toplamı yeniden
+  `miktar × birim fiyat` üzerinden oluşturur.
+- Torba fiyatı torba kilosuna bölünerek gerçek TL/kg stok fiyatına çevrilir.
+- Alışın TL/kg fiyatı `feed_stock_transactions` ve tarihsel `feed_prices`
+  kayıtlarına yazılır; rasyon maliyeti alım tarihinden itibaren bu fiyatı kullanır.
+- Orijinal TL/torba veya TL/kg değeri `purchase_unit_price` alanında ayrıca
+  korunur.
+
 # V3.9.23 DEV4 Hotfix1 — Vadeli Finans ve Çoklu Yem Formu
 
 - `Vadeli` seçimi artık işlem türünden bağımsız olarak Vade Tarihi alanını açar
