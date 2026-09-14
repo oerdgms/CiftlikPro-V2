@@ -46,6 +46,24 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('purchaseDueDate',html)
         self.assertIn('İlk fotoğraf profil fotoğrafı olur',html)
 
+    def test_3923_dev4_hotfix1_turkish_money_and_finance_type_guards(self):
+        self.assertEqual(server.parse_money_value('243.000'),243000)
+        self.assertEqual(server.parse_money_value('243000'),243000)
+        self.assertAlmostEqual(server.parse_money_value('2.500,50'),2500.50)
+        self.assertAlmostEqual(server.parse_money_value('243.50'),243.50)
+        self.assertEqual(server.normalize_finance_type('Yem','Gelir'),'Gider')
+        self.assertEqual(server.normalize_finance_type('Süt Satışı','Gider'),'Gelir')
+        self.assertEqual(server.normalize_finance_type('Diğer','Zarar'),'Zarar')
+        with self.assertRaises(ValueError):server.parse_money_value('abc')
+
+    def test_3923_dev4_hotfix1_finance_ui_has_unconditional_due_and_multi_feed_guards(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        self.assertIn("on=payment.value==='Vadeli'",source)
+        self.assertNotIn("on=payment.value==='Vadeli'&&document.getElementById('tx').value==='Gider'",source)
+        self.assertIn("const on=document.getElementById('financeCategory').value==='Yem'",source)
+        self.assertIn('＋ Yem Ekle',source)
+        self.assertIn("tx_type=normalize_finance_type(category",source)
+
     def test_3923_dev1_tr_tag_and_automatic_calf_rules(self):
         self.assertEqual(server.normalize_tr_tag('tr 583-001-234'),'TR583001234')
         with self.assertRaises(ValueError):server.normalize_tr_tag('583')
@@ -100,8 +118,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_dev3_health_schedule_and_duplicate_claims(self):

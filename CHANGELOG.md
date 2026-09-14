@@ -1,3 +1,17 @@
+# V3.9.23 DEV4 Hotfix1 — Vadeli Finans ve Çoklu Yem Formu
+
+- `Vadeli` seçimi artık işlem türünden bağımsız olarak Vade Tarihi alanını açar
+  ve sunucu vade tarihini zorunlu doğrular.
+- Bekleyen vadeli kayıtlar 7 gün önceden Dashboard'daki Yaklaşan Ödemeler
+  kartında; vade günü “Bugün ödenecek”, sonrasında “Gecikmiş” olarak görünür.
+- `Yem` kategorisi istemci ve sunucu tarafında otomatik `Gider` olarak korunur;
+  bu nedenle eski `Gelir + Yem` uyumsuzluğu yeniden oluşamaz.
+- `Yem` seçildiğinde çoklu ürün sepeti her zaman açılır. Aynı faturaya sınırsız
+  sayıda yem satırı eklenir ve her satır ayrı stok girişine dönüştürülür.
+- `243.000` gibi Türkçe binlik ayraçlı tutarlar sunucuda güvenli biçimde
+  `243000` olarak okunur.
+- Finans tablosunun yatay taşma ve işlem düğmesi erişimi iyileştirildi.
+
 # V3.9.23 DEV4 — Fotoğraf, Vadeli Ödeme ve Çoklu Yem Faturası
 
 - Hayvan ekleme ekranındaki sekiz boş fotoğraf kutusu kaldırıldı. Tek “Fotoğraf Ekle” alanı, fotoğraf seçildikçe yatay küçük önizlemeler oluşturur; ilk görsel profil fotoğrafıdır.

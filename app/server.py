@@ -24,9 +24,9 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4'
+APP_VERSION='3.9.23 DEV4 Hotfix1'
 APP_CHANNEL='RELEASE'
-APP_LABEL='v3.9.23 DEV4'
+APP_LABEL='v3.9.23 DEV4 Hotfix1'
 
 LICENSE_FILE=DATA_ROOT/'ciftlikpro.license'
 LICENSE_PUBLIC_KEY_B64='Z9rGVotpzHR7eNxdVtFX3ztjrxhzhSYBHweob5EYqHE='
@@ -173,16 +173,26 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .finance-toolbar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
 .finance-toolbar label{display:flex;flex-direction:column;gap:5px;font-weight:700}
 .finance-table-wrap{overflow-x:auto;border-radius:14px}
-.finance-table{width:100%;border-collapse:collapse;min-width:900px}
+.finance-table{width:100%;border-collapse:collapse;min-width:1180px;table-layout:fixed}
 .finance-table th{white-space:nowrap;background:#edf5ef}
 .finance-table td{vertical-align:middle}
+.finance-table th:nth-child(1),.finance-table td:nth-child(1){width:100px}
+.finance-table th:nth-child(2),.finance-table td:nth-child(2){width:72px}
+.finance-table th:nth-child(3),.finance-table td:nth-child(3){width:120px}
+.finance-table th:nth-child(4),.finance-table td:nth-child(4){width:210px;overflow-wrap:anywhere}
+.finance-table th:nth-child(5),.finance-table td:nth-child(5){width:180px;overflow-wrap:anywhere}
+.finance-table th:nth-child(6),.finance-table td:nth-child(6){width:105px}
+.finance-table th:nth-child(7),.finance-table td:nth-child(7){width:90px}
+.finance-table th:nth-child(8),.finance-table td:nth-child(8){width:135px}
+.finance-table th:nth-child(9),.finance-table td:nth-child(9){width:120px;white-space:nowrap}
 .finance-table .finance-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}
 .finance-table .finance-actions form{margin:0}
 .finance-table .btn{padding:8px 12px}
 /* HOTFIX 6.16: Finans tablosu kompakt satırlar + işlem butonları tek hizada */
 .finance-table td{padding:8px 10px!important;line-height:1.22!important;vertical-align:middle!important}
 .finance-table th{padding:9px 10px!important}
-.finance-table td:last-child,.finance-table th:last-child{width:158px;min-width:158px}
+.finance-table td:last-child,.finance-table th:last-child{width:158px;min-width:158px;position:sticky;right:0;z-index:2;background:#fff;box-shadow:-5px 0 8px rgba(20,55,35,.06)}
+.finance-table th:last-child{z-index:3;background:#edf5ef}
 .finance-table .finance-actions{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;gap:6px!important;align-items:center!important;justify-content:flex-start!important}
 .finance-table .finance-actions form{display:block!important;margin:0!important;flex:0 0 auto!important}
 .finance-table .finance-actions .btn{min-height:34px!important;height:34px!important;padding:6px 9px!important;font-size:12px!important;line-height:1!important;white-space:nowrap!important}
@@ -212,7 +222,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 @media(max-width:600px){.dashboard-card-gallery{grid-template-columns:1fr}.dashboard-picker{padding:16px;border-radius:18px}.dashboard-slot-plus{right:-3px;top:-6px}}
 @media(max-width:700px){
  .finance-toolbar{align-items:stretch}.finance-toolbar>*{width:100%}.finance-toolbar input,.finance-toolbar select,.finance-toolbar .btn{width:100%}
- .finance-table{min-width:760px}
+ .finance-table{min-width:1180px}
 }
 
 .bulk-animal-box{display:none}
@@ -547,6 +557,39 @@ def finance_request_fingerprint(username,form):
     keys=('tx_date','tx_type','category','amount','description','payment_method','due_date','animal_id','animal_ids','milk_animal_ids','feed_items_json')
     payload='|'.join(str(form.get(k,'')).strip() for k in keys)
     return hashlib.sha256((str(username)+'|'+payload).encode('utf-8')).hexdigest()
+
+FINANCE_INCOME_CATEGORIES=frozenset({
+    'Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme'
+})
+FINANCE_EXPENSE_CATEGORIES=frozenset({
+    'Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı'
+})
+
+def normalize_finance_type(category,requested_type):
+    """Sabit finans kategorilerinin gelir/gider yönünü güvenli biçimde belirler."""
+    category=str(category or '').strip()
+    if category in FINANCE_INCOME_CATEGORIES:return 'Gelir'
+    if category in FINANCE_EXPENSE_CATEGORIES:return 'Gider'
+    requested=str(requested_type or '').strip()
+    return requested if requested in ('Gelir','Gider','Zarar') else 'Gider'
+
+def parse_money_value(value):
+    """200.000 ve 2.500,50 gibi Türkçe tutarları kuruş kaybetmeden sayıya çevirir."""
+    raw=str(value or '').strip().replace('₺','').replace(' ','')
+    if not raw:raise ValueError('Tutar boş bırakılamaz.')
+    if ',' in raw:
+        # Türkçe biçim: nokta binlik, virgül ondalık ayracıdır.
+        normalized=raw.replace('.','').replace(',','.')
+    elif re.fullmatch(r'[+-]?\d{1,3}(?:\.\d{3})+',raw):
+        # 243.000 -> 243000; tek noktalı gerçek ondalıklar (243.50) korunur.
+        normalized=raw.replace('.','')
+    else:
+        normalized=raw
+    try:amount=float(normalized)
+    except (TypeError,ValueError):raise ValueError('Tutar geçerli bir sayı olmalıdır.')
+    if amount!=amount or amount in (float('inf'),float('-inf')):
+        raise ValueError('Tutar geçerli bir sayı olmalıdır.')
+    return amount
 
 def general_request_fingerprint(username,path,form):
     """Dosya gövdelerini taşımadan tüm yazma istekleri için kısa süreli kimlik üretir."""
@@ -6878,11 +6921,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             )
             body=f'''<h1>Finans</h1><div class="grid"><div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div></div><div class="finance-primary-actions"><button type="button" class="btn finance-new-btn" onclick="openFinanceDrawer()">➕ Yeni Finans Kaydı</button><span class="mut">Kayıtlar ve filtreler öncelikli görünür.</span></div><div id="financeDrawerBackdrop" class="finance-drawer-backdrop" onclick="closeFinanceDrawer(event)"></div><aside id="financeDrawer" class="finance-drawer" aria-hidden="true"><div class="finance-drawer-head"><div><span class="mut">FİNANS</span><h2 style="margin:3px 0">➕ Yeni Finans Kaydı</h2><span class="mut">Kaydı oluşturun; bitince listenize dönün.</span></div><button type="button" class="finance-drawer-close" onclick="closeFinanceDrawer()">×</button></div><div class="finance-drawer-body"><div class="card finance-entry-card"><form method="post" class="form" id="financeCreateForm">
 <label>Tarih<input type="date" name="tx_date" required value="{date.today().isoformat()}"></label>
-<label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option><option>Zarar</option></select></label>
-<label>Kategori<select name="category" id="financeCategory"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option><option>Diğer</option></select></label>
+<label>Tür<select name="tx_type" id="tx"><option>Gelir</option><option>Gider</option><option>Zarar</option></select><span class="field-help" id="financeTypeHint">Kategoriye göre otomatik ayarlanır.</span></label>
+<label>Kategori<select name="category" id="financeCategory"><optgroup label="Gelir kategorileri"><option>Süt Satışı</option><option>Hayvan Satışı</option><option>Kesim Geliri</option><option>Buzağı Satışı</option><option>Destekleme</option></optgroup><optgroup label="Gider kategorileri"><option>Yem</option><option>Veteriner</option><option>İlaç</option><option>Aşı</option><option>Saman</option><option>Elektrik</option><option>Yakıt</option><option>İşçilik</option><option>Hayvan Alımı</option></optgroup><optgroup label="Serbest"><option>Diğer</option></optgroup></select></label>
 <label>Toplam Tutar<input type="text" inputmode="decimal" name="amount" id="financeAmount" placeholder="Örn. 200.000 veya 200000" required></label>
 <label>Ödeme Yöntemi<select name="payment_method" id="financePaymentMethod"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label>
-<label id="financeDueDateLabel" style="display:none">Vade Tarihi *<input type="date" name="due_date" id="financeDueDate"><span class="field-help">Vade günü Dashboard ve Finans ekranında hatırlatılır.</span></label>
+<label id="financeDueDateLabel" style="display:none">Vade Tarihi *<input type="date" name="due_date" id="financeDueDate"><span class="field-help">Bu tarih yaklaşınca Dashboard ve Bildirimler alanında, günü geçince “Gecikmiş” olarak hatırlatılır.</span></label>
 <label id="singleAnimalLabel">İlgili Hayvan<select name="animal_id" id="financeAnimal"><option value="">Yok</option>{opts}</select></label><div class="full" id="financeFeedBox" style="display:none;padding:12px;background:#f0f7f2;border:1px solid #d5e7da;border-radius:11px"><h3 style="margin-top:0">🌾 Faturadaki Yemler</h3><div class="mut">Aynı faturadaki tüm yemleri ekleyin. Torba seçerseniz torba kilosunu da yazın.</div><input type="hidden" name="feed_items_json" id="feedItemsJson"><div id="feedItemRows"></div><button type="button" class="btn alt" id="addFeedItemBtn">＋ Yem Ekle</button><div class="mut" style="margin-top:8px">Kalem tutarları boşsa toplam fatura tutarı yemlerin kilogramlarına göre otomatik dağıtılır.</div></div>
 <input type="hidden" name="animal_ids" id="bulkAnimalIds" value="">
 <div class="full bulk-animal-box" id="bulkAnimalBox"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🐄 İlgili Hayvanlar</h3><div class="mut">İlgili hayvanları seçin.</div></div><input class="bulk-search" id="bulkSearch" placeholder="Küpe veya takma ad ara…" oninput="filterBulkAnimals()"></div><div class="bulk-list" id="bulkList">{bulk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="bulkCount">0</b> hayvan</span><span class="pill"><span id="bulkShareLabel">Hayvan Başı Gelir</span> <b id="bulkShare">₺0,00</b></span><button type="button" class="btn alt" onclick="clearBulkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="bulkSelectedPreview">Henüz hayvan seçilmedi.</div></div></div><input type="hidden" name="milk_animal_ids" id="milkAnimalIds" value=""><div class="full bulk-animal-box" id="milkAnimalBox" style="display:none"><div class="bulk-picker"><div class="bulk-picker-head"><div><h3 style="margin:0">🥛 Süt Gelirine Dahil Dişi Hayvanlar</h3><div class="mut">Yalnızca aktif dişi hayvanlar gösterilir. Toplam süt geliri bölünmez; seçilen hayvanlar kayda ilişkilendirilir.</div></div><input class="bulk-search" id="milkSearch" placeholder="Dişi küpe veya takma ad ara…" oninput="filterMilkAnimals()"></div><div class="bulk-list" id="milkList">{milk_cards}</div><div class="bulk-summary"><span class="pill">Seçilen <b id="milkCount">0</b> dişi</span><span class="pill">Toplam gelir <b id="milkTotal">₺0,00</b></span><button type="button" class="btn alt" onclick="clearMilkAnimals()">Seçimi Temizle</button></div><div class="bulk-selected-preview" id="milkSelectedPreview">Henüz dişi hayvan seçilmedi.</div></div></div>
@@ -6894,6 +6937,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<option value="">Gelir + Gider</option>', '<option value="">Tüm İşlemler</option>')
             body=body.replace(f"<option {'selected' if typ=='Gider' else ''}>Gider</option></select>", f"<option {'selected' if typ=='Gider' else ''}>Gider</option><option {'selected' if typ=='Zarar' else ''}>Zarar</option></select>")
             body += f'''<script>
+            const financeIncomeCategories=new Set(['Süt Satışı','Hayvan Satışı','Kesim Geliri','Buzağı Satışı','Destekleme']);
+            const financeExpenseCategories=new Set(['Yem','Veteriner','İlaç','Aşı','Saman','Elektrik','Yakıt','İşçilik','Hayvan Alımı']);
+            function expectedFinanceType(category){{if(financeIncomeCategories.has(category))return 'Gelir';if(financeExpenseCategories.has(category))return 'Gider';return '';}}
+            function syncFinanceTypeFromCategory(){{const category=document.getElementById('financeCategory').value,type=document.getElementById('tx'),expected=expectedFinanceType(category),hint=document.getElementById('financeTypeHint');if(expected)type.value=expected;if(hint)hint.textContent=expected?(category+' kategorisi '+expected.toLocaleLowerCase('tr-TR')+' olarak kaydedilir.'):'Diğer kategorisinde türü siz seçebilirsiniz.';}}
+            function syncFinanceCategoryFromType(){{const type=document.getElementById('tx').value,category=document.getElementById('financeCategory'),expected=expectedFinanceType(category.value);if(expected===type||!expected)return;if(type==='Gelir')category.value='Süt Satışı';else if(type==='Gider')category.value='Yem';else category.value='Diğer';syncFinanceTypeFromCategory();}}
             function isBulkFinance(){{
               const t=document.getElementById('tx').value;
               const c=document.getElementById('financeCategory').value;
@@ -6901,11 +6949,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             }}
             function isMilkFinance(){{return document.getElementById('tx').value==='Gelir' && document.getElementById('financeCategory').value==='Süt Satışı';}}
             const financeFeedOptions=`<option value="">Yem seçin…</option>{finance_feed_opts}`;let feedItemSeq=0;
-            function addFinanceFeedItem(){{feedItemSeq++;const row=document.createElement('div');row.className='feed-invoice-row';row.style.cssText='display:grid;grid-template-columns:2fr .7fr .8fr .8fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px';row.innerHTML='<label>Yem<select class="ffi-feed">'+financeFeedOptions+'</select></label><label>Miktar<input class="ffi-qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="ffi-unit"><option value="torba">Torba</option><option value="kg">kg</option></select></label><label>Torba kg<input class="ffi-package" type="number" min="0.01" step="0.01" value="50"></label><label>Kalem Tutarı ₺<input class="ffi-total" type="number" min="0" step="0.01" placeholder="İsteğe bağlı"></label><button type="button" class="btn danger ffi-remove">Sil</button>';row.querySelector('.ffi-remove').onclick=()=>{{row.remove();syncFeedItems();}};row.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',syncFeedItems));document.getElementById('feedItemRows').appendChild(row);syncFeedItems();}}
+            function addFinanceFeedItem(){{feedItemSeq++;const row=document.createElement('div');row.className='feed-invoice-row';row.style.cssText='display:grid;grid-template-columns:2fr .7fr .8fr .8fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px';row.innerHTML='<label>Yem<select class="ffi-feed">'+financeFeedOptions+'</select></label><label>Miktar<input class="ffi-qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="ffi-unit"><option value="torba">Torba</option><option value="kg">kg</option></select></label><label>Torba kg<input class="ffi-package" type="number" min="0.01" step="0.01" value="50"></label><label>Kalem Tutarı ₺<input class="ffi-total" type="text" inputmode="decimal" placeholder="İsteğe bağlı"></label><button type="button" class="btn danger ffi-remove">Sil</button>';row.querySelector('.ffi-remove').onclick=()=>{{row.remove();syncFeedItems();}};row.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',syncFeedItems));document.getElementById('feedItemRows').appendChild(row);syncFeedItems();}}
             function syncFeedItems(){{const items=Array.from(document.querySelectorAll('.feed-invoice-row')).map(row=>({{feed_id:row.querySelector('.ffi-feed').value,quantity:row.querySelector('.ffi-qty').value,unit:row.querySelector('.ffi-unit').value,package_kg:row.querySelector('.ffi-package').value,line_total:row.querySelector('.ffi-total').value}})).filter(x=>x.feed_id||x.quantity);document.getElementById('feedItemsJson').value=JSON.stringify(items);document.querySelectorAll('.feed-invoice-row').forEach(row=>{{row.querySelector('.ffi-package').closest('label').style.display=row.querySelector('.ffi-unit').value==='torba'?'block':'none';}});}}
             document.getElementById('addFeedItemBtn').addEventListener('click',addFinanceFeedItem);
-            function refreshFinanceFeed(){{const on=document.getElementById('tx').value==='Gider'&&document.getElementById('financeCategory').value==='Yem';const b=document.getElementById('financeFeedBox');if(b)b.style.display=on?'block':'none';if(on&&!document.querySelector('.feed-invoice-row'))addFinanceFeedItem();syncFeedItems();}}
-            function refreshFinanceDue(){{const payment=document.getElementById('financePaymentMethod'),label=document.getElementById('financeDueDateLabel'),field=document.getElementById('financeDueDate'),on=payment.value==='Vadeli'&&document.getElementById('tx').value==='Gider';label.style.display=on?'block':'none';field.required=on;if(!on)field.value='';}}
+            function refreshFinanceFeed(){{const on=document.getElementById('financeCategory').value==='Yem';const b=document.getElementById('financeFeedBox');if(b)b.style.display=on?'block':'none';if(on&&!document.querySelector('.feed-invoice-row'))addFinanceFeedItem();syncFeedItems();}}
+            function refreshFinanceDue(){{const payment=document.getElementById('financePaymentMethod'),label=document.getElementById('financeDueDateLabel'),field=document.getElementById('financeDueDate'),on=payment.value==='Vadeli';label.style.display=on?'block':'none';field.required=on;if(!on)field.value='';}}
             function parseMoneyInput(v){{v=String(v||'').trim().replace(/\\s/g,'').replace(/₺/g,'');if(!v)return 0;if(v.includes(',')){{v=v.replace(/\\./g,'').replace(',','.');}}else{{const parts=v.split('.');if(parts.length>1&&parts.slice(1).every(x=>x.length===3))v=parts.join('');}}const n=Number(v);return Number.isFinite(n)?n:0;}}
             function formatTRY(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0);}}
             function selectedChecks(){{return Array.from(document.querySelectorAll('.bulk-check:checked'));}}
@@ -6962,13 +7010,18 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               const q=(document.getElementById('bulkSearch').value||'').toLocaleLowerCase('tr-TR').trim();
               document.querySelectorAll('.bulk-row').forEach(row=>{{row.style.display=!q||row.dataset.search.toLocaleLowerCase('tr-TR').includes(q)?'grid':'none';}});
             }}
-            document.getElementById('tx').addEventListener('change',function(){{refreshBulkFinance();refreshFinanceFeed();refreshFinanceDue();}});
-            document.getElementById('financeCategory').addEventListener('change',function(){{refreshBulkFinance();refreshFinanceFeed();}});
+            document.getElementById('tx').addEventListener('change',function(){{syncFinanceCategoryFromType();refreshBulkFinance();refreshFinanceFeed();refreshFinanceDue();}});
+            document.getElementById('financeCategory').addEventListener('change',function(){{syncFinanceTypeFromCategory();refreshBulkFinance();refreshFinanceFeed();refreshFinanceDue();}});
             document.getElementById('financePaymentMethod').addEventListener('change',refreshFinanceDue);
             document.getElementById('financeAmount').addEventListener('input',function(){{syncBulkSelection();syncMilkSelection();}});
             document.getElementById('financeCreateForm').addEventListener('submit',function(e){{
-              syncFeedItems();refreshFinanceDue();
+              syncFinanceTypeFromCategory();syncFeedItems();refreshFinanceDue();
               syncBulkSelection();
+              if(document.getElementById('financeCategory').value==='Yem'){{
+                const rows=Array.from(document.querySelectorAll('.feed-invoice-row'));
+                const invalid=rows.length===0||rows.some(row=>{{const feed=row.querySelector('.ffi-feed').value,qty=Number(row.querySelector('.ffi-qty').value||0),unit=row.querySelector('.ffi-unit').value,packageKg=Number(row.querySelector('.ffi-package').value||0);return !feed||qty<=0||(unit==='torba'&&packageKg<=0);}});
+                if(invalid){{e.preventDefault();alert('Her yem satırında yem, miktar ve torba seçildiyse torba kilosunu doldurun. Yeni ürün için “+ Yem Ekle”yi kullanın.');return false;}}
+              }}
               if(isBulkFinance()) document.getElementById('financeAnimal').required=false;
               if(isBulkFinance() && selectedChecks().length===0){{
                 e.preventDefault();
@@ -6991,7 +7044,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 submitBtn.textContent='⏳ Kaydediliyor…';
               }}
             }});
-            refreshBulkFinance();refreshFinanceFeed();refreshFinanceDue();
+            syncFinanceTypeFromCategory();refreshBulkFinance();refreshFinanceFeed();refreshFinanceDue();
             function setFinanceDrawer(open){{const d=document.getElementById('financeDrawer'),b=document.getElementById('financeDrawerBackdrop');if(!d||!b)return;d.classList.toggle('open',open);b.classList.toggle('open',open);d.setAttribute('aria-hidden',open?'false':'true');document.body.style.overflow=open?'hidden':'';}}
 function openFinanceDrawer(){{setFinanceDrawer(true);}}
 function closeFinanceDrawer(ev){{if(ev&&ev.target!==document.getElementById('financeDrawerBackdrop'))return;setFinanceDrawer(false);}}
@@ -8765,12 +8818,13 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not old:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     if str(old['animal_status_action'] or '')=='AGRI_INTERNAL':
                         return self.redirect('/agriculture/transfers','Bağlı iç transfer yalnız Tarım & Ziraat bölümünden değiştirilebilir veya geri alınabilir.')
-                    category=f['category']; animal_id=f.get('animal_id') or None
+                    category=f['category'];tx_type=normalize_finance_type(category,f.get('tx_type')); animal_id=f.get('animal_id') or None
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
                     if action and not animal_id:return self.redirect(f'/finance/edit?id={record_id}','Satış veya kesim için ilgili hayvan seçilmelidir.')
                     old_animal_id=old['animal_id']
                     link=c.execute('select * from feed_finance_links where finance_id=?',(record_id,)).fetchone()
-                    new_amount=float(f['amount'])
+                    try:new_amount=round(parse_money_value(f['amount']),2)
+                    except ValueError as exc:return self.redirect(f'/finance/edit?id={record_id}',str(exc))
                     payment_method=(f.get('payment_method') or 'Nakit').strip();due_date=(f.get('due_date') or '').strip() if payment_method=='Vadeli' else ''
                     if payment_method=='Vadeli':
                         try:date.fromisoformat(due_date)
@@ -8786,7 +8840,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(link['feed_id'],f['tx_date'],linked_unit,'Bağlı Finans/Stok düzenlemesinden güncellendi'))
                     c.execute(
                         'update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,payment_method=?,animal_id=?,animal_status_action=?,due_date=?,payment_status=case when ?=\'Vadeli\' and payment_status<>\'Ödendi\' then \'Bekliyor\' when ?<>\'Vadeli\' then \'Ödendi\' else payment_status end where id=?',
-                        (f['tx_date'],f['tx_type'],category,new_amount,f.get('description'),payment_method,animal_id,action,due_date,payment_method,payment_method,record_id)
+                        (f['tx_date'],tx_type,category,new_amount,f.get('description'),payment_method,animal_id,action,due_date,payment_method,payment_method,record_id)
                     )
                     if category!='Süt Satışı':
                         c.execute('delete from finance_animals where finance_id=?',(record_id,))
@@ -8820,15 +8874,16 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     c.execute("update finance set payment_status='Ödendi',paid_date=?,paid_amount=? where id=?",(paid_date,float(row['amount'] or 0),record_id))
                     return self.redirect('/finance','Vadeli ödeme ödendi olarak kapatıldı.')
                 if path=='/finance':
-                    category=f['category']; tx_type=f.get('tx_type','Gelir')
+                    category=f['category']; tx_type=normalize_finance_type(category,f.get('tx_type','Gelir'))
                     action='Satıldı' if category=='Hayvan Satışı' else 'Kesildi' if category=='Kesim Geliri' else ''
-                    amount=round(float(f['amount']),2)
+                    try:amount=round(parse_money_value(f['amount']),2)
+                    except ValueError as exc:return self.redirect('/finance',str(exc))
                     if amount<=0:return self.redirect('/finance','Tutar 0’dan büyük olmalıdır.')
                     payment_method=(f.get('payment_method') or 'Nakit').strip()
-                    due_date=(f.get('due_date') or '').strip() if payment_method=='Vadeli' and tx_type=='Gider' else ''
-                    if payment_method=='Vadeli' and tx_type=='Gider':
+                    due_date=(f.get('due_date') or '').strip() if payment_method=='Vadeli' else ''
+                    if payment_method=='Vadeli':
                         try:date.fromisoformat(due_date)
-                        except Exception:return self.redirect('/finance','Vadeli alışlarda vade tarihi zorunludur.')
+                        except Exception:return self.redirect('/finance','Vadeli kayıtta vade tarihi zorunludur.')
                     feed_items=[]
                     if tx_type=='Gider' and category=='Yem':
                         try:raw_feed_items=json.loads(f.get('feed_items_json') or '[]')
@@ -8836,7 +8891,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         for item in raw_feed_items:
                             try:
                                 feed_id=int(item.get('feed_id') or 0);quantity=float(item.get('quantity') or 0)
-                                unit=(item.get('unit') or 'kg').strip();package_kg=float(item.get('package_kg') or 1);line_total=float(item.get('line_total') or 0)
+                                unit=(item.get('unit') or 'kg').strip();package_kg=float(item.get('package_kg') or 1);line_total=parse_money_value(item.get('line_total')) if str(item.get('line_total') or '').strip() else 0
                             except Exception:return self.redirect('/finance','Yem kalemlerinden birinin miktar veya fiyatı geçersiz.')
                             if not feed_id or quantity<=0 or unit not in ('kg','torba') or (unit=='torba' and package_kg<=0):return self.redirect('/finance','Her yem kaleminde yem, miktar, birim ve geçerli torba kilosu zorunludur.')
                             quantity_kg=quantity*(package_kg if unit=='torba' else 1)
@@ -8867,7 +8922,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         if not claim_request_once(c,fingerprint,15):
                             return self.redirect('/finance','⚠️ Aynı finans kaydı ikinci kez gönderildi; mükerrer kayıt engellendi.')
                         created=datetime.now().isoformat();tags=', '.join(str(r['tag']) for r in selected);desc=(f.get('description') or '').strip();relation_note=f'Süt satışı · {len(animal_ids)} dişi: {tags}'
-                        c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,amount,(desc+' · ' if desc else '')+relation_note,f.get('payment_method'),None,created,''));finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
+                        c.execute('''insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,due_date,payment_status,paid_date,paid_amount)
+                                     values(?,?,?,?,?,?,?,?,?,?,?,?,?)''',(f['tx_date'],tx_type,category,amount,(desc+' · ' if desc else '')+relation_note,payment_method,None,created,'',due_date,'Bekliyor' if due_date else 'Ödendi','' if due_date else f['tx_date'],0 if due_date else amount));finance_id=c.execute('select last_insert_rowid()').fetchone()[0]
                         for aid in animal_ids:c.execute('insert or ignore into finance_animals(finance_id,animal_id,relation_type) values(?,?,?)',(finance_id,aid,'Süt Satışı'))
                         audit(username,'Süt satışını dişi hayvanlara ilişkilendirdi',f'{len(animal_ids)} dişi · {money(amount)}',self.client_ip());return self.redirect('/finance',f'Süt satışı kaydedildi ve {len(animal_ids)} aktif dişi hayvana ilişkilendirildi.')
                     bulk_mode=tx_type=='Gelir' and category in ('Hayvan Satışı','Kesim Geliri')
@@ -8896,7 +8952,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             cents=base+(1 if idx<remainder else 0)
                             share=cents/100.0
                             desc=(description+' · ' if description else '')+batch_note
-                            c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(f['tx_date'],tx_type,category,share,desc,f.get('payment_method'),aid,created,action))
+                            c.execute('''insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,due_date,payment_status,paid_date,paid_amount)
+                                         values(?,?,?,?,?,?,?,?,?,?,?,?,?)''',(f['tx_date'],tx_type,category,share,desc,payment_method,aid,created,action,due_date,'Bekliyor' if due_date else 'Ödendi','' if due_date else f['tx_date'],0 if due_date else share))
                             c.execute('update animals set status=?,exit_date=?,exit_reason=?,sold_price=? where id=?',(action,f['tx_date'],category,share,aid))
                         audit(username,'Finans geliri hayvanlara dağıtıldı',f'{category} · {n} hayvan · {money(amount)}',self.client_ip())
                         if n==1:

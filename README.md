@@ -1,3 +1,16 @@
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1 — Finans Formu Güvenilirlik Düzeltmesi
+
+Hotfix1, sahada görülen finans formu koşul hatalarını giderir. Ödeme yöntemi
+`Vadeli` seçildiği anda işlem türünden bağımsız olarak Vade Tarihi alanı açılır
+ve tarih zorunlu olur. Bekleyen kayıtlar vadesinden 7 gün önce Dashboard'daki
+Yaklaşan Ödemeler alanına girer; vade günü ve gecikme durumu ayrıca gösterilir.
+
+`Yem` kategorisi artık hem tarayıcıda hem sunucuda otomatik olarak `Gider`
+sayılır ve çoklu yem sepeti koşulsuz açılır. Bir faturada `+ Yem Ekle` ile farklı
+ürünler, torba/kg miktarları ve isteğe bağlı kalem tutarları girilebilir; tek
+finans kaydıyla her ürün için ayrı stok girişi oluşur. Türkçe yazılan `243.000`
+tutarı da artık `243.000,00 TL` olarak kaydedilir; `243,00 TL`ye dönüşmez.
+
 # ÇiftlikPro v3.9.23 DEV4 — Fotoğraf, Vadeli Ödeme ve Çoklu Yem Faturası
 
 DEV4; tüm kayıt işlemlerinde çift dokunmayı hem arayüzde hem sunucuda engeller,
