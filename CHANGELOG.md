@@ -1,3 +1,9 @@
+
+## 3.9.23 DEV4 Hotfix1.5 Build Fix
+- GitHub Actions sürüm doğrulama testi Hotfix1.5 ile eşitlendi.
+- Inno Setup OutputBaseFilename Hotfix1.5 olarak güncellendi.
+- Workflow içindeki kurulum EXE yolu, SHA-256 dosya adı ve artifact yolu Hotfix1.5 ile eşitlendi.
+- Eski Hotfix1.3 beklentisi kullanan regresyon testi Hotfix1.5 olarak düzeltildi.
 # V3.9.23 DEV4 Hotfix1.5 — Finans Tablosu Görsel Düzeltme
 
 - Yem faturası detayı artık tablo satırını büyütmiyor; ayrı, kompakt bir fatura önizleme penceresinde açılıyor.
