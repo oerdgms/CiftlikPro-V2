@@ -33,8 +33,18 @@ class ReportImportTests(unittest.TestCase):
         self.assertTrue(expected.issubset(calf_cols))
         self.assertIn('calf_id',finance_cols)
         html=server.render_smart_animal_add([],[],paddocks)
-        for marker in ('name="tag_digits"','photo_file_8','BarcodeDetector','Çiftlikte Doğdu','name="mother_id"','name="purpose"','name="quarantine_status"'):
+        for marker in ('name="tag_digits"','photoPicker','selectedPhotos.length<8','BarcodeDetector','Çiftlikte Doğdu','name="mother_id"','name="purpose"','name="quarantine_status"'):
             self.assertIn(marker,html)
+
+    def test_3923_dev4_due_date_and_multi_feed_schema(self):
+        with server.db() as con:
+            finance_cols={row[1] for row in con.execute("pragma table_info(finance)").fetchall()}
+            feed_item_cols={row[1] for row in con.execute("pragma table_info(finance_feed_items)").fetchall()}
+        self.assertTrue({'due_date','payment_status','paid_date','paid_amount','supplier'}.issubset(finance_cols))
+        self.assertTrue({'finance_id','feed_id','quantity','unit','package_kg','quantity_kg','line_total'}.issubset(feed_item_cols))
+        html=server.render_smart_animal_add([],[],[])
+        self.assertIn('purchaseDueDate',html)
+        self.assertIn('İlk fotoğraf profil fotoğrafı olur',html)
 
     def test_3923_dev1_tr_tag_and_automatic_calf_rules(self):
         self.assertEqual(server.normalize_tr_tag('tr 583-001-234'),'TR583001234')
@@ -90,8 +100,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV3'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV3_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_dev3_health_schedule_and_duplicate_claims(self):

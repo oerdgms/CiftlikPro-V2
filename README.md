@@ -1,6 +1,6 @@
-# ÇiftlikPro v3.9.23 DEV3 — Sağlık, Padok ve Mobil Kart İyileştirmeleri
+# ÇiftlikPro v3.9.23 DEV4 — Fotoğraf, Vadeli Ödeme ve Çoklu Yem Faturası
 
-DEV3; aşı/ilaç işlemlerinde çift dokunmayı hem arayüzde hem sunucuda engeller,
+DEV4; tüm kayıt işlemlerinde çift dokunmayı hem arayüzde hem sunucuda engeller,
 işlem sırasında düğmeyi pasifleştirip durum metni gösterir. Sağlık planları,
 tamamlanmış sağlık kayıtları ve ilaç tedavileri düzenlenebilir veya güvenli
 biçimde silinebilir; bağlı stok ve finans kayıtları birlikte uzlaştırılır.

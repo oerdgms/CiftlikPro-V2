@@ -1,3 +1,12 @@
+# V3.9.23 DEV4 — Fotoğraf, Vadeli Ödeme ve Çoklu Yem Faturası
+
+- Hayvan ekleme ekranındaki sekiz boş fotoğraf kutusu kaldırıldı. Tek “Fotoğraf Ekle” alanı, fotoğraf seçildikçe yatay küçük önizlemeler oluşturur; ilk görsel profil fotoğrafıdır.
+- Vadeli giderlerde vade tarihi zorunlu hale getirildi. Bekleyen, bugün ödenecek ve gecikmiş ödemeler Dashboard ile Finans ekranında gösterilir; “Ödendi” ile kapatılır.
+- Tek yem faturasında birden fazla katalog yemi, kg veya torba birimi ve torba kilosuyla girilebilir. Finans kaydı tek kalırken stok/fiyat hareketleri her yem için ayrı oluşur.
+- Kalem tutarı bilinmiyorsa toplam fatura tutarı kilogram ağırlığına göre kalemlere dağıtılır; girilmiş kalem toplamları faturayla eşleşmiyorsa kayıt engellenir.
+- Tüm oturum açılmış POST formlarında arayüz kilidi ve sunucu tarafında 20 saniyelik atomik mükerrer istek koruması eklendi.
+- Eski `feed_finance_links` kayıtları korunur; çoklu faturalar geriye uyumlu `finance_feed_items` tablosunda tutulur.
+
 # V3.9.23 DEV3 — Sağlık, Padok ve Mobil Kart Hotfix
 
 - Aşı/ilaç programı oluşturma ve “Yapıldı” işlemlerinde düğme ilk dokunuşta
