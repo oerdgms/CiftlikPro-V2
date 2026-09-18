@@ -132,9 +132,30 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.7'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_7_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.16'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_16_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
+
+    def test_3923_hotfix116_workspace_and_security_guards_are_packaged(self):
+        root=Path(__file__).resolve().parents[1]
+        source=(root/'app'/'server.py').read_text(encoding='utf-8')
+        agriculture=(root/'app'/'agriculture.py').read_text(encoding='utf-8')
+        for marker in ('🐄 Sürü Merkezi','data-animal-tab','data-health-filter','data-report-tab','feedActionDrawer','İşlem Günlüğü'):
+            self.assertIn(marker,source)
+        self.assertIn("if path=='/backup/delete':",source)
+        self.assertIn('method="post" action="/backup/delete"',source)
+        self.assertIn('agri-list-search',agriculture)
+        self.assertIn('agriDrawer',agriculture)
+
+    def test_3923_hotfix113_performance_workspace_is_compact_and_separated(self):
+        source=Path(server.__file__).read_text(encoding="utf-8")
+        self.assertIn("q.get('scope',['active'])",source)
+        self.assertIn("('active','🐂','Devam Eden')",source)
+        self.assertIn("('completed','💰','Tamamlanan')",source)
+        self.assertIn("page_size=10",source)
+        self.assertIn("days_since_weight>=30",source)
+        self.assertIn('id="besi-work-panel"',source)
+        self.assertIn('name="return_to"',source)
 
     def test_3923_dev3_health_schedule_and_duplicate_claims(self):
         vaccine=server.health_schedule_slots('Aşı','2026-09-13',dose_count=3,interval_days=21)
@@ -173,8 +194,13 @@ class ReportImportTests(unittest.TestCase):
                 cur=con.execute("insert into animals(tag,nickname,gender,breed,paddock,paddock_id,status) values('TRDEV300000001','Deneme','Erkek','Simental','DEV3 Test Padok',?,'Aktif')",(paddock_id,))
                 animal_id=cur.lastrowid
             html=server.render_paddock_management()
-            for marker in ('DEV3 Test Padok','TRDEV300000001','Deneme','İçerideki Hayvanlar','Hayvanı Padoka Ata'):
+            for marker in ('Padoklarım','DEV3 Test Padok','TRDEV300000001','Deneme',
+                           'İçindeki Hayvanlar','Hayvanı Padoka Ata','Küçük Kartlar',
+                           'Yem Tüketimi','Padoktan çıkar','data-paddock-panel','data-move-animal'):
                 self.assertIn(marker,html)
+            with server.db() as con:
+                paddock_cols={row[1] for row in con.execute('pragma table_info(paddocks)').fetchall()}
+            self.assertIn('updated_at',paddock_cols)
         finally:
             with server.db() as con:
                 if animal_id:con.execute('delete from animals where id=?',(animal_id,))

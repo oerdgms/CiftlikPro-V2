@@ -1,3 +1,42 @@
+## 3.9.23 DEV4 Hotfix1.16 — Ortak Çalışma Alanları
+
+- Hotfix1.14: Sürü Merkezi ve cinsiyete duyarlı hayvan detay sekmeleri eklendi.
+- Hotfix1.15: Sağlık, Finans ve Raporlar kompakt filtreli çalışma alanlarına dönüştürüldü.
+- Hotfix1.16: Yem ve Tarım listeleri geliştirildi; işlem günlüğü filtrelendi; yedek oluşturma/silme POST akışına taşındı.
+- Hotfix1.13a rapor ekranındaki `display` NameError düzeltmesi dahil edildi.
+- Solver DEV4.19.3, rasyon hesapları, padok/besi motorları ve mevcut finans-stok hesapları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.13 — Besi Performansı 2.0
+
+- Besi ekranı varsayılan olarak yalnızca devam eden aktif hayvanlarla açılır.
+- Devam Eden, Tartım Bekleyen, Düşük, Hedefte, Tamamlanan ve Tümü için sayaçlı sekmeler eklendi.
+- Son tartımı 30 günü geçen veya hiç tartılmamış aktif hayvanlar Tartım Bekleyen listesine alınır.
+- 13 sütunlu uzun tablo yerine kompakt 8 sütunlu operasyon listesi ve sayfa başına 10 hayvan düzeni getirildi.
+- Seçilen hayvan için tartım ekleme, kilo grafiği, GCAA, 30 günlük tahmin, maliyet ve kârlılık aynı çalışma panelinde birleştirildi.
+- Mobilde hayvan satırları kart görünümüne dönüşür; filtreler ve çalışma paneli tek sütunda kullanılabilir.
+- Satılmış/kesilmiş hayvanlar Tamamlanan Besiler altında kalır; mevcut tartım, maliyet ve finans bağlantıları korunur.
+- Uygulama, installer ve GitHub Actions sürüm kaynakları Hotfix1.13 ile eşitlendi.
+
+## 3.9.23 DEV4 Hotfix1.12 — Padok Çalışma Paneli
+
+- Padok Yönetimi, referans görseldeki akışa uygun biçimde üstte seçilebilir kompakt kartlar ve altta tek geniş çalışma paneli olarak yenilendi.
+- Arama; padok adı, kodu, notu, hayvan küpesi, takma adı ve ırkında çalışır. Durum filtresi, sıralama ve küçük/büyük/liste görünümleri eklendi.
+- Toplam padok, aktif hayvan, canlı ağırlık ve aktif rasyonlardan hesaplanan günlük yem özetleri eklendi.
+- Seçili padokta doluluk, canlı ağırlık, aktif rasyon, günlük yem, oluşturma ve son güncelleme bilgileri birlikte gösterilir.
+- Hayvan listesine satır bazında kartı aç, düzenle, başka padoka taşı ve hayvan kaydını silmeden padoktan çıkar işlemleri eklendi.
+- Rasyon atama, yem tüketimi, notlar ve padok hareket geçmişi aynı panelde ayrı sekmelere alındı.
+- Yeni padok, hayvan ekleme ve taşıma işlemleri sayfadan kopmadan açılan pencerelere taşındı; seçili padok işlem sonrasında korunur.
+- Padok son güncelleme zamanı için geriye uyumlu veritabanı migrasyonu eklendi. Mevcut veriler, fotoğraflar, rasyonlar ve hareket geçmişi korunur.
+- Uygulama, installer ve GitHub Actions sürüm kaynakları Hotfix1.12 ile eşitlendi.
+
+## 3.9.23 DEV4 Hotfix1.9 — Professional Dashboard + Padok 2.0 Mobil + Tek Sürüm Kaynağı
+
+- Login ve alt durum çubuğu artık aynı `APP_VERSION` kaynağını kullanır; 1.8/1.7 etiket ayrışması giderildi.
+- Eski varsayılan Dashboard düzeni Professional kokpite otomatik yükseltilir: aktif hayvan, gebe, yaklaşan doğum, aktif padok, toplam canlı ağırlık, ortalama GCAA, düşük performans ve günlük padok yem maliyeti.
+- Kullanıcının gerçekten özelleştirdiği Dashboard düzeni korunur; tüm eski kartlar kart seçicisinde kalır.
+- Padok 2.0 mobil hayvan satırında tür/cinsiyet/ırk/kilo bilgisi artık kesilmek yerine satıra yayılır.
+- Installer/GitHub Actions sürüm referansları Hotfix1.9 ile eşitlendi.
+
 ## 3.9.23 DEV4 Hotfix1.7 — Yem Faturası Ödeme Akışı + Finans Rapor Düzeni
 - Yem faturasında Ödendi / Ödenmedi işlemi finans tablosundan kaldırılıp Fatura Detayı penceresine taşındı.
 - Ödenmiş faturada “Ödenmedi Yap”, bekleyen faturada “Ödendi Yap” işlemi aynı detay penceresinde gösterilir.
@@ -517,3 +556,13 @@
 - Resmî kaynaktan doğrulanmayan et/süt arınma bilgisi “Doğrulanmadı” gösterilir ve tedavi kaydı engellenir.
 - Ölü, kayıp veya pasif hayvana yeni tedavi kaydı açılması hem listede hem sunucu tarafında engellendi.
 - Solver DEV4.19.3 donduruldu; matematik ve kısıt katmanına dokunulmadı.
+
+## V3.9.23 DEV4 Hotfix1.10 — DashboardPro Sağlık Akışı
+- Dashboard Gebelik / Aşı Alarmı artık doğrudan işlem yapılabilir: **Aşıyı Yap**, **Hayvanı Aç**, **1 Gün Ertele**.
+- Dashboard'un kompakt kartlarında işlem butonlarının yanlışlıkla gizlenmesine neden olan CSS düzeltildi.
+- Sağlık ekranına otomatik 7./8. ay gebelik aşı görevleri eklendi; ilgili hayvanı manuel aramadan tamamlanabilir veya ertelenebilir.
+- Aşı tamamlandığında gerçek sağlık geçmişine işlenir; mükerrer kayıt koruması devam eder.
+- Ertelenen gebelik aşı tarihi kalıcı olarak saklanır ve Dashboard/Sağlık ekranında yeni tarihle izlenir.
+- Yaklaşan ödeme kartındaki mevcut hızlı işlem butonları kompakt Dashboard'da görünür hale getirildi.
+- Tailscale/telefon gibi istemcilerin bağlantıyı kapatmasıyla oluşan WinError 10053/10054, ConnectionReset/BrokenPipe durumları sunucuyu kirleten traceback yerine sessiz karşılanır; gerçek sunucu hataları görünmeye devam eder.
+- Login/footer/yedek manifesti tek APP_VERSION kaynağını kullanmaya devam eder.

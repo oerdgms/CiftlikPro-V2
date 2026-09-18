@@ -1,3 +1,30 @@
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.16 — Ortak Çalışma Alanları
+
+Hotfix1.14–1.16; Sürü Merkezi, cinsiyete duyarlı hayvan kartı, Sağlık/Finans/Rapor/Yem/Tarım çalışma alanları ve güvenli yönetim işlemlerini birlikte sunar. Solver DEV4.19.3 ve mevcut hesap motorları değiştirilmemiştir.
+
+## Önceki sürüm: Hotfix1.13 — Besi Performansı 2.0
+
+Besi Performansı ekranı artık günlük kullanıma **Devam Eden** sekmesinden
+başlar. Devam eden, tartım bekleyen, düşük performanslı, hedefte ve tamamlanan
+hayvanlar sayaçlı sekmelerle birbirinden ayrılır.
+
+Liste sayfa başına 10 hayvan gösterir. Bir satır seçildiğinde aynı ekranın
+altında aylık tartım girişi, kilo grafiği, GCAA, 30 günlük tahmin, maliyet ve
+kârlılık bilgileri tek çalışma panelinde açılır. Satılmış/kesilmiş hayvanlar
+otomatik olarak Tamamlanan Besiler altında kalır; mevcut kayıtlar korunur.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.12 — Padok Çalışma Paneli
+
+Padoklar ekranı artık üstte kompakt seçim kartları, altta seçili padoka ait tek
+geniş çalışma paneli kullanır. Arama, durum filtresi, sıralama ve üç farklı
+kart görünümüyle istenen padok hızla bulunur.
+
+Seçili padokta hayvan listesi, rasyon, günlük yem tüketimi, notlar ve hareket
+geçmişi sekmeler halinde izlenir. Her hayvan satırından kart açma, düzenleme,
+başka padoka taşıma ve hayvan kaydını silmeden padoktan çıkarma yapılabilir.
+Yeni padok ve taşıma işlemleri aynı sayfada açılan işlem pencerelerinde
+tamamlanır. Mevcut veritabanı ve yüklenen fotoğraflar güncellemede korunur.
+
 # ÇiftlikPro v3.9.23 DEV4 Hotfix1.7 — Yem Alım Faturası ve Tarihli Stok Maliyeti
 
 Bu sürümde **Yem** kategorisi gerçek alım faturası akışına alındı. Tek faturada birden fazla yem kalemi; miktar, birim, torba kg, birim fiyat, tedarikçi, fatura no ve vade bilgisiyle kaydedilir. Finans tarafında tek gider oluşur, her ürün stoğa ayrı girer.
@@ -258,3 +285,6 @@ Rasyon modülünde besi dönemine göre nişasta hedefi, üst güvenlik sınır�
 # ÇiftlikPro v3.9.21 DEV2 — İlaç & Veteriner
 
 İlaç ve veteriner ana ekranı saha kullanımına uygun özet + işlem çekmeceleri düzenindedir. Katalog, stok/SKT, tedavi, arınma ve finans bağlantısı aynı modülde izlenir. Katalog kaydı tedavi önerisi değildir; doz veteriner reçetesinden, arınma süresi Bakanlık ruhsat sorgusundaki güncel Ürün Özellikleri Özeti'nden doğrulanarak girilir.
+
+### Hotfix1.10 notu
+Dashboard ve Sağlık ekranındaki otomatik gebelik aşı alarmları artık doğrudan tamamlanabilir/ertelenebilir. Tailscale veya mobil tarayıcı bağlantı kesmelerinden doğan normal WinError 10054 kayıtları sessiz karşılanır.
