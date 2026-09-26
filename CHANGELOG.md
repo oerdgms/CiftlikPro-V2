@@ -1,3 +1,227 @@
+# Hotfix1.22aa
+- Bilimsel değerler butonundaki eski üst üste click handler zinciri temizlendi.
+- Bilimsel panel artık bağımsız aç/kapat sınıfıyla yönetilir; ikinci tıklamada güvenli biçimde kapanır.
+- Panel açılırken body/html scroll kilidi temizlenir; sayfa yukarı-aşağı kaymaya devam eder.
+- Solver DEV4.19.6 değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22z
+- Bilimsel değerler panelinin düşük çözünürlükte zorla açık kalması düzeltildi.
+- Bilimsel değerler aç/kapat düğmesi ve sayfa kaydırması düzeltildi.
+- Solver DEV4.19.6 korunmuştur.
+
+## 3.9.23 DEV4 Hotfix1.22y
+- Düşük çözünürlük panelindeki MutationObserver geri besleme döngüsü kaldırıldı; tarayıcı donması giderildi.
+- 1366×768 / %100 benzeri düşük masaüstü çözünürlüklerinde bilimsel hedef panelinin rasyon tablosu üzerine binmesi giderildi.
+- Floating panel 1600 CSS px ve altında devre dışı; panel normal akışta 2×2 / tek kolon responsive çalışır.
+- Solver matematiği değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22w
+- Hotfix1.22v kaynak paketi esas alınarak tüm regresyon kontrolleri yeniden çalıştırıldı.
+- Düşük çözünürlükte açıldığı halde içeriği görünmeyen `Tüm bilimsel değerler` paneli, orta genişlikte 2 kolon ve daha dar ekranda tek kolon olarak görünür doğal akışa alındı.
+- Yem Kataloğu araması Türkçe karakter, noktalama ve çok kelimeli sorgularda tüm katalog üzerinde tutarlı çalışır.
+- Günlük yem kullanımı ve maliyet hesabı; tarih-etkin ana rasyon, padok mevcudu ve ek yemleri birlikte hesaplar.
+- Gelecek tarihli toplu rasyon ataması mevcut rasyonu atama tarihine kadar korur.
+- Geçmiş tarihli fiziksel stok sayımı, sonraki hareketleri koruyarak sayım tarihindeki farka göre hareket oluşturur; negatif ve gelecek tarihli sayım engellenir.
+- Solver DEV4.19.6 ve 28 solver/rasyon fonksiyonu Hotfix1.22v tabanıyla AST düzeyinde birebir aynıdır.
+- 132 otomatik testin tamamı başarıyla geçti.
+
+## 3.9.23 DEV4 Hotfix1.22v
+- Düşük çözünürlükte Bilimsel Hedef Özeti 2×2 / tek kolon responsive düzene geçer; rasyon yem satırlarının üstüne binmez.
+- Yem Kataloğu başlıkları tıklanarak Yem, KM, HP, NDF, ME, Ca, P, Fiyat, Stok, Günlük Kullanım ve Tahmini Yeterlilik alanlarına göre artan/azalan sıralanabilir.
+- Stokta / Kritik Stok / Stok Yok filtreleri arama ve sıralamayla birlikte çalışır.
+- Fiziksel Stok Eşitle işlemi geçmiş hareketleri silmeden yalnız fark kadar Sayım + / Sayım - hareketi oluşturur.
+- Günlük Kullanım hesabına aktif padok ek yemleri de dahil edilir.
+- Solver DEV4.19.6 değiştirilmemiştir.
+
+## 3.9.23 DEV4 Hotfix1.22u
+- Yem Kataloğu araması artık yalnız açık sayfadaki 15 satırı değil tüm aktif kataloğu tarar.
+- Yazdıkça arama 350 ms bekleme sonrası sunucu tarafında tüm katalogda yenilenir.
+- Türkçe karakterler aramada normalize edilir (ı/i, ş/s, ğ/g, ü/u, ö/o, ç/c).
+- Solver/rasyon matematiğine dokunulmadı.
+
+## 3.9.23 DEV4 Hotfix1.22t
+- Mobil yem seçimi iki adımlı akış: yem seç → miktar gir → ekle/güncelle.
+- Yem seçildiğinde liste kapanır; miktar alanı doğrudan görünür, “Yem Değiştir” ile listeye dönülür.
+- iPhone Safari için alt dock modal açıkken gizli kalır; solver matematiği değişmedi.
+
+- Mobil yem ekleme ekranı tek kompakt pencereye dönüştürüldü; alt sabit dock pencere açıkken gizlenir.
+- Seçilen yem için kg miktarı ve Rasyona Ekle/Güncelle alanı her zaman görünür tutuldu.
+- Yem ekleme penceresine kapatma düğmesi eklendi.
+- Buzağı kartı Fotoğraf ve Kilo/Gelişim bölümlerindeki düşük çözünürlük taşmaları giderildi.
+- Solver DEV4.19.6 korunmuştur.
+
+## 3.9.23 DEV4 Hotfix1.22q
+- Padok Ek Yem / Takviye kartları kompaktlaştırıldı; Düzenle ve Kaldır işlemleri yan yana alındı.
+- Ek yem kaydı artık yem, kg/baş/gün, başlangıç tarihi ve not alanlarıyla yerinde düzenlenebilir.
+- Hayvan kartındaki Kilo Gelişim / Tartım Geçmişi düşük çözünürlükte responsive kart satırlarına dönüşür; yatay taşma engellendi.
+- Tartım giriş alanları dar ekranlarda 2 kolon / tek kolon düzene geçer.
+- Rasyon solver DEV4.19.6 değişmedi.
+
+
+## 3.9.23 DEV4 Hotfix1.22p
+- Rasyon Çalışma Masası altındaki eski tek-padok dropdown kaldırıldı.
+- Padoklar işaret kutuları ile çoklu seçilebilir.
+- Tümünü Seç / Seçimi Temizle / Seçili Padoklara Ata / Tüm Aktif Padoklara Ata eklendi.
+- Mevcut `/ration/assign-bulk` güvenli toplu atama altyapısı doğrudan çalışma masasına bağlandı.
+
+## 3.9.23 DEV4 Hotfix1.22b — Referans UI yakınlaştırma
+- Masaüstü rasyon masası referans görsele daha yakın yeniden düzenlendi.
+- Çözüm Durumu Yem Havuzu altında görünür akışta tutuldu.
+- KPI kartlarına referanstaki ilerleme rayları eklendi.
+- Rasyon tablosu, satırlar, kilit/miktar grubu, silme ve toplam satırı kompaktlaştırıldı.
+- Alt işlem barı sabit overlay olmaktan çıkarılıp tablonun doğal altına alındı.
+- Rasyon Bilgileri sağ drawer görünümüne yaklaştırıldı.
+- 1.22a mobil kompakt satır düzeni korundu.
+
+## v3.9.23 DEV4 Hotfix1.22
+- Rasyon çalışma masası referans görsele göre yeniden düzenlendi.
+- Çözüm Durumu Yem Havuzu altında görünür ve sabit akışta.
+- KPI kartları, kompakt yem tablosu ve mobil kilit/miktar kontrolü yenilendi.
+- Solver ve bilimsel hesap çekirdeği korunmuştur.
+
+# Hotfix1.21 — Referans Rasyon UI
+- Çözüm Durumu Yem Havuzu altına taşındı.
+- Hedef/Rasyon kartları referans görseldeki modern dört kart tasarımına geçirildi.
+- Kilit + miktar kontrolleri tek kompakt satırda; mobil taşma azaltıldı.
+- Solver ve bilimsel hesap çekirdeği değiştirilmedi.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.20
+
+- Rasyon Çözüm Durumu ana çalışma kolonuna alındı; sol alta kayma giderildi.
+- Yem miktar kilitleri miktar kontrol hücresine hizalandı.
+- Hedef ↔ Rasyon Özeti daha kompakt ERP şeridine dönüştürüldü.
+- Rasyon Bilgileri sağdan açılan panel haline getirildi.
+- Mısır Pulu (Flaked): KM %87, HP %8,5, nişasta %67,5, yağ %2, ME 3,10 Mcal/kg olarak güncellendi; NDF gibi kullanıcı tarafından verilmeyen alanlar korunur.
+- Mobil rasyon yem ikonları ilk HTML renderında atanır; tıklama beklemeden görünür.
+
+## 3.9.23 DEV4 Hotfix1.19h — İşlevsel Rasyon Masası
+
+- Rasyon kalemi miktar kilidi kalıcı hale getirildi; kilitli yemler elle ve Akıllı Dengeleme uygulamalarında korunur.
+- Her yem için yaş miktarı, KM kg ve toplam rasyon KM payı birlikte canlı gösterilir.
+- Ürün kaynağındaki açık yaş aralığı hedef profile uymuyorsa yem seçimden önce engellenir ve mevcut reçetede uyarılır.
+- Solver sonucu ile kaydedilmemiş miktar/kilit değişiklikleri önce/sonra özetinde gösterilir.
+- Hedef kartlarına masaüstü ve mobilde çalışan hedef aralığı şeritleri eklendi.
+- Solver çekirdeği ve bilimsel hedefler değiştirilmedi; sürüm `DEV4.19.6` olarak korundu.
+
+## 3.9.23 DEV4 Hotfix1.19g — Bilimsel Nişasta Bantları
+
+- `%28` tek ve sert nişasta engeli kaldırıldı; nişasta artık besi fazına göre ideal, dikkat ve genel güvenlik katmanlarıyla değerlendirilir.
+- Başlangıç/Büyütme: ideal `%20–30`, dikkat `%30–34`.
+- Geliştirme/Orta-İleri: ideal `%24–36`, dikkat `%36–40`.
+- Bitirme: ideal `%28–40`, dikkat `%40–45`.
+- `%45` üzeri genel güvenlik kapısıdır; daha düşük sonuçlar eNDF, hızlı rumen nişastası, tahıl ve kaba/kesif raylarıyla birlikte değerlendirilir.
+- `%29,2` gibi büyütme fazında ideal bantta kalan sonuçlar artık yalnız nişasta nedeniyle reddedilmez.
+- Enerji/GCAA önceliği, seçili yem miktarı optimizasyonu ve çalışma masası tasarımı korunmuştur.
+- Solver motoru `DEV4.19.6` olarak işaretlendi.
+
+## 3.9.23 DEV4 Hotfix1.19f — Enerji Öncelikli Tam Çözüm
+
+- GCAA açığı bulunan sonuçların `%8'e kadar` **Sınırlı çözüm** olarak kaydedilmesi kaldırıldı.
+- Solver, güvenlik rayları içinde GCAA hedefini önceliklendirir; arpa, mısır silajı ve uygun besi yemi gibi yüksek net enerjili seçili yemleri artırırken gereksiz HP yükselten yemleri azaltır.
+- HP fazlası için yumuşak ceza `%20` yerine `%10` güvenlik payından sonra başlar.
+- Enerji tohumlaması artık ME yanında NEm/NEg yoğunluğunu kullanır ve fazla HP/nişastayı geri plana iter.
+- GCAA hedefinin `%0,5` altında kalan rasyon kaydedilmez; gerçek engel kullanıcıya bildirilir.
+- Hedef veya güvenlik uyarısı bulunan kayıt artık yeşil **Çözüldü** görünmez; doğru durum **Sınırlı** veya **Çözüm yok** olur.
+- Solver motoru `DEV4.19.5` olarak işaretlendi.
+
+## 3.9.23 DEV4 Hotfix1.19e — Seçili Yem Akıllı Dengeleme
+
+- Rasyon Çöz, kullanıcının seçtiği yemlerin kg miktarlarını artırıp azaltarak önce tam hedefi arar.
+- Yaş boş bırakılan 250 kg ve üzeri besi hayvanlarında yanlışlıkla buzağı DMI denklemine düşme düzeltildi.
+- Güvenlik raylarını aşmayan ve yalnız GCAA hedefini en fazla %8 kaçıran en iyi aday artık açıkça **Sınırlı çözüm** olarak miktarlarıyla kaydedilir; hedefe ulaşılmış gibi gösterilmez.
+- Nişasta, NDF/eNDF, mineral, tahıl ve ciddi kaba/kesif güvenlik kapıları korunur; tehlikeli adaylar kaydedilmez.
+- Ekranda `%47,0` görünen kaba yem oranının aynı anda “%47'nin altında” denmesine yol açan yuvarlama uyuşmazlığı düzeltildi.
+- Solver motoru `DEV4.19.4` olarak işaretlendi.
+
+## 3.9.23 DEV4 Hotfix1.19d — Kompakt Mobil Rasyon
+
+- Mobil yem tablosu hedef tasarımdaki kompakt yatay satır bileşenine dönüştürüldü.
+- Yem türüne göre kategori simgesi, kompakt miktar kontrolü ve küçük silme işlemi eklendi.
+- Fiyat ve günlük maliyet satır içinde sadeleştirildi; toplam kg canlı başlığa eklendi.
+- Yinelenen mobil üst işlemler kaldırıldı; sabit alt Yem Ekle/Kaydet çubuğu korundu.
+- Masaüstü çalışma masası, Solver DEV4.19.3, hedef aralıkları ve hesaplar değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.19c — Görsel Akış + Çözüm Durumu Düzeltmesi
+
+- Mobilde karar panelini yanlış DOM ebeveynine ekleyen yerleşim hatası düzeltildi.
+- Solver tarafından kaydedilmiş reçetelerde genel durum “Çözüldü”; küçük besin sapmaları ayrı “ince ayar” olarak gösterilir.
+- Kaydedilmemiş kullanıcı değişikliklerinde durum yeniden canlı kartlara göre değerlendirilir.
+- Mobil bilimsel ayrıntı görünümünde yatay taşma kaldırıldı.
+- Solver DEV4.19.3, hedef aralıkları ve hesap fonksiyonları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.19b — Masaüstü + Mobil Rasyon Çalışma Masası
+
+- Masaüstünde sol Yem Havuzu, orta çalışma alanı ve sağ Çözüm Durumu paneli üç sütunlu düzende birleştirildi.
+- Hayvan profili ve seçili yem sayısı kompakt üst çubukta toplandı.
+- KM, GCAA, HP ve NDF için 2×2 ana hedef kartları eklendi; nişasta, kaba/kesif ve maliyet tek satıra alındı.
+- Profil formu ve tüm bilimsel hedefler isteğe bağlı açılır hale getirildi.
+- Yem Ekle, Geri Al ve Değişiklikleri Kaydet masaüstünde sabit alt işlem çubuğuna taşındı.
+- Hotfix1.19a mobil tasarım, Solver DEV4.19.3 ve hedef aralıkları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.19a — Mobil Rasyon Çalışma Masası
+
+- Mobil karar paneli tek satırlık durum/uyarı özetine küçültüldü; neden ve ayrıntılar isteğe bağlı açılır.
+- KM, GCAA, HP ve NDF için 2×2 ana hedef kartları eklendi.
+- Nişasta, kaba/kesif ve maliyet ikincil özet satırında toplandı.
+- Bilimsel hedeflerin tamamı ayrı aç/kapat alanında korunur.
+- Mobil yem satırları büyütülmüş miktar kontrolleriyle sadeleştirildi.
+- Yem Ekle ve Kaydet işlemleri ekran altındaki sabit işlem çubuğuna taşındı.
+- Masaüstü Hotfix1.19 görünümü, Solver DEV4.19.3 ve hedef aralıkları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.19 — Rasyon Çalışma Masası 2
+
+- Mevcut rasyon sonucu için `Uygun / Sınırlı / Çözüm yok` durum şeridi eklendi.
+- Bilimsel hedef kartlarındaki en güçlü uyarılar, neden ve önerilen sonraki adımla birlikte yeni karar panelinde gösterilir.
+- Yem sayısı, günlük maliyet, alternatif öneri sayısı ve hızlı işlem bağlantıları tek alanda toplandı.
+- Karar paneli masaüstünde sağ sütun, orta genişlikte alt panel, mobilde üst kart olarak uyarlanır.
+- Solver DEV4.19.3, hedef aralıkları, rasyon hesapları ve kayıt akışları değiştirilmedi.
+- Hotfix1.18d menü/kontrast ve Hotfix1.18c bağlantı günlüğü düzeltmeleri korunur.
+
+## 3.9.23 DEV4 Hotfix1.18d — Menü ve Okunabilirlik
+
+- Tam geniş çalışma kabuğunda CSS ile gizlenen sol menü, mobil ve masaüstünde çalışan erişilebilir çekmeceye dönüştürüldü.
+- Üç çizgi düğmesinin aç/kapa durumu, dış alana tıklama, menü bağlantısı seçme, pencere boyutu değişimi ve `Esc` kapanışı birlikte yönetilir.
+- Üst hızlı menü bağlantılarında açık zemin üzerinde koyu metin ve belirgin aktif/odak rengi sabitlendi.
+- Hastalık bilgi kartındaki koyu zemin üstü başlık beyaza; açık rozet yazıları yüksek kontrastlı koyu yeşile çevrildi.
+- Hotfix1.18c bağlantı günlüğü düzeltmesi, Dashboard, Solver DEV4.19.3, stok, finans ve veritabanı işlemleri korunur.
+
+## 3.9.23 DEV4 Hotfix1.18c — Windows Başlatıcı Bağlantı Günlüğü
+
+- Windows başlatıcısı kaynak sunucuyla aynı korumalı HTTP sunucu sınıfını kullanır. Tailscale ve tarayıcı bağlantısı aniden kapandığında görülen WinError 10053/10054 traceback'i artık gereksiz yere konsola basılmaz.
+- Diğer istisnalar görünür kalır; Dashboard, Solver DEV4.19.3, stok ve finans hesapları korunur.
+
+## 3.9.23 DEV4 Hotfix1.18b — Birleşik Dashboard
+
+- Yeni referans tasarımlı kokpit korunurken önceki Dashboard işlevleri yeniden görünür hale getirildi.
+- Kişiselleştirilebilir Dashboard Kartlarım ve kart düzenleme akışı geri getirildi.
+- Yaklaşan kızgınlık, gebelik aşısı, vadeli ödeme, besi performansı, finans eğilimi, doğum, sağlık ve işletme özetleri birleştirildi.
+- Mevcut işlem butonları ve kayıt akışları korunarak yalnızca sunum katmanı birleştirildi.
+- Yeni kokpitten eski panellere doğrudan geçiş bağlantısı eklendi; gereksiz çift Dashboard şablonu temizlendi.
+
+## 3.9.23 DEV4 Hotfix1.18a — Tam Genişlik Yerleşim Düzeltmesi
+
+- Sol menü gizlendiğinde kalan 198 px boşluk kaldırıldı; ana içerik gerçek ekran genişliğine oturtuldu.
+- Dashboard'un sağdan taşması ve Aylık Net/sağ panel kesilmesi düzeltildi.
+- ÇiftlikPro başlığı ve Dashboard bağlantısı referans tasarımdaki üst başlığa geri getirildi.
+- Üst menü yüksekliği ve içerik başlangıcı referans görsellere göre hizalandı.
+- Dashboard karşılaması yerel saate göre Günaydın, İyi Günler, İyi Akşamlar veya İyi Geceler olarak değişiyor.
+
+## 3.9.23 DEV4 Hotfix1.18 — Referans Tasarım Paketi
+
+- Dashboard, Üreme Merkezi ve Hayvan 360° ekranları referans görsellerdeki tam geniş üst menü ve kart düzenine uyarlandı.
+- Dashboard görev kartına Tümü, Geciken, Bugün ve Yaklaşan çalışan filtreleri eklendi.
+- Üreme Merkezi'ne gerçek padok filtresi, açıklamalı sütunlar ve ayrıntılı seçili hayvan süreç kartı eklendi.
+- Mobilde KPI kartları iki sütuna alındı; üst menü kontrollü yatay kaydırmalı hale getirildi.
+- Solver, rasyon hesapları, padok işlemleri, finans ve stok motorları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.17 — Dashboard 2.0 · Üreme Merkezi · Hayvan 360°
+
+- Padok panelinin görsel dili Dashboard, Üreme Merkezi ve hayvan detayına taşındı.
+- Dashboard gerçek sağlık, vade, doğum, yem stoku ve işlem günlüğü verileriyle yeniden düzenlendi.
+- Üreme kayıtları kızgınlık → tohumlama → gebelik kontrolü → doğum akışında birleştirildi.
+- Hayvan 360° kartına gebelik ilerlemesi, sağlık özeti, kilo grafiği, finans özeti, zaman çizgisi ve hızlı işlemler eklendi.
+- Mobil ve tablet kırılımları eklendi; Solver DEV4.19.3 ve hesap motorları değiştirilmedi.
+
 ## 3.9.23 DEV4 Hotfix1.16 — Ortak Çalışma Alanları
 
 - Hotfix1.14: Sürü Merkezi ve cinsiyete duyarlı hayvan detay sekmeleri eklendi.
@@ -566,3 +790,67 @@
 - Yaklaşan ödeme kartındaki mevcut hızlı işlem butonları kompakt Dashboard'da görünür hale getirildi.
 - Tailscale/telefon gibi istemcilerin bağlantıyı kapatmasıyla oluşan WinError 10053/10054, ConnectionReset/BrokenPipe durumları sunucuyu kirleten traceback yerine sessiz karşılanır; gerçek sunucu hataları görünmeye devam eder.
 - Login/footer/yedek manifesti tek APP_VERSION kaynağını kullanmaya devam eder.
+
+## 3.9.23 DEV4 Hotfix1.22e
+- Mobil hedef kartları modern renkli 2x2 düzene geçirildi.
+- Mobil Çözüm Durumu varsayılan görünümde sadeleştirildi; ayrıntılar açılır yapıda korundu.
+- Mobil + Yem Ekle / Kaydet çubuğunun son yem satırlarını kapatmaması için güvenli alt boşluk artırıldı.
+- 1.22d masaüstü miktar alanları ve yeni çöp kutusu görünümü korundu.
+
+## 3.9.23 DEV4 Hotfix1.22f
+- MISIR PULU (FLAKED) için katalog nişasta ortalaması %67,5 olarak sabitlendi; kesif yem sınıfı düzeltildi.
+- Mevcut kullanıcı veritabanlarında kalmış eski %75/%90 nişasta kayıtları için kalıcı migrasyon eklendi.
+- Mobil yem satırlarının sol simgeleri tıklama beklemeden ilk HTML yüklemesinde görünür hale getirildi.
+- Solver DEV4.19.6 ve bilimsel hedef aralıkları değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22g
+- Mobil yem kartında ikon/ad/KM etiketlerinin aynı yatay satırda sıkışması giderildi.
+- Kilit düğmesi ikon üzerinde küçük rozete taşındı; yem adı için daha geniş alan açıldı.
+- Mobil hedef kartları masaüstü görsel dilinde ikonlu, renkli, durum rozetli 2×2 düzene geçirildi.
+- Solver DEV4.19.6 ve Hotfix1.22f katalog migrasyonu aynen korundu.
+
+## 3.9.23 DEV4 Hotfix1.22h
+- iOS/Safari'de eski satır pseudo-simgesi ile gerçek yem simgesinin üst üste görünmesi giderildi.
+- Mobil satır açılışında eski `data-feed-icon` verisi ve olası yinelenen simgeler temizlenir.
+- Masaüstü Rasyon Çalışma Masası açılırken eski hedef görünümünün bir an görünüp yeni kartlara dönüşmesi giderildi; kartlar hazır olduğunda tek seferde gösterilir.
+- Hotfix1.22g hedef kartları, mobil düzen ve Solver DEV4.19.6 değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22i
+- Mobil yem satırında kalan eski `td::after` logo katmanı ve sıra numarası rozeti kaldırıldı.
+- Her satırda tek gerçek yem logosu bırakıldı; miktar kilidi küçük ve ayrı bir köşe rozeti olarak korundu.
+- Hotfix1.22h masaüstü hedef kartı açılış düzeltmesi ve Solver DEV4.19.6 değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22j
+- Mobil Dashboard Aylık Net değeri büyük tutarlarda kart içinde kalacak şekilde sıkıştırıldı.
+- Kritik Stoklar paneli, yalnız gerçekten stok girişi bulunan yemlerin kalan miktarlarını gösterir.
+- Mobil Son Hareketler paneli üç satırla sınırlandı; masaüstü görünümü ve tam işlem günlüğü korunur.
+- Rasyon Solver DEV4.19.6 ve bilimsel hedefler değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22k
+- Ana sayfadaki Modern ve Klasik Dashboard'ların aynı anda alt alta oluşturulması kaldırıldı.
+- Kullanıcı bazında kalıcı `Modern / Klasik` görünüm seçimi eklendi; varsayılan görünüm Modern'dir.
+- Kart düzenleme bağlantısı Klasik görünümü güvenli biçimde açar; mevcut kişiselleştirilmiş kart dizilimi korunur.
+- Rasyon Solver DEV4.19.6 ve bilimsel hedefler değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22l
+- Modern/Klasik Dashboard tercihi genel çift-gönderim korumasından ayrıldı.
+- Mobil Safari aynı isteği tekrar gönderse bile tercih kaydedilir ve mükerrer kayıt uyarısı gösterilmez.
+- Rasyon Solver DEV4.19.6 ve bilimsel hedefler değiştirilmedi.
+
+## 3.9.23 DEV4 Hotfix1.22m
+- Aktif padok rasyonları günlük yem tüketimiyle stok hareketlerine bağlandı.
+- Günlük tüketim `rasyon kg/baş/gün × aktif padok mevcudu` olarak hesaplanır.
+- Padok/yem/gün tekilliği sayesinde aynı gün mükerrer düşüm engellenir; aynı gün değişen hayvan sayısı veya miktar mevcut hareket üzerinde uzlaştırılır.
+- Geçmiş günlere otomatik tüketim yazılmaz ve yalnız kaydedilmiş, padoka atanmamış reçeteler stok düşürmez.
+- Rasyon Solver DEV4.19.6 ve bilimsel hedefler değiştirilmedi.
+
+
+## 3.9.23 DEV4 Hotfix1.22o
+- Modern/Klasik Dashboard seçiminin mobilde yeniden Moderne dönmesine yol açan form gönderim hatası düzeltildi.
+- Padok yönetimine **Toplu Rasyon Ata** eklendi; tek rasyon birden fazla aktif padoka tek işlemde atanabilir.
+- Padoklara ana rasyon dışında **Ek Yem / Takviye** ekleme, silme, günlük kg/baş ve maliyet takibi eklendi.
+- Ek yemler ana rasyonla birlikte stoktan günlük ve idempotent düşer; aynı yem iki kaynakta varsa tek tüketim hareketinde birleşir.
+- Kendi doğan buzağılar için **İç Üretim Maliyeti** eklendi: süt, yem, bakım ve diğer kalemler küpe bazında birikir; yem kalemleri isteğe bağlı stoktan düşer.
+- İç üretim maliyeti Finans ekranında nakit dışı ayrı toplam olarak gösterilir ve nakit gideri ikinci kez azaltmaz.
+- Buzağı 10 aylık olduğunda yetişkin karta aktarılırken iç üretim maliyeti de devredilir.
+- Rasyon solver çekirdeği DEV4.19.6 değiştirilmedi.

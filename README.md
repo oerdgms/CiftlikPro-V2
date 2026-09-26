@@ -1,6 +1,183 @@
-# ÇiftlikPro v3.9.23 DEV4 Hotfix1.16 — Ortak Çalışma Alanları
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22aa
 
-Hotfix1.14–1.16; Sürü Merkezi, cinsiyete duyarlı hayvan kartı, Sağlık/Finans/Rapor/Yem/Tarım çalışma alanları ve güvenli yönetim işlemlerini birlikte sunar. Solver DEV4.19.3 ve mevcut hesap motorları değiştirilmemiştir.
+Bu hotfix, bilimsel değerler panelinin açıldıktan sonra kapanmaması ve sayfa kaydırmasını kilitlemesi sorununu giderir. Eski buton event zinciri temizlenmiş, panel bağımsız toggle mantığına alınmıştır. Solver DEV4.19.6 korunmuştur.
+
+# Hotfix1.22z
+- Bilimsel değerler paneli masaüstünde varsayılan kapalı başlar.
+- Aç/Kapat düğmesi düşük çözünürlükte yeniden çalışır.
+- Bilimsel panel açıkken sayfa kaydırması engellenmez.
+- 1.22x/y scroll normalizasyonu kaldırıldı; solver değiştirilmedi.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.22y — Düşük Çözünürlük Rasyon Akışı + Donma Hotfix
+
+- 1600 CSS px ve altında bilimsel hedef panelinin fixed/floating davranışı kapatıldı.
+- Bilimsel kartlar normal belge akışında 2×2; daha dar masaüstünde tek kolon çalışır.
+- Rasyon yem tablosu panelin gerçek yüksekliğinden sonra başlar; %100 zoom düşük çözünürlükte üst üste binme engellendi.
+- Hotfix1.22w içindeki stok, arama, tarih ve toplu rasyon düzeltmeleri korunur.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.22w — Tutarlılık ve Düşük Çözünürlük Düzeltmeleri
+
+- Hotfix1.22v kaynak paketi temel alınmıştır.
+- Düşük çözünürlükte `Tüm bilimsel değerleri göster` panelinin başlığı açılıp içeriğinin görünmemesi giderildi; panel orta genişlikte iki, daha dar ekranda tek kolonda doğal sayfa akışına geçer.
+- Yem Kataloğu araması noktalama işaretlerinden, Türkçe karakterlerden ve kelime sırasından bağımsız olarak tüm katalogda çalışır.
+- Günlük yem kullanımı ve maliyet hesabı; ana rasyon, tarih aralığı, padok mevcudu ve ek yemleri birlikte değerlendirir.
+- Gelecek tarihli toplu rasyon ataması bugünkü aktif rasyonu erken kapatmaz.
+- Geçmiş tarihli fiziksel stok sayımı, sayımdan sonraki stok hareketlerini silmeden yalnız o tarihteki farkı işler; gelecek tarihli ve negatif sayım reddedilir.
+- Solver DEV4.19.6, bilimsel hedefler ve yem miktarı optimizasyonu değiştirilmemiştir.
+
+## Hotfix1.22w
+
+- Düşük çözünürlükte bilimsel ayrıntı paneli için görünürlük, yükseklik ve responsive kolon düzeltmesi eklendi.
+- Arama, tarih-etkin rasyon/ek yem kullanımı, gelecek tarihli atama ve tarihsel stok eşitleme akışları yeniden doğrulandı.
+- 132 otomatik testin tamamı geçti; 28 solver/rasyon fonksiyonu 1.22v tabanıyla AST düzeyinde birebir aynıdır.
+
+## Devralınan paket: Hotfix1.22v — Dashboard + Toplu Rasyon + İç Üretim + Ek Yem
+
+- Modern/Klasik Dashboard seçimi mobilde kalıcı çalışır; seçim tekrar Moderne dönmez.
+- Tek rasyon birden fazla aktif padoka aynı başlangıç tarihiyle toplu atanabilir.
+- Kendi doğan buzağıya süt, yem, ot/yonca, bakım ve diğer **İç Üretim Maliyeti** kalemleri eklenebilir; bunlar nakit gideri ikinci kez oluşturmaz ve 10 aylık transferde yetişkin karta devredilir.
+- Padoklara ana rasyon dışında **Ek Yem / Takviye** (kg/baş/gün) eklenebilir; ana rasyonla birlikte günlük maliyet ve stok tüketimine otomatik katılır.
+- Ana rasyon ile ek yem aynı yemse stokta iki ayrı tüketim değil, tek birleşik günlük tüketim hareketi tutulur.
+- Solver DEV4.19.6 ve bilimsel hedefler değiştirilmemiştir.
+
+
+### Hotfix1.22v
+
+- Düşük çözünürlükte Bilimsel Hedef Özeti 2×2, daha dar masaüstünde tek kolon düzene geçer; yem satırlarının üzerine binmez.
+- Yem Kataloğu başlıkları tıklanarak artan/azalan sıralanabilir: Yem, KM, HP, NDF, ME, Ca, P, Fiyat, Stok, Günlük Kullanım ve Tahmini Yeterlilik.
+- Stokta / Kritik Stok / Stok Yok filtreleri arama ve sıralamayla birlikte çalışır.
+- Fiziksel Stok Eşitle, geçmişi silmeden yalnız fark kadar Sayım + / Sayım - hareketi oluşturur.
+- Günlük Kullanım hesabına aktif padok ek yemleri de katılır.
+- Mobil yem seç → miktar akışı korunmuştur.
+- Solver/rasyon matematiği değiştirilmemiştir.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22l — Dashboard Seçim Düzeltmesi
+
+- Mobil Safari'de Modern/Klasik seçiminin genel mükerrer kayıt korumasına takılması giderildi.
+- Görünüm tercihi güvenli ve idempotent çalışır; tekrar gönderilse bile seçilen Dashboard açılır.
+- Hotfix1.22k Dashboard tasarımı ve Solver DEV4.19.6 aynen korunur.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22k — Modern / Klasik Dashboard Seçimi
+
+- Ana sayfadaki iki Dashboard'un alt alta görünmesi kaldırıldı; aynı anda yalnız seçilen görünüm açılır.
+- `Modern / Klasik` seçimi hem masaüstünde hem mobilde kullanılabilir ve kullanıcı hesabına kalıcı kaydedilir.
+- İlk kullanımda Modern görünüm açılır; Klasik görünüm mevcut kişiselleştirilebilir kartları ve operasyon panellerini korur.
+- Hotfix1.22j mobil Dashboard düzenlemeleri ve Solver DEV4.19.6 aynen korunur.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22j — Mobil Dashboard ve Gerçek Stok Özeti
+
+- Mobil Aylık Net tutarı, büyük meblağlarda da KPI kartının içine sığar.
+- Kritik Stoklar yalnız stok girişi yapılmış yemleri ve gerçek kalan kilogramlarını gösterir; kullanılmamış katalog yemleri listelenmez.
+- Son Hareketler mobilde üç kayıtla özetlenir; tam liste `Tümünü Gör` bağlantısında korunur.
+- Hotfix1.22i mobil yem logosu düzeltmesi ve Solver DEV4.19.6 aynen korunur.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22i — Tek Mobil Yem Logosu
+
+- Mobil yem kartındaki eski sıra rozeti ve CSS ile üretilen ikinci yem logosu kaldırıldı.
+- Her satırda yalnız gerçek yem logosu ve onun köşesinde küçük miktar kilidi görünür.
+- Hotfix1.22h masaüstü hedef kartı açılış düzeltmesi ile Solver DEV4.19.6 aynen korunur.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22h — Tek Mobil Yem Simgesi
+
+- iPhone/Safari'de eski `::before` simgesi ile gerçek yem simgesinin birlikte görünmesi giderildi.
+- Her mobil yem satırında yalnız bir gerçek simge kalır; yinelenen DOM simgeleri de açılışta temizlenir.
+- Masaüstünde eski hedef tablosunun yeni kartlardan önce görünmesine yol açan ilk açılış sıçraması giderildi.
+- Hotfix1.22g mobil yem ve hedef kartları ile Solver DEV4.19.6 aynen korunur.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22g — Okunabilir Mobil Rasyon Kartları
+
+- Mobil yem satırlarında ikon, yem adı ve KM bilgileri ayrı alanlara yerleştirildi; adların birkaç harfe sıkışması giderildi.
+- Miktar kilidi yem ikonunun küçük rozeti haline getirildi; `− / miktar / +` alanı geniş ve dokunulabilir kaldı.
+- Mobil KM, GCAA, HP ve NDF hedefleri masaüstü tasarım dilinde ikonlu, durum rozetli ve Hedef/Rasyon karşılaştırmalı 2×2 kartlara dönüştürüldü.
+- Hotfix1.22f mısır flake katalog düzeltmesi korunur; Solver DEV4.19.6 değiştirilmemiştir.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.22f — Katalog ve Mobil Yem Görseli Düzeltmesi
+
+- MISIR PULU (FLAKED) katalog ortalaması KM %87, HP %8,5, nişasta %67,5, yağ %2 ve ME 3,10 Mcal/kg KM olarak uygulanır.
+- Mevcut veritabanlarındaki eski %75/%90 nişasta kayıtları açılışta güvenli biçimde düzeltilir; makul laboratuvar kayıtları korunur.
+- Mobil rasyon satırındaki yem simgesi gerçek HTML öğesi olarak ilk yüklemede çizilir; görmek için yeme dokunmak gerekmez.
+- Solver DEV4.19.6 matematiği ve hedef aralıkları değiştirilmemiştir.
+
+## Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19h — İşlevsel Rasyon Masası
+
+Bu sürüm, Hotfix1.19g içindeki **Solver DEV4.19.6** matematiğini ve bilimsel hedef aralıklarını aynen korur; çalışma masasının kullanım katmanını geliştirir.
+
+- Her yem satırında kalıcı miktar kilidi vardır. Kilitli miktar elle, hızlı ayarla veya Akıllı Dengeleme önerisiyle değiştirilemez.
+- Yaş kilogramına ek olarak yem başına **KM kg** ve toplam rasyon KM payı canlı gösterilir.
+- Katalog kaynağında açık kullanım yaşı bulunan yemler hedef yaşla karşılaştırılır. Örneğin 60–120 günlük Sunar Buzağı Büyütme yemi 11 aylık profile eklenmez.
+- Solverın ilk oluşturduğu miktarlar ve sonradan yapılan değişiklikler önce/sonra özetiyle görünür.
+- KM, GCAA, HP, NDF ve diğer hedeflerde hedef bölgesi ile mevcut konumu gösteren görsel şeritler eklendi.
+- Mobil ve masaüstü kompakt tasarım, bilimsel nişasta bantları ve tam GCAA kayıt kapısı korunur.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19g — Bilimsel Nişasta Bantları
+
+Bu sürüm, enerji öncelikli tam çözümü korur ve nişastayı tek bir `%28` duvarı yerine besi fazına göre yönetir. Başlangıç/Büyütme için ideal `%20–30` ve dikkat `%30–34`; Geliştirme/Orta-İleri için ideal `%24–36` ve dikkat `%36–40`; Bitirme için ideal `%28–40` ve dikkat `%40–45` uygulanır. `%45` üzeri genel sert güvenlik kapısıdır.
+
+Nişasta dikkat bandına çıktığında sonuç tek başına reddedilmez; eNDF, etkin rumen nişastası, tahıl payı, kaba/kesif koridoru ve işleme/adaptasyon riski birlikte değerlendirilir. Böylece `%29,2` gibi başlangıç/büyütme ideal bandındaki güvenli enerji sonuçları çözülebilir.
+
+Bu sürümde Rasyon Çöz, seçilen yemlerin günlük kilogramlarını otomatik artırıp azaltarak hedefi arar. Yaş boş bırakılan 250 kg ve üzeri besi hayvanlarında doğru genel besi DMI varsayımı kullanılır. Tam GCAA hedefi güvenli biçimde yakalanamazsa çözüm kaydedilmez ve sınırlayan kısıt açıklanır. Tehlikeli nişasta, lif, mineral, tahıl veya kaba/kesif sonuçları da kaydedilmez.
+
+- Mobil yem kartları hedef görseldeki yatay ve kompakt satır düzenine dönüştürüldü.
+- Kategori simgesi, yem adı, fiyat, `− / miktar / +`, günlük maliyet ve küçük silme ikonu tek satırda birleştirildi.
+- Büyük “Çıkar” düğmesi, geniş fiyat kutuları ve üstte yinelenen işlem düğmeleri kaldırıldı.
+- Rasyon toplam kg değeri yem başlığında canlı gösterilir.
+- Profil, çözüm özeti, 2×2 KPI kartları ve alt Yem Ekle/Kaydet çubuğu korunur.
+- Solver DEV4.19.6, bilimsel hedef aralıkları ve rasyon hesapları değiştirilmemiştir.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19c — Görsel Akış + Çözüm Durumu Düzeltmesi
+
+- Solverın oluşturup kaydettiği reçete, besin kartlarındaki küçük sapmalar nedeniyle artık yanlışlıkla “Sınırlı” gösterilmez; çözüm sonucu **Çözüldü**, küçük sapmalar **ince ayar** olarak ayrılır.
+- Mobil çalışma masasındaki DOM yerleşim hatası giderildi; profil, kompakt çözüm özeti, 2×2 hedef kartları ve yem listesi doğru sırada görünür.
+- Mobil bilimsel ayrıntılar yatay şerit yerine tek sütunda açılır; sayfa yatay taşmaz.
+- Solver DEV4.19.3, bilimsel hedef aralıkları ve rasyon hesapları değiştirilmemiştir.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19b — Masaüstü + Mobil Rasyon Çalışma Masası
+
+- Masaüstünde sol Yem Havuzu, orta hedef/rasyon alanı ve sağ karar paneli birlikte çalışır.
+- KM, GCAA, HP ve NDF değerleri 2×2 kartlarla; nişasta, kaba/kesif ve maliyet tek satırda gösterilir.
+- Profil ve bilimsel ayrıntılar isteğe bağlı açılır.
+- Yem Ekle, Geri Al ve Kaydet işlemleri masaüstünde ekran altında sabittir.
+- Hotfix1.19a mobil tasarımı aynen korunur.
+- Solver DEV4.19.3 ve hedef aralıkları değiştirilmemiştir.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19a — Mobil Rasyon Çalışma Masası
+
+- Mobilde çözüm durumu ve uyarı sayısı tek satırda görünür; nedenler düğmeyle açılır.
+- KM, GCAA, HP ve NDF değerleri 2×2 ana kart düzenindedir.
+- Nişasta, kaba/kesif ve maliyet kompakt özet satırında gösterilir.
+- Rasyon yemleri büyük −/+ kontrolleriyle düzenlenir.
+- Yem Ekle ve Kaydet düğmeleri ekran altında sabit kalır.
+- Masaüstü görünümü, Solver DEV4.19.3 ve hedef aralıkları korunmuştur.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.19 — Rasyon Çalışma Masası 2
+
+- Rasyon ekranında `Uygun / Sınırlı / Çözüm yok` durumu tek bakışta görünür.
+- En önemli nedenler, sayısal mevcut değer ve önerilen sonraki adım aynı karar panelinde toplanır.
+- Yem sayısı, günlük maliyet, alternatif öneriler, Yem Ekle, rapor ve Akıllı Dengeleme kısayolları birlikte sunulur.
+- Masaüstü, tablet ve mobil için uyarlanabilir görünüm kullanılır.
+- Solver DEV4.19.3, hedef aralıkları ve hesap motorları değiştirilmemiştir.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.18d — Menü ve Kontrast Düzeltmesi
+
+- Sol üstteki üç çizgi düğmesi mobil ve masaüstünde sol menüyü açıp kapatır.
+- Menü dış alana dokunma/tıklama veya `Esc` ile kapanır; erişilebilirlik durumu güncellenir.
+- Tam geniş Dashboard/Üreme/Hayvan ekranlarında gizlenen sol menü çekmece olarak geri getirildi.
+- Üst hızlı menü yazıları ile hastalık bilgi kartı başlık ve rozet kontrastları güçlendirildi.
+- Hotfix1.18c bağlantı günlüğü koruması ile Solver DEV4.19.3, rasyon, finans, stok ve veritabanı işleyişi korunur.
+
+# Önceki sürüm: ÇiftlikPro v3.9.23 DEV4 Hotfix1.18c — Bağlantı Günlüğü Düzeltmesi
+
+- Windows kaynak başlatıcısı ve installer, uzaktan kapanan istemci bağlantıları için aynı korumalı HTTP sunucusunu kullanır.
+- WinError 10053/10054 kaynaklı gereksiz traceback gizlenir; diğer sunucu hataları görünür kalır.
+- Hotfix1.18b birleşik Dashboard ve Solver DEV4.19.3 korunur.
+
+# ÇiftlikPro v3.9.23 DEV4 Hotfix1.18b — Birleşik Dashboard
+
+Padok Yönetimi 2.0 tasarım dili; gerçek verilerle çalışan Dashboard, dört aşamalı Üreme Merkezi ve Hayvan 360° kartına taşındı. Dashboard'un yeni kokpiti ile kişiselleştirilebilir kartlar, kızgınlık, aşı, ödeme, finans ve işletme panelleri aynı sayfada görüntülenir. Üstteki bağlantıdan diğer panellere gidilir; **Kartları Düzenle** ile sekiz kart yuvası kişiselleştirilir. Solver DEV4.19.3 ve mevcut hesap motorları değiştirilmemiştir.
+
+## Önceki sürüm: Hotfix1.16 — Ortak Çalışma Alanları
+
+Hotfix1.14–1.16; Sürü Merkezi, cinsiyete duyarlı hayvan kartı, Sağlık/Finans/Rapor/Yem/Tarım çalışma alanları ve güvenli yönetim işlemlerini birlikte sunar.
 
 ## Önceki sürüm: Hotfix1.13 — Besi Performansı 2.0
 
@@ -288,3 +465,14 @@ Rasyon modülünde besi dönemine göre nişasta hedefi, üst güvenlik sınır�
 
 ### Hotfix1.10 notu
 Dashboard ve Sağlık ekranındaki otomatik gebelik aşı alarmları artık doğrudan tamamlanabilir/ertelenebilir. Tailscale veya mobil tarayıcı bağlantı kesmelerinden doğan normal WinError 10054 kayıtları sessiz karşılanır.
+
+
+## Hotfix1.22q
+- Modern/Klasik Dashboard seçimi mobilde de kalıcı çalışır; seçim değeri gizli alanla güvenli gönderilir.
+- Padoklar ekranına **Toplu Rasyon Ata** eklendi; tek rasyon birden fazla aktif padoka aynı başlangıç tarihiyle atanabilir.
+- Aynı padokta aynı rasyon ve başlangıç tarihi zaten aktifse tekrar kayıt oluşturulmaz.
+- Toplu atama sonrası günlük yem stok tüketimi anında yeniden eşitlenir.
+- Solver DEV4.19.6 değiştirilmemiştir.
+
+
+- 1.22x MutationObserver geri besleme döngüsü kaldırıldı; düşük çözünürlük panel normal akışta kalır.

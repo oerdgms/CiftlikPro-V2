@@ -3,8 +3,6 @@ import sys
 import threading
 import time
 import webbrowser
-from http.server import ThreadingHTTPServer
-
 import server
 
 URL = f"http://127.0.0.1:{server.PORT}/login"
@@ -37,7 +35,9 @@ def run() -> None:
     server.ensure_archive_schema()
     server.promote_mature_calves()
 
-    httpd = ThreadingHTTPServer(("0.0.0.0", server.PORT), server.App)
+    # Use the same server as direct source startup: disconnected LAN/VPN clients
+    # should not produce a traceback while real request errors stay visible.
+    httpd = server.QuietThreadingHTTPServer(("0.0.0.0", server.PORT), server.App)
     if not background:
         threading.Thread(target=open_browser_when_ready, daemon=True).start()
 

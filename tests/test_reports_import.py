@@ -1,9 +1,12 @@
 import io
+import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
@@ -132,8 +135,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.16'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_16_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22aa'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22aa_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_hotfix116_workspace_and_security_guards_are_packaged(self):
@@ -146,6 +149,282 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('method="post" action="/backup/delete"',source)
         self.assertIn('agri-list-search',agriculture)
         self.assertIn('agriDrawer',agriculture)
+
+    def test_3923_hotfix117_visual_workspaces_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('Dashboard 2.0','/reproduction-center','v117-board','animal-360-grid','Gebelik Durumu','Hızlı İşlemler'):
+            self.assertIn(marker,source)
+        self.assertIn('body.v118-shell .main{box-sizing:border-box!important;margin-left:0!important;width:100%!important',source)
+        self.assertIn('body.v118-shell .top .brand{display:inline-flex!important',source)
+        self.assertIn('v118-restored-dashboard',source)
+        for restored in ('Dashboard Kartlarım','Yaklaşan Kızgınlık','Gebelik / Aşı Alarmı','Yaklaşan Ödemeler','Son 6 Ay Finans Eğilimi','İşletme Özeti'):
+            self.assertIn(restored,source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
+    def test_3923_hotfix118d_menu_drawer_and_contrast_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        self.assertIn('id="sideMenuBackdrop"',source)
+        self.assertIn('aria-controls="sideMenu"',source)
+        self.assertIn('function setMenu(open)',source)
+        self.assertIn('body.v118-shell #sideMenu.side.mobile-open{transform:translateX(0)!important}',source)
+        self.assertNotIn('body.v118-shell .side{display:none!important}',source)
+        self.assertIn('.disease-hero h1{{margin:8px 0;color:#fff!important',source)
+        self.assertIn('.disease-hero .pill{{background:#f3fbf6!important;color:#0b4f31!important',source)
+
+    def test_3923_hotfix119_ration_workbench2_is_presentation_only(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('WORKBENCH2_UI','workbench2-decision-ui','Çözüm Durumu','Uygun','Sınırlı','Çözüm yok','Akıllı dengelemeye git'):
+            self.assertIn(marker,source)
+        self.assertIn('Solver DEV4.19.6 enerji/HP takası ve faz bazlı nişasta bantlarıyla seçili yem miktarlarını otomatik dengeler',source)
+
+    def test_3923_hotfix119a_mobile_ration_redesign_is_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('WORKBENCH2_MOBILE_UI','workbench2-mobile-redesign','wb2-kpi-grid','wb2-mobile-dock','Tüm bilimsel değerleri göster','Rasyondaki Yemler'):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix119b_desktop_ration_redesign_is_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('WORKBENCH2_DESKTOP_UI','workbench2-desktop-redesign','wb2-desktop-kpi-grid','wb2-desktop-dock','Profili Düzenle','Tüm bilimsel değerler'):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix119c_solver_result_and_mobile_dom_fix_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ("data-solver-result='{solver_result}'", "target.dataset.solverResult==='solved'", 'Uyarı satırı çözüm başarısızlığı', 'rail.parentNode.insertBefore(profile,rail)', 'center.insertBefore(rail,workspace)', "issues+' ince ayar'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix119d_compact_mobile_feed_rows_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX119D_MOBILE_RATION_UI','hotfix119d-mobile-ration-compact','data-feed-icon','hf119d-total',"remove.textContent='🗑'",'grid-template-columns:44px minmax(0,1fr) 144px 38px'):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix119h_functional_ration_layer_is_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX119H_FUNCTIONAL_RATION_UI','hotfix119h-functional-ration-ui',
+                       'hf119h-lock-input','hf119h-feed-meta','hf119h-change-summary',
+                       'hf119h-range','hf119h-solve-guard'):
+            self.assertIn(marker,source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+        self.assertIn('Solver DEV4.19.6',source)
+
+    def test_3923_hotfix122f_flaked_corn_and_mobile_thumbs_are_packaged(self):
+        root=Path(__file__).resolve().parents[1]
+        source=(root/'app'/'server.py').read_text(encoding='utf-8')
+        catalog=json.loads((root/'app'/'feed_catalog.json').read_text(encoding='utf-8'))
+        flake=next(x for x in catalog if x['name']=='MISIR PULU (FLAKED)')
+        self.assertEqual(flake['category'],'Kesif Yemler')
+        self.assertAlmostEqual(flake['starch_pct'],67.5)
+        self.assertAlmostEqual(flake['dm_pct'],87.0)
+        self.assertAlmostEqual(flake['cp_pct'],8.5)
+        for marker in ('HOTFIX122F_FEED_CATALOG_AND_MOBILE_THUMBS','hf122f-feed-thumb',
+                       'starch_pct between 74.5 and 75.5',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122g_mobile_rows_and_target_cards_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX122G_MOBILE_RATION_READABILITY','hotfix122g-mobile-ration-readability',
+                       "grid-template-areas:'name qty remove' 'price daily daily'",
+                       "data-key=\"dm\"]:before{content:'🌿'",'Kuru madde tüketimi',
+                       "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122h_mobile_uses_single_real_feed_thumb(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX122H_SINGLE_FEED_THUMB','hotfix122h-single-feed-thumb',
+                       "row.removeAttribute('data-feed-icon')","for(var i=1;i<thumbs.length;i++)thumbs[i].remove()",
+                       "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122h_desktop_target_cards_do_not_flash_old_view(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX122H_DESKTOP_TARGET_BOOT_CSS','hotfix122h-desktop-target-boot',
+                       ':not(.wb2-desktop-ready) .target-workspace','HOTFIX122H_DESKTOP_TARGET_BOOT_JS',
+                       "document.querySelector('.wb2-desktop-kpis')",'new MutationObserver(ready)',
+                       "html.replace('</head>', HOTFIX122H_DESKTOP_TARGET_BOOT_CSS + '</head>')"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122i_mobile_feed_has_one_logo_and_clean_lock_badge(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX122I_MOBILE_FEED_BADGES','hotfix122i-mobile-feed-badges',
+                       'tr.ration-row td:first-child::before','tr.ration-row td:first-child::after',
+                       'td:first-child>.hf122f-feed-thumb','td:nth-child(2)>.hf119h-lock',
+                       "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122j_mobile_dashboard_uses_real_stock_and_compact_activity(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('HOTFIX122J_MOBILE_DASHBOARD','hotfix122j-mobile-dashboard',
+                       'v122j-month-net','v122j-money','v122j-recent-panel',
+                       '.v122j-recent-row:nth-child(n+4)','entered.tx_type in',
+                       'Henüz stok girişi yapılmış yem bulunmuyor.',
+                       "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+    def test_3923_hotfix122k_dashboard_mode_is_persistent_and_exclusive(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('def dashboard_view(username):','dashboard_view_',
+                       'action="/dashboard-view"',"if path=='/dashboard-view':",
+                       'modern_dashboard_html=',
+                       "restored_dashboard_html if dashboard_view_mode=='classic' else modern_dashboard_html",
+                       'HOTFIX122K_DASHBOARD_MODE','hotfix122k-dashboard-mode',
+                       "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+        self.assertNotIn('<a class="v118-dashboard-jump" href="#dashboard-tools">',source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
+    def test_3923_hotfix122l_dashboard_choice_bypasses_record_dedupe_and_changes_view(self):
+        server.SESSIONS['dashboard-choice']={'username':'admin','role':'admin'}
+        with server.db() as con:
+            con.execute("delete from settings where setting_key='dashboard_view_admin'")
+        http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+        thread=threading.Thread(target=http.serve_forever,daemon=True)
+        thread.start()
+        try:
+            with patch.object(server,'license_status',return_value=(True,{},'')):
+                def choose(view):
+                    request=urllib.request.Request(
+                        f'http://127.0.0.1:{http.server_port}/dashboard-view',
+                        data=urllib.parse.urlencode({'view':view}).encode('utf-8'),
+                        headers={'Cookie':'sid=dashboard-choice','Content-Type':'application/x-www-form-urlencoded'},
+                    )
+                    with urllib.request.urlopen(request,timeout=15) as response:
+                        return response.read().decode('utf-8')
+                first=choose('classic')
+                repeated=choose('classic')
+                modern=choose('modern')
+                self.assertIn('Dashboard Kartlarım',first)
+                self.assertIn('Dashboard Kartlarım',repeated)
+                self.assertNotIn('mükerrer kayıt engellendi',repeated)
+                self.assertIn("Bugünün İşleri",modern)
+                self.assertNotIn('Dashboard Kartlarım',modern)
+        finally:
+            http.shutdown()
+            http.server_close()
+            server.SESSIONS.pop('dashboard-choice',None)
+
+    def test_3923_hotfix122n_dashboard_buttons_keep_choice_in_hidden_inputs(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        self.assertIn('<input type="hidden" name="view" value="modern">',source)
+        self.assertIn('<input type="hidden" name="view" value="classic">',source)
+        self.assertNotIn('button type="submit" name="view" value="classic"',source)
+        self.assertIn("view=(f.get('view') or '').strip().lower()",source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
+    def test_3923_hotfix122n_bulk_ration_assignment_updates_selected_paddocks(self):
+        ids={'ration':None,'paddocks':[]}
+        day=server.date.today().isoformat()
+        try:
+            with server.db() as con:
+                ids['ration']=con.execute("insert into rations(name,target_group,notes,active,created_at) values('HF122N Toplu Rasyon','Test','',1,?)",(day+'T00:00:00',)).lastrowid
+                for index in range(2):
+                    pid=con.execute('''insert into paddocks(name,code,type,capacity,notes,active,created_at,updated_at)
+                        values(?,?,?,?,?,1,?,?)''',(f'HF122N Padok {index+1}',f'N{index+1}','Besi',10,'',day+'T00:00:00',day+'T00:00:00')).lastrowid
+                    ids['paddocks'].append(pid)
+            server.SESSIONS['bulk-ration']={'username':'admin','role':'admin'}
+            http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+            thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+            try:
+                payload={'ration_id':ids['ration'],'start_date':day,'notes':'Toplu test'}
+                for pid in ids['paddocks']:payload[f'bulk_paddock_{pid}']='1'
+                request=urllib.request.Request(
+                    f'http://127.0.0.1:{http.server_port}/ration/assign-bulk',
+                    data=urllib.parse.urlencode(payload).encode('utf-8'),
+                    headers={'Cookie':'sid=bulk-ration','Content-Type':'application/x-www-form-urlencoded'},
+                )
+                with patch.object(server,'license_status',return_value=(True,{},'')):
+                    with urllib.request.urlopen(request,timeout=15) as response:
+                        html=response.read().decode('utf-8')
+                self.assertIn('Padoklarım',html)
+                with server.db() as con:
+                    rows=con.execute('select paddock_id,ration_id,start_date,active from paddock_rations where paddock_id in (?,?) and active=1 order by paddock_id',tuple(ids['paddocks'])).fetchall()
+                self.assertEqual(len(rows),2)
+                self.assertTrue(all(int(r['ration_id'])==ids['ration'] and r['start_date']==day and int(r['active'])==1 for r in rows))
+            finally:
+                http.shutdown();http.server_close();server.SESSIONS.pop('bulk-ration',None)
+        finally:
+            with server.db() as con:
+                for pid in ids['paddocks']:
+                    con.execute('delete from paddock_feed_consumptions where paddock_id=?',(pid,))
+                    con.execute('delete from paddock_rations where paddock_id=?',(pid,))
+                    con.execute('delete from paddocks where id=?',(pid,))
+                if ids['ration']:
+                    con.execute('delete from ration_item_history where ration_id=?',(ids['ration'],))
+                    con.execute('delete from ration_items where ration_id=?',(ids['ration'],))
+                    con.execute('delete from rations where id=?',(ids['ration'],))
+
+
+    def test_3923_hotfix122p_workbench_bulk_paddock_picker_is_visible(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('Padoklara Toplu Ata','Tümünü Seç','Seçimi Temizle','Seçili Padoklara Ata','Tüm Aktif Padoklara Ata','ration-bulk-paddock-grid','action="/ration/assign-bulk"'):
+            self.assertIn(marker,source)
+        self.assertNotIn('<select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select>',source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
+    def test_3923_hotfix119h_calf_period_feed_rejects_eleven_month_profile(self):
+        with server.db() as con:
+            feed=con.execute("select * from feed_catalog where name='SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ'").fetchone()
+        ok,message=server.feed_age_phase_compatibility(feed,11,'Otomatik','Besi')
+        self.assertFalse(ok)
+        self.assertIn('60–120',message)
+        self.assertIn('11 aylık',message)
+
+    def test_3923_hotfix119h_calf_period_feed_accepts_three_month_or_unknown_age(self):
+        with server.db() as con:
+            feed=con.execute("select * from feed_catalog where name='SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ'").fetchone()
+        self.assertTrue(server.feed_age_phase_compatibility(feed,3,'Otomatik','Besi')[0])
+        self.assertTrue(server.feed_age_phase_compatibility(feed,0,'Otomatik','Besi')[0])
+
+    def test_3923_hotfix119h_solver_preflight_stops_incompatible_period_feed(self):
+        with server.db() as con:
+            feed=con.execute("select * from feed_catalog where name='SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ'").fetchone()
+        solved,_,message=server.solve_smart_ration([feed],265,1.3,'Besi Erkek',11,'Besi Başlangıç')
+        self.assertIsNone(solved)
+        self.assertIn('Yaş/dönem uyumsuz yem',message)
+
+    def test_3923_hotfix119h_ration_item_lock_schema_is_migrated(self):
+        with server.db() as con:
+            columns={r['name'] for r in con.execute('pragma table_info(ration_items)')}
+        self.assertIn('locked',columns)
+
+    def test_3923_hotfix118a_dashboard_greeting_follows_local_hour(self):
+        self.assertEqual(server.day_greeting(5),'Günaydın')
+        self.assertEqual(server.day_greeting(11),'Günaydın')
+        self.assertEqual(server.day_greeting(12),'İyi Günler')
+        self.assertEqual(server.day_greeting(17),'İyi Günler')
+        self.assertEqual(server.day_greeting(18),'İyi Akşamlar')
+        self.assertEqual(server.day_greeting(21),'İyi Akşamlar')
+        self.assertEqual(server.day_greeting(22),'İyi Geceler')
+        self.assertEqual(server.day_greeting(4),'İyi Geceler')
+
+    def test_3923_hotfix118b_dashboard_and_card_editor_render(self):
+        server.SESSIONS['dashboard-smoke']={'username':'admin','role':'admin'}
+        with server.db() as con:
+            con.execute("delete from settings where setting_key='dashboard_view_admin'")
+        http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+        thread=threading.Thread(target=http.serve_forever,daemon=True)
+        thread.start()
+        try:
+            with patch.object(server,'license_status',return_value=(True,{},'')):
+                for route,expected in (
+                    ('/',('Bugünün İşleri','Kritik Stoklar','Son Hareketler','✨ Modern','▦ Klasik')),
+                    ('/?edit=1',('Dashboard Kartlarım','Yaklaşan Kızgınlık','Son 6 Ay Finans Eğilimi',
+                                 'İşletme Özeti','dashboardPickerForm','dashboard-card-choice','Düzenlemeyi Bitir')),
+                ):
+                    request=urllib.request.Request(
+                        f'http://127.0.0.1:{http.server_port}{route}',
+                        headers={'Cookie':'sid=dashboard-smoke'},
+                    )
+                    with urllib.request.urlopen(request,timeout=15) as response:
+                        self.assertEqual(response.status,200)
+                        html=response.read().decode('utf-8')
+                    for text in expected:self.assertIn(text,html)
+                    if route=='/':
+                        self.assertNotIn('Dashboard Kartlarım',html)
+                    else:
+                        self.assertNotIn('Bugünün İşleri',html)
+        finally:
+            http.shutdown()
+            http.server_close()
+            server.SESSIONS.pop('dashboard-smoke',None)
 
     def test_3923_hotfix113_performance_workspace_is_compact_and_separated(self):
         source=Path(server.__file__).read_text(encoding="utf-8")
@@ -205,6 +484,84 @@ class ReportImportTests(unittest.TestCase):
             with server.db() as con:
                 if animal_id:con.execute('delete from animals where id=?',(animal_id,))
                 if paddock_id:con.execute('delete from paddocks where id=?',(paddock_id,))
+
+    def test_3923_hotfix122m_active_paddock_ration_deducts_stock_once_and_reconciles(self):
+        ids={'feed':None,'ration':None,'paddock':None,'stock':None}
+        animal_ids=[]
+        day=server.date.today().isoformat()
+        try:
+            with server.db() as con:
+                ids['feed']=con.execute('''insert into feed_catalog
+                    (name,category,dm_pct,ndf_pct,cp_pct,active)
+                    values('HF122M OTOMATİK STOK TEST YEMİ','Kesif Yemler',90,20,12,1)''').lastrowid
+                ids['ration']=con.execute('''insert into rations
+                    (name,target_group,notes,active,created_at)
+                    values('HF122M Günlük Stok Rasyonu','Test','',1,?)''',(day+'T00:00:00',)).lastrowid
+                con.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,2)',
+                            (ids['ration'],ids['feed']))
+                server.record_ration_item_history(con,ids['ration'],ids['feed'],2,day,'Otomatik stok testi')
+                ids['paddock']=con.execute('''insert into paddocks
+                    (name,code,type,capacity,notes,active,created_at,updated_at)
+                    values('HF122M Test Padok','HF122M','Besi',10,'',1,?,?)''',
+                    (day+'T00:00:00',day+'T00:00:00')).lastrowid
+                for index in range(2):
+                    animal_ids.append(con.execute('''insert into animals
+                        (tag,nickname,gender,breed,paddock,paddock_id,status)
+                        values(?,?,?,?,?,?, 'Aktif')''',
+                        (f'TRHF122M{index:03d}',f'Test {index}','Erkek','Simental',
+                         'HF122M Test Padok',ids['paddock'])).lastrowid)
+                con.execute('''insert into paddock_rations
+                    (paddock_id,ration_id,start_date,end_date,active,notes)
+                    values(?,?,?,NULL,1,'Otomatik stok testi')''',(ids['paddock'],ids['ration'],day))
+                ids['stock']=con.execute('''insert into feed_stock_transactions
+                    (feed_id,tx_date,tx_type,quantity_kg,unit_price,notes)
+                    values(?,?,'Giriş',100,10,'Test stoğu')''',(ids['feed'],day)).lastrowid
+
+                first=server.sync_daily_paddock_feed_stock(con,day)
+                again=server.sync_daily_paddock_feed_stock(con,day)
+                txs=con.execute("select * from feed_stock_transactions where feed_id=? and tx_type='Tüketim'",
+                                (ids['feed'],)).fetchall()
+                self.assertEqual(first['created'],1)
+                self.assertEqual(again['created'],0)
+                self.assertEqual(len(txs),1)
+                self.assertAlmostEqual(txs[0]['quantity_kg'],4.0)
+                self.assertAlmostEqual(server.feed_stock_kg(ids['feed'],con),96.0)
+
+                animal_ids.append(con.execute('''insert into animals
+                    (tag,nickname,gender,breed,paddock,paddock_id,status)
+                    values('TRHF122M999','Test 3','Erkek','Simental','HF122M Test Padok',?,'Aktif')''',
+                    (ids['paddock'],)).lastrowid)
+                adjusted=server.sync_daily_paddock_feed_stock(con,day)
+                txs=con.execute("select * from feed_stock_transactions where feed_id=? and tx_type='Tüketim'",
+                                (ids['feed'],)).fetchall()
+                self.assertEqual(adjusted['updated'],1)
+                self.assertEqual(len(txs),1)
+                self.assertAlmostEqual(txs[0]['quantity_kg'],6.0)
+                self.assertAlmostEqual(server.feed_stock_kg(ids['feed'],con),94.0)
+
+                con.execute('update paddock_rations set active=0,end_date=? where paddock_id=?',(day,ids['paddock']))
+                removed=server.sync_daily_paddock_feed_stock(con,day)
+                self.assertEqual(removed['removed'],1)
+                self.assertAlmostEqual(server.feed_stock_kg(ids['feed'],con),100.0)
+        finally:
+            with server.db() as con:
+                if ids['paddock']:
+                    rows=con.execute('select stock_tx_id from paddock_feed_consumptions where paddock_id=?',
+                                     (ids['paddock'],)).fetchall()
+                    for row in rows:
+                        if row['stock_tx_id']:con.execute('delete from feed_stock_transactions where id=?',(row['stock_tx_id'],))
+                    con.execute('delete from paddock_feed_consumptions where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from paddock_rations where paddock_id=?',(ids['paddock'],))
+                for animal_id in animal_ids:con.execute('delete from animals where id=?',(animal_id,))
+                if ids['stock']:con.execute('delete from feed_stock_transactions where id=?',(ids['stock'],))
+                if ids['ration']:
+                    con.execute('delete from ration_item_history where ration_id=?',(ids['ration'],))
+                    con.execute('delete from ration_items where ration_id=?',(ids['ration'],))
+                    con.execute('delete from rations where id=?',(ids['ration'],))
+                if ids['paddock']:con.execute('delete from paddocks where id=?',(ids['paddock'],))
+                if ids['feed']:
+                    con.execute('delete from feed_cost_history where feed_id=?',(ids['feed'],))
+                    con.execute('delete from feed_catalog where id=?',(ids['feed'],))
 
     def test_3921_dev51_official_cattle_medicine_catalog_is_seeded(self):
         with server.db() as con:
@@ -281,18 +638,18 @@ class ReportImportTests(unittest.TestCase):
 
     def test_beef_starch_targets_follow_finishing_phase(self):
         expected={
-            'Besi Başlangıç':(20.0,24.0,28.0),
-            'Besi Geliştirme':(23.0,27.0,30.0),
-            'Besi Bitirme':(25.0,29.0,31.0),
+            'Besi Başlangıç':(20.0,30.0,34.0,45.0),
+            'Besi Geliştirme':(24.0,36.0,40.0,45.0),
+            'Besi Bitirme':(28.0,40.0,45.0,45.0),
         }
         for phase,values in expected.items():
             target=server.beef_starch_targets(phase)
-            self.assertEqual((target['starch_min'],target['starch_ideal_max'],target['starch_max']),values)
+            self.assertEqual((target['starch_min'],target['starch_ideal_max'],target['starch_max'],target['starch_hard_max']),values)
 
     def test_manual_phase_override_controls_all_solver_limits(self):
         limits=server.beef_phase_limits(250,1.4,6.5,0,'Besi Bitirme')
         self.assertEqual(limits['phase'],'Besi Bitirme')
-        self.assertEqual((limits['starch_min'],limits['starch_ideal_max'],limits['starch_max']),(25.0,29.0,31.0))
+        self.assertEqual((limits['starch_min'],limits['starch_ideal_max'],limits['starch_max'],limits['starch_hard_max']),(28.0,40.0,45.0,45.0))
         self.assertEqual((limits['roughage_min'],limits['roughage_max']),(30.0,40.0))
 
     def test_ration_target_panel_contains_combined_starch_rumen_card(self):
@@ -303,7 +660,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('Göreli asidoz riski',html)
         self.assertIn('klinik pH değildir',html)
         self.assertIn('target-mini-starch-current',html)
-        self.assertIn('%25–29',html)
+        self.assertIn('%28–40',html)
 
     def test_intact_male_uses_nasem_growing_bull_profile(self):
         # 520.833 kg canlı ağırlık yaklaşık 500 kg SBW'dir. Değerler NASEM
@@ -431,16 +788,26 @@ class ReportImportTests(unittest.TestCase):
         lower,upper=server.smart_feed_bounds(labeled,300,7.93,1.0,0,'Besi Geliştirme')
         self.assertEqual((lower,upper),(0.75,2.25))
 
-    def test_417_starch_hard_limit_rejects_ration_even_when_effective_fiber_is_enough(self):
+    def test_417_starch_attention_band_does_not_reject_when_effective_fiber_is_enough(self):
         targets={'dmi_kg':8.0,'cp_pct':12.0,'me_mcal_day':20.0,'ndf_min':25.0,'ca_g':35.0,'p_g':20.0}
-        limits={'starch_ideal_max':27.0,'starch_max':30.0,'endf_min':11.5,'roughage_min':37.0,'roughage_max':43.0}
+        limits={'starch_ideal_max':30.0,'starch_max':34.0,'starch_hard_max':45.0,'endf_min':11.5,'roughage_min':37.0,'roughage_max':43.0}
         metrics={'dm_kg':8.0,'cp_pct_dm':12.0,'me_mcal':20.0,'ndf_pct_dm':30.0,'endf_pct_dm':13.0,
                  'starch_pct_dm':32.0,'rapid_starch_pct_dm':0.0,'starch_degradability_coverage':0.0,
                  'roughage_pct_dm':40.0,'ca_g':35.0,'p_g':20.0}
         report=server._solver_feasibility_report(metrics,targets,limits)
-        self.assertEqual(report['status'],'unsafe')
-        self.assertTrue(any('faz üst sınırı' in item for item in report['unsafe']))
+        self.assertNotEqual(report['status'],'unsafe')
+        self.assertTrue(any('ideal bandın üzerinde' in item for item in report['warnings']))
         self.assertEqual(report['rumen_risk']['level'],'Orta')
+
+    def test_4196_starch_general_hard_limit_rejects_ration(self):
+        targets={'dmi_kg':8.0,'cp_pct':12.0,'me_mcal_day':20.0,'ndf_min':25.0,'ca_g':35.0,'p_g':20.0}
+        limits={'starch_ideal_max':30.0,'starch_max':34.0,'starch_hard_max':45.0,'endf_min':11.5,'roughage_min':37.0,'roughage_max':43.0}
+        metrics={'dm_kg':8.0,'cp_pct_dm':12.0,'me_mcal':20.0,'ndf_pct_dm':30.0,'endf_pct_dm':13.0,
+                 'starch_pct_dm':46.0,'rapid_starch_pct_dm':0.0,'starch_degradability_coverage':0.0,
+                 'roughage_pct_dm':40.0,'ca_g':35.0,'p_g':20.0}
+        report=server._solver_feasibility_report(metrics,targets,limits)
+        self.assertEqual(report['status'],'unsafe')
+        self.assertTrue(any('genel güvenlik sınırı' in item for item in report['unsafe']))
 
     def test_high_starch_and_low_effective_fiber_are_rejected_together(self):
         targets={'dmi_kg':8.0,'cp_pct':12.0,'me_mcal_day':20.0,'ndf_min':25.0,'ca_g':35.0,'p_g':20.0}
@@ -729,7 +1096,7 @@ class ReportImportTests(unittest.TestCase):
     def test_4191_field_260kg_eight_feed_set_solves_inside_roughage_corridor(self):
         names=['ARPA EZMESİ','ARPA SAMANI','BUĞDAY KEPEĞİ',
                'SOYA KÜSPESİ, SOLVENT, %44','SUNAR 15.26 GELİŞTİRME BESİ YEMİ',
-               'SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
+               'MISIR SİLAJI, %29-33 KM',
                "YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF"]
         with server.db() as con:
             base=[dict(con.execute('select * from feed_catalog where name=?',(name,)).fetchone()) for name in names]
@@ -765,6 +1132,58 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('data-nem="{_solver_nutrient(x,\'nem_mcal_kg\'):.8f}"',source)
         self.assertIn('data-neg="{_solver_nutrient(x,\'neg_mcal_kg\'):.8f}"',source)
         self.assertNotIn('data-nem="{float(x[\'nem_mcal_kg\'] or 0):.8f}"',source)
+
+    def test_4194_blank_age_uses_yearling_dmi_from_250kg(self):
+        blank=server.nasem_dynamic_dmi(275*0.96,1.60,0,275)
+        yearling=server.nasem_dynamic_dmi(275*0.96,1.60,12,275)
+        calf=server.nasem_dynamic_dmi(200*0.96,1.60,0,200)
+        self.assertAlmostEqual(blank,yearling,places=8)
+        self.assertNotAlmostEqual(calf,yearling,places=3)
+
+    def test_4194_displayed_roughage_boundary_is_not_below(self):
+        targets={'dmi_kg':7.0,'cp_pct':12.0,'me_mcal_day':18.0,'adg':1.3,
+                 'ndf_min':25.0,'ca_g':35.0,'p_g':20.0}
+        limits={'starch_ideal_max':24.0,'starch_max':28.0,'endf_min':12.0,
+                'roughage_min':47.0,'roughage_max':53.0,'grain_max':24.0}
+        metrics={'dm_kg':7.0,'predicted_dmi_kg':7.0,'cp_pct_dm':12.0,'me_mcal':18.0,
+                 'achievable_adg_kg':1.3,'ndf_pct_dm':30.0,'endf_pct_dm':14.0,
+                 'starch_pct_dm':24.0,'rapid_starch_pct_dm':16.0,
+                 'starch_degradability_coverage':1.0,'roughage_pct_dm':46.99,
+                 'grain_pct_dm':20.0,'wheat_grain_pct_dm':20.0,'ca_g':35.0,'p_g':20.0}
+        report=server._solver_feasibility_report(metrics,targets,limits)
+        self.assertFalse(any(item.startswith('kaba yem %') for item in report['warnings']))
+
+    def test_4195_energy_priority_solves_275kg_with_selected_feeds(self):
+        names=['ARPA SAMANI','ARPA EZMESİ','BUĞDAY EZMESİ',
+               "YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF",
+               'MISIR SİLAJI, %29-33 KM','SUNAR 15.26 GELİŞTİRME BESİ YEMİ']
+        with server.db() as con:
+            feeds=[con.execute('select * from feed_catalog where name=?',(name,)).fetchone() for name in names]
+        solved,targets,message=server.solve_smart_ration(feeds,275,1.4,'Besi Erkek',0,'Otomatik')
+        self.assertIsNotNone(solved,message)
+        quantities,metrics,_=solved
+        self.assertTrue(all(value>0 for value in quantities))
+        self.assertGreaterEqual(metrics['achievable_adg_kg'],targets['adg']*.995)
+        self.assertLess(metrics['cp_pct_dm'],targets['cp_pct']*1.20)
+        self.assertFalse(any(str(x).startswith('GCAA kapasitesi') for x in metrics['feasibility']['warnings']))
+
+    def test_4195_growth_deficit_is_not_saved_as_limited_solution(self):
+        names=['ARPA SAMANI','ARPA EZMESİ','BUĞDAY EZMESİ',
+               "YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF",
+               'MISIR SİLAJI, %29-33 KM','SUNAR 15.26 GELİŞTİRME BESİ YEMİ']
+        with server.db() as con:
+            feeds=[con.execute('select * from feed_catalog where name=?',(name,)).fetchone() for name in names]
+        with patch.object(server,'_achievable_adg',return_value=1.29):
+            solved,_,message=server.solve_smart_ration(feeds,275,1.4,'Besi Erkek',0,'Otomatik')
+        self.assertIsNone(solved)
+        self.assertIn('Çözüm kaydedilmedi',message)
+        self.assertIn('GCAA kapasitesi',message)
+
+    def test_4195_saved_result_with_warning_is_not_green_solved(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        self.assertIn("const state=noSolution?'none':(bad.length||warn.length?'limited':'ok')",source)
+        self.assertIn("state==='none'?'Çözüm yok':'Sınırlı'",source)
+        self.assertIn('çözüm kaydedilmedi|çözüm bulunamadı',source)
 
     def test_3921_medicine_veterinary_schema_is_migrated(self):
         with server.db() as con:
@@ -911,5 +1330,243 @@ class ReportImportTests(unittest.TestCase):
         self.assertEqual(ids,{purchase})
 
 
+    def test_3923_hotfix122o_extra_feed_combines_with_ration_stock_once(self):
+        stamp=str(time.time_ns())
+        day=server.date.today().isoformat()
+        with server.db() as con:
+            fid=con.execute("insert into feed_catalog(name,category,active) values(?, 'Kesif Yemler',1)",(f'HF122O Yem {stamp}',)).lastrowid
+            con.execute("insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,'Giriş',100,10,'test')",(fid,day))
+            pid=con.execute("insert into paddocks(name,code,type,capacity,notes,active,created_at,updated_at) values(?,?, 'Besi',10,'',1,?,?)",(f'HF122O Padok {stamp}',f'O{stamp[-4:]}',day+'T00:00:00',day+'T00:00:00')).lastrowid
+            for idx in range(2):
+                con.execute("insert into animals(tag,nickname,gender,birth_date,status,paddock_id) values(?,?, 'Erkek','2024-01-01','Aktif',?)",(f'TR122O{stamp[-7:]}{idx}',f'Test {idx}',pid))
+            rid=con.execute("insert into rations(name,target_group,notes,active,created_at) values(?, 'Besi','',1,?)",(f'HF122O Rasyon {stamp}',day+'T00:00:00')).lastrowid
+            con.execute("insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,1)",(rid,fid))
+            con.execute("insert into paddock_rations(paddock_id,ration_id,start_date,active,notes) values(?,?,?,1,'')",(pid,rid,day))
+            con.execute("insert into paddock_extra_feeds(paddock_id,feed_id,kg_per_head_day,start_date,active,notes,created_at,updated_at) values(?,?,2,?,1,'',?,?)",(pid,fid,day,day+'T00:00:00',day+'T00:00:00'))
+            first=server.sync_daily_paddock_feed_stock(con,day)
+            rows=con.execute("select * from feed_stock_transactions where feed_id=? and tx_date=? and tx_type='Tüketim'",(fid,day)).fetchall()
+            self.assertEqual(len(rows),1)
+            self.assertAlmostEqual(float(rows[0]['quantity_kg']),6.0)
+            con.execute("update paddock_extra_feeds set kg_per_head_day=3 where paddock_id=? and feed_id=? and active=1",(pid,fid))
+            second=server.sync_daily_paddock_feed_stock(con,day)
+            rows=con.execute("select * from feed_stock_transactions where feed_id=? and tx_date=? and tx_type='Tüketim'",(fid,day)).fetchall()
+            self.assertEqual(len(rows),1)
+            self.assertAlmostEqual(float(rows[0]['quantity_kg']),8.0)
+            self.assertAlmostEqual(server.feed_stock_kg(fid,con),92.0)
+        self.assertGreaterEqual(first['created'],1)
+        self.assertGreaterEqual(second['updated'],1)
+
+    def test_3923_hotfix122o_internal_calf_cost_survives_promotion(self):
+        stamp=str(time.time_ns())
+        tag=f'TR122OCALF{stamp[-6:]}'
+        with server.db() as con:
+            cid=con.execute("insert into calves(tag,mother_id,birth_date,gender,status,purchase_price,daily_feed_cost,daily_care_cost) values(?,0,'2025-01-01','Erkek','Aktif',0,0,0)",(tag,)).lastrowid
+            con.execute("insert into calf_internal_costs(calf_id,cost_date,cost_type,quantity,unit,unit_cost,amount,notes,created_at) values(?,?,'Süt',10,'Litre',25,250,'test',?)",(cid,server.date.today().isoformat(),server.datetime.now().isoformat(timespec='seconds')))
+            calf=con.execute('select * from calves where id=?',(cid,)).fetchone()
+            _,_,operating,total=server.calf_cost_values(calf,con)
+            self.assertGreaterEqual(operating,250.0)
+            self.assertGreaterEqual(total,250.0)
+        server.promote_mature_calves()
+        with server.db() as con:
+            calf=con.execute('select promoted_animal_id from calves where id=?',(cid,)).fetchone()
+            self.assertIsNotNone(calf['promoted_animal_id'])
+            animal=con.execute('select * from animals where id=?',(calf['promoted_animal_id'],)).fetchone()
+            self.assertAlmostEqual(float(animal['internal_production_cost'] or 0),250.0)
+            _,_,operating,total=server.animal_cost_values(animal,con,'animal')
+            self.assertGreaterEqual(operating,250.0)
+            self.assertGreaterEqual(total,250.0)
+
+    def test_3923_hotfix122o_internal_cost_and_extra_feed_ui_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('paddock_extra_feeds','calf_internal_costs','İç Üretim Maliyeti',
+                       '/paddock-extra-feed/save','/calf-internal-cost/save',
+                       'Ek yem maliyeti','Toplu Rasyon Ata',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+        with server.db() as con:
+            tables={r['name'] for r in con.execute("select name from sqlite_master where type='table'")}
+            animal_cols={r['name'] for r in con.execute('pragma table_info(animals)')}
+        self.assertTrue({'paddock_extra_feeds','calf_internal_costs'} <= tables)
+        self.assertIn('internal_production_cost',animal_cols)
+
+    def test_3923_hotfix122q_extra_feed_edit_and_weight_responsive_ui(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('data-edit-extra-feed','✏ Ek Yemi Düzenle','Değişiklikleri Kaydet',
+                       'extra-feed-card','weight-history-table','weight-entry-form',
+                       'data-label="Günlük Artış"',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+
+
+    def test_3923_hotfix122r_mobile_feed_modal_and_calf_grid_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('hotfix122r-compact-mobile','hf122r-feed-open','hf122r-feed-close',
+                       'calf-entry-grid','calf-weight-form',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+
+
+    def test_3923_hotfix122s_ios_feed_modal_scroll_and_dock_hide(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('hotfix122s-ios-feed-modal','hf122s-feed-open','grid-template-rows:auto minmax(0,1fr) auto','-webkit-overflow-scrolling:touch',"dock.style.setProperty('display','none','important')","APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+
+
+    def test_3923_hotfix122t_mobile_feed_select_switches_to_quantity_step(self):
+        src=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('hotfix122t-mobile-feed-stepper','hf122t-selected','← Yem Değiştir','setSelected(true)',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,src)
+
+    def test_3923_hotfix122v_stock_reconcile_sort_and_responsive_are_packaged(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for item in ('/feed/stock-reconcile','Fiziksel Stok Eşitle','feed-sort-link',"sort_key=(q.get('sort'",'hotfix122v-responsive-stock-sort','max-width:1500px',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(item,source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
+    def test_3923_hotfix122w_feed_search_ignores_punctuation_and_turkish_case(self):
+        self.assertEqual(server._feed_search_norm('yon..'),'yon')
+        self.assertEqual(server._feed_search_norm('  MISIR, SİLAJI  '),'misir silaji')
+        self.assertIsNotNone(server._feed_search_rank('yon..','YONCA KURU OTU','Kuru Kaba Yemler','NASEM'))
+        self.assertIsNotNone(server._feed_search_rank('misir silaj','MISIR SİLAJI, %29-33 KM','Sulu Kaba Yemler','NASEM'))
+        self.assertIsNone(server._feed_search_rank('misir silaj','ARPA SAMANI','Kuru Kaba Yemler','NASEM'))
+
+    def test_3923_hotfix122w_daily_use_combines_main_ration_and_extra_feed(self):
+        stamp=str(time.time_ns());today=server.date.today().isoformat();ids={}
+        try:
+            with server.db() as con:
+                ids['feed']=con.execute("insert into feed_catalog(name,category,source,active) values(?,?,?,1)",(f'HF122W Yem {stamp}','Test','Test')).lastrowid
+                ids['paddock']=con.execute('''insert into paddocks(name,code,type,capacity,notes,active,created_at,updated_at)
+                    values(?,?,?,?,?,1,?,?)''',(f'HF122W Padok {stamp}',f'W{stamp[-6:]}','Besi',10,'',today+'T00:00:00',today+'T00:00:00')).lastrowid
+                ids['ration']=con.execute("insert into rations(name,target_group,notes,active,created_at) values(?,?,?,?,?)",(f'HF122W Rasyon {stamp}','Test','',1,today+'T00:00:00')).lastrowid
+                for index in range(2):
+                    con.execute("insert into animals(tag,gender,status,paddock_id,paddock) values(?,?,'Aktif',?,?)",(f'TR9{stamp[-10:]}{index}','Erkek',ids['paddock'],f'HF122W Padok {stamp}'))
+                con.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?)',(ids['ration'],ids['feed'],1.25))
+                con.execute('insert into paddock_rations(paddock_id,ration_id,start_date,active) values(?,?,?,1)',(ids['paddock'],ids['ration'],today))
+                now=server.datetime.now().isoformat(timespec='seconds')
+                con.execute('''insert into paddock_extra_feeds(paddock_id,feed_id,kg_per_head_day,start_date,active,notes,created_at,updated_at)
+                    values(?,?,?,?,1,'Test',?,?)''',(ids['paddock'],ids['feed'],0.75,today,now,now))
+                use=server.current_daily_feed_use(con,today)
+            self.assertAlmostEqual(use[ids['feed']],4.0)
+        finally:
+            with server.db() as con:
+                if ids.get('paddock'):
+                    con.execute('delete from paddock_feed_consumptions where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from paddock_extra_feeds where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from paddock_rations where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from animals where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from paddocks where id=?',(ids['paddock'],))
+                if ids.get('ration'):
+                    con.execute('delete from ration_item_history where ration_id=?',(ids['ration'],))
+                    con.execute('delete from ration_items where ration_id=?',(ids['ration'],))
+                    con.execute('delete from rations where id=?',(ids['ration'],))
+                if ids.get('feed'):con.execute('delete from feed_catalog where id=?',(ids['feed'],))
+
+    def test_3923_hotfix122w_future_bulk_assignment_keeps_todays_ration(self):
+        stamp=str(time.time_ns());today=server.date.today();future=(today+server.timedelta(days=3)).isoformat();ids={'feeds':[],'rations':[]}
+        try:
+            with server.db() as con:
+                for label in ('Eski','Yeni'):
+                    ids['feeds'].append(con.execute("insert into feed_catalog(name,category,source,active) values(?,?,?,1)",(f'HF122W {label} Yem {stamp}','Test','Test')).lastrowid)
+                    ids['rations'].append(con.execute("insert into rations(name,target_group,notes,active,created_at) values(?,?,?,?,?)",(f'HF122W {label} Rasyon {stamp}','Test','',1,today.isoformat()+'T00:00:00')).lastrowid)
+                ids['paddock']=con.execute('''insert into paddocks(name,code,type,capacity,notes,active,created_at,updated_at)
+                    values(?,?,?,?,?,1,?,?)''',(f'HF122W Gelecek Padok {stamp}',f'WF{stamp[-5:]}','Besi',10,'',today.isoformat()+'T00:00:00',today.isoformat()+'T00:00:00')).lastrowid
+                con.execute("insert into animals(tag,gender,status,paddock_id,paddock) values(?,?,'Aktif',?,?)",(f'TR8{stamp[-11:]}','Erkek',ids['paddock'],f'HF122W Gelecek Padok {stamp}'))
+                con.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,1)',(ids['rations'][0],ids['feeds'][0]))
+                con.execute('insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,2)',(ids['rations'][1],ids['feeds'][1]))
+                con.execute('insert into paddock_rations(paddock_id,ration_id,start_date,active) values(?,?,?,1)',(ids['paddock'],ids['rations'][0],today.isoformat()))
+            server.SESSIONS['future-bulk-ration']={'username':'admin','role':'admin'}
+            http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+            thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+            try:
+                payload={'ration_id':ids['rations'][1],'start_date':future,f'bulk_paddock_{ids["paddock"]}':'1'}
+                request=urllib.request.Request(
+                    f'http://127.0.0.1:{http.server_port}/ration/assign-bulk',
+                    data=urllib.parse.urlencode(payload).encode('utf-8'),
+                    headers={'Cookie':'sid=future-bulk-ration','Content-Type':'application/x-www-form-urlencoded'},
+                )
+                with patch.object(server,'license_status',return_value=(True,{},'')):
+                    with urllib.request.urlopen(request,timeout=15) as response:self.assertEqual(response.status,200)
+            finally:
+                http.shutdown();http.server_close();server.SESSIONS.pop('future-bulk-ration',None)
+            with server.db() as con:
+                use=server.current_daily_feed_use(con,today.isoformat())
+                rows=con.execute('select ration_id,start_date,end_date,active from paddock_rations where paddock_id=? order by start_date',(ids['paddock'],)).fetchall()
+                consumed=con.execute("select feed_id,quantity_kg from feed_stock_transactions where tx_date=? and tx_type='Tüketim' and feed_id in (?,?) order by feed_id",(today.isoformat(),*ids['feeds'])).fetchall()
+            self.assertAlmostEqual(use.get(ids['feeds'][0],0),1.0)
+            self.assertNotIn(ids['feeds'][1],use)
+            self.assertEqual(len(rows),2)
+            self.assertEqual([int(r['active']) for r in rows],[1,1])
+            self.assertEqual(len(consumed),1)
+            self.assertEqual(int(consumed[0]['feed_id']),ids['feeds'][0])
+            self.assertAlmostEqual(float(consumed[0]['quantity_kg']),1.0)
+        finally:
+            with server.db() as con:
+                if ids.get('paddock'):
+                    txids=[r['stock_tx_id'] for r in con.execute('select stock_tx_id from paddock_feed_consumptions where paddock_id=?',(ids['paddock'],)).fetchall() if r['stock_tx_id']]
+                    con.execute('delete from paddock_feed_consumptions where paddock_id=?',(ids['paddock'],))
+                    for txid in txids:con.execute('delete from feed_stock_transactions where id=?',(txid,))
+                    con.execute('delete from paddock_rations where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from animals where paddock_id=?',(ids['paddock'],))
+                    con.execute('delete from paddocks where id=?',(ids['paddock'],))
+                for rid in ids['rations']:
+                    con.execute('delete from ration_item_history where ration_id=?',(rid,));con.execute('delete from ration_items where ration_id=?',(rid,));con.execute('delete from rations where id=?',(rid,))
+                for fid in ids['feeds']:
+                    con.execute('delete from feed_cost_history where feed_id=?',(fid,));con.execute('delete from feed_catalog where id=?',(fid,))
+
+    def test_3923_hotfix122w_historical_stock_count_preserves_later_movements(self):
+        stamp=str(time.time_ns());today=server.date.today();past=(today-server.timedelta(days=1)).isoformat();older=(today-server.timedelta(days=2)).isoformat();ids={}
+        try:
+            with server.db() as con:
+                ids['feed']=con.execute("insert into feed_catalog(name,category,source,active) values(?,?,?,1)",(f'HF122W Sayım Yem {stamp}','Test','Test')).lastrowid
+                for day,kind,quantity in ((older,'Giriş',100),(past,'Çıkış',20),(today.isoformat(),'Giriş',10)):
+                    con.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,0,?)',(ids['feed'],day,kind,quantity,'Test'))
+                self.assertAlmostEqual(server.feed_stock_kg(ids['feed'],con,past),80.0)
+            server.SESSIONS['stock-count']={'username':'admin','role':'admin'}
+            http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+            thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+            try:
+                def post_count(day,physical):
+                    request=urllib.request.Request(
+                        f'http://127.0.0.1:{http.server_port}/feed/stock-reconcile',
+                        data=urllib.parse.urlencode({'feed_id':ids['feed'],'physical_qty_kg':physical,'tx_date':day,'notes':'Test sayımı'}).encode('utf-8'),
+                        headers={'Cookie':'sid=stock-count','Content-Type':'application/x-www-form-urlencoded'},
+                    )
+                    with patch.object(server,'license_status',return_value=(True,{},'')):
+                        with urllib.request.urlopen(request,timeout=15) as response:return response.read().decode('utf-8')
+                post_count(past,'70')
+                post_count((today+server.timedelta(days=1)).isoformat(),'50')
+            finally:
+                http.shutdown();http.server_close();server.SESSIONS.pop('stock-count',None)
+            with server.db() as con:
+                count_row=con.execute("select tx_type,quantity_kg from feed_stock_transactions where feed_id=? and tx_date=? and tx_type like 'Sayım %'",(ids['feed'],past)).fetchone()
+                future_count=con.execute("select count(*) from feed_stock_transactions where feed_id=? and tx_date>? and tx_type like 'Sayım %'",(ids['feed'],today.isoformat())).fetchone()[0]
+                present=server.feed_stock_kg(ids['feed'],con)
+            self.assertIsNotNone(count_row)
+            self.assertEqual(count_row['tx_type'],'Sayım -')
+            self.assertAlmostEqual(float(count_row['quantity_kg']),10.0)
+            self.assertEqual(future_count,0)
+            self.assertAlmostEqual(present,80.0)
+        finally:
+            with server.db() as con:
+                if ids.get('feed'):
+                    con.execute('delete from feed_cost_history where feed_id=?',(ids['feed'],))
+                    con.execute('delete from feed_stock_transactions where feed_id=?',(ids['feed'],))
+                    con.execute('delete from feed_catalog where id=?',(ids['feed'],))
+
+    def test_3923_hotfix122w_low_resolution_science_panel_is_forced_visible(self):
+        source=Path(server.__file__).read_text(encoding='utf-8')
+        for marker in ('hotfix122w-science-panel-visibility','science-target-shell.wb2-desktop-open',
+                       'content-visibility:visible','grid-template-columns:repeat(2,minmax(0,1fr))',
+                       'max-width:1500px',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+            self.assertIn(marker,source)
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22aa')
+
 if __name__ == "__main__":
     unittest.main()
+
+
+# Hotfix1.22w source regression marker test is intentionally source-level because
+# feed catalog rendering is an authenticated HTTP page in production.
+def _hotfix122u_source_test():
+    source=Path(__file__).resolve().parents[1].joinpath('app','server.py').read_text(encoding='utf-8')
+    for marker in ('_feed_search_norm','tüm katalogda aranır','Tüm katalogda aranıyor…','timer=setTimeout(submitAll,350)',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
+        assert marker in source, marker

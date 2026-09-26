@@ -24,7 +24,7 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.16'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22a'
 APP_CHANNEL='RELEASE'
 # Tek sürüm kaynağı: login, footer, yedek manifesti ve diğer ekranlar aynı değeri kullanır.
 APP_LABEL='v'+APP_VERSION
@@ -788,10 +788,30 @@ def init_db():
         CREATE UNIQUE INDEX IF NOT EXISTS idx_feed_cost_history_day ON feed_cost_history(feed_id,effective_date);
         CREATE TABLE IF NOT EXISTS feed_stock_transactions(id INTEGER PRIMARY KEY,feed_id INTEGER NOT NULL,tx_date TEXT NOT NULL,tx_type TEXT NOT NULL,quantity_kg REAL NOT NULL,unit_price REAL DEFAULT 0,notes TEXT);
         CREATE TABLE IF NOT EXISTS rations(id INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,target_group TEXT,notes TEXT,active INTEGER DEFAULT 1,created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS ration_items(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,kg_per_head_day REAL NOT NULL,UNIQUE(ration_id,feed_id));
+        CREATE TABLE IF NOT EXISTS ration_items(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,kg_per_head_day REAL NOT NULL,locked INTEGER DEFAULT 0,UNIQUE(ration_id,feed_id));
         CREATE TABLE IF NOT EXISTS ration_item_history(id INTEGER PRIMARY KEY,ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,effective_date TEXT NOT NULL,kg_per_head_day REAL NOT NULL,created_at TEXT NOT NULL,notes TEXT);
         CREATE INDEX IF NOT EXISTS idx_ration_item_history_lookup ON ration_item_history(ration_id,feed_id,effective_date,id);
         CREATE TABLE IF NOT EXISTS paddock_rations(id INTEGER PRIMARY KEY,paddock_id INTEGER NOT NULL,ration_id INTEGER NOT NULL,start_date TEXT NOT NULL,end_date TEXT,active INTEGER DEFAULT 1,notes TEXT);
+        CREATE TABLE IF NOT EXISTS paddock_extra_feeds(
+            id INTEGER PRIMARY KEY,paddock_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,
+            kg_per_head_day REAL NOT NULL DEFAULT 0,start_date TEXT NOT NULL,end_date TEXT,
+            active INTEGER DEFAULT 1,notes TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_paddock_extra_feeds_lookup
+            ON paddock_extra_feeds(paddock_id,feed_id,start_date,end_date,active);
+        CREATE TABLE IF NOT EXISTS calf_internal_costs(
+            id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,cost_date TEXT NOT NULL,cost_type TEXT NOT NULL,
+            feed_id INTEGER,quantity REAL DEFAULT 0,unit TEXT,unit_cost REAL DEFAULT 0,amount REAL NOT NULL DEFAULT 0,
+            stock_tx_id INTEGER,notes TEXT,created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_calf_internal_costs_calf_date
+            ON calf_internal_costs(calf_id,cost_date,id);
+        CREATE TABLE IF NOT EXISTS paddock_feed_consumptions(
+            id INTEGER PRIMARY KEY,consumption_date TEXT NOT NULL,paddock_id INTEGER NOT NULL,
+            ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,animal_count INTEGER DEFAULT 0,
+            kg_per_head_day REAL DEFAULT 0,quantity_kg REAL DEFAULT 0,stock_tx_id INTEGER UNIQUE,
+            created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+            UNIQUE(consumption_date,paddock_id,feed_id));
+        CREATE INDEX IF NOT EXISTS idx_paddock_feed_consumptions_date
+            ON paddock_feed_consumptions(consumption_date,paddock_id);
         CREATE TABLE IF NOT EXISTS action_completion_claims(action_key TEXT PRIMARY KEY,created_at TEXT NOT NULL);
         ''')
         paddock_cols={r[1] for r in c.execute('pragma table_info(paddocks)').fetchall()}
@@ -1018,6 +1038,9 @@ def init_db():
         ration_cols={r[1] for r in c.execute('pragma table_info(rations)').fetchall()}
         for col,typ in [('target_weight_kg','REAL DEFAULT 450'),('target_adg_kg','REAL DEFAULT 1.3'),('animal_type',"TEXT DEFAULT 'Besi Erkek'"),('ration_type',"TEXT DEFAULT 'Besi'"),('target_milk_l','REAL DEFAULT 25'),('milk_fat_pct','REAL DEFAULT 3.8'),('milk_protein_pct','REAL DEFAULT 3.2'),('target_age_months','REAL DEFAULT 0'),('target_beef_phase',"TEXT DEFAULT 'Otomatik'")]:
             if col not in ration_cols:c.execute(f'ALTER TABLE rations ADD COLUMN {col} {typ}')
+        ration_item_cols={r[1] for r in c.execute('pragma table_info(ration_items)').fetchall()}
+        if 'locked' not in ration_item_cols:
+            c.execute('ALTER TABLE ration_items ADD COLUMN locked INTEGER DEFAULT 0')
         # Rasyon miktar geçmişi: mevcut rasyonları başlangıç revizyonu olarak koru.
         # Böylece padoka atama tarihinden sonraki maliyetler ilerideki rasyon değişiklikleriyle geriye dönük bozulmaz.
         for ri in c.execute('''select ri.ration_id,ri.feed_id,ri.kg_per_head_day,r.created_at
@@ -1092,7 +1115,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS calf_weights(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,measure_date TEXT NOT NULL,weight REAL NOT NULL,notes TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS calf_photos(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,filename TEXT NOT NULL,created_at TEXT NOT NULL,caption TEXT)")
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
-        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\''),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT'),('mother_id','INTEGER'),('father_tag','TEXT')]:
+        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\''),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT'),('mother_id','INTEGER'),('father_tag','TEXT'),('internal_production_cost','REAL DEFAULT 0')]:
             if col not in cols:c.execute(f'ALTER TABLE animals ADD COLUMN {col} {typ}')
         # V3.9.0 Padok + Yem/Rasyon veri modeli
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
@@ -1264,6 +1287,17 @@ def init_db():
             print('HOTFIX 6.13 yem kataloğu gerçek DB migrasyonu kontrol edildi.')
         except Exception as exc:
             print('HOTFIX 6.13 yem kataloğu migrasyonu uygulanamadı:',exc)
+        # Hotfix1.22f: Mısır flake için eski %75/%90 nişasta kayıtlarını
+        # katalog ortalamasına çek. Kesif yem sınıfını da mevcut DB'lere uygula.
+        # 65-70 aralığının ortası kullanılır; makul laboratuvar kayıtları korunur.
+        try:
+            _patch_feed('MISIR PULU (FLAKED)',{
+                'category':'Kesif Yemler','dm_pct':87.0,'cp_pct':8.5,'starch_pct':67.5,
+                'fat_pct':2.0,'me_mcal_kg':3.10,
+                'source':'ÇiftlikPro Hotfix1.22f · Mısır flake katalog ortalama aralığı'
+            },"starch_pct>80 OR starch_pct between 74.5 and 75.5 OR dm_pct>90 OR fat_pct>4 OR category like 'Sulu Kaba%'")
+        except Exception as exc:
+            print('Hotfix1.22f mısır flake güncellemesi uygulanamadı:',exc)
         # DEV10: Ezme adları JSON'da kalmasın; mevcut kullanıcı veritabanlarına da ekle.
         # Besin değerleri uygulamanın kendi feed_catalog.json kaydından gelir; mevcut kullanıcı yemleri değiştirilmez.
         try:
@@ -1749,8 +1783,38 @@ def dashboard_layout(username):
         pass
     return DASHBOARD_DEFAULT_LAYOUT[:]
 
+def dashboard_view(username):
+    """Kullanıcının Dashboard tercihini döndürür; eski hesaplarda Modern varsayılandır."""
+    key='dashboard_view_'+str(username)
+    try:
+        with db() as c:
+            r=c.execute("select setting_value from settings where setting_key=?",(key,)).fetchone()
+        value=str(r['setting_value'] or '').strip().lower() if r else ''
+        if value in ('modern','classic'):
+            return value
+    except Exception:
+        pass
+    return 'modern'
+
 def h(s):
     return str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
+
+def _feed_search_norm(value):
+    """Yem aramasını Türkçe karakter, noktalama ve fazla boşluktan arındırır."""
+    text=unicodedata.normalize('NFD',str(value or '').casefold())
+    text=''.join(ch for ch in text if unicodedata.category(ch)!='Mn')
+    text=text.translate(str.maketrans({'ı':'i','ş':'s','ğ':'g','ü':'u','ö':'o','ç':'c'}))
+    return ' '.join(re.sub(r'[^a-z0-9]+',' ',text).split())
+
+def _feed_search_rank(query,name,category='',source=''):
+    """Eşleşmeyene None, ad eşleşmesini öne alan kararlı bir sıralama döndürür."""
+    tokens=_feed_search_norm(query).split()
+    if not tokens:return (0,0,_feed_search_norm(name))
+    name_norm=_feed_search_norm(name)
+    haystack=_feed_search_norm(' '.join((str(name or ''),str(category or ''),str(source or ''))))
+    if not all(token in haystack for token in tokens):return None
+    return (0 if all(token in name_norm for token in tokens) else 1,
+            0 if name_norm.startswith(tokens[0]) else 1,name_norm)
 
 def money(v):
     return f"₺{float(v or 0):,.2f}".replace(',','X').replace('.',',').replace('X','.')
@@ -1769,6 +1833,14 @@ def fmt_datetime(v):
         return d.strftime('%d/%m/%Y %H:%M')
     except Exception:
         return fmt_date(v)
+
+def day_greeting(hour=None):
+    """Yerel saate göre Dashboard karşılama metni."""
+    current_hour=datetime.now().hour if hour is None else int(hour)%24
+    if 5<=current_hour<12:return 'Günaydın'
+    if 12<=current_hour<18:return 'İyi Günler'
+    if 18<=current_hour<22:return 'İyi Akşamlar'
+    return 'İyi Geceler'
 
 def current_pregnancy_record(c, animal_id):
     latest=c.execute("select * from inseminations where animal_id=? order by insemination_date desc,id desc limit 1",(animal_id,)).fetchone()
@@ -1849,6 +1921,55 @@ def ration_cost_between(c, ration_id, start_day, end_day):
     return total
 
 
+def paddock_extra_feeds_on_date(c, paddock_id, on_date):
+    d=str(on_date)[:10]
+    return c.execute('''select pef.*,f.name,f.category,f.dm_pct,f.cp_pct,f.ndf_pct
+        from paddock_extra_feeds pef join feed_catalog f on f.id=pef.feed_id
+        where pef.paddock_id=? and pef.start_date<=?
+          and (pef.end_date is null or trim(pef.end_date)='' or pef.end_date>=?)
+        order by f.name,pef.id''',(int(paddock_id),d,d)).fetchall()
+
+
+def paddock_extra_feed_cost_on_date(c, paddock_id, on_date):
+    total=0.0
+    for row in paddock_extra_feeds_on_date(c,paddock_id,on_date):
+        total += max(0.0,float(row['kg_per_head_day'] or 0))*current_feed_price(int(row['feed_id']),c,str(on_date)[:10])
+    return total
+
+
+def paddock_extra_feed_cost_between(c, paddock_id, start_day, end_day):
+    if not paddock_id or end_day<=start_day:return 0.0
+    rows=c.execute('''select * from paddock_extra_feeds
+        where paddock_id=? and start_date<? and (end_date is null or trim(end_date)='' or end_date>=?)''',
+        (int(paddock_id),end_day.isoformat(),start_day.isoformat())).fetchall()
+    if not rows:return 0.0
+    feed_ids=sorted({int(r['feed_id']) for r in rows})
+    bounds={start_day,end_day}
+    for r in rows:
+        try:
+            s=date.fromisoformat(str(r['start_date'])[:10])
+            if start_day<s<end_day:bounds.add(s)
+        except Exception:pass
+        try:
+            if r['end_date']:
+                e=date.fromisoformat(str(r['end_date'])[:10])+timedelta(days=1)
+                if start_day<e<end_day:bounds.add(e)
+        except Exception:pass
+    if feed_ids:
+        ph=','.join('?'*len(feed_ids));s0=start_day.isoformat();e0=end_day.isoformat()
+        price_rows=c.execute(f'''select distinct effective_date from feed_cost_history where feed_id in ({ph}) and effective_date>? and effective_date<?
+                                union select distinct effective_date from feed_prices where feed_id in ({ph}) and effective_date>? and effective_date<?''',
+                             (*feed_ids,s0,e0,*feed_ids,s0,e0)).fetchall()
+        for r in price_rows:
+            try:bounds.add(date.fromisoformat(str(r['effective_date'])[:10]))
+            except Exception:pass
+    total=0.0;pts=sorted(bounds)
+    for a,b in zip(pts,pts[1:]):
+        days=max(0,(b-a).days)
+        if days:total+=days*paddock_extra_feed_cost_on_date(c,paddock_id,a.isoformat())
+    return total
+
+
 def animal_paddock_intervals(c, a, start_day, end_day, source='animal'):
     # Hayvanın [start,end) dönemindeki padoklarını tarih aralıkları halinde döndürür.
     aid=int(a['id']); current_pid=a['paddock_id'] if 'paddock_id' in a.keys() else None
@@ -1901,6 +2022,7 @@ def paddock_feed_cost_between(c, paddock_id, start_day, end_day, manual_daily_fe
         if cur>=end_day:break
     if cur<end_day:
         d=(end_day-cur).days;total+=d*manual_daily_feed;manual_days+=d
+    total += paddock_extra_feed_cost_between(c,paddock_id,start_day,end_day)
     return total,ration_days,manual_days
 
 
@@ -1914,9 +2036,12 @@ def animal_current_feed_context(a, con=None, on_date=None):
             pr=c.execute('''select pr.*,r.name ration_name from paddock_rations pr join rations r on r.id=pr.ration_id
                 where pr.paddock_id=? and pr.start_date<=? and (pr.end_date is null or pr.end_date='' or pr.end_date>=?)
                 order by pr.start_date desc,pr.id desc limit 1''',(pid,d,d)).fetchone()
+            extra_cost=paddock_extra_feed_cost_on_date(c,pid,d)
             if pr:
-                return {'feed_cost':ration_cost_on_date(c,int(pr['ration_id']),d),'source':'ration','ration_name':pr['ration_name'],'start_date':pr['start_date'],'paddock_id':pid}
-        return {'feed_cost':manual,'source':'manual','ration_name':'','start_date':'','paddock_id':pid}
+                return {'feed_cost':ration_cost_on_date(c,int(pr['ration_id']),d)+extra_cost,'base_feed_cost':ration_cost_on_date(c,int(pr['ration_id']),d),'extra_feed_cost':extra_cost,'source':'ration','ration_name':pr['ration_name'],'start_date':pr['start_date'],'paddock_id':pid}
+            if extra_cost>0:
+                return {'feed_cost':manual+extra_cost,'base_feed_cost':manual,'extra_feed_cost':extra_cost,'source':'manual+extra','ration_name':'','start_date':'','paddock_id':pid}
+        return {'feed_cost':manual,'base_feed_cost':manual,'extra_feed_cost':0.0,'source':'manual','ration_name':'','start_date':'','paddock_id':pid}
     finally:
         if own:c.close()
 
@@ -1939,7 +2064,12 @@ def animal_cost_values(a, con=None, source='animal'):
         feed_acc=0.0
         for a0,b0,pid in animal_paddock_intervals(c,a,start_date,end_date,source):
             part,_,_=paddock_feed_cost_between(c,pid,a0,b0,manual_feed);feed_acc+=part
-        accumulated=feed_acc + days*care
+        internal_cost=0.0
+        if source=='calf':
+            internal_cost=float(c.execute('select coalesce(sum(amount),0) total from calf_internal_costs where calf_id=?',(int(a['id']),)).fetchone()['total'] or 0)
+        elif 'internal_production_cost' in a.keys():
+            internal_cost=float(a['internal_production_cost'] or 0)
+        accumulated=feed_acc + days*care + internal_cost
         ctx=animal_current_feed_context(a,c,end_date.isoformat())
         daily=float(ctx['feed_cost'])+care
         return days,daily,accumulated,purchase+accumulated
@@ -1949,6 +2079,11 @@ def animal_cost_values(a, con=None, source='animal'):
 def calf_cost_values(calf, con=None):
     """Buzağıları yetişkinlerle aynı tarihsel padok/rasyon maliyet motorunda hesaplar."""
     return animal_cost_values(calf,con,'calf')
+
+
+def calf_internal_cost_total(c, calf_id):
+    row=c.execute('select coalesce(sum(amount),0) total from calf_internal_costs where calf_id=?',(int(calf_id),)).fetchone()
+    return float(row['total'] or 0) if row else 0.0
 
 
 def animal_loss_breakdown(c, rec, source, event_date):
@@ -2098,11 +2233,14 @@ def feed_weighted_cost(feed_id, con=None, on_date=None):
 def current_feed_price(feed_id, con=None, on_date=None):
     return feed_weighted_cost(feed_id,con,on_date)
 
-def feed_stock_kg(feed_id, con=None):
+def feed_stock_kg(feed_id, con=None, on_date=None):
     own=con is None
     c=con or db().__enter__()
     try:
-        r=c.execute("select coalesce(sum(case when tx_type in ('Giriş','Sayım +') then quantity_kg when tx_type in ('Çıkış','Tüketim','Sayım -') then -quantity_kg else 0 end),0) qty from feed_stock_transactions where feed_id=?",(feed_id,)).fetchone()
+        if on_date:
+            r=c.execute("select coalesce(sum(case when tx_type in ('Giriş','Sayım +') then quantity_kg when tx_type in ('Çıkış','Tüketim','Sayım -') then -quantity_kg else 0 end),0) qty from feed_stock_transactions where feed_id=? and tx_date<=?",(feed_id,str(on_date)[:10])).fetchone()
+        else:
+            r=c.execute("select coalesce(sum(case when tx_type in ('Giriş','Sayım +') then quantity_kg when tx_type in ('Çıkış','Tüketim','Sayım -') then -quantity_kg else 0 end),0) qty from feed_stock_transactions where feed_id=?",(feed_id,)).fetchone()
         return float(r['qty'] or 0)
     finally:
         if own:c.close()
@@ -2131,7 +2269,7 @@ def ration_summary(ration_id, con=None):
     own=con is None
     c=con or db().__enter__()
     try:
-        sql="""select ri.id item_id,ri.kg_per_head_day,f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
+        sql="""select ri.id item_id,ri.kg_per_head_day,coalesce(ri.locked,0) locked,f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price
                  from ration_items ri join feed_catalog f on f.id=ri.feed_id where ri.ration_id=? order by f.name"""
         rows=c.execute(sql,(date.today().isoformat(),ration_id)).fetchall()
         out={'as_fed_kg':0.0,'dm_kg':0.0,'cp_kg':0.0,'ndf_kg':0.0,'endf_kg':0.0,'starch_kg':0.0,
@@ -2214,7 +2352,11 @@ def nasem_dynamic_dmi(sbw_kg, nem_density, age_months=0, weight_kg=0):
     sbw=max(1.0,float(sbw_kg or 0)); nem=max(0.70,min(float(nem_density or 1.55),2.50))
     nema=max(nem,0.95)
     age=float(age_months or 0); w=float(weight_kg or 0)
-    is_yearling=(age>=12.0) if age>0 else (w>=300.0)
+    # Yaş alanı isteğe bağlıdır. Boş bırakılan 250 kg ve üzeri besi hayvanını
+    # otomatik olarak "buzağı" denklemine düşürmek aynı yem setini gereksiz yere
+    # daha düşük tüketim kapasitesine kilitliyordu. 250 kg altı genç hayvanlarda
+    # muhafazakâr buzağı denklemi korunur; yaş girilmişse gerçek yaş belirleyicidir.
+    is_yearling=(age>=12.0) if age>0 else (w>=250.0)
     intercept=0.0869 if is_yearling else 0.1128
     dmi=(sbw**0.75)*(0.2435*nema-0.0466*(nema**2)-intercept)/nema
     return max(0.0,dmi)
@@ -2228,19 +2370,20 @@ def _reference_nem_density(weight_kg, age_months=0):
     return 1.84
 
 def beef_starch_targets(phase):
-    """Besi dönemi için muhafazakâr çalışma/uyarı bandı (% KM).
+    """Besi dönemi için literatür-temelli çalışma/uyarı bandı (% KM).
 
     İdeal bant solver için yumuşak yönlendirmedir; enerji, NDF/eNDF ve kaba/kesif
-    hedeflerinin önüne geçmez. ``starch_max`` adı geriye uyumluluk için korunur,
-    fakat değer evrensel fizyolojik üst sınır değildir: üzerinde tek başına çözüm
-    reddedilmez; hızlı nişasta, etkili lif, işleme ve adaptasyonla birlikte uyarı
-    eşiği olarak değerlendirilir.
+    hedeflerinin önüne geçmez. ``starch_max`` dikkat bandının sonudur; tek başına
+    fizyolojik bir duvar değildir. ``starch_hard_max`` genel güvenlik kapısıdır.
+    Aradaki sonuç hızlı nişasta, etkili lif, işleme ve adaptasyonla birlikte
+    değerlendirilir. Faz adları mevcut kayıtlarla geriye uyumlu tutulur:
+    Başlangıç=büyütme, Geliştirme=orta/ileri besi.
     """
     return {
-        'Besi Başlangıç':{'starch_min':20.0,'starch_ideal_max':24.0,'starch_max':28.0},
-        'Besi Geliştirme':{'starch_min':23.0,'starch_ideal_max':27.0,'starch_max':30.0},
-        'Besi Bitirme':{'starch_min':25.0,'starch_ideal_max':29.0,'starch_max':31.0},
-    }.get(str(phase),{'starch_min':23.0,'starch_ideal_max':27.0,'starch_max':30.0})
+        'Besi Başlangıç':{'starch_min':20.0,'starch_ideal_max':30.0,'starch_max':34.0,'starch_hard_max':45.0},
+        'Besi Geliştirme':{'starch_min':24.0,'starch_ideal_max':36.0,'starch_max':40.0,'starch_hard_max':45.0},
+        'Besi Bitirme':{'starch_min':28.0,'starch_ideal_max':40.0,'starch_max':45.0,'starch_hard_max':45.0},
+    }.get(str(phase),{'starch_min':20.0,'starch_ideal_max':30.0,'starch_max':34.0,'starch_hard_max':45.0})
 
 def _beef_animal_profile(animal_type):
     """NASEM Chapter 20 hayvan profilini kullanıcı seçimiyle eşleştirir.
@@ -2430,6 +2573,36 @@ def _commercial_feed_kind(feed):
     if any(x in name for x in ('BESİ YEMİ','BESI YEMI','BUZAĞI','BUZAGI','GELİŞTİRME BESİ','GELISTIRME BESI')):
         return 'beef'
     return 'neutral'
+
+def feed_age_phase_compatibility(feed, age_months=0, phase_override='Otomatik', ration_type='Besi'):
+    """Ürün kaynağında açık yaş/gün aralığı varsa hedef profille uyumunu denetler.
+
+    Yaş girilmemişse ürün hakkında varsayım yapılmaz. Katalog kaynağındaki açık
+    ``60-120 gün`` gibi aralıklar ise yalnız kullanım uygunluğu kapısıdır; yemin
+    besin değerini veya solver matematiğini değiştirmez.
+    """
+    if str(ration_type or 'Besi').strip().lower().startswith(('süt','sut')):
+        return True,''
+    try: age=float(age_months or 0)
+    except Exception: age=0.0
+    if age<=0:return True,''
+    name=str(_rowval(feed,'name','') or '')
+    evidence=' · '.join(str(_rowval(feed,key,'') or '') for key in ('source','constraint_source'))
+    match=re.search(r'(\d{1,3})\s*[-–]\s*(\d{1,3})\s*gün',evidence,re.IGNORECASE)
+    if not match:return True,''
+    low_days,high_days=float(match.group(1)),float(match.group(2))
+    age_days=age*30.4375
+    if low_days-1e-6<=age_days<=high_days+1e-6:return True,''
+    return False,(f'{name}: ürün kaynağı {low_days:.0f}–{high_days:.0f} günlük kullanım dönemi bildiriyor; '
+                  f'hedef hayvan {age:g} aylık. Yemi çıkarın veya yaş/dönem bilgisini düzeltin.')
+
+def incompatible_feeds_for_profile(feeds, age_months=0, phase_override='Otomatik', ration_type='Besi'):
+    """Hedef profile açıkça uymayan seçili yemleri (yem, açıklama) olarak döndürür."""
+    result=[]
+    for feed in feeds:
+        ok,reason=feed_age_phase_compatibility(feed,age_months,phase_override,ration_type)
+        if not ok:result.append((feed,reason))
+    return result
 
 def _commercial_profile_penalty(feeds, qtys, animal_type, target_dm):
     """Karşı profile ait ticari yemi yasaklamadan güçlü biçimde geri plana atar."""
@@ -2790,14 +2963,25 @@ def _solver_feasibility_report(metrics, targets, limits):
     adg_value=float(metrics.get('achievable_adg_kg') or 0)
     adg_signed=(adg_value-adg_target)/adg_target if adg_target>0 else 0.0
     rough=float(metrics.get('roughage_pct_dm') or 0)
+    # Kullanıcıya tek ondalık gösterilen değer ile karar aynı hassasiyette olsun.
+    # Örn. 46.99 ekranda %47.0 iken "%47'nin altında" denmemeli.
+    rough_cmp=round(rough,1)
+    rough_min=float(limits.get('roughage_min') or 0)
+    rough_max=float(limits.get('roughage_max') or 100)
     unsafe=[]; blockers=[]; warnings=[]
     rumen_risk=_rumen_risk_assessment(metrics,limits)
-    # DEV4.17: İdeal üstü ile sert üst arasındaki dikkat bandı kullanılabilir;
-    # fazın sert nişasta üst sınırı aşılırsa çözüm kaydedilmez.
+    # DEV4.19.6: Fazın ideal ve dikkat bantları optimizasyon yönlendirmesidir.
+    # Nişasta tek başına yalnız genel sert güvenlik sınırında çözümü reddeder;
+    # daha aşağıda eNDF ve etkin rumen nişastasıyla birlikte değerlendirilir.
     starch=float(metrics.get('starch_pct_dm') or 0)
     starch_max=float(limits.get('starch_max') or 100)
-    if starch>starch_max+.05:
-        unsafe.append(f'nişasta %{starch:.1f}; faz üst sınırı %{starch_max:.1f}')
+    starch_hard_max=float(limits.get('starch_hard_max') or 45.0)
+    if starch>starch_hard_max+.05:
+        unsafe.append(f'nişasta %{starch:.1f}; genel güvenlik sınırı %{starch_hard_max:.1f}')
+    elif starch>starch_max+.05:
+        warnings.append(f'nişasta %{starch:.1f}; faz dikkat bandı %{starch_max:.1f} üzerinde')
+    elif starch>float(limits.get('starch_ideal_max') or starch_max)+.05:
+        warnings.append(f'nişasta %{starch:.1f}; ideal bandın üzerinde')
     if rumen_risk['level']=='Yüksek' and (
         starch>starch_max
         or float(metrics.get('endf_pct_dm') or 0)<float(limits.get('endf_min') or 0)):
@@ -2836,9 +3020,9 @@ def _solver_feasibility_report(metrics, targets, limits):
     if adg_target>0:
         if adg_signed<-.015:blockers.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
         elif adg_signed<-.005:warnings.append(f'GCAA kapasitesi {adg_signed*100:+.1f}%')
-    if rough<float(limits.get('roughage_min') or 0)-5 or rough>float(limits.get('roughage_max') or 100)+5:
+    if rough_cmp<rough_min-5 or rough_cmp>rough_max+5:
         unsafe.append(f'kaba yem KM payı %{rough:.1f}; faz koridoru dışında')
-    elif rough<float(limits.get('roughage_min') or 0) or rough>float(limits.get('roughage_max') or 100):
+    elif rough_cmp<rough_min or rough_cmp>rough_max:
         warnings.append(f'kaba yem %{rough:.1f}')
 
     # Bir tek ciddi kartta sapma varsa kullanıcıya "sınırlı" çözüm gösterilebilir;
@@ -2907,12 +3091,14 @@ def _ration_assistant(feeds,m,t,lim):
         else: tips.append('Protein yetersiz: soya/kanola/ayçiçeği küspesi veya uygun proteinli besi yemi ekleyin.')
     if m['endf_pct_dm']<lim['endf_min']:
         tips.append('Etkili lif düşük: saman/yonca/uygun kuru ot gibi fiziksel etkili kaba yem ekleyin veya tahılı azaltın.')
-    elif m['roughage_pct_dm']<lim['roughage_min']:
+    elif round(float(m['roughage_pct_dm']),1)<float(lim['roughage_min']):
         tips.append(f'Kaba yem KM oranı faz koridorunun altında (%{m["roughage_pct_dm"]:.1f}; hedef %{lim["roughage_min"]:.0f}–%{lim["roughage_max"]:.0f}). eNDF yeterli olsa da kaba/kesif dağılımını düzeltmek için uygun kaba yemi artırın veya kesif yemi azaltın.')
-    elif m['roughage_pct_dm']>lim['roughage_max']:
+    elif round(float(m['roughage_pct_dm']),1)>float(lim['roughage_max']):
         tips.append(f'Kaba yem KM oranı faz koridorunun üzerinde (%{m["roughage_pct_dm"]:.1f}; hedef %{lim["roughage_min"]:.0f}–%{lim["roughage_max"]:.0f}). Enerji yoğunluğunu ve GCAA kapasitesini koruyarak kaba/kesif dağılımını yeniden dengeleyin.')
-    if m['starch_pct_dm']>lim['starch_max']:
-        tips.append('Nişasta yüksek: buğday/arpa gibi hızlı fermente tahılı azaltın; kaba yem veya daha düşük nişastalı enerji kaynağı ekleyin.')
+    if m['starch_pct_dm']>lim.get('starch_hard_max',45.0):
+        tips.append('Nişasta genel güvenlik sınırında: hızlı fermente tahılı azaltın; etkili lifi ve daha düşük nişastalı enerji kaynaklarını artırın.')
+    elif m['starch_pct_dm']>lim['starch_max']:
+        tips.append(f'Nişasta faz dikkat bandının üzerinde (%{lim["starch_max"]:.0f}); arpa/buğday işleme inceliği, adaptasyon ve eNDF birlikte kontrol edilmeli.')
     elif m['starch_pct_dm']>lim['starch_ideal_max']+.5:
         tips.append(f'Nişasta ideal bandın üzerinde (%{lim["starch_ideal_max"]:.0f}–%{lim["starch_max"]:.0f} dikkat bölgesi): arpa/buğday miktarı, yem işleme inceliği ve eNDF birlikte kontrol edilmeli.')
     cap=m['ca_g']/m['p_g'] if m['p_g']>0 else 99
@@ -3079,9 +3265,12 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     """
     import random as _random, time as _time
     t=ration_requirement_targets(weight_kg,target_adg,animal_type,age_months,phase_override)
+    incompatible=incompatible_feeds_for_profile(feeds,age_months,phase_override,'Besi')
+    if incompatible:
+        return None,t,'Yaş/dönem uyumsuz yem: '+'; '.join(reason for _,reason in incompatible)
     lim=beef_phase_limits(t['weight_kg'],target_adg,t['dmi_kg'],age_months,phase_override)
     t['roughage_min'],t['roughage_max']=lim['roughage_min'],lim['roughage_max']
-    t['endf_min']=lim['endf_min'];t['starch_min']=lim['starch_min'];t['starch_ideal_max']=lim['starch_ideal_max'];t['starch_max']=lim['starch_max'];t['phase']=lim['phase']
+    t['endf_min']=lim['endf_min'];t['starch_min']=lim['starch_min'];t['starch_ideal_max']=lim['starch_ideal_max'];t['starch_max']=lim['starch_max'];t['starch_hard_max']=lim['starch_hard_max'];t['phase']=lim['phase']
     lim['grain_max']={'Besi Başlangıç':24.0,'Besi Geliştirme':30.0,'Besi Bitirme':34.0}.get(lim['phase'],30.0)
     n=len(feeds)
     if n<2:return None,t,'En az 2 yem seçin.'
@@ -3115,7 +3304,10 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     movable=[i for i in range(n) if not fixed[i]]
     rng=_random.Random(6172026)
     tol=.035
-    adg_tol=.01
+    # GCAA artık yaklaşık hedef değil, optimizerın öncelikli tabanıdır. %0,25'ten
+    # büyük açık aramada görünür kalır; böylece 1,29 değerinde durup 1,40 hedefini
+    # "sınırlı" diye kaydetmek yerine enerji takasına devam edilir.
+    adg_tol=.0025
     rough_tol_pp={'Besi Başlangıç':3.0,'Besi Geliştirme':3.0,'Besi Bitirme':5.0}.get(t.get('phase'),3.5)
     target_dm=float(t['dmi_kg'])
     target_cp=float(t['cp_pct'])
@@ -3151,6 +3343,13 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         tahıl ağırlıklı bir adayı seçmesine yol açabiliyordu.
         """
         vals=[]
+        dynamic_dm=max(_predicted_dmi_for_metrics(m,t),.01)
+        dm_gap=abs(float(m.get('dm_kg') or 0)-dynamic_dm)/dynamic_dm
+        cp_gap=max(0.0,(target_cp-float(m.get('cp_pct_dm') or 0))/max(target_cp,.01))
+        # Fizibilite kapısının zaten reddedeceği ciddi KM/HP sapmalarını enerji
+        # hedefi uğruna aşma. Bu sınırlar içinde ise GCAA öncelikli optimize edilir.
+        vals.append(max(0.0,(dm_gap-.08)/.08))
+        vals.append(max(0.0,(cp_gap-.08)/.08))
         rough_pct=float(m.get('roughage_pct_dm') or 0)
         # Kayıt sonunda reddedilecek ciddi kaba/kesif sapmasını arama sırasında
         # da sert ray yap. Aksi halde optimizer besin kartları iyi görünen fakat
@@ -3160,8 +3359,9 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         vals.append(max(0.0,(t['ndf_min']*.85-m['ndf_pct_dm'])/max(t['ndf_min'],1)))
         vals.append(max(0.0,(m['ndf_pct_dm']-t['ndf_max']*1.15)/max(t['ndf_max'],1)))
         vals.append(max(0.0,(lim['endf_min']*.80-m['endf_pct_dm'])/max(lim['endf_min'],1)))
-        # Fazın nişasta üst sınırı kayıt öncesi sert güvenlik kapısıdır.
-        vals.append(max(0.0,(m['starch_pct_dm']-lim['starch_max'])/max(lim['starch_max'],1)))
+        # Dikkat bandı optimizasyonu yönlendirir; yalnız genel üst sınır sert kapıdır.
+        starch_hard=float(lim.get('starch_hard_max') or 45.0)
+        vals.append(max(0.0,(m['starch_pct_dm']-starch_hard)/max(starch_hard,1)))
         risk=_rumen_risk_assessment(m,lim)
         vals.append(1.0 if risk['level']=='Yüksek' else 0.0)
         grain_dm,wheat_dm,_=_grain_mix_dm(feeds,q)
@@ -3204,9 +3404,9 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         me_signed=(m['me_mcal']-target_me)/max(target_me,.01)
         adg_signed=(m['achievable_adg_kg']-target_adg)/max(target_adg,.01)
         # Asgari hedefleri eşitlik kısıtına çevirmeden gereksiz yüksek arzı azalt.
-        # HP'de %20 güvenlik payı, enerjiye göre GCAA kapasitesinde %5 saha payı
+        # HP'de %10 güvenlik payı, enerjiye göre GCAA kapasitesinde %5 saha payı
         # serbesttir; sonrası güvenlik hedeflerinden sonra, maliyetten önce sıralanır.
-        cp_surplus_soft=max(0.0,cp_signed-.20)/.20
+        cp_surplus_soft=max(0.0,cp_signed-.10)/.10
         adg_surplus_soft=max(0.0,adg_signed-.05)/.05
         surplus_soft=cp_surplus_soft+adg_surplus_soft
         outs=[max(0.0,dm-tol)/tol,
@@ -3224,6 +3424,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         safety_count=sum(v>1e-10 for v in sv)
         hard_safety_count=sum(v>1e-10 for v in hsv)
         target_count=sum(v>1e-10 for v in outs)
+        growth_priority=max(0.0,-adg_signed-.003)/.003
         grain_dm,wheat_dm,_=_grain_mix_dm(feeds,q)
         wheat_share=wheat_dm/max(grain_dm,.01) if grain_dm>.05 else 0.0
         wheat_soft=max(0.0,(wheat_share-.30)/.10)
@@ -3232,9 +3433,11 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         # sapmaları ancak ana hedeflerden sonra karşılaştırılır; maliyet en son gelir.
         key=(hard_safety_count,
              round(max(hsv) if hsv else 0.0,10),
+             round(growth_priority,10),
              target_count,
              round(max(outs),10),
              round(sum(v*v for v in outs),10),
+             round(surplus_soft,8),
              round(profile_soft,8),
              round(starch_soft,8),
              round(wheat_soft,8),
@@ -3242,7 +3445,6 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
              safety_count,
              round(max(sv) if sv else 0.0,10),
              round(risk_soft,8),
-             round(surplus_soft,8),
              # Aynı fizibilite seviyesinde önce uygulanabilirlik/kalite, sonra milimetrik kart farkı.
              # Bu sıra 0.01 kg gibi matematiksel ama saha dışı kalemleri ve ucuz yem dominansını azaltır.
              round(_feed_quality_penalty(feeds,q,target_dm),8),
@@ -3284,15 +3486,24 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
             endf=max(.1,_solver_nutrient(f,'ndf_pct')*_solver_nutrient(f,'effective_ndf_pct')/100.0)
             price=max(.01,float(_rowval(f,'price',0) or .01))
             fname=str(_rowval(f,'name','')).upper()
+            nem=max(.05,_solver_nutrient(f,'nem_mcal_kg')); neg=max(.02,_solver_nutrient(f,'neg_mcal_kg'))
             if mode=='commercial_anchor': val=3.0 if ('SİLAJ' in fname or 'SILAJ' in fname) else (2.0 if ('YONCA' in fname or 'ALFALFA' in fname) else .45)
-            elif mode=='energy': val=me+.02*cp+.005*endf
+            elif mode in ('energy','energy_low_cp'):
+                # Aynı kaba yem KM payında yonca/çok proteinli kaba yem yerine
+                # daha yüksek net enerji sağlayan silaj/otu öne çıkar.
+                val=3.2*neg+1.4*nem+.25*me-.045*max(0.0,cp-target_cp)+.002*endf
             elif mode=='cost': val=1.0/price
             else: val=.55*me+.015*cp+.008*endf
             rw[i]=max(.01,val)*(1.0 if mode=='commercial_anchor' else (0.65+rng.random()*.70))
         for i in conc:
             f=feeds[i]; me=max(.05,_solver_nutrient(f,'me_mcal_kg')); cp=max(.1,_solver_nutrient(f,'cp_pct'))
             starch=_solver_starch_pct(f); price=max(.01,float(_rowval(f,'price',0) or .01))
+            nem=max(.05,_solver_nutrient(f,'nem_mcal_kg')); neg=max(.02,_solver_nutrient(f,'neg_mcal_kg'))
             if mode=='protein': val=.10*cp+.35*me
+            elif mode in ('energy','energy_low_cp'):
+                # Arpa/mısır/uygun besi yemi gibi net enerjisi yüksek kalemleri
+                # artır; gereksiz HP ve nişasta yükünü aynı anda geri plana it.
+                val=3.4*neg+1.5*nem+.30*me-.050*max(0.0,cp-target_cp)-.012*max(0.0,starch-lim['starch_ideal_max'])
             elif mode in ('commercial','commercial_anchor'):
                 # Toplam tahıl/nişasta rayı dolduğunda arpa-buğdayı daha fazla
                 # zorlamak yerine hedef hayvana uygun tam karma yeme kapasite aç.
@@ -3317,14 +3528,14 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         if all(abs(sh-x)>.005 for x in shares): shares.append(sh)
     seeds=[]
     for sh in shares:
-        for mode in ('balanced','energy','protein','commercial','commercial_anchor','cost'):
+        for mode in ('balanced','energy','energy_low_cp','protein','commercial','commercial_anchor','cost'):
             for _ in range(2):seeds.append(make_seed(sh,mode))
 
     # Rastgele fizibilite taramasi: karar degiskenleri yem miktarlaridir; DMI ve kaba hedefi
     # etrafinda farkli dagilimlar olusturulur. Sabit RNG nedeniyle sonuc tekrarlanabilirdir.
     for _ in range(450):
         sh=max(lim['roughage_min'],min(lim['roughage_max'],target_rough+rng.uniform(-12,12)))/100.0
-        seeds.append(make_seed(sh,rng.choice(('balanced','energy','protein','commercial','cost'))))
+        seeds.append(make_seed(sh,rng.choice(('balanced','energy','energy_low_cp','protein','commercial','cost'))))
 
     scored=[]
     for q in seeds:
@@ -3375,15 +3586,18 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.19.3 · seçili yem min/max→etiket→NASEM/INRA→KM/GCAA→kaba/tahıl/buğday güvenliği→kalite/maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.19.6 · enerji/HP takası→bilimsel nişasta bantları→NASEM/INRA→KM/GCAA→güvenlik→maliyet'
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)
     feasibility=_solver_feasibility_report(bm,t,lim)
     bm['feasibility']=feasibility
 
-    if feasibility['status'] in ('unsafe','infeasible'):
+    growth_shortfall=float(feasibility.get('adg_signed') or 0.0)<-.005
+    if feasibility['status'] in ('unsafe','infeasible') or growth_shortfall:
         reasons=feasibility['unsafe']+feasibility['blockers']
+        if growth_shortfall and not any(str(x).startswith('GCAA kapasitesi') for x in reasons):
+            reasons.append(f'GCAA kapasitesi {float(feasibility.get("adg_signed") or 0.0)*100:+.1f}%')
         detail='; '.join(reasons) if reasons else 'seçili yem kısıtları hedefleri aynı anda karşılamıyor'
         advice=_ration_assistant(feeds,bm,t,lim)
         return None,t,'Çözüm kaydedilmedi: '+detail+'. Sınırlayan kısıtlar düzeltilmeli. Öneri: '+advice
@@ -3593,7 +3807,7 @@ def _ration_requirement_panel_legacy(rr,sm):
     t=ration_targets_for_record(rr)
     cp_s,cp_c=nutrient_status(sm['cp_pct_dm'],t['cp_pct'],0.05,0.10); me_s,me_c=nutrient_status(sm['me_mcal'],t['me_mcal_day'],0.08,0.10); dm_s,dm_c=nutrient_status(sm['dm_kg'],t['dmi_kg'],0.10); ca_s,ca_c=nutrient_status(sm['ca_g'],t['ca_g'],0.10); p_s,p_c=nutrient_status(sm['p_g'],t['p_g'],0.10)
     ndf=sm['ndf_pct_dm']; ndf_s='✅ Uygun' if t['ndf_min']<=ndf<=t['ndf_max'] else ('⚠️ Düşük' if ndf<t['ndf_min'] else '⚠️ Yüksek')
-    starch=sm.get('starch_pct_dm',0);starch_min=t.get('starch_min',0);starch_ideal_max=t.get('starch_ideal_max',t.get('starch_max',100));starch_max=t.get('starch_max',100)
+    starch=sm.get('starch_pct_dm',0);starch_min=t.get('starch_min',0);starch_ideal_max=t.get('starch_ideal_max',t.get('starch_max',100));starch_max=t.get('starch_max',100);starch_hard=t.get('starch_hard_max',45)
     starch_s='✅ Uygun' if starch_min<=starch<=starch_ideal_max else ('ℹ️ İdeal altı' if starch<starch_min else ('⚠️ Sınıra yakın' if starch<=starch_max else '🔴 Yüksek'))
     rough=sm.get('roughage_pct_dm',0); conc=sm.get('concentrate_pct_dm',0); rc_s='✅ Uygun' if (t['roughage_min']-0.05)<=rough<=(t['roughage_max']+0.05) else ('⚠️ Kaba yem düşük' if rough<t['roughage_min'] else '⚠️ Kaba yem yüksek')
     if t['mode']=='Süt':
@@ -3650,7 +3864,7 @@ def _ration_requirement_panel_legacy(rr,sm):
         starch_rumen,
         box('cost','Maliyet',money(sm['cost']),money(sm['cost']),'💰 Canlı','Değişiklik yok'),
     ])
-    detail=f"""<details class='nutri-detail'><summary>📋 Besin detaylarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Besin</th><th>Hedef</th><th>Mevcut</th><th>Durum</th></tr></thead><tbody><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td>{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}</td><td>%{ndf:.1f}</td><td>{ndf_s}</td></tr><tr><td>eNDF</td><td>En az %{t.get('endf_min',0):.1f}</td><td>%{sm.get('endf_pct_dm',0):.1f}</td><td>{'✅ Uygun' if sm.get('endf_pct_dm',0)>=t.get('endf_min',0) else '⚠️ Düşük'}</td></tr><tr><td>Nişasta</td><td>İdeal %{starch_min:.0f}–{starch_ideal_max:.0f} · üst %{starch_max:.0f}</td><td>%{starch:.1f} KM · {sm.get('starch_kg',0):.2f} kg</td><td>{starch_s}</td></tr><tr><td>Etkin rumen nişastası</td><td>Veri kapsamıyla izlenir</td><td>%{sm.get('rapid_starch_pct_dm',0):.1f} KM · kapsam %{sm.get('starch_degradability_coverage',0)*100:.0f}</td><td>{risk_s}</td></tr><tr><td>Asidoz riski</td><td>Düşük</td><td>{rumen_risk['level']} · güven {rumen_risk['confidence']}</td><td>Klinik pH tahmini değildir</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g</td><td>{sm['ca_g']:.0f} g</td><td>{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g</td><td>{sm['p_g']:.0f} g</td><td>{p_s}</td></tr><tr><td>Kaba/Kesif</td><td>Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}</td><td>%{rough:.0f} / %{conc:.0f}</td><td>{rc_s}</td></tr></tbody></table></div></details>"""
+    detail=f"""<details class='nutri-detail'><summary>📋 Besin detaylarını göster</summary><div class='table-compact-wrap'><table class='ration-target-table compact-table zebra'><thead><tr><th>Besin</th><th>Hedef</th><th>Mevcut</th><th>Durum</th></tr></thead><tbody><tr><td>Kuru Madde</td><td>{t['dmi_kg']:.2f} kg/gün</td><td>{sm['dm_kg']:.2f} kg</td><td>{dm_s}</td></tr><tr><td>Ham Protein</td><td>%{t['cp_pct']:.1f} KM</td><td>%{sm['cp_pct_dm']:.1f} KM</td><td>{cp_s}</td></tr><tr><td>Metabolik Enerji</td><td>{t['me_mcal_day']:.1f} Mcal/gün</td><td>{sm['me_mcal']:.1f} Mcal</td><td>{me_s}</td></tr><tr><td>NDF</td><td>%{t['ndf_min']:.0f}–{t['ndf_max']:.0f}</td><td>%{ndf:.1f}</td><td>{ndf_s}</td></tr><tr><td>eNDF</td><td>En az %{t.get('endf_min',0):.1f}</td><td>%{sm.get('endf_pct_dm',0):.1f}</td><td>{'✅ Uygun' if sm.get('endf_pct_dm',0)>=t.get('endf_min',0) else '⚠️ Düşük'}</td></tr><tr><td>Nişasta</td><td>İdeal %{starch_min:.0f}–{starch_ideal_max:.0f} · dikkat ≤%{starch_max:.0f} · güvenlik ≤%{starch_hard:.0f}</td><td>%{starch:.1f} KM · {sm.get('starch_kg',0):.2f} kg</td><td>{starch_s}</td></tr><tr><td>Etkin rumen nişastası</td><td>Veri kapsamıyla izlenir</td><td>%{sm.get('rapid_starch_pct_dm',0):.1f} KM · kapsam %{sm.get('starch_degradability_coverage',0)*100:.0f}</td><td>{risk_s}</td></tr><tr><td>Asidoz riski</td><td>Düşük</td><td>{rumen_risk['level']} · güven {rumen_risk['confidence']}</td><td>Klinik pH tahmini değildir</td></tr><tr><td>Kalsiyum</td><td>{t['ca_g']:.0f} g</td><td>{sm['ca_g']:.0f} g</td><td>{ca_s}</td></tr><tr><td>Fosfor</td><td>{t['p_g']:.0f} g</td><td>{sm['p_g']:.0f} g</td><td>{p_s}</td></tr><tr><td>Kaba/Kesif</td><td>Kaba %{t['roughage_min']:.0f}–{t['roughage_max']:.0f}</td><td>%{rough:.0f} / %{conc:.0f}</td><td>{rc_s}</td></tr></tbody></table></div></details>"""
     return f"""<style>
 body:has(.workbench-shell) .nutri-mini-grid{{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:7px!important}}
 body:has(.workbench-shell) .nutri-mini.nutri-compare-card{{height:100px!important;min-height:100px!important;grid-template-rows:23px 1fr 28px!important}}
@@ -3691,8 +3905,15 @@ def ration_requirement_panel(rr,sm):
     predicted_dmi=_predicted_dmi_for_metrics(sm,t)
     sm['predicted_dmi_kg']=predicted_dmi
     capacity=_achievable_adg(sm,t) if sm.get('nem_density',0)>0 and sm.get('neg_density',0)>0 else 0.0
+    sm['achievable_adg_kg']=capacity
     gain_supply,_,_=_energy_balance(sm,t)
     limits=beef_phase_limits(t['weight_kg'],t['adg'],predicted_dmi,t.get('age_months',0),t.get('phase','Otomatik'))
+    # Sunum katmanı, solverın gerçekten ürettiği kayıt ile besin kartlarındaki
+    # ince ayar uyarılarını birbirinden ayırır. Uyarı satırı çözüm başarısızlığı
+    # değildir; yalnız solve_smart_ration tarafından kaydedilen reçete
+    # "solved" olarak işaretlenir. Hesap ve hedef aralıkları değiştirilmez.
+    ration_notes=str(_rowval(rr,'notes','') or '')
+    solver_result='solved' if ('Besi Hayvanı İhtiyaç Motoru V2' in ration_notes or 'Süt_V5.01' in ration_notes) else 'manual'
     rumen_risk=_rumen_risk_assessment(sm,limits)
     mw=_mineral_windows(t,predicted_dmi)
 
@@ -3824,7 +4045,7 @@ def ration_requirement_panel(rr,sm):
     @media(min-width:1001px) and (max-width:1450px){{.science-target-row{{grid-template-columns:minmax(78px,.9fr) minmax(100px,1.2fr);gap:2px 4px;padding:4px 5px}}.science-target-values{{gap:3px}}.science-target-values b{{font-size:11px}}.science-target-state i{{display:none}}}}
     @media(max-width:1000px){{body:has(.workbench-shell) .science-target-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important}}}}
     @media(max-width:650px){{body:has(.workbench-shell) .science-target-grid{{display:grid!important;grid-auto-flow:column!important;grid-template-columns:none!important;grid-auto-columns:minmax(280px,86vw)!important;overflow-x:auto!important;scroll-snap-type:x mandatory;padding-bottom:5px!important}}.science-target-card{{scroll-snap-align:start}}.science-target-row{{padding:6px 7px}}}}
-    </style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>🎯 Bilimsel Hedef Özeti</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky science-target-shell'><div class='target-compare-title'><b>Gereksinim ↔ Rasyon Arzı</b><span id='target-live-note'>NASEM hayvan profili · Dinamik KM · NEm/NEg performansı</span></div><div class='science-target-grid'>{energy_card}{protein_card}{rumen_card}{mineral_card}</div>{details}</div></div>"""
+    </style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>🎯 Bilimsel Hedef Özeti</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky science-target-shell'><div class='target-compare-title'><b>Gereksinim ↔ Rasyon Arzı</b><span id='target-live-note'>NASEM hayvan profili · Dinamik KM · NEm/NEg performansı</span></div><div class='science-target-grid' data-solver-result='{solver_result}'>{energy_card}{protein_card}{rumen_card}{mineral_card}</div>{details}</div></div>"""
 
 def ration_smart_recommendations(rr, sm, con=None, limit=6):
     """Katalogdaki yemleri mevcut besin açıklarını iyileştirme potansiyeline göre sıralar.
@@ -4094,6 +4315,159 @@ def paddock_population(paddock_id, con=None):
     finally:
         if own:c.close()
 
+def current_daily_feed_use(c,on_date=None):
+    """Tarih için ana rasyon + ek yemlerin toplam kg/gün ihtiyacını döndürür."""
+    day=str(on_date or date.today().isoformat())[:10]
+    assignments=c.execute('''select pr.* from paddock_rations pr
+        join paddocks p on p.id=pr.paddock_id
+        join rations r on r.id=pr.ration_id
+        where pr.active=1 and p.active=1 and r.active=1 and pr.start_date<=?
+          and (pr.end_date is null or trim(pr.end_date)='' or pr.end_date>=?)
+        order by pr.paddock_id,pr.start_date desc,pr.id desc''',(day,day)).fetchall()
+    latest={}
+    for row in assignments:latest.setdefault(int(row['paddock_id']),row)
+    active_paddock_ids={int(r['id']) for r in c.execute('select id from paddocks where active=1').fetchall()}
+    extra_paddock_ids={int(r['paddock_id']) for r in c.execute('''select distinct paddock_id from paddock_extra_feeds
+        where active=1 and start_date<=? and (end_date is null or trim(end_date)='' or end_date>=?)''',(day,day)).fetchall()}
+    daily_use={}
+    for pid in sorted(active_paddock_ids & (set(latest.keys())|extra_paddock_ids)):
+        population=paddock_population(pid,c)
+        if population<=0:continue
+        assignment=latest.get(pid)
+        if assignment:
+            rid=int(assignment['ration_id'])
+            items=ration_items_on_date(c,rid,day)
+            if not items:
+                items=c.execute('''select ri.feed_id,ri.kg_per_head_day from ration_items ri
+                    where ri.ration_id=? and ri.kg_per_head_day>0''',(rid,)).fetchall()
+            for item in items:
+                fid=int(item['feed_id'])
+                daily_use[fid]=daily_use.get(fid,0.0)+population*max(0.0,float(item['kg_per_head_day'] or 0))
+        for extra in paddock_extra_feeds_on_date(c,pid,day):
+            fid=int(extra['feed_id'])
+            daily_use[fid]=daily_use.get(fid,0.0)+population*max(0.0,float(extra['kg_per_head_day'] or 0))
+    return {fid:round(quantity,6) for fid,quantity in daily_use.items()}
+
+def sync_daily_paddock_feed_stock(con=None, on_date=None):
+    """Aktif padok rasyonunun bugünkü tüketimini stokla idempotent eşitler.
+
+    Her padok/yem/gün için tek otomatik stok hareketi tutulur. Aynı gün hayvan
+    sayısı veya rasyon miktarı değişirse ikinci tüketim yazmak yerine mevcut
+    hareket güncellenir. Otomatik çağrılar yalnız bugünün tarihini geçirir;
+    geçmiş günler kendiliğinden doldurulmaz.
+    """
+    own=con is None
+    c=con or db()
+    day=str(on_date or date.today().isoformat())[:10]
+    now=datetime.now().isoformat(timespec='seconds')
+    stats={'created':0,'updated':0,'removed':0,'quantity_kg':0.0}
+    touched=set()
+    try:
+        assignments=c.execute('''select pr.*,p.name paddock_name,r.name ration_name
+            from paddock_rations pr
+            join paddocks p on p.id=pr.paddock_id
+            join rations r on r.id=pr.ration_id
+            where pr.active=1 and p.active=1 and r.active=1 and pr.start_date<=?
+              and (pr.end_date is null or trim(pr.end_date)='' or pr.end_date>=?)
+            order by pr.paddock_id,pr.start_date desc,pr.id desc''',(day,day)).fetchall()
+        latest={}
+        for row in assignments:latest.setdefault(int(row['paddock_id']),row)
+
+        desired={}
+        active_paddock_ids={int(r['id']) for r in c.execute('select id from paddocks where active=1').fetchall()}
+        extra_paddock_ids={int(r['paddock_id']) for r in c.execute('''select distinct paddock_id from paddock_extra_feeds
+            where active=1 and start_date<=? and (end_date is null or trim(end_date)='' or end_date>=?)''',(day,day)).fetchall()}
+        for pid in sorted(active_paddock_ids & (set(latest.keys())|extra_paddock_ids)):
+            population=paddock_population(pid,c)
+            if population<=0:continue
+            assignment=latest.get(pid)
+            rid=int(assignment['ration_id']) if assignment else 0
+            paddock_name=(str(assignment['paddock_name'] or '') if assignment else str(c.execute('select name from paddocks where id=?',(pid,)).fetchone()['name'] or ''))
+            ration_name=str(assignment['ration_name'] or '') if assignment else ''
+            def add_desired(fid,per_head,source_label):
+                fid=int(fid);per_head=max(0.0,float(per_head or 0))
+                if per_head<=0:return
+                key=(pid,fid);item=desired.get(key)
+                if not item:
+                    item={'paddock_id':pid,'paddock_name':paddock_name,'ration_id':rid,'ration_name':ration_name,
+                          'feed_id':fid,'animal_count':population,'kg_per_head_day':0.0,'quantity_kg':0.0,'sources':[]}
+                    desired[key]=item
+                item['kg_per_head_day']+=per_head
+                item['quantity_kg']=round(item['kg_per_head_day']*population,6)
+                item['sources'].append(source_label)
+            if assignment:
+                items=ration_items_on_date(c,rid,day)
+                if not items:
+                    items=c.execute('''select ri.feed_id,ri.kg_per_head_day,f.*
+                        from ration_items ri join feed_catalog f on f.id=ri.feed_id
+                        where ri.ration_id=? and ri.kg_per_head_day>0 order by f.name''',(rid,)).fetchall()
+                for item in items:add_desired(item['feed_id'],item['kg_per_head_day'],'Ana rasyon')
+            for extra in paddock_extra_feeds_on_date(c,pid,day):
+                add_desired(extra['feed_id'],extra['kg_per_head_day'],'Ek yem')
+
+        existing={(int(row['paddock_id']),int(row['feed_id'])):row for row in c.execute(
+            'select * from paddock_feed_consumptions where consumption_date=?',(day,)).fetchall()}
+
+        for key,item in desired.items():
+            source_text=' + '.join(dict.fromkeys(item.get('sources') or [])) or 'Padok besleme'
+            note=('Otomatik padok tüketimi | '
+                  f"{item['paddock_name']} | {(item['ration_name'] or 'Rasyon yok')} | {source_text} | "
+                  f"{item['animal_count']} baş × {item['kg_per_head_day']:.3f} kg/baş/gün")
+            previous=existing.pop(key,None)
+            tx_id=int(previous['stock_tx_id'] or 0) if previous else 0
+            tx=c.execute('select id from feed_stock_transactions where id=?',(tx_id,)).fetchone() if tx_id else None
+            if tx:
+                changed=(int(previous['ration_id'])!=item['ration_id'] or
+                         int(previous['animal_count'] or 0)!=item['animal_count'] or
+                         abs(float(previous['kg_per_head_day'] or 0)-item['kg_per_head_day'])>1e-9 or
+                         abs(float(previous['quantity_kg'] or 0)-item['quantity_kg'])>1e-9)
+                c.execute('''update feed_stock_transactions set feed_id=?,tx_date=?,tx_type='Tüketim',
+                             quantity_kg=?,unit_price=0,notes=? where id=?''',
+                          (item['feed_id'],day,item['quantity_kg'],note,tx_id))
+                c.execute('''update paddock_feed_consumptions set ration_id=?,animal_count=?,
+                             kg_per_head_day=?,quantity_kg=?,updated_at=? where id=?''',
+                          (item['ration_id'],item['animal_count'],item['kg_per_head_day'],
+                           item['quantity_kg'],now,previous['id']))
+                if changed:stats['updated']+=1
+            else:
+                cur=c.execute('''insert into feed_stock_transactions
+                    (feed_id,tx_date,tx_type,quantity_kg,unit_price,notes)
+                    values(?,?,'Tüketim',?,0,?)''',(item['feed_id'],day,item['quantity_kg'],note))
+                tx_id=int(cur.lastrowid)
+                if previous:
+                    c.execute('''update paddock_feed_consumptions set ration_id=?,animal_count=?,
+                        kg_per_head_day=?,quantity_kg=?,stock_tx_id=?,updated_at=? where id=?''',
+                        (item['ration_id'],item['animal_count'],item['kg_per_head_day'],
+                         item['quantity_kg'],tx_id,now,previous['id']))
+                    stats['updated']+=1
+                else:
+                    c.execute('''insert into paddock_feed_consumptions
+                        (consumption_date,paddock_id,ration_id,feed_id,animal_count,kg_per_head_day,
+                         quantity_kg,stock_tx_id,created_at,updated_at)
+                        values(?,?,?,?,?,?,?,?,?,?)''',
+                        (day,item['paddock_id'],item['ration_id'],item['feed_id'],item['animal_count'],
+                         item['kg_per_head_day'],item['quantity_kg'],tx_id,now,now))
+                    stats['created']+=1
+            stats['quantity_kg']+=item['quantity_kg'];touched.add(item['feed_id'])
+
+        # Yalnız bugünün artık geçerli olmayan otomatik hareketlerini geri al.
+        # Manuel stok hareketlerine hiçbir durumda dokunulmaz.
+        for row in existing.values():
+            tx_id=int(row['stock_tx_id'] or 0)
+            if tx_id:c.execute('delete from feed_stock_transactions where id=?',(tx_id,))
+            c.execute('delete from paddock_feed_consumptions where id=?',(row['id'],))
+            touched.add(int(row['feed_id']));stats['removed']+=1
+
+        for fid in touched:rebuild_feed_cost_history(c,fid)
+        stats['quantity_kg']=round(stats['quantity_kg'],6)
+        if own:c.commit()
+        return stats
+    except Exception:
+        if own:c.rollback()
+        raise
+    finally:
+        if own:c.close()
+
 def sync_paddock_text(c, source, animal_id, paddock_id):
     name=''
     if paddock_id:
@@ -4155,6 +4529,7 @@ def render_paddock_management(selected_id=None):
     with db() as c:
         paddocks=c.execute("select * from paddocks where active=1 order by name").fetchall()
         rations=c.execute("select id,name from rations where active=1 order by name").fetchall()
+        feeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
         adults=c.execute("""select id,tag,nickname,gender,breed,birth_date,paddock_id,
             coalesce((select w.weight from weights w where w.animal_id=animals.id order by w.measure_date desc,w.id desc limit 1),purchase_weight,0) latest_weight
             from animals where coalesce(status,'Aktif')='Aktif'
@@ -4177,11 +4552,15 @@ def render_paddock_management(selected_id=None):
             pid=int(item['paddock_id'] or 0)
             (occupants[pid] if pid in occupants else unassigned).append(item)
         active_rations={}
+        active_extra_feeds={}
         for pd in paddocks:
             ar=c.execute("""select pr.*,r.name ration_name from paddock_rations pr
-                join rations r on r.id=pr.ration_id where pr.paddock_id=? and pr.active=1
-                and (pr.end_date is null or pr.end_date='') order by pr.id desc limit 1""",(pd['id'],)).fetchone()
+                join rations r on r.id=pr.ration_id where pr.paddock_id=? and pr.active=1 and pr.start_date<=?
+                and (pr.end_date is null or trim(pr.end_date)='' or pr.end_date>=?)
+                order by pr.start_date desc,pr.id desc limit 1""",
+                (pd['id'],date.today().isoformat(),date.today().isoformat())).fetchone()
             active_rations[int(pd['id'])]=(ar,ration_summary(ar['ration_id'],c) if ar else None)
+            active_extra_feeds[int(pd['id'])]=paddock_extra_feeds_on_date(c,int(pd['id']),date.today().isoformat())
         history=c.execute("""select ph.*,case when ph.animal_source='animal' then a.tag else ca.tag end tag,
             fp.name from_name,tp.name to_name from paddock_history ph
             left join animals a on ph.animal_source='animal' and a.id=ph.animal_id
@@ -4200,8 +4579,13 @@ def render_paddock_management(selected_id=None):
 
     pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
     ration_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in rations)
+    feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
     animal_opts=''.join(f'<option value="{x["source"]}:{x["id"]}">{"🐄" if x["source"]=="animal" else "🐮"} {h(x["tag"])} · {h(x["nickname"] or "Takma ad yok")} · {h(x["kind"])}</option>' for x in subjects)
     move_animal_opts=''.join(f'<option value="{x["source"]}:{x["id"]}" data-paddock="{int(x["paddock_id"] or 0)}">{h(x["tag"])} · {h(x["nickname"] or "Takma ad yok")} · {h(x["kind"])}</option>' for x in subjects)
+    bulk_paddock_checks=''.join(
+        f'<label style="display:flex;gap:10px;align-items:center;border:1px solid #d8e7dd;border-radius:10px;padding:10px;background:#f9fcfa"><input type="checkbox" name="bulk_paddock_{int(x["id"])}" value="1" style="width:18px;height:18px"><span><b>🏠 {h(x["name"])}</b><small style="display:block;color:#718078">{h(x["type"] or "Genel")}</small></span></label>'
+        for x in paddocks
+    ) or '<div class="paddock-empty">Aktif padok bulunmuyor.</div>'
 
     def animal_table_row(item,current_id=None,index=0):
         view=('/animal?id='+str(item['id'])) if item['source']=='animal' else ('/calf?id='+str(item['id']))
@@ -4220,11 +4604,12 @@ def render_paddock_management(selected_id=None):
         pid=int(pd['id']);items=occupants.get(pid,[]);pop=len(items);assigned_total+=pop
         cap=int(pd['capacity'] or 0);capacity_total+=cap;pct=(pop/cap*100) if cap else 0
         if cap and pop>cap:overloaded+=1
-        ar,summary=active_rations.get(pid,(None,None))
+        ar,summary=active_rations.get(pid,(None,None));extra_items=active_extra_feeds.get(pid,[])
         total_weight=sum(float(x.get('latest_weight',0) or 0) for x in items)
         weighed=sum(1 for x in items if float(x.get('latest_weight',0) or 0)>0)
         avg_weight=(total_weight/weighed) if weighed else 0
-        daily_feed=(float(summary['as_fed_kg'] or 0)*pop) if summary else 0.0
+        extra_per_head=sum(float(x['kg_per_head_day'] or 0) for x in extra_items)
+        daily_feed=((float(summary['as_fed_kg'] or 0) if summary else 0.0)+extra_per_head)*pop
         daily_feed_total+=daily_feed
         if cap and pop>cap:status_key,status_label='over','Aşım'
         elif str(pd['type'] or '').casefold()=='karantina':status_key,status_label='warning','Uyarı'
@@ -4241,16 +4626,21 @@ def render_paddock_management(selected_id=None):
             for feed in summary['items']:
                 per_head=float(feed['kg_per_head_day'] or 0);price=float(feed['price'] or 0)
                 feed_rows+=f'''<tr><td><b>{h(feed['name'])}</b></td><td>{tr_number(per_head,2)} kg</td><td>{tr_number(per_head*pop,2)} kg</td><td>{money(price)}/kg</td><td><b>{money(per_head*pop*price)}</b></td></tr>'''
+        for extra in extra_items:
+            per_head=float(extra['kg_per_head_day'] or 0);price=current_feed_price(int(extra['feed_id']))
+            feed_rows+=f'''<tr><td><b>{h(extra['name'])}</b> <span class="paddock-type-chip">Ek Yem</span></td><td>{tr_number(per_head,2)} kg</td><td>{tr_number(per_head*pop,2)} kg</td><td>{money(price)}/kg</td><td><b>{money(per_head*pop*price)}</b></td></tr>'''
         if not feed_rows:feed_rows='<tr><td colspan="5" class="paddock-empty">Aktif rasyon veya yem kalemi bulunmuyor.</td></tr>'
         panel_history=[r for r in history if int(r['from_paddock_id'] or 0)==pid or int(r['to_paddock_id'] or 0)==pid]
         panel_history_rows=''.join(f'<tr><td>{fmt_datetime(r["moved_at"])}</td><td><b>{h(r["tag"] or "-")}</b></td><td>{h(r["from_name"] or "Padoksuz")}</td><td>{h(r["to_name"] or "Padoksuz")}</td><td>{h(r["notes"] or "-")}</td></tr>' for r in panel_history[:50]) or '<tr><td colspan="5" class="paddock-empty">Bu padok için hareket kaydı yok.</td></tr>'
+        extra_cost=sum(float(x['kg_per_head_day'] or 0)*current_feed_price(int(x['feed_id'])) for x in extra_items)
+        extra_summary=(''.join(f'''<div class="paddock-note-card extra-feed-card"><div class="extra-feed-main"><b>＋ {h(x['name'])}</b><span>{tr_number(x['kg_per_head_day'],2)} kg/baş/gün · {money(float(x['kg_per_head_day'] or 0)*current_feed_price(int(x['feed_id'])))}/baş/gün</span></div><div class="extra-feed-actions"><button type="button" class="btn alt compact-btn" data-edit-extra-feed="{int(x['id'])}" data-paddock="{pid}" data-feed="{int(x['feed_id'])}" data-kg="{float(x['kg_per_head_day'] or 0):.3f}" data-start="{h(x['start_date'] or date.today().isoformat())}" data-notes="{h(x['notes'] or '')}">✏ Düzenle</button><form method="post" action="/paddock-extra-feed/delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Kaldırılıyor…"><input type="hidden" name="id" value="{x['id']}"><input type="hidden" name="paddock_id" value="{pid}"><button class="btn red compact-btn">🗑 Kaldır</button></form></div></div>''' for x in extra_items) if extra_items else '<div class="paddock-empty">Ek yem / takviye tanımlı değil.</div>')
         ration_overview=(f'''<div class="paddock-ration-summary"><div><span>Aktif Rasyon</span><b>{h(ar['ration_name'])}</b></div><div><span>Başlangıç</span><b>{fmt_date(ar['start_date'])}</b></div><div><span>Yem / Baş</span><b>{tr_number(summary['as_fed_kg'],2)} kg/gün</b></div><div><span>Maliyet / Baş</span><b>{money(summary['cost'])}/gün</b></div><a class="btn alt" href="/rations?id={ar['ration_id']}">Rasyonu Aç</a></div>''' if ar and summary else '<div class="paddock-empty">Bu padoka henüz aktif rasyon atanmamış.</div>')
         panels.append(f'''<section class="paddock-work-panel" data-paddock-panel="{pid}" {'hidden' if pid!=selected else ''}>
         <header class="paddock-panel-head"><div class="paddock-panel-title"><span class="paddock-house large">🏠</span><div><h2>{h(pd['name'])}</h2><span class="paddock-type-chip">{h(pd['type']) or 'Genel'}</span> <span class="paddock-state {status_key}">{status_label}</span></div></div><div class="paddock-panel-actions"><a class="btn alt" href="/paddock-edit?id={pid}">✎ Düzenle</a><button type="button" class="btn alt" data-move-paddock="{pid}" {'disabled' if not items else ''}>⇄ Taşı</button><form method="post" action="/paddock/delete" class="inline-form" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm('{h(pd['name'])} padoku silinsin mi? Dolu padoklar güvenlik nedeniyle silinmez.')"><input type="hidden" name="id" value="{pid}"><button class="btn red">🗑 Sil</button></form></div></header>
         <details class="paddock-info" open><summary>🐄 Padok Bilgileri <span>⌄</span></summary><div class="paddock-info-grid"><div><span>Doluluk</span><b>{(f'%{pct:.0f}' if cap else 'Kapasite yok')}</b><i class="paddock-inline-progress"><i style="width:{min(100,pct):.1f}%"></i></i></div><div><span>Hayvan Sayısı</span><b>{pop}{(' / '+str(cap)) if cap else ''}</b></div><div><span>Toplam Canlı Kg</span><b>{(tr_number(total_weight,0)+' kg') if weighed else '—'}</b></div><div><span>Ort. Canlı Kg</span><b>{(tr_number(avg_weight,1)+' kg') if weighed else '—'}</b></div><div><span>Günlük Yem</span><b>{(tr_number(daily_feed,1)+' kg') if summary else '—'}</b></div><div><span>Aktif Rasyon</span><b>{h(ar['ration_name']) if ar else '—'}</b></div><div><span>Oluşturma Tarihi</span><b>{fmt_date(pd['created_at']) or '—'}</b></div><div><span>Son Güncelleme</span><b>{fmt_datetime(pd['updated_at'] or pd['created_at']) or '—'}</b></div></div></details>
         <nav class="paddock-tabs" aria-label="Padok bölümleri"><button type="button" class="active" data-paddock-tab="animals">🐄 İçindeki Hayvanlar ({pop})</button><button type="button" data-paddock-tab="ration">⚖ Rasyon</button><button type="button" data-paddock-tab="feed">♨ Yem Tüketimi</button><button type="button" data-paddock-tab="notes">▣ Notlar</button><button type="button" data-paddock-tab="history">◴ Geçmiş</button></nav>
         <div class="paddock-tab-panel" data-paddock-tab-panel="animals"><div class="paddock-table-wrap"><table class="paddock-animal-table"><thead><tr><th>Küpe No</th><th>Cinsiyet</th><th>Tür / Irk</th><th>Yaş</th><th>Canlı Kg</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>{animal_rows}</tbody></table></div><div class="paddock-panel-foot"><button type="button" class="btn alt" data-add-paddock="{pid}">＋ Bu Padoka Hayvan Ekle</button><button type="button" class="btn alt" data-show-all-paddock="{pid}">Tümünü Gör →</button></div></div>
-        <div class="paddock-tab-panel" data-paddock-tab-panel="ration" hidden>{ration_overview}<form method="post" action="/ration/assign" class="form paddock-tab-form" data-submit-lock="1" data-submit-text="⏳ Atanıyor…"><input type="hidden" name="paddock_id" value="{pid}"><input type="hidden" name="return_paddock_id" value="{pid}"><label>Yeni Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes"></label><div><button class="btn orange">Rasyonu Ata / Değiştir</button></div></form></div>
+        <div class="paddock-tab-panel" data-paddock-tab-panel="ration" hidden>{ration_overview}<form method="post" action="/ration/assign" class="form paddock-tab-form" data-submit-lock="1" data-submit-text="⏳ Atanıyor…"><input type="hidden" name="paddock_id" value="{pid}"><input type="hidden" name="return_paddock_id" value="{pid}"><label>Yeni Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes"></label><div><button class="btn orange">Rasyonu Ata / Değiştir</button></div></form><div style="margin-top:14px"><div class="filter-title"><div><h3 style="margin:0">＋ Ek Yem / Takviye</h3><p class="mut">Ana rasyona ek olarak hayvan başına günlük verilen yemler.</p></div><button type="button" class="btn alt" data-open-extra-feed="{pid}">＋ Ek Yem Ekle</button></div><div style="display:grid;gap:8px">{extra_summary}</div><p class="mut">Ek yem maliyeti: {money(extra_cost)}/baş/gün. Stoktan ana rasyonla birlikte otomatik düşer.</p></div></div>
         <div class="paddock-tab-panel" data-paddock-tab-panel="feed" hidden><div class="paddock-table-wrap"><table><thead><tr><th>Yem</th><th>Baş / Gün</th><th>Padok / Gün</th><th>Birim Maliyet</th><th>Günlük Toplam</th></tr></thead><tbody>{feed_rows}</tbody></table></div></div>
         <div class="paddock-tab-panel" data-paddock-tab-panel="notes" hidden><div class="paddock-note-card"><h3>Padok Notları</h3><p>{h(pd['notes']) or 'Bu padok için not girilmemiş.'}</p><a class="btn alt" href="/paddock-edit?id={pid}">Notu Düzenle</a></div></div>
         <div class="paddock-tab-panel" data-paddock-tab-panel="history" hidden><div class="paddock-table-wrap"><table><thead><tr><th>Tarih</th><th>Hayvan</th><th>Önceki</th><th>Yeni</th><th>Not</th></tr></thead><tbody>{panel_history_rows}</tbody></table></div></div></section>''')
@@ -4261,7 +4651,7 @@ def render_paddock_management(selected_id=None):
     empty_page='<div class="paddock-empty-page"><span>🏠</span><h2>Henüz padok tanımlanmadı</h2><p>İlk padoku oluşturarak hayvanları ve rasyonları tek ekrandan yönetmeye başlayın.</p><button type="button" class="btn" data-open-paddock-create>＋ Yeni Padok</button></div>'
 
     paddock_css='''
-.paddock-page{--pd-green:#087a4b;--pd-deep:#075f3c;--pd-line:#dbe8df;--pd-soft:#f4f9f6}.paddock-page [hidden]{display:none!important}.paddock-page-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}.paddock-page-head .paddock-house{font-size:47px}.paddock-page-head h1{margin:0;font-size:31px}.paddock-page-head p{margin:3px 0 0}.paddock-toolbar{display:grid;grid-template-columns:minmax(250px,1.6fr) 150px 170px auto;gap:10px;align-items:end;margin:18px 0}.paddock-search-wrap{position:relative}.paddock-search-wrap span{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:19px}.paddock-search-wrap input{padding-left:42px}.paddock-toolbar label{font-size:11px;color:#66756c}.paddock-toolbar label select{margin-top:3px}.paddock-view-switch{display:flex;gap:6px;justify-content:flex-end}.paddock-view-button{border:1px solid #cadbd0;background:#f9fbfa;color:#27563d;border-radius:9px;padding:10px 12px;font-weight:800;cursor:pointer;white-space:nowrap}.paddock-view-button.active{background:var(--pd-green);border-color:var(--pd-green);color:#fff}.paddock-summary-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;margin-bottom:14px}.paddock-kpi{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--pd-line);border-radius:11px;padding:11px 14px;box-shadow:0 3px 12px #123c2510;min-width:0}.paddock-kpi>i{font-style:normal;font-size:27px}.paddock-kpi span{display:block;color:#6b7b72;font-size:11px}.paddock-kpi b{font-size:23px;color:#153b28}.paddock-new-button{min-width:145px;border:0;border-radius:10px;background:var(--pd-green);color:#fff;font-size:15px;font-weight:900;padding:0 20px;cursor:pointer}.paddock-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px}.paddock-card-grid[data-view="large"]{grid-template-columns:repeat(2,minmax(0,1fr))}.paddock-card-grid[data-view="list"]{grid-template-columns:1fr}.paddock-select-card{position:relative;min-height:125px;display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr auto;gap:4px 10px;text-align:left;border:1px solid #dfe9e2;background:#fff;border-radius:12px;padding:13px 15px 14px;color:#15241b;cursor:pointer;box-shadow:0 4px 14px #173b280b;overflow:hidden}.paddock-select-card:hover{border-color:#83c7a0;transform:translateY(-1px)}.paddock-select-card.selected{border-color:#25a86c;box-shadow:0 0 0 1px #25a86c,0 6px 18px #0a6f4520}.paddock-house{font-size:31px;line-height:1}.paddock-house.large{font-size:38px}.paddock-card-copy{min-width:0}.paddock-card-copy>b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.paddock-card-copy small{display:block;color:#718078;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.paddock-card-copy strong{display:block;font-size:20px;margin-top:12px}.paddock-card-copy strong em{font-size:13px;font-style:normal;font-weight:700}.paddock-state{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900;background:#e5f6ec;color:#087346;white-space:nowrap}.paddock-state.warning{background:#fff2d2;color:#b16b00}.paddock-state.over{background:#ffe5e2;color:#b33228}.paddock-state.full{background:#ffe9d7;color:#a95613}.paddock-state.empty{background:#edf2ef;color:#607168}.paddock-card-arrow{position:absolute;right:13px;top:44px;color:#087346;font-size:27px}.paddock-card-progress{position:absolute;left:15px;right:46px;bottom:14px;height:8px;border-radius:99px;background:#e0eee6;overflow:hidden}.paddock-card-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#27aa6b,#67c493)}.paddock-card-progress i.warning{background:linear-gradient(90deg,#eaa42b,#f4c96a)}.paddock-card-progress i.over{background:#db4d42}.paddock-card-progress i.full{background:linear-gradient(90deg,#ff8a43,#ffbd71)}.paddock-card-percent{position:absolute;right:12px;bottom:10px;font-size:11px;color:#52645a}.paddock-card-grid[data-view="large"] .paddock-select-card{min-height:142px}.paddock-card-grid[data-view="list"] .paddock-select-card{min-height:76px;grid-template-columns:auto minmax(170px,1fr) auto 190px;padding-bottom:13px}.paddock-card-grid[data-view="list"] .paddock-card-copy strong{margin-top:5px}.paddock-card-grid[data-view="list"] .paddock-card-progress{position:relative;left:auto;right:auto;bottom:auto;align-self:center}.paddock-card-grid[data-view="list"] .paddock-card-percent{right:62px;bottom:28px}.paddock-work-panel{border:1px solid #43b37c;border-radius:13px;background:#fff;padding:15px;box-shadow:0 5px 20px rgba(18,72,43,.07);scroll-margin-top:125px}.paddock-panel-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}.paddock-panel-title{display:flex;align-items:center;gap:12px}.paddock-panel-title h2{margin:0 0 6px;font-size:26px}.paddock-type-chip{display:inline-flex;padding:5px 9px;border-radius:999px;background:#f0f4f1;color:#55675d;font-size:11px;font-weight:800}.paddock-panel-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.paddock-panel-actions .btn{padding:9px 12px}.paddock-panel-actions button:disabled{opacity:.45;cursor:not-allowed}.paddock-info{border:1px solid var(--pd-line);border-radius:10px;overflow:hidden;background:#fff;margin:0}.paddock-info>summary{list-style:none;display:flex;justify-content:space-between;cursor:pointer;padding:11px 14px;font-weight:900;color:#163e29;border-left:3px solid var(--pd-green);background:#f9fcfa}.paddock-info>summary::-webkit-details-marker{display:none}.paddock-info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--pd-line)}.paddock-info-grid>div{min-height:74px;padding:12px 16px;border-right:1px solid var(--pd-line);border-bottom:1px solid var(--pd-line)}.paddock-info-grid>div:nth-child(4n){border-right:0}.paddock-info-grid>div:nth-last-child(-n+4){border-bottom:0}.paddock-info-grid span{display:block;color:#718078;font-size:11px}.paddock-info-grid b{display:block;margin-top:4px;font-size:15px}.paddock-inline-progress{display:block;width:75%;height:7px;background:#e4eee8;border-radius:99px;margin-top:5px;overflow:hidden}.paddock-inline-progress i{display:block;height:100%;background:var(--pd-green);border-radius:inherit}.paddock-tabs{display:flex;gap:6px;margin:13px 0 10px;overflow-x:auto;padding-bottom:2px}.paddock-tabs button{border:1px solid #d4e1d8;background:#f8fbf9;color:#41594b;border-radius:8px;padding:10px 13px;font-weight:850;cursor:pointer;white-space:nowrap}.paddock-tabs button.active{background:var(--pd-green);color:#fff;border-color:var(--pd-green)}.paddock-tab-panel{border-radius:10px}.paddock-table-wrap{overflow-x:auto;border:1px solid #e0e9e3;border-radius:10px}.paddock-table-wrap table{margin:0;min-width:760px}.paddock-table-wrap th{background:#eef5f1;color:#183a28}.paddock-table-wrap td,.paddock-table-wrap th{padding:10px 12px}.paddock-table-wrap tbody tr:hover{background:#f5faf7}.paddock-tag-link{font-weight:900;color:#18261d;text-decoration:none}.paddock-tag-link:hover{color:var(--pd-green);text-decoration:underline}.paddock-animal-table td small{display:block;color:#7a8980;margin-top:3px}.paddock-gender{font-size:21px;font-weight:900}.paddock-gender.female{color:#ef3e9a}.paddock-gender.male{color:#2275df}.paddock-row-actions{display:flex;gap:5px;align-items:center}.paddock-icon-action{width:31px;height:31px;display:inline-grid;place-items:center;border:0;border-radius:50%;background:#eff4f1;color:#173e29;text-decoration:none;font-size:17px;font-weight:900;cursor:pointer;padding:0}.paddock-icon-action:hover{background:#dceee3}.paddock-icon-action.remove{background:#fff0ee;color:#b8342b}.paddock-row-actions form{margin:0}.paddock-panel-foot{display:flex;justify-content:space-between;gap:10px;margin-top:12px}.paddock-empty{text-align:center;color:#6d7c73;padding:22px!important}.paddock-ration-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;align-items:center;padding:13px;border:1px solid var(--pd-line);background:var(--pd-soft);border-radius:10px}.paddock-ration-summary span{display:block;color:#708077;font-size:11px}.paddock-ration-summary b{display:block;margin-top:4px}.paddock-tab-form{margin-top:12px;grid-template-columns:2fr 1fr 2fr auto;align-items:end}.paddock-note-card{background:#fffaf0;border:1px solid #eee1be;border-radius:10px;padding:17px}.paddock-note-card h3{margin-top:0}.paddock-unassigned{margin-top:14px}.paddock-unassigned>summary{cursor:pointer;font-weight:900;font-size:16px}.paddock-empty-page{text-align:center;padding:50px 20px;background:#fff;border:1px dashed #a9c9b5;border-radius:14px}.paddock-empty-page>span{font-size:52px}.paddock-empty-page h2{margin-bottom:4px}.paddock-search-count{display:block;color:#6b7a71;font-size:12px;margin:-7px 0 10px}.paddock-dialog{width:min(720px,calc(100vw - 26px));max-height:88vh;border:0;border-radius:16px;padding:0;box-shadow:0 28px 80px #0c2f1d55}.paddock-dialog::backdrop{background:#102b1d80;backdrop-filter:blur(2px)}.paddock-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;background:#f5faf7;border-bottom:1px solid var(--pd-line)}.paddock-dialog-head h2{margin:0}.paddock-dialog-close{border:0;background:#e5eee8;border-radius:50%;width:36px;height:36px;font-size:24px;cursor:pointer}.paddock-dialog-body{padding:18px 20px}.paddock-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.paddock-kpi-note{font-size:10px!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.paddock-page{--pd-green:#087a4b;--pd-deep:#075f3c;--pd-line:#dbe8df;--pd-soft:#f4f9f6}.paddock-page [hidden]{display:none!important}.paddock-page-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}.paddock-page-head .paddock-house{font-size:47px}.paddock-page-head h1{margin:0;font-size:31px}.paddock-page-head p{margin:3px 0 0}.paddock-toolbar{display:grid;grid-template-columns:minmax(250px,1.6fr) 150px 170px auto;gap:10px;align-items:end;margin:18px 0}.paddock-search-wrap{position:relative}.paddock-search-wrap span{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:19px}.paddock-search-wrap input{padding-left:42px}.paddock-toolbar label{font-size:11px;color:#66756c}.paddock-toolbar label select{margin-top:3px}.paddock-view-switch{display:flex;gap:6px;justify-content:flex-end}.paddock-view-button{border:1px solid #cadbd0;background:#f9fbfa;color:#27563d;border-radius:9px;padding:10px 12px;font-weight:800;cursor:pointer;white-space:nowrap}.paddock-view-button.active{background:var(--pd-green);border-color:var(--pd-green);color:#fff}.paddock-summary-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;margin-bottom:14px}.paddock-kpi{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--pd-line);border-radius:11px;padding:11px 14px;box-shadow:0 3px 12px #123c2510;min-width:0}.paddock-kpi>i{font-style:normal;font-size:27px}.paddock-kpi span{display:block;color:#6b7b72;font-size:11px}.paddock-kpi b{font-size:23px;color:#153b28}.paddock-new-button{min-width:145px;border:0;border-radius:10px;background:var(--pd-green);color:#fff;font-size:15px;font-weight:900;padding:0 20px;cursor:pointer}.paddock-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px}.paddock-card-grid[data-view="large"]{grid-template-columns:repeat(2,minmax(0,1fr))}.paddock-card-grid[data-view="list"]{grid-template-columns:1fr}.paddock-select-card{position:relative;min-height:125px;display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto 1fr auto;gap:4px 10px;text-align:left;border:1px solid #dfe9e2;background:#fff;border-radius:12px;padding:13px 15px 14px;color:#15241b;cursor:pointer;box-shadow:0 4px 14px #173b280b;overflow:hidden}.paddock-select-card:hover{border-color:#83c7a0;transform:translateY(-1px)}.paddock-select-card.selected{border-color:#25a86c;box-shadow:0 0 0 1px #25a86c,0 6px 18px #0a6f4520}.paddock-house{font-size:31px;line-height:1}.paddock-house.large{font-size:38px}.paddock-card-copy{min-width:0}.paddock-card-copy>b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.paddock-card-copy small{display:block;color:#718078;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.paddock-card-copy strong{display:block;font-size:20px;margin-top:12px}.paddock-card-copy strong em{font-size:13px;font-style:normal;font-weight:700}.paddock-state{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:900;background:#e5f6ec;color:#087346;white-space:nowrap}.paddock-state.warning{background:#fff2d2;color:#b16b00}.paddock-state.over{background:#ffe5e2;color:#b33228}.paddock-state.full{background:#ffe9d7;color:#a95613}.paddock-state.empty{background:#edf2ef;color:#607168}.paddock-card-arrow{position:absolute;right:13px;top:44px;color:#087346;font-size:27px}.paddock-card-progress{position:absolute;left:15px;right:46px;bottom:14px;height:8px;border-radius:99px;background:#e0eee6;overflow:hidden}.paddock-card-progress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#27aa6b,#67c493)}.paddock-card-progress i.warning{background:linear-gradient(90deg,#eaa42b,#f4c96a)}.paddock-card-progress i.over{background:#db4d42}.paddock-card-progress i.full{background:linear-gradient(90deg,#ff8a43,#ffbd71)}.paddock-card-percent{position:absolute;right:12px;bottom:10px;font-size:11px;color:#52645a}.paddock-card-grid[data-view="large"] .paddock-select-card{min-height:142px}.paddock-card-grid[data-view="list"] .paddock-select-card{min-height:76px;grid-template-columns:auto minmax(170px,1fr) auto 190px;padding-bottom:13px}.paddock-card-grid[data-view="list"] .paddock-card-copy strong{margin-top:5px}.paddock-card-grid[data-view="list"] .paddock-card-progress{position:relative;left:auto;right:auto;bottom:auto;align-self:center}.paddock-card-grid[data-view="list"] .paddock-card-percent{right:62px;bottom:28px}.paddock-work-panel{border:1px solid #43b37c;border-radius:13px;background:#fff;padding:15px;box-shadow:0 5px 20px rgba(18,72,43,.07);scroll-margin-top:125px}.paddock-panel-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px}.paddock-panel-title{display:flex;align-items:center;gap:12px}.paddock-panel-title h2{margin:0 0 6px;font-size:26px}.paddock-type-chip{display:inline-flex;padding:5px 9px;border-radius:999px;background:#f0f4f1;color:#55675d;font-size:11px;font-weight:800}.paddock-panel-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.paddock-panel-actions .btn{padding:9px 12px}.paddock-panel-actions button:disabled{opacity:.45;cursor:not-allowed}.paddock-info{border:1px solid var(--pd-line);border-radius:10px;overflow:hidden;background:#fff;margin:0}.paddock-info>summary{list-style:none;display:flex;justify-content:space-between;cursor:pointer;padding:11px 14px;font-weight:900;color:#163e29;border-left:3px solid var(--pd-green);background:#f9fcfa}.paddock-info>summary::-webkit-details-marker{display:none}.paddock-info-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--pd-line)}.paddock-info-grid>div{min-height:74px;padding:12px 16px;border-right:1px solid var(--pd-line);border-bottom:1px solid var(--pd-line)}.paddock-info-grid>div:nth-child(4n){border-right:0}.paddock-info-grid>div:nth-last-child(-n+4){border-bottom:0}.paddock-info-grid span{display:block;color:#718078;font-size:11px}.paddock-info-grid b{display:block;margin-top:4px;font-size:15px}.paddock-inline-progress{display:block;width:75%;height:7px;background:#e4eee8;border-radius:99px;margin-top:5px;overflow:hidden}.paddock-inline-progress i{display:block;height:100%;background:var(--pd-green);border-radius:inherit}.paddock-tabs{display:flex;gap:6px;margin:13px 0 10px;overflow-x:auto;padding-bottom:2px}.paddock-tabs button{border:1px solid #d4e1d8;background:#f8fbf9;color:#41594b;border-radius:8px;padding:10px 13px;font-weight:850;cursor:pointer;white-space:nowrap}.paddock-tabs button.active{background:var(--pd-green);color:#fff;border-color:var(--pd-green)}.paddock-tab-panel{border-radius:10px}.paddock-table-wrap{overflow-x:auto;border:1px solid #e0e9e3;border-radius:10px}.paddock-table-wrap table{margin:0;min-width:760px}.paddock-table-wrap th{background:#eef5f1;color:#183a28}.paddock-table-wrap td,.paddock-table-wrap th{padding:10px 12px}.paddock-table-wrap tbody tr:hover{background:#f5faf7}.paddock-tag-link{font-weight:900;color:#18261d;text-decoration:none}.paddock-tag-link:hover{color:var(--pd-green);text-decoration:underline}.paddock-animal-table td small{display:block;color:#7a8980;margin-top:3px}.paddock-gender{font-size:21px;font-weight:900}.paddock-gender.female{color:#ef3e9a}.paddock-gender.male{color:#2275df}.paddock-row-actions{display:flex;gap:5px;align-items:center}.paddock-icon-action{width:31px;height:31px;display:inline-grid;place-items:center;border:0;border-radius:50%;background:#eff4f1;color:#173e29;text-decoration:none;font-size:17px;font-weight:900;cursor:pointer;padding:0}.paddock-icon-action:hover{background:#dceee3}.paddock-icon-action.remove{background:#fff0ee;color:#b8342b}.paddock-row-actions form{margin:0}.paddock-panel-foot{display:flex;justify-content:space-between;gap:10px;margin-top:12px}.paddock-empty{text-align:center;color:#6d7c73;padding:22px!important}.paddock-ration-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;align-items:center;padding:13px;border:1px solid var(--pd-line);background:var(--pd-soft);border-radius:10px}.paddock-ration-summary span{display:block;color:#708077;font-size:11px}.paddock-ration-summary b{display:block;margin-top:4px}.paddock-tab-form{margin-top:12px;grid-template-columns:2fr 1fr 2fr auto;align-items:end}.paddock-note-card{background:#fffaf0;border:1px solid #eee1be;border-radius:10px;padding:17px}.paddock-note-card h3{margin-top:0}.extra-feed-card{padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:0}.extra-feed-main{min-width:0;display:grid;gap:2px}.extra-feed-main b{font-size:13px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.extra-feed-main span{font-size:12px;color:#5f6f65;line-height:1.25}.extra-feed-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}.extra-feed-actions form{margin:0}.extra-feed-actions .btn{padding:7px 10px;min-height:31px;font-size:11px;white-space:nowrap}@media(max-width:700px){.extra-feed-card{align-items:flex-start;flex-direction:column;padding:9px 10px;gap:7px}.extra-feed-main b{white-space:normal}.extra-feed-actions{width:100%}.extra-feed-actions .btn,.extra-feed-actions form{flex:1}.extra-feed-actions form .btn{width:100%}}.paddock-unassigned{margin-top:14px}.paddock-unassigned>summary{cursor:pointer;font-weight:900;font-size:16px}.paddock-empty-page{text-align:center;padding:50px 20px;background:#fff;border:1px dashed #a9c9b5;border-radius:14px}.paddock-empty-page>span{font-size:52px}.paddock-empty-page h2{margin-bottom:4px}.paddock-search-count{display:block;color:#6b7a71;font-size:12px;margin:-7px 0 10px}.paddock-dialog{width:min(720px,calc(100vw - 26px));max-height:88vh;border:0;border-radius:16px;padding:0;box-shadow:0 28px 80px #0c2f1d55}.paddock-dialog::backdrop{background:#102b1d80;backdrop-filter:blur(2px)}.paddock-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;background:#f5faf7;border-bottom:1px solid var(--pd-line)}.paddock-dialog-head h2{margin:0}.paddock-dialog-close{border:0;background:#e5eee8;border-radius:50%;width:36px;height:36px;font-size:24px;cursor:pointer}.paddock-dialog-body{padding:18px 20px}.paddock-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.paddock-kpi-note{font-size:10px!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:1180px){.paddock-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.paddock-summary-row{grid-template-columns:repeat(2,minmax(0,1fr))}.paddock-new-button{min-height:56px;grid-column:span 2}.paddock-toolbar{grid-template-columns:minmax(230px,1fr) 150px 170px}.paddock-view-switch{grid-column:1/-1;justify-content:flex-start}.paddock-info-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.paddock-info-grid>div:nth-child(2n){border-right:0}.paddock-info-grid>div:nth-last-child(-n+4){border-bottom:1px solid var(--pd-line)}.paddock-info-grid>div:nth-last-child(-n+2){border-bottom:0}.paddock-tab-form{grid-template-columns:1fr 1fr}.paddock-tab-form>div{align-self:end}}
 @media(max-width:760px){.paddock-page-head{align-items:flex-start}.paddock-page-head .paddock-house{font-size:39px}.paddock-page-head h1{font-size:25px}.paddock-toolbar{grid-template-columns:1fr 1fr}.paddock-search-wrap{grid-column:1/-1}.paddock-view-switch{overflow-x:auto}.paddock-view-button{font-size:11px;padding:9px}.paddock-summary-row{grid-template-columns:1fr 1fr}.paddock-kpi{padding:10px}.paddock-kpi b{font-size:19px}.paddock-new-button{grid-column:1/-1;min-height:48px}.paddock-card-grid,.paddock-card-grid[data-view="large"]{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.paddock-select-card{min-height:118px;padding:11px}.paddock-card-copy>b{font-size:14px}.paddock-card-copy small{font-size:10px}.paddock-card-copy strong{font-size:17px}.paddock-state{padding:4px 7px;font-size:9px}.paddock-house{font-size:25px}.paddock-card-progress{left:11px}.paddock-work-panel{padding:11px}.paddock-panel-head{align-items:flex-start;display:block}.paddock-panel-actions{justify-content:flex-start;margin-top:10px}.paddock-panel-title h2{font-size:22px}.paddock-info-grid{grid-template-columns:1fr 1fr}.paddock-info-grid>div{padding:10px;min-height:67px}.paddock-tabs button{padding:9px 10px;font-size:11px}.paddock-panel-foot{display:grid}.paddock-panel-foot .btn{width:100%}.paddock-ration-summary{grid-template-columns:1fr 1fr}.paddock-ration-summary .btn{grid-column:1/-1}.paddock-tab-form{grid-template-columns:1fr}.paddock-animal-table{min-width:0!important}.paddock-animal-table thead{display:none}.paddock-animal-table,.paddock-animal-table tbody,.paddock-animal-table tr,.paddock-animal-table td{display:block;width:100%}.paddock-animal-table tr{margin:8px;border:1px solid var(--pd-line);border-radius:10px;padding:7px;width:calc(100% - 16px);background:#fff}.paddock-animal-table td{display:grid;grid-template-columns:92px 1fr;gap:8px;border-bottom:1px solid #edf2ee;padding:7px!important}.paddock-animal-table td:last-child{border-bottom:0}.paddock-animal-table td:before{content:attr(data-label);font-size:10px;color:#718078;font-weight:800}.paddock-row-actions{justify-content:flex-start}.paddock-dialog-body{padding:14px}.paddock-dialog .form{grid-template-columns:1fr}}
 @media(max-width:480px){.paddock-card-grid,.paddock-card-grid[data-view="large"]{grid-template-columns:1fr}.paddock-toolbar{grid-template-columns:1fr}.paddock-toolbar>*{grid-column:1}.paddock-summary-row{grid-template-columns:1fr 1fr}.paddock-card-grid[data-view="list"] .paddock-select-card{grid-template-columns:auto 1fr auto;min-height:110px}.paddock-card-grid[data-view="list"] .paddock-card-progress{position:absolute;left:11px;right:46px;bottom:14px}.paddock-info-grid{grid-template-columns:1fr}.paddock-info-grid>div{border-right:0!important;border-bottom:1px solid var(--pd-line)!important}.paddock-info-grid>div:last-child{border-bottom:0!important}.paddock-panel-actions .btn,.paddock-panel-actions form{flex:1}.paddock-panel-actions form .btn{width:100%}.paddock-ration-summary{grid-template-columns:1fr}.paddock-ration-summary .btn{grid-column:auto}}
@@ -4280,20 +4670,24 @@ root.querySelectorAll('[data-paddock-view]').forEach(button=>button.addEventList
 root.querySelectorAll('.paddock-tabs').forEach(nav=>nav.addEventListener('click',event=>{const button=event.target.closest('[data-paddock-tab]');if(!button)return;const panel=nav.closest('[data-paddock-panel]');nav.querySelectorAll('[data-paddock-tab]').forEach(x=>x.classList.toggle('active',x===button));panel.querySelectorAll('[data-paddock-tab-panel]').forEach(x=>x.hidden=x.dataset.paddockTabPanel!==button.dataset.paddockTab)}));
 function openDialog(dialog){if(!dialog)return;if(dialog.showModal)dialog.showModal();else dialog.setAttribute('open','')}
 function closeDialog(dialog){if(!dialog)return;if(dialog.close)dialog.close();else dialog.removeAttribute('open')}
-const createDialog=root.querySelector('#paddockCreateDialog'),assignDialog=root.querySelector('#paddockAssignDialog'),moveDialog=root.querySelector('#paddockMoveDialog');
+const createDialog=root.querySelector('#paddockCreateDialog'),assignDialog=root.querySelector('#paddockAssignDialog'),moveDialog=root.querySelector('#paddockMoveDialog'),bulkRationDialog=root.querySelector('#paddockBulkRationDialog'),extraFeedDialog=root.querySelector('#paddockExtraFeedDialog');
+function resetExtraFeed(pid){const f=extraFeedDialog.querySelector('form');f.reset();f.querySelector('[name=\"id\"]').value='';f.querySelector('[name=\"paddock_id\"]').value=pid||'';f.querySelector('[name=\"return_paddock_id\"]').value=pid||'';f.querySelector('[name=\"start_date\"]').value='{date.today().isoformat()}';f.querySelector('[name=\"kg_per_head_day\"]').value='1.00';extraFeedDialog.querySelector('[data-extra-feed-title]').textContent='＋ Ek Yem / Takviye';extraFeedDialog.querySelector('[data-extra-feed-submit]').textContent='Ek Yemi Kaydet'}
+function editExtraFeed(btn){const f=extraFeedDialog.querySelector('form');f.reset();f.querySelector('[name=\"id\"]').value=btn.dataset.editExtraFeed||'';f.querySelector('[name=\"paddock_id\"]').value=btn.dataset.paddock||'';f.querySelector('[name=\"return_paddock_id\"]').value=btn.dataset.paddock||'';f.querySelector('[name=\"feed_id\"]').value=btn.dataset.feed||'';f.querySelector('[name=\"kg_per_head_day\"]').value=btn.dataset.kg||'1.00';f.querySelector('[name=\"start_date\"]').value=btn.dataset.start||'{date.today().isoformat()}';f.querySelector('[name=\"notes\"]').value=btn.dataset.notes||'';extraFeedDialog.querySelector('[data-extra-feed-title]').textContent='✏ Ek Yemi Düzenle';extraFeedDialog.querySelector('[data-extra-feed-submit]').textContent='Değişiklikleri Kaydet';openDialog(extraFeedDialog)}
 function configureMove(from,ref){const animal=moveDialog.querySelector('[name="animal_ref"]'),destination=moveDialog.querySelector('[name="paddock_id"]'),back=moveDialog.querySelector('[name="return_paddock_id"]');animal.value='';[...animal.options].forEach((option,index)=>{if(!index)return;const show=!from||option.dataset.paddock===String(from);option.hidden=!show;option.disabled=!show});if(ref)animal.value=ref;[...destination.options].forEach(option=>option.disabled=option.value===String(from));destination.value='';back.value=from||'';openDialog(moveDialog)}
-root.addEventListener('click',event=>{const target=event.target.closest('button,a');if(!target)return;if(target.matches('[data-open-paddock-create]')){openDialog(createDialog);return}if(target.matches('[data-add-paddock]')){assignDialog.querySelector('[name="paddock_id"]').value=target.dataset.addPaddock;assignDialog.querySelector('[name="return_paddock_id"]').value=target.dataset.addPaddock;openDialog(assignDialog);return}if(target.matches('[data-move-paddock]')){configureMove(target.dataset.movePaddock,'');return}if(target.matches('[data-move-animal]')){configureMove(target.dataset.currentPaddock,target.dataset.moveAnimal);return}if(target.matches('[data-show-all-paddock]')){const panel=target.closest('[data-paddock-panel]');panel.querySelectorAll('.paddock-extra-row').forEach(row=>row.hidden=false);target.textContent='Tümü gösteriliyor';target.disabled=true;return}if(target.matches('[data-dialog-close]')){closeDialog(target.closest('dialog'));}});
+root.addEventListener('click',event=>{const target=event.target.closest('button,a');if(!target)return;if(target.matches('[data-open-paddock-create]')){openDialog(createDialog);return}if(target.matches('[data-open-bulk-ration]')){openDialog(bulkRationDialog);return}if(target.matches('[data-open-extra-feed]')){resetExtraFeed(target.dataset.openExtraFeed);openDialog(extraFeedDialog);return}if(target.matches('[data-edit-extra-feed]')){editExtraFeed(target);return}if(target.matches('[data-bulk-select-all]')){bulkRationDialog.querySelectorAll('input[type=checkbox][name^=bulk_paddock_]').forEach(x=>x.checked=true);return}if(target.matches('[data-bulk-clear]')){bulkRationDialog.querySelectorAll('input[type=checkbox][name^=bulk_paddock_]').forEach(x=>x.checked=false);return}if(target.matches('[data-add-paddock]')){assignDialog.querySelector('[name="paddock_id"]').value=target.dataset.addPaddock;assignDialog.querySelector('[name="return_paddock_id"]').value=target.dataset.addPaddock;openDialog(assignDialog);return}if(target.matches('[data-move-paddock]')){configureMove(target.dataset.movePaddock,'');return}if(target.matches('[data-move-animal]')){configureMove(target.dataset.currentPaddock,target.dataset.moveAnimal);return}if(target.matches('[data-show-all-paddock]')){const panel=target.closest('[data-paddock-panel]');panel.querySelectorAll('.paddock-extra-row').forEach(row=>row.hidden=false);target.textContent='Tümü gösteriliyor';target.disabled=true;return}if(target.matches('[data-dialog-close]')){closeDialog(target.closest('dialog'));}});
 root.querySelectorAll('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{if(event.target===dialog)closeDialog(dialog)}));
 let initial=new URL(location.href).searchParams.get('selected');try{initial=initial||localStorage.getItem('ciftlikpro-paddock-selected')}catch(e){}if(initial&&cards.some(x=>x.dataset.paddockCard===String(initial)))selectPaddock(initial,false);
 let view='small';try{view=localStorage.getItem('ciftlikpro-paddock-view')||'small'}catch(e){}const viewButton=root.querySelector('[data-paddock-view="'+view+'"]')||root.querySelector('[data-paddock-view="small"]');if(viewButton)viewButton.click();filterAndSort();
 })();</script>
 '''
-    page_html=f'''<div class="paddock-page"><style>{paddock_css}</style><div class="paddock-page-head"><span class="paddock-house">🏠</span><div><h1>Padoklarım</h1><p class="mut">Padokları seçin, hayvanları ve tüm ayrıntıları tek çalışma panelinden yönetin.</p></div></div>
+    page_html=f'''<div class="paddock-page"><style>{paddock_css}</style><div class="paddock-page-head"><span class="paddock-house">🏠</span><div><h1>Padoklarım</h1><p class="mut">Padokları seçin, hayvanları ve tüm ayrıntıları tek çalışma panelinden yönetin.</p></div><div style="margin-left:auto"><button type="button" class="btn blue" data-open-bulk-ration>⚖ Toplu Rasyon Ata</button></div></div>
     <div class="paddock-toolbar"><div class="paddock-search-wrap"><span>⌕</span><input id="paddockSearch" type="search" placeholder="Padok adı, not, küpe veya hayvan ara…" autocomplete="off"></div><label>Durum<select id="paddockStatus"><option value="">Tümü</option><option value="active">Aktif</option><option value="full">Dolu</option><option value="warning">Uyarı</option><option value="over">Kapasite Aşımı</option><option value="empty">Boş</option></select></label><label>Sıralama<select id="paddockSort"><option value="name">Ad (A-Z)</option><option value="population">Hayvan Sayısı</option><option value="occupancy">Doluluk</option><option value="updated">Son Güncelleme</option></select></label><div class="paddock-view-switch" aria-label="Görünüm"><button type="button" class="paddock-view-button active" data-paddock-view="small">▦ Küçük Kartlar</button><button type="button" class="paddock-view-button" data-paddock-view="large">▤ Büyük Kartlar</button><button type="button" class="paddock-view-button" data-paddock-view="list">☷ Liste</button></div></div>
     <div class="paddock-summary-row"><div class="paddock-kpi"><i>🏠</i><div><span>Toplam Padok</span><b>{len(paddocks)}</b></div></div><div class="paddock-kpi"><i>🐄</i><div><span>Toplam Hayvan</span><b>{len(subjects)}</b><span class="paddock-kpi-note">{len(unassigned)} padoksuz</span></div></div><div class="paddock-kpi"><i>⚖</i><div><span>Toplam Canlı Kg</span><b>{tr_number(global_weight,0)}</b></div></div><div class="paddock-kpi"><i>🌽</i><div><span>Günlük Yem</span><b>{tr_number(daily_feed_total,1)} kg</b></div></div><button type="button" class="paddock-new-button" data-open-paddock-create>＋ Yeni Padok</button></div>
     <span class="paddock-search-count" id="paddockSearchCount"></span><section class="paddock-card-grid" id="paddockCardGrid" data-view="small">{''.join(cards)}</section>{''.join(panels) if panels else empty_page}
     <details class="card paddock-unassigned" {'open' if unassigned else ''}><summary>⚠ Padoksuz Aktif Hayvanlar ({len(unassigned)})</summary><div class="paddock-table-wrap" style="margin-top:12px"><table class="paddock-animal-table"><thead><tr><th>Küpe No</th><th>Cinsiyet</th><th>Tür / Irk</th><th>Yaş</th><th>Canlı Kg</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>{unassigned_rows}</tbody></table></div></details>
     <dialog class="paddock-dialog" id="paddockCreateDialog"><div class="paddock-dialog-head"><div><h2>＋ Yeni Padok</h2><span class="mut">Padok bilgilerini ve kapasitesini tanımlayın.</span></div><button type="button" class="paddock-dialog-close" data-dialog-close>×</button></div><div class="paddock-dialog-body"><form method="post" action="/paddock/create" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><label>Padok Adı<input name="name" required placeholder="Besi B-01"></label><label>Kod<input name="code" placeholder="B01"></label><label>Tür<select name="type"><option>Genel</option><option>Besi</option><option>Dişi</option><option>Buzağı</option><option>Doğum</option><option>Karantina</option></select></label><label>Kapasite<input type="number" min="0" name="capacity" value="0"></label><label class="full">Not<textarea name="notes" rows="3"></textarea></label><div class="full paddock-dialog-actions"><button type="button" class="btn alt" data-dialog-close>İptal</button><button class="btn">Padoku Kaydet</button></div></form></div></dialog>
+    <dialog class="paddock-dialog" id="paddockBulkRationDialog"><div class="paddock-dialog-head"><div><h2>⚖ Toplu Rasyon Ata</h2><span class="mut">Bir rasyonu seçtiğiniz tüm aktif padoklara aynı başlangıç tarihiyle atayın.</span></div><button type="button" class="paddock-dialog-close" data-dialog-close>×</button></div><div class="paddock-dialog-body"><form method="post" action="/ration/assign-bulk" data-submit-lock="1" data-submit-text="⏳ Toplu atanıyor…"><div class="form"><label>Rasyon<select name="ration_id" required><option value="">Seçin</option>{ration_opts}</select></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah besi grubu"></label></div><div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap"><button type="button" class="btn alt" data-bulk-select-all>Tümünü Seç</button><button type="button" class="btn alt" data-bulk-clear>Seçimi Temizle</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;max-height:320px;overflow:auto;padding:4px">{bulk_paddock_checks}</div><div class="paddock-dialog-actions"><button type="button" class="btn alt" data-dialog-close>İptal</button><button class="btn blue">Seçili Padoklara Ata</button></div></form></div></dialog>
+    <dialog class="paddock-dialog" id="paddockExtraFeedDialog"><div class="paddock-dialog-head"><div><h2 data-extra-feed-title>＋ Ek Yem / Takviye</h2><span class="mut">Ana rasyon dışında hayvan başına günlük verilecek yemi tanımlayın.</span></div><button type="button" class="paddock-dialog-close" data-dialog-close>×</button></div><div class="paddock-dialog-body"><form method="post" action="/paddock-extra-feed/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="id"><input type="hidden" name="paddock_id"><input type="hidden" name="return_paddock_id"><label class="full">Yem<select name="feed_id" required><option value="">Yem seçin…</option>{feed_opts}</select></label><label>kg / baş / gün<input type="number" name="kg_per_head_day" min="0.01" step="0.01" required value="1.00"></label><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label class="full">Not<input name="notes" placeholder="Örn. 2 kg arpa + 2 kg Kardelen takviyesi"></label><div class="full paddock-dialog-actions"><button type="button" class="btn alt" data-dialog-close>İptal</button><button class="btn" data-extra-feed-submit>Ek Yemi Kaydet</button></div></form></div></dialog>
     <dialog class="paddock-dialog" id="paddockAssignDialog"><div class="paddock-dialog-head"><div><h2>🐄 Bu Padoka Hayvan Ekle</h2><span class="mut">Padoksuz veya başka padoktaki aktif hayvanı seçin.</span></div><button type="button" class="paddock-dialog-close" data-dialog-close>×</button></div><div class="paddock-dialog-body"><form method="post" action="/paddock/assign" class="form" data-submit-lock="1" data-submit-text="⏳ Atanıyor…"><label class="full">Hayvan<select name="animal_ref" required><option value="">Seçin</option>{animal_opts}</select></label><input type="hidden" name="paddock_id"><input type="hidden" name="return_paddock_id"><label class="full">Taşıma Notu<input name="notes" placeholder="Padoka ekleme / grup değişimi"></label><div class="full paddock-dialog-actions"><button type="button" class="btn alt" data-dialog-close>İptal</button><button class="btn">Padoka Ekle</button></div></form></div></dialog>
     <dialog class="paddock-dialog" id="paddockMoveDialog"><div class="paddock-dialog-head"><div><h2>⇄ Hayvanı Padoka Ata / Taşı</h2><span class="mut">Hayvanı yeni padoka taşıyın veya padoksuz bırakın.</span></div><button type="button" class="paddock-dialog-close" data-dialog-close>×</button></div><div class="paddock-dialog-body"><form method="post" action="/paddock/assign" class="form" data-submit-lock="1" data-submit-text="⏳ Taşınıyor…"><label class="full">Hayvan<select name="animal_ref" required><option value="">Seçin</option>{move_animal_opts}</select></label><label>Yeni Padok<select name="paddock_id"><option value="">Padoksuz</option>{pd_opts}</select></label><label>Taşıma Notu<input name="notes" placeholder="Grup değişimi"></label><input type="hidden" name="return_paddock_id"><div class="full paddock-dialog-actions"><button type="button" class="btn alt" data-dialog-close>İptal</button><button class="btn blue">Hayvanı Taşı</button></div></form></div></dialog>
     <div class="sr-only">Kapasite özeti: {known_free} boş yer, {overloaded} kapasite aşımı.</div>{paddock_js}</div>'''
@@ -4351,10 +4745,13 @@ def promote_mature_calves():
         for calf in rows:
             if months_old(calf['birth_date']) < 10: continue
             existing=c.execute('select id from animals where tag=?',(calf['tag'],)).fetchone()
-            if existing: aid=existing['id']
+            transferred_internal=calf_internal_cost_total(c,int(calf['id']))
+            if existing:
+                aid=existing['id']
+                c.execute('update animals set internal_production_cost=? where id=?',(transferred_internal,aid))
             else:
-                cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,paddock_id,photo_url,sold_price,status,purchase_date,purchase_price,daily_feed_cost,daily_care_cost,target_sale_price) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    (calf['tag'],calf['nickname'] or '',calf['gender'] or '',calf['breed'] or '',calf['birth_date'],calf['notes'] or '',calf['paddock'] or '',calf['paddock_id'],calf['photo_url'] or '',0,'Aktif',calf['purchase_date'] or '',float(calf['purchase_price'] or 0),float(calf['daily_feed_cost'] or 0),float(calf['daily_care_cost'] or 0),float(calf['target_sale_price'] or 0)))
+                cur=c.execute('insert into animals(tag,nickname,gender,breed,birth_date,notes,paddock,paddock_id,photo_url,sold_price,status,purchase_date,purchase_price,daily_feed_cost,daily_care_cost,target_sale_price,internal_production_cost) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (calf['tag'],calf['nickname'] or '',calf['gender'] or '',calf['breed'] or '',calf['birth_date'],calf['notes'] or '',calf['paddock'] or '',calf['paddock_id'],calf['photo_url'] or '',0,'Aktif',calf['purchase_date'] or '',float(calf['purchase_price'] or 0),float(calf['daily_feed_cost'] or 0),float(calf['daily_care_cost'] or 0),float(calf['target_sale_price'] or 0),transferred_internal))
                 aid=cur.lastrowid
             for phist in c.execute("select * from paddock_history where animal_source='calf' and animal_id=? order by id",(calf['id'],)).fetchall():
                 if not c.execute("select 1 from paddock_history where animal_source='animal' and animal_id=? and moved_at=? and coalesce(to_paddock_id,0)=coalesce(?,0)",(aid,phist['moved_at'],phist['to_paddock_id'])).fetchone():
@@ -4551,6 +4948,108 @@ body.erp-ration-reference .erp-secondary{margin-top:8px}.erp-ration-reference .e
 </script>
 """
 
+# Hotfix1.19 — Rasyon Çalışma Masası 2 karar katmanı.
+# Yalnız mevcut hedef kartlarının ürettiği durumları görünür hale getirir;
+# solver, hedef aralıkları ve rasyon hesap fonksiyonlarına müdahale etmez.
+WORKBENCH2_UI = r"""
+<style id="workbench2-decision-ui">
+.wb2-decision-rail{min-width:0;background:#fff;border:1px solid #d4e0d7;border-radius:10px;box-shadow:0 2px 9px rgba(21,61,40,.06);overflow:hidden;color:#173d28}
+.wb2-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;border-bottom:1px solid #e0e8e2;background:linear-gradient(135deg,#f8fbf9,#eef7f1)}
+.wb2-head b{font-size:13px}.wb2-current{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:99px;font-size:10px;font-weight:900;background:#edf3ef;color:#52675b}
+.wb2-current:before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}.wb2-current.ok{background:#e6f7ed;color:#087643}.wb2-current.limited{background:#fff4d8;color:#9b6000}.wb2-current.none{background:#fde9e7;color:#b72f28}
+.wb2-body{padding:10px}.wb2-status-track{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:10px}.wb2-state{padding:7px 4px;border:1px solid #dfe8e2;border-radius:7px;background:#fafcfb;text-align:center;color:#77857d;font-size:9px;font-weight:900}.wb2-state span{display:block;font-size:15px;line-height:1.1;margin-bottom:3px}.wb2-state.active.ok{border-color:#54b879;background:#eaf8ef;color:#087643}.wb2-state.active.limited{border-color:#e7b54b;background:#fff7e5;color:#925900}.wb2-state.active.none{border-color:#df716b;background:#fff0ef;color:#af2d27}
+.wb2-section{padding:9px 0;border-top:1px solid #edf1ee}.wb2-section:first-of-type{border-top:0;padding-top:0}.wb2-section h4{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.35px;color:#65766c}.wb2-reasons{display:grid;gap:5px}.wb2-reason{padding:7px 8px;border-radius:7px;background:#fff8e9;border-left:3px solid #dfa221}.wb2-reason.bad{background:#fff1f0;border-left-color:#d54b43}.wb2-reason b,.wb2-reason span{display:block;font-size:10px;line-height:1.25}.wb2-reason span{margin-top:2px;color:#66756c;font-size:9px}.wb2-all-good{padding:8px;border-radius:7px;background:#ecf8f0;color:#0b7141;font-size:10px;font-weight:800}
+.wb2-next{padding:9px;border-radius:8px;background:#edf6f0;color:#24583d;font-size:10px;line-height:1.4}.wb2-next b{display:block;margin-bottom:3px;color:#124d2e}.wb2-facts{display:grid;grid-template-columns:1fr 1fr;gap:5px}.wb2-fact{padding:7px;background:#f6f9f7;border:1px solid #e3eae5;border-radius:7px;min-width:0}.wb2-fact span,.wb2-fact b{display:block}.wb2-fact span{font-size:8px;color:#718078;text-transform:uppercase;font-weight:900}.wb2-fact b{font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wb2-actions{display:grid;gap:6px}.wb2-actions .btn{width:100%;min-height:34px!important;padding:6px 8px!important;font-size:10px!important;border-radius:7px!important}.wb2-lock-note{margin-top:8px;padding-top:8px;border-top:1px dashed #dbe5de;color:#6c7b72;font-size:8.5px;line-height:1.35}
+@media(min-width:1281px){body.erp-ration-reference .erp-ration-layout{grid-template-columns:226px minmax(560px,1fr) 270px!important}.wb2-decision-rail{position:sticky;top:116px;max-height:calc(100vh - 146px);overflow:auto}}
+@media(min-width:901px) and (max-width:1280px){body.erp-ration-reference .erp-ration-layout{grid-template-columns:210px minmax(0,1fr)!important}.wb2-decision-rail{grid-column:2;margin-top:0}.wb2-body{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}.wb2-status-track{grid-column:1/-1}.wb2-section:nth-of-type(3),.wb2-section:nth-of-type(4){border-top:0}}
+@media(max-width:900px){.wb2-decision-rail{margin:0 0 10px;border-radius:14px}.wb2-head{padding:11px 12px}.wb2-body{padding:10px}.wb2-status-track{margin-bottom:8px}.wb2-section{padding:8px 0}.wb2-facts{grid-template-columns:repeat(3,1fr)}.wb2-actions{grid-template-columns:1fr 1fr}.wb2-actions .btn:first-child{grid-column:1/-1;min-height:44px!important;font-size:12px!important}.wb2-lock-note{font-size:9px}}
+@media(max-width:460px){.wb2-facts{grid-template-columns:1fr 1fr}.wb2-state{font-size:8px}.wb2-state span{font-size:14px}}
+</style>
+<script id="workbench2-decision-script">
+(()=>{
+ const start=()=>{
+  const shell=document.querySelector('.workbench-shell'),target=document.querySelector('.science-target-grid');
+  if(!shell||!target||document.querySelector('.wb2-decision-rail'))return;
+  const rail=document.createElement('aside');rail.className='wb2-decision-rail';rail.setAttribute('aria-label','Rasyon çözüm durumu');
+  rail.innerHTML=`<div class="wb2-head"><b>🧭 Çözüm Durumu</b><span class="wb2-current" id="wb2-current">Analiz</span></div><div class="wb2-body"><div class="wb2-status-track" aria-label="Durum basamakları"><div class="wb2-state ok" data-state="ok"><span>✓</span>Uygun</div><div class="wb2-state limited" data-state="limited"><span>!</span>Sınırlı</div><div class="wb2-state none" data-state="none"><span>×</span>Çözüm yok</div></div><section class="wb2-section"><h4>Neden?</h4><div class="wb2-reasons" id="wb2-reasons"></div></section><section class="wb2-section"><h4>En etkili sonraki adım</h4><div class="wb2-next" id="wb2-next"></div></section><section class="wb2-section"><h4>Canlı özet</h4><div class="wb2-facts"><div class="wb2-fact"><span>Yem</span><b id="wb2-feed-count">—</b></div><div class="wb2-fact"><span>Maliyet</span><b id="wb2-cost">—</b></div><div class="wb2-fact"><span>Alternatif</span><b id="wb2-alternatives">—</b></div></div></section><section class="wb2-section"><h4>Hızlı işlem</h4><div class="wb2-actions"><button type="button" class="btn blue" id="wb2-balance">⚖️ Akıllı dengelemeye git</button><button type="button" class="btn" id="wb2-add-feed">＋ Yem ekle</button><a class="btn alt" id="wb2-report" href="#">🧾 Rapor</a></div><div class="wb2-lock-note">Bilimsel güvenlik rayları korunur. Solver DEV4.19.6 enerji/HP takası ve faz bazlı nişasta bantlarıyla seçili yem miktarlarını otomatik dengeler; GCAA hedef altıysa kayıt yapmaz.</div></section></div>`;
+  const layout=document.querySelector('.erp-ration-layout'),center=document.querySelector('.erp-ration-center');
+  if(layout&&center&&window.matchMedia('(min-width:901px)').matches)layout.append(rail);else{const workspace=shell.querySelector('.target-workspace');if(center&&workspace&&workspace.parentNode===center)center.insertBefore(rail,workspace);else shell.insertBefore(rail,shell.children[1]||null)}
+  const report=document.querySelector('#ration-workbench .workbench-actions a[href*="ration-prep-report"]');if(report)rail.querySelector('#wb2-report').href=report.href;
+  rail.querySelector('#wb2-balance').onclick=()=>document.getElementById('smart-balance')?.scrollIntoView({behavior:'smooth',block:'start'});
+  rail.querySelector('#wb2-add-feed').onclick=()=>{const box=document.getElementById('quick-feed-add');if(box){box.open=true;box.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),250)}};
+  const labels={dm:'KM tüketimi',adg:'GCAA kapasitesi',cp:'Ham protein',ndf:'NDF',endf:'Etkili NDF',rc:'Kaba / Kesif',starch:'Nişasta',ph:'Göreli asidoz riski',ca:'Kalsiyum',p:'Fosfor',cap:'Ca:P oranı'};
+  const suggestion=id=>['starch','ph','endf','ndf','rc'].includes(id)?'Kaba yem, etkili lif ve nişasta dengesini birlikte kontrol et.':['ca','p','cap'].includes(id)?'Mineral kaynaklarını ve Ca:P oranını birlikte kontrol et.':['dm','adg'].includes(id)?'KM tüketimi ile enerjiye göre GCAA kapasitesini birlikte dengele.':id==='cp'?'Protein kaynağını hedef faza göre azalt veya tamamla.':'En güçlü uyarıdan başlayarak küçük miktar adımlarıyla yeniden dengele.';
+  let queued=false;
+  const sync=()=>{queued=false;const flash=(document.querySelector('.ration-result-flash-detail,.flash.err,.flash')?.textContent||'').toLocaleLowerCase('tr-TR');const noSolution=/çözüm kaydedilmedi|çözüm bulunamadı|uygun çözüm yok|çözümsüz/.test(flash);const rows=[...target.querySelectorAll('.science-target-row')].filter(x=>!x.id.endsWith('-cost'));const bad=rows.filter(x=>x.classList.contains('bad')),warn=rows.filter(x=>x.classList.contains('warn'));const dirty=!(document.getElementById('ration-save')?.disabled??true);const solverSolved=target.dataset.solverResult==='solved'&&!dirty;const state=noSolution?'none':(bad.length||warn.length?'limited':'ok');const current=rail.querySelector('#wb2-current');current.className='wb2-current '+state;current.textContent=state==='ok'?(solverSolved?'Çözüldü':'Uygun'):state==='none'?'Çözüm yok':'Sınırlı';rail.querySelectorAll('.wb2-state').forEach(x=>x.classList.toggle('active',x.dataset.state===state));const reasons=rail.querySelector('#wb2-reasons');reasons.innerHTML='';const focus=[...bad,...warn.filter(x=>!bad.includes(x))].slice(0,3);if(state==='none'){const d=document.createElement('div');d.className='wb2-reason bad';d.innerHTML='<b>Seçili yemlerle uygun çözüm üretilemedi.</b><span>Yem havuzunu veya hedef profilini kontrollü biçimde gözden geçirin.</span>';reasons.append(d)}else if(!focus.length){const d=document.createElement('div');d.className='wb2-all-good';d.textContent=solverSolved?'Solver çözümü tamamlandı; görünen hedef ve güvenlik göstergeleri uygun.':'Görünen hedef ve güvenlik göstergeleri uygun aralıkta.';reasons.append(d)}else focus.forEach(x=>{const id=x.id.replace('target-mini-',''),status=x.querySelector('[id$="-status"]')?.textContent?.trim()||'',currentValue=x.querySelector('[id$="-current"]')?.textContent?.trim()||'';const d=document.createElement('div');d.className='wb2-reason '+(x.classList.contains('bad')?'bad':'warn');const b=document.createElement('b'),s=document.createElement('span');b.textContent=(labels[id]||id)+': '+status;s.textContent='Rasyon '+currentValue;d.append(b,s);reasons.append(d)});const primary=focus[0]?.id.replace('target-mini-','')||'';rail.querySelector('#wb2-next').innerHTML=state==='ok'?(solverSolved&&focus.length?'<b>Çözüm tamamlandı</b>Bu maddeler çözüm başarısızlığı değil, saha ince ayarıdır.':'<b>Reçeteyi koru</b>Kaydetmeden önce maliyet ve stok uygunluğunu son kez kontrol et.'):state==='none'?'<b>Yem havuzunu genişlet</b>Önce eksik besin grubunu karşılayan bir yem ekle, sonra mevcut solver ile yeniden çöz.':'<b>Öncelik: '+(labels[primary]||'en güçlü uyarı')+'</b>'+suggestion(primary);rail.querySelector('#wb2-feed-count').textContent=document.querySelectorAll('.ration-row').length+' kalem';rail.querySelector('#wb2-cost').textContent=document.getElementById('target-mini-cost-current')?.textContent?.trim()||'—';rail.querySelector('#wb2-alternatives').textContent=document.querySelectorAll('.smart-solution').length+' öneri'};
+  const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(sync)}};new MutationObserver(schedule).observe(target,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});const dirty=document.getElementById('dirty-status');if(dirty)new MutationObserver(schedule).observe(dirty,{subtree:true,childList:true,characterData:true});sync();
+ };
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+</script>
+"""
+
+# Hotfix1.19a — görsel prototipteki mobil rasyon akışı.
+# Mevcut bilimsel kartların DOM değerlerini yeniden düzenler; hesap üretmez.
+WORKBENCH2_MOBILE_UI = r"""
+<style id="workbench2-mobile-redesign">
+@media(max-width:900px){
+ html,body{max-width:100%;overflow-x:hidden!important}
+ body:has(.workbench-shell) .erp-ration-layout,body:has(.workbench-shell) .erp-ration-center,body:has(.workbench-shell) .workbench-shell{width:100%!important;max-width:100%!important;min-width:0!important;overflow:visible!important}
+ body:has(.workbench-shell) .workbench-page-head{display:none!important}
+ body:has(.workbench-shell) .erp-commandbar{overflow-x:auto!important;overscroll-behavior-x:contain;scrollbar-width:none}
+ body:has(.workbench-shell) .erp-commandbar::-webkit-scrollbar{display:none}
+ body:has(.workbench-shell) .main{padding-bottom:142px!important}
+ .wb2-mobile-profile{display:flex;align-items:center;gap:7px;overflow-x:auto;margin:0 0 9px;padding:10px 11px;background:#f5faf7;border:1px solid #d6e5dc;border-radius:13px;scrollbar-width:none}
+ .wb2-mobile-profile::-webkit-scrollbar{display:none}.wb2-profile-pill{flex:0 0 auto;padding:6px 9px;border-right:1px solid #d9e6de;font-size:11px;font-weight:850;color:#345b47;white-space:nowrap}.wb2-profile-pill:first-child{font-size:13px;color:#124c2e}.wb2-profile-pill:last-child{border-right:0}
+ .wb2-decision-rail{margin-bottom:9px!important}.wb2-decision-rail .wb2-head{display:grid!important;grid-template-columns:1fr auto auto auto!important;gap:7px!important;cursor:pointer}.wb2-decision-rail .wb2-head>b{font-size:11px!important;color:#6b7a71;text-transform:uppercase;letter-spacing:.3px}.wb2-mobile-count{font-size:10px;color:#8c5c08;font-weight:800;white-space:nowrap}.wb2-mobile-open{border:0;background:#fff;border:1px solid #dfb24f;color:#815200;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:900;cursor:pointer}.wb2-decision-rail:not(.wb2-mobile-expanded) .wb2-body{display:none!important}.wb2-decision-rail.wb2-mobile-expanded .wb2-body{display:block!important}.wb2-decision-rail.wb2-mobile-expanded .wb2-mobile-open:after{content:' Kapat'}.wb2-decision-rail.wb2-mobile-expanded .wb2-mobile-open{font-size:0}.wb2-decision-rail.wb2-mobile-expanded .wb2-mobile-open:after{font-size:10px}
+ .wb2-kpi-dashboard{margin:0 0 10px}.wb2-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.wb2-kpi{min-width:0;padding:10px;border:1px solid #d9e5dd;border-left:4px solid #2fa55d;border-radius:12px;background:#fff}.wb2-kpi.warn{border-left-color:#e3a323;background:#fffaf0}.wb2-kpi.bad{border-left-color:#d64a42;background:#fff4f3}.wb2-kpi-top{display:flex;justify-content:space-between;gap:5px;align-items:flex-start}.wb2-kpi-name{font-size:15px;font-weight:950;color:#173d28}.wb2-kpi-status{max-width:78px;padding:4px 6px;border-radius:99px;background:#edf6f0;color:#177442;font-size:8.5px;line-height:1.1;font-weight:900;text-align:center;white-space:normal}.wb2-kpi.warn .wb2-kpi-status{background:#fff0cb;color:#925900}.wb2-kpi.bad .wb2-kpi-status{background:#fde5e2;color:#ae2e28}.wb2-kpi-values{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.wb2-kpi-values span{min-width:0}.wb2-kpi-values small{display:block;color:#6d7b72;font-size:8px;font-weight:900;text-transform:uppercase}.wb2-kpi-values b{display:block;margin-top:2px;font-size:16px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wb2-kpi-secondary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px}.wb2-kpi-secondary>div{min-width:0;padding:8px 6px;text-align:center;background:#f5f8f6;border:1px solid #dfe7e2;border-radius:10px}.wb2-kpi-secondary span,.wb2-kpi-secondary b{display:block}.wb2-kpi-secondary span{font-size:8.5px;color:#6d7a72;font-weight:850}.wb2-kpi-secondary b{margin-top:3px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wb2-science-toggle{width:100%;margin-top:7px;padding:8px;border:1px solid #d8e4dc;border-radius:9px;background:#fff;color:#2f6447;font-size:10px;font-weight:850}
+ body:has(.workbench-shell) .target-compare-sticky{display:none!important}body:has(.workbench-shell) .target-compare-sticky.wb2-show-science{display:block!important;position:static!important;margin:0 0 10px!important;height:auto!important;max-height:none!important;overflow:visible!important}
+ body:has(.workbench-shell) .target-compare-sticky.wb2-show-science .science-target-grid{display:grid!important;grid-template-columns:1fr!important;grid-auto-flow:row!important;grid-auto-columns:auto!important;overflow:visible!important}
+ body:has(.workbench-shell) #ration-workbench .workbench-head h3{font-size:20px!important}body:has(.workbench-shell) #ration-workbench .workbench-head .mut{display:none!important}body:has(.workbench-shell) #ration-workbench .workbench-actions{display:none!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row{grid-template-areas:'name remove' 'qty qty' 'price daily'!important;grid-template-columns:minmax(0,1fr) auto!important;padding:11px!important;margin-bottom:8px!important;border-radius:12px!important}body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){grid-area:name!important;padding:2px 0 8px!important;font-size:15px!important}body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8){grid-area:remove!important;align-self:start!important}body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8) .btn{min-height:34px!important;padding:5px 8px!important}body:has(.workbench-shell) .ration-workbench-table .ration-stepper{grid-template-columns:48px minmax(90px,1fr) 48px!important}body:has(.workbench-shell) .ration-workbench-table .ration-stepper .btn{width:48px!important;height:46px!important;min-height:46px!important}body:has(.workbench-shell) .ration-workbench-table .ration-qty{height:46px!important;font-size:17px!important}
+ body:has(.workbench-shell) .ration-savebar{display:none!important}.wb2-mobile-dock{position:fixed;left:8px;right:8px;bottom:42px;z-index:190;display:grid;grid-template-columns:.9fr 1.1fr;gap:8px;padding:8px;background:rgba(255,255,255,.97);border:1px solid #d7e3da;border-radius:14px;box-shadow:0 -6px 24px rgba(20,58,37,.15);backdrop-filter:blur(10px)}.wb2-mobile-dock .btn{width:100%;min-height:48px!important;border-radius:10px!important;font-size:14px!important}.wb2-mobile-dock .wb2-dock-save:disabled{opacity:.5}
+}
+</style>
+<script id="workbench2-mobile-redesign-script">
+(()=>{const init=()=>{if(!window.matchMedia('(max-width:900px)').matches)return;const shell=document.querySelector('.workbench-shell'),rail=document.querySelector('.wb2-decision-rail'),target=document.querySelector('.science-target-grid'),workspace=document.querySelector('.target-workspace'),form=document.getElementById('ration-bulk-form');if(!shell||!rail||!target||!workspace||!form||document.querySelector('.wb2-kpi-dashboard'))return;
+ const context=document.querySelector('.target-context')?.textContent?.trim()||'Besi rasyonu';const pieces=context.split('·').map(x=>x.trim()).filter(Boolean);const profile=document.createElement('div');profile.className='wb2-mobile-profile';const profileData=['🐂 Besi',...pieces.slice(0,3),document.querySelectorAll('.ration-row').length+' yem'];profileData.forEach(v=>{const s=document.createElement('span');s.className='wb2-profile-pill';s.textContent=v;profile.append(s)});rail.parentNode.insertBefore(profile,rail);
+ const head=rail.querySelector('.wb2-head'),count=document.createElement('span'),open=document.createElement('button');count.className='wb2-mobile-count';open.className='wb2-mobile-open';open.type='button';open.textContent='Neden?';head.insertBefore(count,head.lastElementChild);head.append(open);const toggle=()=>{rail.classList.toggle('wb2-mobile-expanded');open.setAttribute('aria-expanded',rail.classList.contains('wb2-mobile-expanded')?'true':'false')};open.onclick=e=>{e.stopPropagation();toggle()};head.onclick=e=>{if(!e.target.closest('.wb2-current'))toggle()};
+ const dash=document.createElement('section');dash.className='wb2-kpi-dashboard';dash.innerHTML='<div class="wb2-kpi-grid"></div><div class="wb2-kpi-secondary"><div><span>Nişasta</span><b id="wb2-mobile-starch">—</b></div><div><span>Kaba / Kesif</span><b id="wb2-mobile-rc">—</b></div><div><span>Maliyet</span><b id="wb2-mobile-cost">—</b></div></div><button type="button" class="wb2-science-toggle">Tüm bilimsel değerleri göster</button>';workspace.parentNode.insertBefore(dash,workspace);const grid=dash.querySelector('.wb2-kpi-grid'),defs=[['dm','KM'],['adg','GCAA'],['cp','HP'],['ndf','NDF']];defs.forEach(([id,label])=>{const c=document.createElement('article');c.className='wb2-kpi';c.dataset.key=id;c.innerHTML='<div class="wb2-kpi-top"><span class="wb2-kpi-name">'+label+'</span><span class="wb2-kpi-status">—</span></div><div class="wb2-kpi-values"><span><small>Hedef</small><b class="wb2-kpi-target">—</b></span><span><small>Rasyon</small><b class="wb2-kpi-current">—</b></span></div>';grid.append(c)});const science=workspace.querySelector('.target-compare-sticky'),scienceBtn=dash.querySelector('.wb2-science-toggle');scienceBtn.onclick=()=>{const show=!science.classList.contains('wb2-show-science');science.classList.toggle('wb2-show-science',show);scienceBtn.textContent=show?'Bilimsel değerleri kapat':'Tüm bilimsel değerleri göster';if(show)science.scrollIntoView({behavior:'smooth',block:'start'})};
+ const workTitle=document.querySelector('#ration-workbench .workbench-head h3');if(workTitle)workTitle.textContent='🌾 Rasyondaki Yemler';const dock=document.createElement('div');dock.className='wb2-mobile-dock';dock.innerHTML='<button type="button" class="btn alt wb2-dock-add">＋ Yem Ekle</button><button type="button" class="btn wb2-dock-save">💾 Kaydet</button>';document.body.append(dock);dock.querySelector('.wb2-dock-add').onclick=()=>{const box=document.getElementById('quick-feed-add');if(box){box.open=true;box.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),250)}};const originalSave=document.getElementById('ration-save'),dockSave=dock.querySelector('.wb2-dock-save');dockSave.onclick=()=>{if(!dockSave.disabled)form.requestSubmit(originalSave)};
+ let queued=false;const sync=()=>{queued=false;defs.forEach(([id])=>{const src=document.getElementById('target-mini-'+id),card=grid.querySelector('[data-key="'+id+'"]');if(!src||!card)return;card.classList.remove('warn','bad');if(src.classList.contains('bad'))card.classList.add('bad');else if(src.classList.contains('warn'))card.classList.add('warn');card.querySelector('.wb2-kpi-target').textContent=document.getElementById('target-mini-'+id+'-target')?.textContent||'—';card.querySelector('.wb2-kpi-current').textContent=document.getElementById('target-mini-'+id+'-current')?.textContent||'—';card.querySelector('.wb2-kpi-status').textContent=document.getElementById('target-mini-'+id+'-status')?.textContent?.replace(/[✅⚠️🔴ℹ️]/g,'').trim()||'—'});document.getElementById('wb2-mobile-starch').textContent=document.getElementById('target-mini-starch-current')?.textContent||'—';document.getElementById('wb2-mobile-rc').textContent=document.getElementById('target-mini-rc-current')?.textContent||'—';document.getElementById('wb2-mobile-cost').textContent=document.getElementById('target-mini-cost-current')?.textContent||'—';const issues=[...target.querySelectorAll('.science-target-row.warn,.science-target-row.bad')].filter(x=>!x.id.endsWith('-cost')).length,solverSolved=target.dataset.solverResult==='solved'&&(originalSave?.disabled??true);count.textContent=issues?(solverSolved?issues+' ince ayar':issues+' değer dikkat istiyor'):'Değerler uygun';dockSave.disabled=!!originalSave?.disabled;dockSave.textContent=dockSave.disabled?'✓ Kaydedildi':'💾 Kaydet'};const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(sync)}};new MutationObserver(schedule).observe(target,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});if(originalSave)new MutationObserver(schedule).observe(originalSave,{attributes:true,attributeFilter:['disabled']});sync();};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init()})();
+</script>
+"""
+
+# Hotfix1.19b — masaüstü çalışma masasını mobil bilgi hiyerarşisiyle birleştirir.
+WORKBENCH2_DESKTOP_UI = r"""
+<style id="workbench2-desktop-redesign">
+@media(min-width:901px){
+ body.wb2-desktop .main{padding-bottom:92px!important}
+ body.wb2-desktop .erp-ration-layout{align-items:start!important}
+ body.wb2-desktop .erp-ration-center{display:flex!important;flex-direction:column;gap:8px}
+ body.wb2-desktop .wb2-desktop-profile{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:#fff;border:1px solid #d4e0d7;border-radius:9px;box-shadow:0 2px 8px rgba(21,61,40,.045)}
+ body.wb2-desktop .wb2-profile-main{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}.wb2-profile-main strong{font-size:13px;color:#17432c;white-space:nowrap}.wb2-profile-main span{padding-left:8px;border-left:1px solid #dce6df;color:#50665a;font-size:10px;font-weight:800;white-space:nowrap}.wb2-profile-edit{min-height:30px!important;padding:5px 10px!important;font-size:10px!important;border-radius:6px!important;white-space:nowrap}
+ body.wb2-desktop .wb2-desktop-kpis{background:#fff;border:1px solid #d4e0d7;border-radius:9px;padding:9px;box-shadow:0 2px 8px rgba(21,61,40,.045)}.wb2-desktop-kpi-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}.wb2-desktop-kpi-head b{font-size:12px;color:#1a432d}.wb2-desktop-kpi-head span{font-size:9px;color:#6c7a72}.wb2-desktop-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.wb2-desktop-kpi{display:grid;grid-template-columns:90px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:58px;padding:8px 9px;border:1px solid #dce7df;border-left:4px solid #27a55c;border-radius:8px;background:#fbfdfb}.wb2-desktop-kpi.warn{border-left-color:#e3a323;background:#fffaf0}.wb2-desktop-kpi.bad{border-left-color:#d64a42;background:#fff4f3}.wb2-desktop-kpi-name b{display:block;font-size:14px}.wb2-desktop-kpi-name small{display:block;margin-top:2px;font-size:8px;color:#6b7971}.wb2-desktop-kpi-values{display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:0}.wb2-desktop-kpi-values span{min-width:0}.wb2-desktop-kpi-values small{display:block;font-size:7px;color:#708078;font-weight:900;text-transform:uppercase}.wb2-desktop-kpi-values b{display:block;margin-top:2px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wb2-desktop-kpi-status{max-width:95px;padding:5px 7px;border-radius:99px;background:#e8f7ee;color:#087441;font-size:9px;font-weight:900;text-align:center}.wb2-desktop-kpi.warn .wb2-desktop-kpi-status{background:#fff0c9;color:#925900}.wb2-desktop-kpi.bad .wb2-desktop-kpi-status{background:#fde5e2;color:#ae2e28}
+ .wb2-desktop-secondary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.wb2-desktop-secondary>div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;background:#f3f7f4;border:1px solid #dfe7e2;border-radius:7px}.wb2-desktop-secondary span{font-size:9px;color:#67776e;font-weight:850}.wb2-desktop-secondary b{font-size:12px;white-space:nowrap}.wb2-desktop-more{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}.wb2-desktop-more .btn{min-height:28px!important;padding:4px 8px!important;font-size:9px!important;border-radius:6px!important}
+ body.wb2-desktop .target-controlbar,body.wb2-desktop .target-compare-sticky{display:none!important}body.wb2-desktop .target-controlbar.wb2-desktop-open{display:flex!important}body.wb2-desktop .target-compare-sticky.wb2-desktop-open{display:block!important;position:static!important;margin:0!important}
+ body.wb2-desktop #ration-workbench{margin-top:0!important}body.wb2-desktop #ration-workbench .workbench-head h3{font-size:14px!important}body.wb2-desktop #ration-workbench .workbench-actions{display:none!important}body.wb2-desktop .ration-savebar{display:none!important}
+ .wb2-desktop-dock{position:fixed;bottom:42px;z-index:150;display:grid;grid-template-columns:auto auto minmax(170px,240px);justify-content:end;gap:7px;margin:0;padding:8px;background:rgba(255,255,255,.97);border:1px solid #d4e0d7;border-radius:9px;box-shadow:0 -5px 20px rgba(19,57,36,.12);backdrop-filter:blur(9px);box-sizing:border-box}.wb2-desktop-dock .btn{min-height:36px!important;padding:7px 11px!important;border-radius:7px!important;font-size:10px!important}.wb2-desktop-dock .wb2-desktop-save:disabled{opacity:.5}
+ body.wb2-desktop .wb2-decision-rail{border-radius:9px!important}body.wb2-desktop .wb2-body{padding:9px!important}body.wb2-desktop .wb2-section{padding:8px 0!important}
+}
+@media(min-width:1181px){body.wb2-desktop .erp-ration-layout{grid-template-columns:220px minmax(560px,1fr) 258px!important}}
+@media(min-width:901px) and (max-width:1180px){body.wb2-desktop .erp-ration-layout{grid-template-columns:205px minmax(0,1fr)!important}body.wb2-desktop .wb2-decision-rail{grid-column:2!important;position:static!important}.wb2-desktop-kpi-grid{grid-template-columns:1fr}.wb2-desktop-dock{bottom:42px}}
+</style>
+<script id="workbench2-desktop-redesign-script">
+(()=>{const init=()=>{if(!window.matchMedia('(min-width:901px)').matches)return;const shell=document.querySelector('.workbench-shell'),layout=document.querySelector('.erp-ration-layout'),center=document.querySelector('.erp-ration-center'),workspace=document.querySelector('.target-workspace'),target=document.querySelector('.science-target-grid'),form=document.getElementById('ration-bulk-form');if(!shell||!layout||!center||!workspace||!target||!form||document.querySelector('.wb2-desktop-kpis'))return;document.body.classList.add('wb2-desktop');
+ const context=document.querySelector('.target-context')?.textContent?.trim()||'Besi rasyonu';const profile=document.createElement('div');profile.className='wb2-desktop-profile';profile.innerHTML='<div class="wb2-profile-main"><strong>🐂 Hayvan Profili</strong><span></span><span>'+document.querySelectorAll('.ration-row').length+' yem seçili</span></div><button type="button" class="btn alt wb2-profile-edit">✏️ Profili Düzenle</button>';profile.querySelector('.wb2-profile-main span').textContent=context;center.insertBefore(profile,workspace);
+ const panel=document.createElement('section');panel.className='wb2-desktop-kpis';panel.innerHTML='<div class="wb2-desktop-kpi-head"><b>Hedef ↔ Rasyon Özeti</b><span>Kaydedilmemiş miktarlar canlı güncellenir</span></div><div class="wb2-desktop-kpi-grid"></div><div class="wb2-desktop-secondary"><div><span>Nişasta</span><b id="wb2-desktop-starch">—</b></div><div><span>Kaba / Kesif</span><b id="wb2-desktop-rc">—</b></div><div><span>Günlük Maliyet</span><b id="wb2-desktop-cost">—</b></div></div><div class="wb2-desktop-more"><button type="button" class="btn alt wb2-desktop-science">🔬 Tüm bilimsel değerler</button></div>';center.insertBefore(panel,workspace);const grid=panel.querySelector('.wb2-desktop-kpi-grid'),defs=[['dm','KM','Tüketim'],['adg','GCAA','Performans'],['cp','HP','Protein'],['ndf','NDF','Lif bandı']];defs.forEach(([id,label,note])=>{const c=document.createElement('article');c.className='wb2-desktop-kpi';c.dataset.key=id;c.innerHTML='<div class="wb2-desktop-kpi-name"><b>'+label+'</b><small>'+note+'</small></div><div class="wb2-desktop-kpi-values"><span><small>Hedef</small><b class="wb2-desktop-target">—</b></span><span><small>Rasyon</small><b class="wb2-desktop-current">—</b></span></div><span class="wb2-desktop-kpi-status">—</span>';grid.append(c)});
+ const control=workspace.querySelector('.target-controlbar'),science=workspace.querySelector('.target-compare-sticky');profile.querySelector('.wb2-profile-edit').onclick=()=>{const open=!control.classList.contains('wb2-desktop-open');control.classList.toggle('wb2-desktop-open',open);profile.querySelector('.wb2-profile-edit').textContent=open?'✕ Profili Kapat':'✏️ Profili Düzenle'};panel.querySelector('.wb2-desktop-science').onclick=e=>{const open=!science.classList.contains('wb2-desktop-open');science.classList.toggle('wb2-desktop-open',open);e.currentTarget.textContent=open?'✕ Bilimsel değerleri kapat':'🔬 Tüm bilimsel değerler'};
+ const workTitle=document.querySelector('#ration-workbench .workbench-head h3');if(workTitle)workTitle.textContent='🌾 Rasyondaki Yemler';const dock=document.createElement('div');dock.className='wb2-desktop-dock';dock.innerHTML='<button type="button" class="btn alt wb2-desktop-add">＋ Yem Ekle</button><button type="button" class="btn alt wb2-desktop-reset">↩ Geri Al</button><button type="button" class="btn wb2-desktop-save">💾 Değişiklikleri Kaydet</button>';center.append(dock);const placeDock=()=>{const r=center.getBoundingClientRect();dock.style.left=Math.round(r.left)+'px';dock.style.width=Math.round(r.width)+'px'};placeDock();window.addEventListener('resize',placeDock,{passive:true});dock.querySelector('.wb2-desktop-add').onclick=()=>document.getElementById('quick-feed-search')?.focus();const originalReset=document.getElementById('ration-reset'),originalSave=document.getElementById('ration-save'),reset=dock.querySelector('.wb2-desktop-reset'),save=dock.querySelector('.wb2-desktop-save');reset.onclick=()=>originalReset?.click();save.onclick=()=>{if(!save.disabled)form.requestSubmit(originalSave)};
+ let queued=false;const sync=()=>{queued=false;defs.forEach(([id])=>{const src=document.getElementById('target-mini-'+id),card=grid.querySelector('[data-key="'+id+'"]');if(!src||!card)return;card.classList.remove('warn','bad');if(src.classList.contains('bad'))card.classList.add('bad');else if(src.classList.contains('warn'))card.classList.add('warn');card.querySelector('.wb2-desktop-target').textContent=document.getElementById('target-mini-'+id+'-target')?.textContent||'—';card.querySelector('.wb2-desktop-current').textContent=document.getElementById('target-mini-'+id+'-current')?.textContent||'—';card.querySelector('.wb2-desktop-kpi-status').textContent=document.getElementById('target-mini-'+id+'-status')?.textContent?.replace(/[✅⚠️🔴ℹ️]/g,'').trim()||'—'});document.getElementById('wb2-desktop-starch').textContent=document.getElementById('target-mini-starch-current')?.textContent||'—';document.getElementById('wb2-desktop-rc').textContent=document.getElementById('target-mini-rc-current')?.textContent||'—';document.getElementById('wb2-desktop-cost').textContent=document.getElementById('target-mini-cost-current')?.textContent||'—';save.disabled=!!originalSave?.disabled;save.textContent=save.disabled?'✓ Kaydedildi':'💾 Değişiklikleri Kaydet';reset.disabled=!!originalSave?.disabled};const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(sync)}};new MutationObserver(schedule).observe(target,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});if(originalSave)new MutationObserver(schedule).observe(originalSave,{attributes:true,attributeFilter:['disabled']});sync();};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init()})();
+</script>
+"""
+
 # FINAL5 UI polish
 FINAL5_UI_CSS = r"""
 .dashboard-tabs{display:none!important}
@@ -4620,12 +5119,29 @@ HOTFIX116_UI_CSS = r'''
 .count-tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 8px;margin-bottom:3px}.count-tab{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:9px 12px;border:1px solid #d7e4db;border-radius:10px;background:#fff;color:#28543d;font-size:12px;font-weight:850;text-decoration:none;cursor:pointer}.count-tab b{display:inline-grid;place-items:center;min-width:24px;height:21px;padding:0 6px;border-radius:99px;background:#e6f1e9;color:#276342;font-size:10px}.count-tab.active{background:#117344;color:#fff;border-color:#117344}.count-tab.active b{background:#ffffff30;color:#fff}
 .compact-filter{display:grid;grid-template-columns:minmax(240px,2fr) repeat(2,minmax(150px,1fr)) auto;gap:8px;align-items:end;padding:12px;margin-bottom:10px}.compact-filter label{font-size:11px;font-weight:850;color:#52665a}.compact-filter input,.compact-filter select{margin-top:4px}.compact-filter-actions{display:flex;gap:6px}
 .workspace-table-wrap{overflow:auto;border:1px solid #e0e9e3;border-radius:10px}.workspace-table{margin:0;min-width:920px;font-size:12px}.workspace-table th{position:sticky;top:0;z-index:2;background:#edf5ef;white-space:nowrap}.workspace-table td{vertical-align:middle}.workspace-table tbody tr:hover{background:#f0f8f3}.workspace-table .row-actions{display:flex;gap:5px;align-items:center;white-space:nowrap}.workspace-table .row-actions form{margin:0}.workspace-pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.workspace-pager>div{display:flex;gap:6px;align-items:center}.workspace-empty{text-align:center;padding:28px;color:#68796f}
-.animal-card-tabs{display:flex;gap:7px;overflow-x:auto;margin:11px 0;padding-bottom:2px}.animal-card-tab{white-space:nowrap;border:1px solid #d4e3d9;background:#fff;color:#315b44;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer}.animal-card-tab.active{background:#117344;color:#fff;border-color:#117344}.animal-card-panel{display:none}.animal-card-panel.active{display:block}.animal-profile-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:start}.animal-profile-head .photo{width:118px;height:118px}.animal-quick-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.panel-card{margin:0!important;min-width:0}.panel-table-wrap{overflow:auto;max-height:420px}.panel-table-wrap table{margin:0}.gender-note{padding:11px;border:1px solid #dce8df;border-radius:9px;background:#f6faf7;color:#53675b}
+.animal-card-tabs{display:flex;gap:7px;overflow-x:auto;margin:11px 0;padding-bottom:2px}.animal-card-tab{white-space:nowrap;border:1px solid #d4e3d9;background:#fff;color:#315b44;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer}.animal-card-tab.active{background:#117344;color:#fff;border-color:#117344}.animal-card-panel{display:none}.animal-card-panel.active{display:block}.animal-profile-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:start}.animal-profile-head .photo{width:118px;height:118px}.animal-quick-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.panel-card{margin:0!important;min-width:0}.panel-table-wrap{overflow:auto;max-height:420px}.panel-table-wrap table{margin:0}.weight-entry-form{display:grid;grid-template-columns:150px 120px minmax(150px,1fr) auto;gap:8px;align-items:center}.weight-entry-form input,.weight-entry-form button{margin:0;min-width:0}.weight-history-table{width:100%;table-layout:auto}.weight-history-table th,.weight-history-table td{white-space:nowrap}.weight-history-table td:last-child{white-space:normal;overflow-wrap:anywhere}@media(max-width:1050px){.weight-entry-form{grid-template-columns:1fr 1fr}.weight-entry-form input[name=notes],.weight-entry-form button{grid-column:1/-1;width:100%}.weight-history-wrap{max-height:none;overflow:visible}.weight-history-table,.weight-history-table tbody,.weight-history-table tr,.weight-history-table td{display:block;width:100%}.weight-history-table thead{display:none}.weight-history-table tr{border:1px solid #dfe9e2;border-radius:9px;margin:7px 0;background:#fff;overflow:hidden}.weight-history-table td{display:grid;grid-template-columns:minmax(92px,34%) minmax(0,1fr);gap:8px;align-items:start;padding:7px 9px!important;border-bottom:1px solid #edf2ee;white-space:normal;overflow-wrap:anywhere}.weight-history-table td:last-child{border-bottom:0}.weight-history-table td:before{content:attr(data-label);font-size:11px;font-weight:800;color:#6b7b72}.weight-history-table td[colspan]{display:block;text-align:center}.weight-history-table td[colspan]:before{display:none}}@media(max-width:520px){.weight-entry-form{grid-template-columns:1fr}.weight-entry-form input,.weight-entry-form input[name=notes],.weight-entry-form button{grid-column:1/-1;width:100%}.weight-history-table td{grid-template-columns:90px minmax(0,1fr);font-size:12px}}.gender-note{padding:11px;border:1px solid #dce8df;border-radius:9px;background:#f6faf7;color:#53675b}
 .section-drawer-backdrop{position:fixed;inset:0;display:none;background:rgba(9,34,22,.42);z-index:2190}.section-drawer-backdrop.open{display:block}.section-drawer{position:fixed;right:0;top:0;bottom:0;width:min(720px,95vw);background:#f6f9f7;box-shadow:-20px 0 55px #0b301f42;z-index:2200;transform:translateX(105%);transition:.22s;overflow:auto}.section-drawer.open{transform:translateX(0)}.section-drawer-head{position:sticky;top:0;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;background:#fff;border-bottom:1px solid #dce7df;padding:17px 19px}.section-drawer-head h2{margin:0}.section-drawer-body{padding:14px 16px 30px}.section-drawer-close{border:0;background:#e8f3ec;color:#126c3b;border-radius:50%;width:40px;height:40px;font-size:25px;cursor:pointer}
 .module-tabs{display:flex;gap:7px;overflow-x:auto;margin:9px 0}.module-tab{white-space:nowrap;padding:9px 12px;border:1px solid #d8e5dc;border-radius:10px;background:#fff;color:#28543d;font-weight:850;cursor:pointer}.module-tab.active{background:#117344;color:#fff;border-color:#117344}.module-panel{display:none}.module-panel.active{display:block}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;background:#77a98a}.status-dot.danger{background:#dc4a3d}.status-dot.warn{background:#e8a21c}.status-dot.ok{background:#24a05a}.low-stock td{background:#fff9ea}.no-stock td{background:#fff0ee}
-@media(max-width:900px){.compact-filter{grid-template-columns:1fr 1fr}.compact-filter label:first-child{grid-column:1/-1}.compact-filter-actions{grid-column:1/-1}.panel-grid{grid-template-columns:1fr}.animal-profile-head{grid-template-columns:auto 1fr}.animal-quick-actions{grid-column:1/-1;justify-content:flex-start}}
-@media(max-width:650px){.workspace-hero{padding:14px;flex-direction:column}.workspace-actions{width:100%;justify-content:stretch}.workspace-actions .btn{flex:1;text-align:center}.compact-filter{grid-template-columns:1fr}.compact-filter label:first-child,.compact-filter-actions{grid-column:auto}.workspace-pager{align-items:flex-start;flex-direction:column}.animal-profile-head{grid-template-columns:78px 1fr;gap:10px}.animal-profile-head .photo{width:78px!important;height:78px!important}.animal-profile-head h1{font-size:21px}.animal-quick-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.animal-quick-actions .btn{text-align:center}.workspace-table{min-width:0}.workspace-table thead{display:none}.workspace-table,.workspace-table tbody,.workspace-table tr,.workspace-table td{display:block;width:100%}.workspace-table tr{padding:10px;border-bottom:1px solid #e1e9e3}.workspace-table td{display:grid;grid-template-columns:105px 1fr;gap:8px;padding:5px 3px!important;border:0!important}.workspace-table td:before{content:attr(data-label);font-weight:850;color:#607168}.workspace-table .row-actions{white-space:normal;flex-wrap:wrap}.section-drawer{width:100vw}.module-tabs,.animal-card-tabs,.count-tabs{scrollbar-width:none}}
+/* Hotfix1.17: Padok tasarım dilinde Dashboard, Üreme Merkezi ve Hayvan 360°. */
+.v117-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin:0 0 12px}.v117-head h1{font-size:29px;margin:0 0 3px}.v117-head p{margin:0;color:#61756a}.v117-date{text-align:right;color:#40594b;font-weight:800}.v117-date small{display:block;color:#78877f;font-weight:600;margin-top:3px}.v117-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:11px}.v117-kpi{display:grid;grid-template-columns:48px 1fr auto;gap:10px;align-items:center;padding:14px!important;margin:0!important}.v117-kpi .ico{font-size:32px}.v117-kpi span{display:block;color:#607369;font-size:12px}.v117-kpi b{display:block;font-size:27px;color:#13251c;margin-top:2px}.v117-chip{align-self:start;border-radius:99px;padding:5px 9px;background:#e3f5e9;color:#147044;font-size:10px;font-weight:900}.v117-chip.warn{background:#fff0d2;color:#9a6100}.v117-chip.danger{background:#ffe5e3;color:#bd332a}.v117-dashboard{display:grid;grid-template-columns:1.12fr 1fr 1fr;gap:10px}.v117-panel{margin:0!important;padding:0!important;overflow:hidden}.v117-panel-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #e0e8e3}.v117-panel-head h2{font-size:16px;margin:0}.v117-panel-head a{font-size:11px;font-weight:850;color:#087044}.v117-panel-body{padding:10px 13px}.v117-task{display:grid;grid-template-columns:55px 1fr auto;gap:8px;align-items:center;padding:9px 1px;border-bottom:1px solid #e9efeb}.v117-task:last-child{border-bottom:0}.v117-task small{display:block;color:#6c7c73;margin-top:2px}.v117-donut-wrap{display:grid;grid-template-columns:140px 1fr;align-items:center;gap:12px}.v117-donut{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;position:relative;background:conic-gradient(#24a461 0 var(--p1),#087548 var(--p1) var(--p2),#8dd9b2 var(--p2) var(--p3),#dfe9e3 var(--p3) 100%)}.v117-donut:after{content:'';position:absolute;inset:27px;border-radius:50%;background:#fff}.v117-donut b{position:relative;z-index:1;text-align:center;font-size:22px}.v117-donut b small{display:block;font-size:10px}.v117-legend{display:grid;gap:8px}.v117-legend div{display:flex;justify-content:space-between;border-bottom:1px solid #edf1ee;padding-bottom:5px;font-size:12px}.v117-list-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 0;border-bottom:1px solid #e8eee9;font-size:12px}.v117-list-row:last-child{border-bottom:0}.v117-list-row small{display:block;color:#718077;margin-top:2px}.v117-span-2{grid-column:span 2}.v117-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.repro-column{border:1px solid #d6e7dc;border-radius:11px;background:#f7faf8;overflow:hidden}.repro-column-head{display:flex;justify-content:space-between;align-items:center;padding:11px;background:#fff;border-bottom:1px solid #dce8e0}.repro-column-head h2{font-size:15px;margin:0}.repro-column-head b{background:#e5f3e9;color:#126e40;border-radius:99px;padding:4px 8px;font-size:10px}.repro-cards{display:grid;gap:7px;padding:8px;max-height:520px;overflow:auto}.repro-card{background:#fff;border:1px solid #e0e8e3;border-radius:9px;padding:9px}.repro-card.selected{border-color:#169257;box-shadow:0 0 0 1px #169257}.repro-card-top{display:flex;align-items:flex-start;gap:7px}.repro-card-top strong{font-size:12px}.repro-card-top small{display:block;color:#6d7d73;margin-top:2px}.repro-card .actions{margin-top:7px}.repro-card .btn{padding:6px 8px;font-size:10px}.repro-detail{margin-top:10px!important}.repro-flow{display:flex;align-items:center;justify-content:center;gap:8px;overflow-x:auto;padding:15px}.repro-step{display:grid;place-items:center;min-width:86px;text-align:center;color:#7b8a82;font-size:10px}.repro-step i{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#e8eeea;font-style:normal;font-size:19px;margin-bottom:5px}.repro-step.done,.repro-step.active{color:#087044;font-weight:850}.repro-step.done i,.repro-step.active i{background:#139158;color:#fff}.repro-arrow{color:#9db5a6;font-size:20px}.animal-360-grid{display:grid;grid-template-columns:1.25fr .8fr .7fr;gap:10px}.animal-360-card{margin:0!important}.animal-360-preg{grid-column:span 2}.animal-360-timeline{grid-row:span 2}.animal-360-event{position:relative;padding:3px 0 12px 22px;border-left:2px solid #d8e7dd;font-size:12px}.animal-360-event:before{content:'';position:absolute;width:9px;height:9px;border-radius:50%;background:#15915a;left:-5.5px;top:5px}.animal-360-event small{display:block;color:#6c7c73;margin-top:2px}.animal-360-fast{position:sticky;bottom:26px;z-index:30;display:grid;grid-template-columns:auto repeat(5,1fr);gap:8px;align-items:center;margin-top:11px!important;padding:9px!important;background:rgba(255,255,255,.96);backdrop-filter:blur(8px)}.animal-360-fast b{padding:0 7px}.animal-360-fast .btn{text-align:center}.mini-weight-chart svg{max-height:195px}
+/* Hotfix1.18: referans ekranlarla aynı tam geniş çalışma kabuğu. */
+body.v118-shell{--v118-green:#087447;--v118-line:#d7e5dc;--erp-top:60px;--erp-cmd:72px;--erp-tabs:0px;background:linear-gradient(135deg,#f7fbf8,#f1f8f4 52%,#f8fbf9)}
+body.v118-shell .layout{display:block!important;padding-left:0!important}body.v118-shell #sideMenu.side{display:block!important;width:min(280px,86vw)!important;transform:translateX(-105%)!important;transition:transform .22s ease!important;z-index:80!important;box-shadow:8px 0 28px rgba(0,0,0,.22)!important}body.v118-shell #sideMenu.side.mobile-open{transform:translateX(0)!important}body.v118-shell .main{box-sizing:border-box!important;margin-left:0!important;width:100%!important;max-width:none!important;padding:18px 24px 42px!important}body.v118-shell .erp-tabs{display:none!important}
+body.v118-shell .top .brand{display:inline-flex!important;font-size:22px!important;color:#10251a!important}body.v118-shell .top-left{min-width:240px}body.v118-shell .menu-toggle{display:inline-block!important;color:#087447!important;background:#edf6f0!important;border:1px solid #cce0d3!important}body.v118-shell .mobile-dashboard-command{display:flex!important}
+body.v118-shell .erp-commandbar{left:0!important;right:0!important;justify-content:stretch!important;background:rgba(255,255,255,.97)!important;box-shadow:0 2px 9px #143a2414!important}body.v118-shell .erp-commandbar>a{flex:1 1 0!important;min-width:94px!important;justify-content:center!important;border-right:1px solid #e2e9e4!important;background:#fff!important;color:#14251b!important}body.v118-shell .erp-commandbar>a:hover,body.v118-shell .erp-commandbar>a:focus-visible,body.v118-shell .erp-commandbar>a[aria-current="page"]{background:#e3f2e8!important;color:#075d38!important;box-shadow:inset 0 -3px #087447}body.v118-shell .erp-commandbar .command-edit{flex:0 0 48px!important;background:#edf6f0!important;color:#153d29!important}
+.side-menu-backdrop{position:fixed;left:0;right:0;top:var(--erp-top,64px);bottom:var(--erp-status,0px);z-index:79;display:none;background:rgba(8,31,20,.42);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}.side-menu-backdrop.open{display:block}body.menu-drawer-open{overflow:hidden}
+body.v118-shell .erp-commandbar a[href="/animal-add"],body.v118-shell .erp-commandbar a[href="/data"]{display:none!important}
+body.v118-shell .v117-head{padding:4px 10px 8px}body.v118-shell .v117-head h1{font-size:31px;color:#10271b;letter-spacing:-.7px}body.v118-shell .v117-kpi{min-height:102px;border-color:var(--v118-line)!important;box-shadow:0 4px 15px #173b280c!important}body.v118-shell .v117-panel,body.v118-shell .repro-column,body.v118-shell .animal-360-card{border-color:var(--v118-line)!important;box-shadow:0 4px 15px #173b280b!important}
+.v118-task-tabs{display:flex;gap:6px;padding:9px 12px 0;overflow:auto}.v118-task-tab{border:1px solid #d9e5dd;background:#f7faf8;color:#3e5b4a;border-radius:7px;padding:7px 10px;font:inherit;font-size:11px;font-weight:850;white-space:nowrap;cursor:pointer}.v118-task-tab.active{background:#e3f3e8;color:#087447;border-color:#7fba98;box-shadow:inset 0 -2px #087447}.v117-task[hidden]{display:none!important}
+.v118-dashboard-jump{display:block;margin:18px 0 12px;padding:13px 18px;border:1px solid #b9daca;border-radius:9px;background:#eaf6ef;color:#075e3c;font-weight:800;text-decoration:none}.v118-dashboard-jump:hover{background:#dff2e7}.v118-restored-dashboard{scroll-margin-top:145px}.v118-restored-dashboard .dashboard-section-title{margin-top:14px}
+.v118-toolbar{display:grid;grid-template-columns:minmax(280px,1fr) 220px;gap:9px;padding:10px!important;margin-bottom:10px!important}.v118-toolbar label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;color:#315841;font-size:12px;font-weight:850}.v118-toolbar input,.v118-toolbar select{margin:0!important}.repro-column-sub{padding:0 11px 9px;background:#fff;color:#718178;font-size:10px;border-bottom:1px solid #e5ece7}.repro-card-top>div{min-width:0;flex:1}.repro-card-top .v117-chip{white-space:nowrap}.repro-detail-grid{display:grid;grid-template-columns:minmax(280px,.8fr) 1.4fr;align-items:stretch}.repro-selected{padding:15px 17px;border-right:1px solid #e0e9e3}.repro-selected h2{margin:0 0 4px}.repro-selected .quick-metrics{margin-top:12px}.repro-flow-wrap{display:flex;flex-direction:column;justify-content:center}.repro-next-action{margin:0 15px 13px;padding:9px 12px;border:1px solid #bfe1cc;border-radius:8px;background:#eaf7ef;color:#185c37;display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:11px}.repro-next-action .btn{white-space:nowrap}
+.animal-profile-head{border-color:#cfe0d5!important;box-shadow:0 4px 16px #1639250d!important}.animal-card-tabs{gap:0!important;border:1px solid #d6e4db;border-radius:9px;background:#fff;overflow-x:auto}.animal-card-tab{flex:1;border:0!important;border-right:1px solid #e0e8e3!important;border-radius:0!important;background:#fff!important;padding:12px 14px!important}.animal-card-tab.active{color:#087447!important;background:#eaf6ef!important;box-shadow:inset 0 -3px #087447}.animal-360-grid .v117-panel-head{min-height:49px}.animal-360-fast{border:1px solid #bdd8c7!important}.animal-360-fast .btn:first-of-type{background:#087447!important;color:#fff!important}
+@media(min-width:1250px){body.v118-shell .main{padding-left:28px!important;padding-right:28px!important}.v117-dashboard{grid-template-columns:1.08fr 1fr 1fr}.v117-dashboard>.v117-panel:nth-child(1){grid-row:span 2}.v117-dashboard>.v117-panel:nth-child(4){grid-column:2}.v117-dashboard>.v117-panel:nth-child(5){grid-column:3}}
+@media(max-width:900px){.compact-filter{grid-template-columns:1fr 1fr}.compact-filter label:first-child{grid-column:1/-1}.compact-filter-actions{grid-column:1/-1}.panel-grid{grid-template-columns:1fr}.animal-profile-head{grid-template-columns:auto 1fr}.animal-quick-actions{grid-column:1/-1;justify-content:flex-start}.repro-detail-grid{grid-template-columns:1fr}.repro-selected{border-right:0;border-bottom:1px solid #e0e9e3}}
+@media(max-width:1100px){.v117-dashboard{grid-template-columns:1fr 1fr}.v117-board{grid-template-columns:1fr 1fr}.animal-360-grid{grid-template-columns:1fr 1fr}.animal-360-timeline{grid-row:auto}.animal-360-preg{grid-column:span 1}.v117-span-2{grid-column:span 1}}
+@media(max-width:650px){.workspace-hero{padding:14px;flex-direction:column}.workspace-actions{width:100%;justify-content:stretch}.workspace-actions .btn{flex:1;text-align:center}.compact-filter{grid-template-columns:1fr}.compact-filter label:first-child,.compact-filter-actions{grid-column:auto}.workspace-pager{align-items:flex-start;flex-direction:column}.animal-profile-head{grid-template-columns:78px 1fr;gap:10px}.animal-profile-head .photo{width:78px!important;height:78px!important}.animal-profile-head h1{font-size:21px}.animal-quick-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.animal-quick-actions .btn{text-align:center}.workspace-table{min-width:0}.workspace-table thead{display:none}.workspace-table,.workspace-table tbody,.workspace-table tr,.workspace-table td{display:block;width:100%}.workspace-table tr{padding:10px;border-bottom:1px solid #e1e9e3}.workspace-table td{display:grid;grid-template-columns:105px 1fr;gap:8px;padding:5px 3px!important;border:0!important}.workspace-table td:before{content:attr(data-label);font-weight:850;color:#607168}.workspace-table .row-actions{white-space:normal;flex-wrap:wrap}.section-drawer{width:100vw}.module-tabs,.animal-card-tabs,.count-tabs{scrollbar-width:none}.v117-head{flex-direction:column}.v117-date{text-align:left}.v117-kpis,.v117-dashboard,.v117-board,.animal-360-grid{grid-template-columns:1fr}.v117-donut-wrap{grid-template-columns:120px 1fr}.v117-donut{width:112px;height:112px}.animal-360-preg,.v117-span-2{grid-column:auto}.animal-360-fast{position:static;grid-template-columns:1fr 1fr}.animal-360-fast b{grid-column:1/-1}.repro-flow{justify-content:flex-start}.repro-arrow{display:none}}
+@media(max-width:650px){body.v118-shell .main{padding:13px 12px 34px!important}body.v118-shell .erp-commandbar{overflow-x:auto!important;justify-content:flex-start!important}body.v118-shell .erp-commandbar>a{flex:0 0 112px!important;min-width:112px!important}body.v118-shell .v117-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}body.v118-shell .v117-kpi{grid-template-columns:36px 1fr!important;padding:10px!important;min-height:92px!important}body.v118-shell .v117-kpi .ico{font-size:25px}body.v118-shell .v117-kpi b{font-size:20px}body.v118-shell .v117-kpi .v117-chip{grid-column:2;justify-self:start;margin-top:-5px}.v118-toolbar{grid-template-columns:1fr}.v118-toolbar label{grid-template-columns:1fr}.repro-next-action{align-items:stretch;flex-direction:column}.animal-card-tab{flex:0 0 128px!important}.v117-head h1{font-size:25px!important}}
 '''
 
 def page(title,body,path='/',user='admin',flash=''):
@@ -4638,7 +5154,7 @@ def page(title,body,path='/',user='admin',flash=''):
     groups=[
         ('🐄 Hayvanlar',[('Sürü Merkezi','/all-animals'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
         ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
-        ('🩺 Üreme & Sağlık',[('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
+        ('🩺 Üreme & Sağlık',[('Üreme Merkezi','/reproduction-center'),('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
         ('🌾 Tarım & Ziraat',[('Genel Bakış','/agriculture'),('Tarlalar','/agriculture/fields'),('Üretim Sezonları','/agriculture/seasons'),('Tarla İşlemleri','/agriculture/operations'),('Girdi & Depo','/agriculture/inputs'),('Hasat & Mahsul','/agriculture/harvests'),('Satış & İç Transfer','/agriculture/transfers'),('Tarım Finans','/agriculture/finance'),('Tarım Raporları','/agriculture/reports')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
         ('🗄️ Veri & Sistem',[('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('📝 Sürüm Notları','/version-notes')]),
@@ -5027,12 +5543,31 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 @media(max-width:820px){{.prep-report-summary{{grid-template-columns:repeat(2,minmax(0,1fr))}}.prep-report-controls{{width:100%}}.prep-report-controls label{{flex:1}}.prep-report-controls input{{width:100%}}.prep-report-controls .btn{{flex:1}}}}
 @media(max-width:520px){{.prep-report-summary{{grid-template-columns:1fr}}.prep-report-table th:nth-child(4),.prep-report-table td:nth-child(4){{display:none}}}}
 .command-edit{{border:0;border-left:1px solid #dde5df;background:#f6faf7;min-width:44px;font-size:18px;cursor:pointer}}.command-editor{{border:0;border-radius:16px;box-shadow:0 20px 70px #0004;max-width:420px;width:calc(100% - 28px)}}.command-editor::backdrop{{background:#10281c66}}.command-editor h3{{margin-top:0}}.command-choice{{display:flex;align-items:center;gap:10px;padding:9px;border-bottom:1px solid #edf1ee}}.command-choice input{{width:18px;height:18px}}.command-editor-actions{{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}}@media(max-width:700px){{.command-edit{{position:sticky;right:0;background:#eef7f1;flex:0 0 46px}}}}
-</style></head><body><div class="top"><div class="top-left"><button class="menu-toggle" id="menuToggle" aria-label="Menüyü aç">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar" id="customCommandbar"><a data-qid="dashboard" class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a data-qid="new" href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a data-qid="rations" href="/rations"><span class="ico">⚖</span>Rasyon</a><a data-qid="feeds" href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a data-qid="finance" href="/finance"><span class="ico">₺</span>Finans</a><a data-qid="reports" href="/reports"><span class="ico">▥</span>Raporlar</a><a data-qid="data" href="/data"><span class="ico">⇄</span>Veri</a><a data-qid="paddocks" href="/paddocks"><span class="ico">🏠</span>Padoklar</a><a data-qid="health" href="/health"><span class="ico">💉</span>Sağlık</a><button type="button" class="command-edit" id="commandEditBtn" title="Üst menüyü özelleştir">⚙</button></div><dialog id="commandEditor" class="command-editor"><form method="dialog"><h3>Üst Menüyü Özelleştir</h3><p class="mut">Gösterilecek hızlı erişimleri seçin. Ayar bu cihazda saklanır.</p><div id="commandChoices"></div><div class="command-editor-actions"><button type="button" class="btn alt" id="commandReset">Varsayılana Dön</button><button class="btn">Tamam</button></div></form></dialog><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu">{nav}</aside><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">{h(APP_LABEL)}</span></div><script>
+</style></head><body><div class="top"><div class="top-left"><button type="button" class="menu-toggle" id="menuToggle" aria-label="Menüyü aç" aria-controls="sideMenu" aria-expanded="false">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar" id="customCommandbar"><a data-qid="dashboard" class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a data-qid="new" href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a data-qid="rations" href="/rations"><span class="ico">⚖</span>Rasyon</a><a data-qid="feeds" href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a data-qid="finance" href="/finance"><span class="ico">₺</span>Finans</a><a data-qid="reports" href="/reports"><span class="ico">▥</span>Raporlar</a><a data-qid="data" href="/data"><span class="ico">⇄</span>Veri</a><a data-qid="paddocks" href="/paddocks"><span class="ico">🏠</span>Padoklar</a><a data-qid="health" href="/health"><span class="ico">💉</span>Sağlık</a><button type="button" class="command-edit" id="commandEditBtn" title="Üst menüyü özelleştir">⚙</button></div><dialog id="commandEditor" class="command-editor"><form method="dialog"><h3>Üst Menüyü Özelleştir</h3><p class="mut">Gösterilecek hızlı erişimleri seçin. Ayar bu cihazda saklanır.</p><div id="commandChoices"></div><div class="command-editor-actions"><button type="button" class="btn alt" id="commandReset">Varsayılana Dön</button><button class="btn">Tamam</button></div></form></dialog><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu" aria-hidden="true">{nav}</aside><div class="side-menu-backdrop" id="sideMenuBackdrop" aria-hidden="true"></div><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">{h(APP_LABEL)}</span></div><script>
 (function(){{
- const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu");
- if(btn&&side){{btn.addEventListener("click",function(){{side.classList.toggle("mobile-open");}});side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{side.classList.remove("mobile-open");}});}});}}
+ const modernPaths=['/','/reproduction-center','/animal'];
+ if(modernPaths.includes(location.pathname)){{document.body.classList.add('v118-shell');const bar=document.getElementById('customCommandbar'),first=bar&&bar.querySelector('[data-qid="new"]');if(bar&&first&&!bar.querySelector('.v118-animals-link')){{const animals=document.createElement('a');animals.className='v118-animals-link';animals.href='/all-animals';animals.innerHTML='<span class="ico">🐄</span>Hayvanlar';const repro=document.createElement('a');repro.href='/reproduction-center';repro.innerHTML='<span class="ico">◉</span>Tohumlama';bar.insertBefore(repro,first);bar.insertBefore(animals,repro);}}}}
+ const btn=document.getElementById("menuToggle"),side=document.getElementById("sideMenu"),backdrop=document.getElementById("sideMenuBackdrop");
+ function setMenu(open){{
+   if(!btn||!side)return;
+   side.classList.toggle("mobile-open",!!open);
+   if(backdrop){{backdrop.classList.toggle("open",!!open);backdrop.setAttribute("aria-hidden",open?"false":"true");}}
+   document.body.classList.toggle("menu-drawer-open",!!open);
+   btn.setAttribute("aria-expanded",open?"true":"false");
+   btn.setAttribute("aria-label",open?"Menüyü kapat":"Menüyü aç");
+   side.setAttribute("aria-hidden",open?"false":((window.innerWidth<=900||modernPaths.includes(location.pathname))?"true":"false"));
+ }}
+ if(btn&&side){{
+   btn.addEventListener("click",function(ev){{ev.preventDefault();ev.stopPropagation();setMenu(!side.classList.contains("mobile-open"));}});
+   side.querySelectorAll("a").forEach(function(a){{a.addEventListener("click",function(){{setMenu(false);}});}});
+   if(backdrop)backdrop.addEventListener("click",function(){{setMenu(false);}});
+   document.addEventListener("keydown",function(ev){{if(ev.key==="Escape")setMenu(false);}});
+   window.addEventListener("resize",function(){{setMenu(false);}});
+   setMenu(false);
+ }}
  document.querySelectorAll(".nav-group").forEach(function(d){{d.addEventListener("toggle",function(){{if(!d.open)return;document.querySelectorAll(".nav-group").forEach(function(o){{if(o!==d)o.open=false;}});}});}});
 
+ document.querySelectorAll('#customCommandbar a[href]').forEach(function(a){{if(a.getAttribute('href')===location.pathname)a.setAttribute('aria-current','page');}});
  const cb=document.getElementById('customCommandbar'),edit=document.getElementById('commandEditBtn'),dlg=document.getElementById('commandEditor'),choices=document.getElementById('commandChoices'),reset=document.getElementById('commandReset');
  if(cb&&edit&&dlg&&choices){{const defaults=['dashboard','new','rations','feeds','finance','reports','data'];const labels={{dashboard:'Dashboard',new:'Yeni Kayıt',rations:'Rasyon',feeds:'Yem Kataloğu',finance:'Finans',reports:'Raporlar',data:'Veri',paddocks:'Padoklar',health:'Sağlık'}};function saved(){{try{{return JSON.parse(localStorage.getItem('ciftlikpro_quick_menu')||'null')||defaults}}catch(e){{return defaults}}}}function apply(){{const on=saved();cb.querySelectorAll('[data-qid]').forEach(a=>a.style.display=on.includes(a.dataset.qid)?'':'none')}}function build(){{const on=saved();choices.innerHTML='';Object.keys(labels).forEach(id=>{{const l=document.createElement('label');l.className='command-choice';l.innerHTML='<input type="checkbox" value="'+id+'" '+(on.includes(id)?'checked':'')+'><span>'+labels[id]+'</span>';choices.appendChild(l)}});}}edit.addEventListener('click',()=>{{build();dlg.showModal()}});dlg.addEventListener('close',()=>{{const vals=[...choices.querySelectorAll('input:checked')].map(x=>x.value);if(vals.length)localStorage.setItem('ciftlikpro_quick_menu',JSON.stringify(vals));apply()}});reset.addEventListener('click',()=>{{localStorage.removeItem('ciftlikpro_quick_menu');build();apply()}});apply();}}
  const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning"),bulk=document.getElementById("bulkAnimalIds");if(c&&a&&w){{function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r&&!bulk;}}c.addEventListener("change",x);x();}}
@@ -5235,7 +5770,7 @@ function bindRationFloatingSummary(){{
   }}
 
   function update(){{
-    if(window.innerWidth<=1180){{clearFloating();captureBaseGeometry();return;}}
+    if(window.innerWidth<=1600){{clearFloating();captureBaseGeometry();return;}}
     const headerH=topbar?topbar.getBoundingClientRect().height:58;
     const trigger=window.scrollY+headerH+8>=anchorY;
     if(trigger){{
@@ -5894,11 +6429,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=f'''<header class="workspace-hero"><div><h1>📜 İşlem Günlüğü</h1><p>Yönetim hareketlerini kullanıcı, işlem ve tarihe göre inceleyin.</p></div><div class="workspace-actions"><a class="btn alt" href="/settings">Ayarlara Dön</a></div></header><form class="card compact-filter" method="get"><label>Metin Ara<input name="q" value="{h(audit_q)}" placeholder="İşlem, detay veya IP"></label><label>Kullanıcı<select name="user">{user_opts}</select></label><label>İşlem<select name="action">{action_opts}</select></label><label>Tarih<input type="date" name="date" value="{h(audit_date)}"></label><div class="compact-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/audit-log">Temizle</a></div></form><div class="card"><div class="workspace-table-wrap"><table class="workspace-table"><thead><tr><th>Tarih</th><th>Kullanıcı</th><th>İşlem</th><th>Detay</th><th>IP</th></tr></thead><tbody>{trs}</tbody></table></div><div class="workspace-pager"><span class="mut">{len(filtered_audit)} kayıt · {audit_page}/{audit_pages} sayfa</span><div><a class="btn alt" href="{prev_url}">← Önceki</a><a class="btn alt" href="{next_url}">Sonraki →</a></div></div></div>'''
             return self.send_html(page('İşlem Günlüğü',body,'/audit-log',u,msg))
         promote_mature_calves()
+        if path in ('/','/feeds','/paddocks'):
+            try:sync_daily_paddock_feed_stock()
+            except Exception as exc:print('[WARN] Günlük yem stok tüketimi işlenemedi:',exc)
         if path=='/':
             _dash_t0=time.perf_counter()
             profile=farm_profile()
             farm_name=farm_display_name(profile)
             edit_dashboard=(q.get('edit',['0'])[0]=='1')
+            dashboard_view_mode='classic' if edit_dashboard else dashboard_view(u)
             dash_layout=dashboard_layout(u)
             with db() as c:
                 animals=c.execute("select count(*) from animals where gender='Dişi' and status='Aktif'").fetchone()[0]
@@ -5948,9 +6487,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                             adgs.append(adg)
                             if adg < perf_target*perf_warn: low_perf_count+=1
                 avg_adg=(sum(adgs)/len(adgs)) if adgs else None
-                daily_paddock_feed_cost=0.0
-                for pr in c.execute("select paddock_id,ration_id from paddock_rations where active=1 and (end_date is null or end_date='')").fetchall():
-                    daily_paddock_feed_cost += paddock_population(pr['paddock_id'],c)*ration_summary(pr['ration_id'],c)['cost']
+                daily_paddock_feed_cost=sum(
+                    quantity*current_feed_price(feed_id,c,date.today().isoformat())
+                    for feed_id,quantity in current_daily_feed_use(c).items()
+                )
             estrus_latest={}
             for er in estrus_dash_rows:
                 if er['animal_id'] not in estrus_latest: estrus_latest[er['animal_id']]=er
@@ -6054,28 +6594,71 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             dashboard_summary_html=''.join(dash_slots)
             gallery_choices=''.join(f'''<button type="button" class="dashboard-card-choice" data-key="{h(k)}" onclick="chooseDashboardCard('{h(k)}')"><span class="choice-icon">{card_meta[k][0]}</span><span><b>{h(card_meta[k][1])}</b><small>{h(card_meta[k][2])}</small></span></button>''' for k,_ in DASHBOARD_CARD_OPTIONS)
             dashboard_picker_html=f'''<div class="dashboard-picker-backdrop" id="dashboardPicker" onclick="if(event.target===this)closeDashboardPicker()"><div class="dashboard-picker"><div class="dashboard-picker-head"><div><h2>Dashboard Kartı Seç</h2><p>Seçtiğiniz kart bu yuvaya anında yerleşir.</p></div><button type="button" class="dashboard-picker-close" onclick="closeDashboardPicker()">×</button></div><div class="dashboard-card-gallery">{gallery_choices}</div><div class="dashboard-picker-footer"><button type="button" class="btn red" onclick="chooseDashboardCard('')">Yuvayı Boşalt</button><span class="mut">Daha sonra tekrar ekleyebilirsiniz.</span></div><form id="dashboardPickerForm" method="post" action="/dashboard-layout"><input type="hidden" name="slot" id="dashboardPickerSlot"><input type="hidden" name="card_key" id="dashboardPickerKey"></form></div></div><script>function openDashboardPicker(slot,current){{document.getElementById('dashboardPickerSlot').value=slot;document.getElementById('dashboardPicker').classList.add('open');document.querySelectorAll('.dashboard-card-choice').forEach(function(b){{b.classList.toggle('active',b.dataset.key===current);}});}}function closeDashboardPicker(){{document.getElementById('dashboardPicker').classList.remove('open');}}function chooseDashboardCard(key){{document.getElementById('dashboardPickerKey').value=key;document.getElementById('dashboardPickerForm').submit();}}document.addEventListener('keydown',function(e){{if(e.key==='Escape')closeDashboardPicker();}});</script>'''
-            dashboard_logo=(f'<img class="farm-hero-logo" src="{h(profile.get("farm_logo"))}" alt="Çiftlik logosu">' if profile.get('farm_logo') else '')
-            body=f'''<div class="hero"><a class="farm-hero home-hero-link" href="/" title="Ana Sayfa">{dashboard_logo}<div><h1>{h(farm_name)}</h1><div>Bugünün sürü, sağlık ve finans görünümü</div></div></a><div><a class="btn orange" href="/backup/create">💾 Hemen Yedek Al</a></div></div>
-            <div class="dashboard-section-title"><h2>Dashboard Kartlarım</h2><span>{'Kartın üzerindeki + işaretine dokunarak değiştirebilirsiniz' if edit_dashboard else 'Size özel hızlı görünüm'}</span></div>
-            <div class="grid summary-grid">{dashboard_summary_html}</div>{dashboard_picker_html if edit_dashboard else ''}
-            <div class="dashboard-section-title today-title" id="approaching-estrus"><h2>📋 Bugünün İşleri</h2><span>Öncelikli üreme, sağlık ve finans takibi</span></div>
-            <div class="today-work-grid">
-              <section class="card today-work-card"><div class="today-work-head"><b>🌸 Yaklaşan Kızgınlık</b><span>{len(estrus_upcoming)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts">{estrus_dashboard_html}</div></div><a class="today-work-action" href="/estrus">Kızgınlık Takibini Aç →</a></section>
-              <section class="card today-work-card"><div class="today-work-head"><b>💉 Gebelik / Aşı Alarmı</b><span>{len(pregnancy_vaccines)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts show-actions">{pregnancy_vaccine_html}</div></div><a class="today-work-action" href="/health">Sağlık Takibini Aç →</a></section>
-              <section class="card today-work-card finance-today"><div class="today-work-head"><b>₺ Yaklaşan Ödemeler</b><span>{len(payment_due_rows)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts show-actions">{payment_due_html}</div></div><a class="today-work-action" href="/finance">Tüm Finans Detaylarını Aç →</a></section>
-            </div>
-            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-top:12px"><div><h2 style="margin:0 0 6px">🐂 Besi Performansı</h2><p class="mut" style="margin:0">Aktif ve kesilen erkekleri; alım tarihi, kesim tarihi, kilo performansı ve gerçekleşmiş maliyete göre inceleyin.</p></div><a class="btn blue" href="/performance">Besi Analizine Git →</a></div>
-            <div class="two" style="margin-top:14px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><p class="mut">Detaylı finans hareketleri Finans bölümünde tutulur.</p><div class="actions"><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a><a class="btn alt" href="/reports">Finans Raporları</a></div></div></div><div class="two" style="margin-top:14px"><div class="card" id="approaching-births"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>'''
             with db() as c:
                 month_key=date.today().strftime('%Y-%m')
                 month_milk_income=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gelir' and category in ('Süt Satışı','Süt Geliri') and substr(tx_date,1,7)=?",(month_key,)).fetchone()[0]
                 month_cut_income=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gelir' and category='Kesim Geliri' and substr(tx_date,1,7)=?",(month_key,)).fetchone()[0]
                 recent_weights=c.execute("select count(*) from weights where measure_date>=?",((date.today()-timedelta(days=30)).isoformat(),)).fetchone()[0]
-            body += f'''<div class="card" style="margin-top:14px"><h2>İşletme Özeti</h2><div class="grid business-summary-grid"><div class="card stat metric blue">Bu Ay Süt Geliri<b>{money(month_milk_income)}</b></div><div class="card stat metric green">Bu Ay Kesim Geliri<b>{money(month_cut_income)}</b></div><div class="card stat metric orange">30 Günlük Kilo Kaydı<b>{recent_weights}</b></div></div><div class="actions"><a class="btn" href="/animal-add">+ Hayvan Ekle</a><a class="btn alt" href="/reports">Raporları Aç</a></div></div>'''
-            # V3.9.20: Dashboard uzunluğunu azaltan açılır/kapanır bölümler.
-            fold_js='''<script>(function(){var titles=[].slice.call(document.querySelectorAll('.dashboard-section-title'));titles.forEach(function(t,i){if(i===0)return;var key='cp_dash_section_'+i;var saved=localStorage.getItem(key);var open=saved===null?(i<3):saved==='1';var nodes=[];for(var n=t.nextElementSibling;n&&!(n.classList&&n.classList.contains('dashboard-section-title'));n=n.nextElementSibling)nodes.push(n);t.style.cursor='pointer';var hint=t.querySelector('span');if(hint)hint.dataset.original=hint.textContent;function paint(){nodes.forEach(function(x){x.style.display=open?'':'none'});if(hint)hint.textContent=(open?'▲ ':'▼ ')+(hint.dataset.original||'');}t.addEventListener('click',function(){open=!open;localStorage.setItem(key,open?'1':'0');paint()});paint();});})();</script>'''
-            # Büyük dashboard bloklarını başlıklarına göre istemci tarafında kompaktlaştır.
-            body += fold_js
+            restored_dashboard_html=f'''<section class="v118-restored-dashboard" id="dashboard-tools">
+            <div class="dashboard-section-title"><div><h2>🧩 Dashboard Kartlarım</h2><span>{'Kartın üzerindeki + işaretiyle değiştirebilirsiniz' if edit_dashboard else 'Kişiselleştirilebilir hızlı görünüm'}</span></div><div class="actions"><a class="btn alt" href="/?edit={'0' if edit_dashboard else '1'}">{'✓ Düzenlemeyi Bitir' if edit_dashboard else '⚙ Kartları Düzenle'}</a><a class="btn alt" href="/backup/create">💾 Yedek Al</a></div></div>
+            <div class="grid summary-grid">{dashboard_summary_html}</div>{dashboard_picker_html if edit_dashboard else ''}
+            <div class="dashboard-section-title today-title" id="approaching-estrus"><h2>📋 Operasyon Panelleri</h2><span>Kızgınlık, sağlık ve ödeme işlemleri</span></div>
+            <div class="today-work-grid">
+              <section class="card today-work-card"><div class="today-work-head"><b>🌸 Yaklaşan Kızgınlık</b><span>{len(estrus_upcoming)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts">{estrus_dashboard_html}</div></div><a class="today-work-action" href="/estrus">Kızgınlık Takibini Aç →</a></section>
+              <section class="card today-work-card"><div class="today-work-head"><b>💉 Gebelik / Aşı Alarmı</b><span>{len(pregnancy_vaccines)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts show-actions">{pregnancy_vaccine_html}</div></div><a class="today-work-action" href="/health">Sağlık Takibini Aç →</a></section>
+              <section class="card today-work-card finance-today"><div class="today-work-head"><b>₺ Yaklaşan Ödemeler</b><span>{len(payment_due_rows)}</span></div><div class="today-work-body"><div class="alertlist compact-alerts show-actions">{payment_due_html}</div></div><a class="today-work-action" href="/finance">Tüm Finans Detaylarını Aç →</a></section>
+            </div>
+            <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-top:12px"><div><h2 style="margin:0 0 6px">🐂 Besi Performansı</h2><p class="mut" style="margin:0">Aktif ve tamamlanan erkekleri; kilo performansı, maliyet ve kârlılığa göre inceleyin.</p></div><a class="btn blue" href="/performance">Besi Analizine Git →</a></div>
+            <div class="two" style="margin-top:12px"><div class="card"><h2>Son 6 Ay Finans Eğilimi</h2><div class="mut">Yeşil: gelir · Kırmızı: gider</div><div class="mini-chart">{bars}</div></div><div class="card"><h2>Hızlı İşlemler</h2><p class="mut">Sık kullanılan kayıt ekranlarını açın.</p><div class="actions"><a class="btn" href="/animal-add">Hayvan Ekle</a><a class="btn blue" href="/finance">Finans Kaydı</a><a class="btn alt" href="/health">Sağlık Kaydı</a><a class="btn alt" href="/reports">Raporlar</a></div></div></div>
+            <div class="two" style="margin-top:12px"><div class="card" id="approaching-births"><h2>Yaklaşan Doğumlar</h2><div class="alertlist">{due_html}</div></div><div class="card"><h2>Yaklaşan Aşı / Sağlık</h2><div class="alertlist">{health_html}</div></div></div>
+            <div class="card" style="margin-top:12px"><h2>İşletme Özeti</h2><div class="grid business-summary-grid"><div class="card stat metric blue">Bu Ay Süt Geliri<b>{money(month_milk_income)}</b></div><div class="card stat metric green">Bu Ay Kesim Geliri<b>{money(month_cut_income)}</b></div><div class="card stat metric orange">30 Günlük Kilo Kaydı<b>{recent_weights}</b></div></div></div>
+            </section>'''
+            # Hotfix1.17 Dashboard 2.0: Padok paneli ile aynı yoğunlukta, gerçek verili yönetim kokpiti.
+            with db() as c:
+                low_feed_rows=c.execute("""select f.name,coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 and exists(select 1 from feed_stock_transactions entered where entered.feed_id=f.id and entered.tx_type in ('Giriş','Sayım +')) order by stock asc,f.name limit 5""").fetchall()
+                recent_actions=c.execute("select created_at,username,action,detail from audit_log order by id desc limit 5").fetchall()
+            month_net=(months[-1][1]-months[-1][2]) if months else 0
+            today_tasks=[];overdue_task_count=0
+            for r in health_rows[:4]:
+                try:days=(date.fromisoformat(r['next_date'])-date.today()).days
+                except Exception:days=99
+                overdue_task_count+=1 if days<0 else 0
+                label=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
+                tag=r['animal_tag'] or r['calf_tag'] or 'Genel'
+                today_tasks.append(f'''<div class="v117-task" data-task-state="{'overdue' if days<0 else 'today' if days==0 else 'upcoming'}"><b>{fmt_date(r['next_date'])}</b><div><strong>💉 {h(r['kind'])} · {h(tag)}</strong><small>{h(r['product']) or 'Sağlık işlemi'}</small></div><span class="v117-chip {'danger' if days<0 else 'warn' if days<=3 else ''}">{h(label)}</span></div>''')
+            for r in payment_due_rows[:2]:
+                try:days=(date.fromisoformat(r['due_date'])-date.today()).days
+                except Exception:days=99
+                overdue_task_count+=1 if days<0 else 0
+                label=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
+                today_tasks.append(f'''<div class="v117-task" data-task-state="{'overdue' if days<0 else 'today' if days==0 else 'upcoming'}"><b>{fmt_date(r['due_date'])}</b><div><strong>₺ {h(r['supplier'] or r['category'])}</strong><small>{money(r['amount'])} · Vadeli ödeme</small></div><span class="v117-chip {'danger' if days<0 else 'warn'}">{h(label)}</span></div>''')
+            dashboard_v117_tasks=''.join(today_tasks) or '<div class="workspace-empty">Bugün için bekleyen görev bulunmuyor.</div>'
+            birth_rows=''.join(f'''<div class="v117-list-row"><div><b>♀ {h(r['tag'])} {h(r['nickname'])}</b><small>Tahmini doğum: {fmt_date(r['due_date'])}</small></div><span class="v117-chip {'danger' if (date.fromisoformat(r['due_date'])-date.today()).days<=7 else ''}">{max(0,(date.fromisoformat(r['due_date'])-date.today()).days)} gün</span></div>''' for r in due_rows[:5]) or '<div class="workspace-empty">45 gün içinde doğum beklenmiyor.</div>'
+            feed_rows_html=''.join(f'''<div class="v117-list-row"><div><b>🌾 {h(r['name'])}</b><small>Kalan takipli yem stoku</small></div><span class="v117-chip {'danger' if float(r['stock'] or 0)<=0 else 'warn' if float(r['stock'] or 0)<500 else ''}">{float(r['stock'] or 0):,.0f} kg</span></div>''' for r in low_feed_rows) or '<div class="workspace-empty">Henüz stok girişi yapılmış yem bulunmuyor.</div>'
+            action_rows=''.join(f'''<div class="v117-list-row v122j-recent-row"><div><b>{h(r['action'])}</b><small>{h(r['detail']) or h(r['username'])} · {fmt_datetime(r['created_at'])}</small></div><span class="v117-chip">Kayıt</span></div>''' for r in recent_actions) or '<div class="workspace-empty">Henüz işlem hareketi yok.</div>'
+            total_for_chart=max(1,active_total);p1=animals/total_for_chart*100;p2=(animals+males)/total_for_chart*100;p3=(animals+males+calves)/total_for_chart*100
+            dashboard_owner=(profile.get('owner_name') or u or 'Osman').split()[0]
+            greeting=day_greeting()
+            dashboard_switch_html=f'''<div class="v122k-dashboard-switch" aria-label="Dashboard görünümü">
+              <form method="post" action="/dashboard-view"><input type="hidden" name="view" value="modern"><button type="submit" class="{'active' if dashboard_view_mode=='modern' else ''}" aria-pressed="{'true' if dashboard_view_mode=='modern' else 'false'}">✨ Modern</button></form>
+              <form method="post" action="/dashboard-view"><input type="hidden" name="view" value="classic"><button type="submit" class="{'active' if dashboard_view_mode=='classic' else ''}" aria-pressed="{'true' if dashboard_view_mode=='classic' else 'false'}">▦ Klasik</button></form>
+            </div>'''
+            dashboard_header_html=f'''<div class="v117-head v122k-dashboard-head"><div><h1>🏡 {h(greeting)} {h(dashboard_owner)}</h1><p>Bugün çiftliğinizde neler oluyor?</p></div><div class="v122k-dashboard-tools"><div class="v117-date">📅 {date.today().strftime('%d/%m/%Y')}<small>{h(farm_name)}</small></div>{dashboard_switch_html}</div></div>'''
+            modern_dashboard_html=f'''<section class="v117-kpis">
+              <a class="card v117-kpi" href="/all-animals"><span class="ico">🐄</span><div><span>Toplam Hayvan</span><b>{active_total}</b></div><em class="v117-chip">Aktif</em></a>
+              <a class="card v117-kpi" href="/paddocks"><span class="ico">🏠</span><div><span>Aktif Padok</span><b>{active_paddocks}</b></div><em class="v117-chip">Padok</em></a>
+              <a class="card v117-kpi" href="/health"><span class="ico">☑</span><div><span>Bugün Yapılacak</span><b>{len(today_tasks)}</b></div><em class="v117-chip {'danger' if overdue_task_count else ''}">{overdue_task_count} gecikmiş</em></a>
+              <a class="card v117-kpi v122j-month-net" href="/finance"><span class="ico">₺</span><div><span>Aylık Net</span><b class="v122j-money">{money(month_net)}</b></div><em class="v117-chip {'danger' if month_net<0 else ''}">{'Zarar' if month_net<0 else 'Net'}</em></a>
+            </section>
+            <section class="v117-dashboard">
+              <div class="card v117-panel"><div class="v117-panel-head"><h2>📋 Bugünün İşleri</h2><a href="/health">Tümünü Gör →</a></div><div class="v118-task-tabs"><button class="v118-task-tab active" data-task-filter="all">Tümü ({len(today_tasks)})</button><button class="v118-task-tab" data-task-filter="overdue">🔴 Geciken ({overdue_task_count})</button><button class="v118-task-tab" data-task-filter="today">🕒 Bugün</button><button class="v118-task-tab" data-task-filter="upcoming">🗓 Yaklaşan</button></div><div class="v117-panel-body">{dashboard_v117_tasks}</div></div>
+              <div class="card v117-panel"><div class="v117-panel-head"><h2>🐄 Sürü Dağılımı</h2><a href="/all-animals">Tümünü Gör →</a></div><div class="v117-panel-body v117-donut-wrap"><div class="v117-donut" style="--p1:{p1:.1f}%;--p2:{p2:.1f}%;--p3:{p3:.1f}%"><b>{active_total}<small>hayvan</small></b></div><div class="v117-legend"><div><span>● Dişi</span><b>{animals}</b></div><div><span>● Erkek</span><b>{males}</b></div><div><span>● Buzağı</span><b>{calves}</b></div><div><span>● Gebe</span><b>{pregnant}</b></div></div></div></div>
+              <div class="card v117-panel"><div class="v117-panel-head"><h2>🐮 Yaklaşan Doğumlar</h2><a href="/reproduction-center">Tümünü Gör →</a></div><div class="v117-panel-body">{birth_rows}</div></div>
+              <div class="card v117-panel"><div class="v117-panel-head"><h2>🌾 Kritik Stoklar</h2><a href="/feeds">Tümünü Gör →</a></div><div class="v117-panel-body">{feed_rows_html}</div></div>
+              <div class="card v117-panel v117-span-2 v122j-recent-panel"><div class="v117-panel-head"><h2>↻ Son Hareketler</h2><a href="/audit-log">Tümünü Gör →</a></div><div class="v117-panel-body">{action_rows}</div></div>
+            </section><script>(function(){{const tabs=[...document.querySelectorAll('[data-task-filter]')],tasks=[...document.querySelectorAll('[data-task-state]')];tabs.forEach(tab=>tab.addEventListener('click',function(){{tabs.forEach(x=>x.classList.toggle('active',x===tab));const state=tab.dataset.taskFilter;tasks.forEach(x=>x.hidden=state!=='all'&&x.dataset.taskState!==state);}}));}})();</script>'''
+            selected_dashboard_html=restored_dashboard_html if dashboard_view_mode=='classic' else modern_dashboard_html
+            body=dashboard_header_html+selected_dashboard_html
             print(f'[PERF] Dashboard hazır: {time.perf_counter()-_dash_t0:.3f} sn')
             return self.send_html(page('Profesyonel Dashboard',body,'/',u,msg))
 
@@ -6157,24 +6740,27 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             search=(q.get('q',[''])[0] or '').strip()
             stock_filter=(q.get('stock',['all'])[0] or 'all').lower()
             if stock_filter not in ('all','available','low','out'):stock_filter='all'
+            sort_key=(q.get('sort',['name'])[0] or 'name').lower();sort_dir=(q.get('dir',['asc'])[0] or 'asc').lower()
+            if sort_key not in ('name','dm','cp','ndf','me','ca','p','price','stock','daily','days'):sort_key='name'
+            if sort_dir not in ('asc','desc'):sort_dir='asc'
             try:per_page=int(q.get('per_page',['15'])[0])
             except Exception:per_page=15
             if per_page not in (10,15,30):per_page=15
             try:page_no=max(1,int(q.get('page',['1'])[0]))
             except Exception:page_no=1
             with db() as c:
-                params=[]; where='where f.active=1'
-                if search: where+=' and (f.name like ? or f.category like ?)';params=[f'%{search}%',f'%{search}%']
-                feeds=c.execute(f'''select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc,fp.id desc limit 1),0) price,
+                # Hotfix 1.22u: arama yalnız mevcut sayfadaki 15 satıra değil, tüm aktif kataloğa uygulanır.
+                feeds=c.execute('''select f.*,coalesce((select ch.cost_per_kg from feed_cost_history ch where ch.feed_id=f.id and ch.effective_date<=date('now','localtime') order by ch.effective_date desc,ch.id desc limit 1),(select fp.price_per_kg from feed_prices fp where fp.feed_id=f.id and fp.effective_date<=? order by fp.effective_date desc limit 1),0) price,
                     coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock
-                    from feed_catalog f {where} order by f.category,f.name limit 250''',[date.today().isoformat()]+params).fetchall()
+                    from feed_catalog f where f.active=1 order by f.category,f.name''',(date.today().isoformat(),)).fetchall()
+                if search:
+                    ranked=[]
+                    for row in feeds:
+                        rank=_feed_search_rank(search,row['name'],row['category'],row['source'])
+                        if rank is not None:ranked.append((rank+(int(row['id']),),row))
+                    feeds=[row for _,row in sorted(ranked,key=lambda item:item[0])]
                 allfeeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
-                daily_use={}
-                active_pr=c.execute("select paddock_id,ration_id from paddock_rations where active=1 and (end_date is null or end_date='')").fetchall()
-                for pr in active_pr:
-                    pop=paddock_population(pr['paddock_id'],c)
-                    for it in c.execute("select feed_id,kg_per_head_day from ration_items where ration_id=?",(pr['ration_id'],)).fetchall():
-                        daily_use[it['feed_id']]=daily_use.get(it['feed_id'],0.0)+pop*float(it['kg_per_head_day'] or 0)
+                daily_use=current_daily_feed_use(c)
                 feeds=list(feeds)
                 def feed_stock_state(r):
                     stock=float(r['stock'] or 0);use=float(daily_use.get(r['id'],0) or 0)
@@ -6184,29 +6770,38 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 stock_counts={'all':len(feeds),'available':0,'low':0,'out':0}
                 for rr in feeds:stock_counts[feed_stock_state(rr)]+=1
                 filtered_feeds=feeds if stock_filter=='all' else [r for r in feeds if feed_stock_state(r)==stock_filter]
+                def _sv(r):
+                    st=float(r['stock'] or 0);du=float(daily_use.get(r['id'],0) or 0)
+                    return {'name':str(r['name'] or '').casefold(),'dm':float(r['dm_pct'] or 0),'cp':float(r['cp_pct'] or 0),'ndf':float(r['ndf_pct'] or 0),'me':float(r['me_mcal_kg'] or 0),'ca':float(r['ca_pct'] or 0),'p':float(r['p_pct'] or 0),'price':float(r['price'] or 0),'stock':st,'daily':du,'days':st/du if du>0 else 10**12}[sort_key]
+                filtered_feeds=sorted(filtered_feeds,key=_sv,reverse=(sort_dir=='desc'))
                 total_count=len(filtered_feeds);total_pages=max(1,(total_count+per_page-1)//per_page)
                 if page_no>total_pages:page_no=total_pages
                 offset=(page_no-1)*per_page;feeds=filtered_feeds[offset:offset+per_page]
                 opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in allfeeds)
                 trs=''.join(f'''<tr class="feed-catalog-row {"no-stock" if feed_stock_state(r)=="out" else "low-stock" if feed_stock_state(r)=="low" else ""}" data-search="{h((str(r['name'])+' '+str(r['category'] or '')+' '+str(r['source'] or '')).casefold())}"><td><b>{h(r['name'])}</b><div class="mut">{h(r['category'])}</div><small class="mut">{h(r['source']) or '-'}</small></td><td>{float(r['dm_pct'] or 0):.1f}</td><td>{float(r['cp_pct'] or 0):.1f}</td><td>{float(r['ndf_pct'] or 0):.1f}</td><td>{float(r['me_mcal_kg'] or 0):.2f}</td><td>{float(r['ca_pct'] or 0):.2f}</td><td>{float(r['p_pct'] or 0):.2f}</td><td><b>{money(r['price'])}/kg</b></td><td>{float(r['stock'] or 0):,.1f} kg</td><td>{daily_use.get(r['id'],0):,.1f} kg</td><td>{(f"{float(r['stock'] or 0)/daily_use.get(r['id'],1):.0f} gün" if daily_use.get(r['id'],0)>0 else '-')}</td><td><div class="actions" style="flex-wrap:nowrap"><a class="btn alt compact-btn" href="/feed-edit?id={r['id']}">✏️ Düzenle</a><form method="post" action="/feed/delete" style="margin:0" onsubmit="return confirm('Bu yemi katalogdan kaldırmak istediğinize emin misiniz? Geçmiş rasyon ve fiyat kayıtları korunur.')"><input type="hidden" name="feed_id" value="{r['id']}"><button class="btn red compact-btn">🗑 Sil</button></form></div></td></tr>''' for r in feeds)
-            def feed_url(page_value=1,stock_value=None):
-                return '/feeds?'+urllib.parse.urlencode({'q':search,'stock':stock_value if stock_value is not None else stock_filter,'per_page':per_page,'page':page_value})
+            def feed_url(page_value=1,stock_value=None,sort_value=None,dir_value=None):
+                return '/feeds?'+urllib.parse.urlencode({'q':search,'stock':stock_value if stock_value is not None else stock_filter,'sort':sort_value if sort_value is not None else sort_key,'dir':dir_value if dir_value is not None else sort_dir,'per_page':per_page,'page':page_value})
+            def sort_link(key,label):
+                nd='desc' if sort_key==key and sort_dir=='asc' else 'asc';mark=' ▲' if sort_key==key and sort_dir=='asc' else (' ▼' if sort_key==key else '')
+                return f'<a class="feed-sort-link" href="{h(feed_url(1,None,key,nd))}">{label}{mark}</a>'
             feed_tabs=''.join(f'<a class="count-tab {"active" if stock_filter==key else ""}" href="{h(feed_url(1,key))}">{label}<b>{stock_counts[key]}</b></a>' for key,label in [('all','Tüm Yemler'),('available','Stokta'),('low','Kritik Stok'),('out','Stok Yok')])
             feed_pager=f'''<div class="workspace-pager"><span class="mut">{total_count} yemden {offset+1 if total_count else 0}–{min(offset+per_page,total_count)} arası · Sayfa {page_no}/{total_pages}</span><div>{f'<a class="btn alt" href="{h(feed_url(page_no-1))}">← Önceki</a>' if page_no>1 else ''}{f'<a class="btn alt" href="{h(feed_url(page_no+1))}">Sonraki →</a>' if page_no<total_pages else ''}</div></div>'''
             body=f'''<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">Besin değerleri NASEM 2016 Beef + NASEM 2021 Dairy ile karşılaştırmalı güncelleniyor. Tam eşleşmeyen özel yemlerde mevcut referans korunur; kendi laboratuvar analizinizi Düzenle ile girebilirsiniz. Eski fiyatlar aktarılmadı.</p>
+            <div class="flash" style="margin:0 0 14px">🌾 Aktif padok rasyonları her gün <b>kg/baş/gün × aktif hayvan sayısı</b> kadar stoktan otomatik düşülür. Aynı gün mükerrer tüketim oluşmaz.</div>
             <div class="grid"><div class="card stat metric"><span>Yem Kataloğu</span><b>{len(allfeeds)}</b></div><div class="card stat metric blue"><span>Gösterilen</span><b>{len(feeds)}</b></div><div class="card stat metric orange"><span>Fiyat Mantığı</span><b>Geçmişli</b><small>Her tarih kendi fiyatını korur</small></div></div>
             <div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2><form method="post" action="/feed/price" class="form"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tarih<input type="date" name="effective_date" value="{date.today().isoformat()}" required></label><label>₺ / kg<input type="number" step="0.0001" min="0" name="price_per_kg" required></label><label class="full">Not<input name="notes" placeholder="Tedarikçi / alım notu"></label><div class="full"><button class="btn">Fiyatı Kaydet</button></div></form></div>
             <div class="card"><h2>📦 Stok Hareketi</h2><form method="post" action="/feed/stock" class="form" id="feedStockForm"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Tür<select name="tx_type" id="feedStockType"><option>Giriş</option><option>Çıkış</option><option>Tüketim</option><option>Sayım +</option><option>Sayım -</option></select></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" inputmode="decimal" name="quantity_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label>Alış ₺/kg<input type="number" step="0.0001" min="0" name="unit_price" value="0"></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="full" id="feedFinanceAsk" style="padding:10px;background:#edf7f0;border:1px solid #cfe3d5;border-radius:10px"><input type="checkbox" name="post_to_finance" value="yes" style="width:auto;margin-right:8px"> Bu stok girişini <b>Finans → Gider / Yem</b> olarak da kaydet</label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn blue">Stok Hareketini Kaydet</button></div></form></div></div>
             <div class="card" style="margin-top:14px"><details><summary><b>➕ Katalogda olmayan özel yem ekle</b></summary><form method="post" action="/feed/create" class="form" style="margin-top:14px"><label>Yem Adı<input name="name" required></label><label>Kategori<input name="category" value="Özel Yem"></label><label>KM %<input type="number" min="0" max="100" step="0.01" name="dm_pct"></label><label>HP % KM<input type="number" min="0" max="100" step="0.01" name="cp_pct"></label><label>NDF % KM<input type="number" min="0" max="100" step="0.01" name="ndf_pct"></label><label>eNDF etkinliği %<input type="number" min="0" max="100" step="0.01" name="effective_ndf_pct"></label><label>Nişasta % KM<input type="number" min="0" max="100" step="0.01" name="starch_pct"></label><label>ME Mcal/kg KM<input type="number" min="0" step="0.001" name="me_mcal_kg"></label><label>Ca % KM<input type="number" min="0" max="100" step="0.001" name="ca_pct"></label><label>P % KM<input type="number" min="0" max="100" step="0.001" name="p_pct"></label><details class="full"><summary><b>🏷 Üretici etiketi (ürün bazında)</b></summary><div class="form" style="margin-top:12px"><label>Etiket HP %<input type="number" min="0" max="100" step="0.01" name="label_cp_pct_as_fed"></label><label>Etiket ME kcal/kg<input type="number" min="0" step="1" name="label_me_kcal_kg_as_fed"></label><label>Etiket ham selüloz %<input type="number" min="0" max="100" step="0.01" name="label_crude_fiber_pct_as_fed"></label><label>Etiket ham yağ %<input type="number" min="0" max="100" step="0.01" name="label_fat_pct_as_fed"></label><label>Etiket ham kül %<input type="number" min="0" max="100" step="0.01" name="label_ash_pct_as_fed"></label><label>Etiket sodyum %<input type="number" min="0" max="100" step="0.01" name="label_sodium_pct_as_fed"></label></div><p class="mut">Bu alanlar çuval/üretici değerlerini aynen saklar. Solver alanları yukarıda KM bazında ayrıca girilir.</p></details><details class="full"><summary><b>🧪 İleri analiz ve etiket sınırları</b></summary><div class="form" style="margin-top:12px"><label>Nişasta rumen yıkılabilirliği %<input type="number" min="0" max="100" step="0.01" name="starch_degradability_pct"></label><label>NDF sindirilebilirliği %<input type="number" min="0" max="100" step="0.01" name="ndf_digestibility_pct"></label><label>İşleme biçimi<input name="processing_method" placeholder="Ezme / kırma / flake / öğütme"></label><label>Etiket alt doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_min_kg_day"></label><label>Etiket üst doz kg/baş/gün<input type="number" min="0" step="0.01" name="solver_max_kg_day"></label><label>Sınır kaynağı<input name="constraint_source" placeholder="Ürün etiketi / uzman / laboratuvar"></label></div><p class="mut">Bilinmeyen alanları 0 bırakın. Etiket üst dozu girilirse solver bu miktarı aşmaz.</p></details><div class="full"><button class="btn">Özel Yemi Ekle</button></div></form></details></div>
-            <div class="card" style="margin-top:14px;overflow:auto"><form class="actions" id="feed-catalog-search-form"><input id="feed-catalog-search" name="q" value="{h(search)}" placeholder="Yem ara... yazdıkça filtrelenir" autocomplete="off"><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a><span class="mut" id="feed-search-count"></span></form><table id="feed-catalog-table"><tr><th>Yem</th><th>KM%</th><th>HP%</th><th>NDF%</th><th>ME</th><th>Ca%</th><th>P%</th><th>Fiyat</th><th>Stok</th><th>Günlük Kullanım</th><th>Tahmini Yeterlilik</th><th>İşlem</th></tr>{trs or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'}</table></div><script>(()=>{{const i=document.getElementById('feed-catalog-search'),rows=[...document.querySelectorAll('.feed-catalog-row')],count=document.getElementById('feed-search-count');if(!i)return;const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c');function run(){{const t=norm(i.value.trim());let n=0;rows.forEach(r=>{{const ok=!t||norm(r.dataset.search||r.textContent).includes(t);r.style.display=ok?'':'none';if(ok)n++;}});if(count)count.textContent=n+' yem gösteriliyor';}}i.addEventListener('input',run);run();}})();</script>'''
+            <div class="card" style="margin-top:14px;overflow:auto"><form class="actions" id="feed-catalog-search-form"><input id="feed-catalog-search" name="q" value="{h(search)}" placeholder="Yem ara... tüm katalogda aranır" autocomplete="off"><button class="btn alt">🔎 Ara</button><a class="btn alt" href="/feeds">Temizle</a><span class="mut" id="feed-search-count"></span></form><table id="feed-catalog-table"><tr><th>{sort_link('name','Yem')}</th><th>{sort_link('dm','KM%')}</th><th>{sort_link('cp','HP%')}</th><th>{sort_link('ndf','NDF%')}</th><th>{sort_link('me','ME')}</th><th>{sort_link('ca','Ca%')}</th><th>{sort_link('p','P%')}</th><th>{sort_link('price','Fiyat')}</th><th>{sort_link('stock','Stok')}</th><th>{sort_link('daily','Günlük Kullanım')}</th><th>{sort_link('days','Tahmini Yeterlilik')}</th><th>İşlem</th></tr>{trs or '<tr><td colspan="12">Kayıt bulunamadı.</td></tr>'}</table></div><script>(()=>{{const i=document.getElementById('feed-catalog-search'),form=document.getElementById('feed-catalog-search-form'),rows=[...document.querySelectorAll('.feed-catalog-row')],count=document.getElementById('feed-search-count');if(!i||!form)return;const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]+/g,' ').trim().replace(/\\s+/g,' ');let timer=null,lastSent=norm(i.value.trim());function localRun(){{const t=norm(i.value.trim()),tokens=t.split(' ').filter(Boolean);let n=0;rows.forEach(r=>{{const hay=norm(r.dataset.search||r.textContent),ok=!tokens.length||tokens.every(token=>hay.includes(token));r.style.display=ok?'':'none';if(ok)n++;}});if(count)count.textContent=(t&&n===0?'Tüm katalogda aranıyor…':n+' yem bu sayfada');}}function submitAll(){{const t=norm(i.value.trim());if(t===lastSent)return;lastSent=t;form.submit();}}i.addEventListener('input',()=>{{localRun();clearTimeout(timer);timer=setTimeout(submitAll,350);}});localRun();}})();</script>'''
             feed_payment_select='<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select>'
             body=body.replace('<h1>🌾 Yem Kataloğu & Stok</h1><p class="mut">',f'''<header class="workspace-hero"><div><h1>🌾 Yem Kataloğu & Stok</h1><p>Fiyat, stok ve yeterlilik durumunu tek listeden izleyin.</p></div><div class="workspace-actions"><button type="button" class="btn alt" onclick="openFeedAction('price')">💰 Fiyat Gir</button><button type="button" class="btn blue" onclick="openFeedAction('stock')">📦 Stok Hareketi</button></div></header><nav class="count-tabs">{feed_tabs}</nav><p class="mut">''',1)
             body=body.replace('<div class="two" style="margin-top:14px"><div class="card"><h2>💰 Güncel Fiyat Gir</h2>','<div id="feedActionCards" style="display:none"><div class="card" id="feedPriceCard"><h2>💰 Güncel Fiyat Gir</h2>',1)
             body=body.replace('<div class="card"><h2>📦 Stok Hareketi</h2>','<div class="card" id="feedStockCard"><h2>📦 Stok Hareketi</h2>',1)
-            body=body.replace('<form class="actions" id="feed-catalog-search-form">',f'''<form class="actions" id="feed-catalog-search-form"><input type="hidden" name="stock" value="{h(stock_filter)}"><input type="hidden" name="per_page" value="{per_page}">''',1)
+            body=body.replace('<form class="actions" id="feed-catalog-search-form">',f'''<form class="actions" id="feed-catalog-search-form"><input type="hidden" name="stock" value="{h(stock_filter)}"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"><input type="hidden" name="per_page" value="{per_page}">''',1)
             body=body.replace('</table></div><script>(()=>','</table>'+feed_pager+'</div><script>(()=>',1)
             body=body.replace(feed_payment_select,'<select name="payment_method" id="feedPaymentMethod"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select>',1)
             body=body.replace('<label class="full" id="feedFinanceAsk"','<label id="feedDueDateLabel" style="display:none">Vade Tarihi *<input type="date" name="due_date" id="feedDueDate"></label><label class="full" id="feedFinanceAsk"',1)
+            body += f'''<div class="card" style="margin-top:14px"><h2>⚖️ Fiziksel Stok Eşitle</h2><p class="mut">Geçmiş hareketleri silmez; yalnız sistem stoğu ile fiziksel sayım arasındaki farkı hareket olarak kaydeder.</p><form method="post" action="/feed/stock-reconcile" class="form" data-submit-lock="1" data-submit-text="⏳ Eşitleniyor…"><label class="full">Yem<select name="feed_id" required><option value="">Seçin</option>{opts}</select></label><label>Fiziksel Stok (kg)<input type="number" min="0" step="0.01" name="physical_qty_kg" required></label><label>Tarih<input type="date" name="tx_date" value="{date.today().isoformat()}" required></label><label class="full">Not<input name="notes" value="Fiziksel stok sayımı"></label><div class="full"><button class="btn orange">Stoku Eşitle</button></div></form></div>'''
             body += '''<div class="section-drawer-backdrop" id="feedActionDrawerBackdrop" onclick="if(event.target===this)closeFeedAction()"></div><aside class="section-drawer" id="feedActionDrawer"><div class="section-drawer-head"><div><h2 id="feedActionTitle">Yem İşlemi</h2><div class="mut">Yem maliyeti ve stok bağlantıları korunarak kaydedilir.</div></div><button type="button" class="section-drawer-close" onclick="closeFeedAction()">×</button></div><div class="section-drawer-body" id="feedActionBody"></div></aside><script>(function(){const p=document.getElementById('feedPaymentMethod'),l=document.getElementById('feedDueDateLabel'),d=document.getElementById('feedDueDate'),t=document.getElementById('feedStockType');if(p){function sync(){const on=p.value==='Vadeli'&&t.value==='Giriş';l.style.display=on?'block':'none';d.required=on;if(!on)d.value='';}p.addEventListener('change',sync);t.addEventListener('change',sync);sync();}const holder=document.getElementById('feedActionCards'),body=document.getElementById('feedActionBody'),drawer=document.getElementById('feedActionDrawer'),backdrop=document.getElementById('feedActionDrawerBackdrop'),title=document.getElementById('feedActionTitle');window.openFeedAction=function(type){const card=document.getElementById(type==='price'?'feedPriceCard':'feedStockCard');if(!card)return;body.appendChild(card);card.style.display='block';title.textContent=type==='price'?'Güncel Yem Fiyatı':'Yem Stok Hareketi';drawer.classList.add('open');backdrop.classList.add('open');document.body.style.overflow='hidden'};window.closeFeedAction=function(){const card=body.querySelector('.card');if(card){card.style.display='none';holder.appendChild(card)}drawer.classList.remove('open');backdrop.classList.remove('open');document.body.style.overflow=''};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFeedAction()});})();</script>'''
             return self.send_html(page('Yem Kataloğu',body,'/feeds',u,msg))
         if path=='/feed-edit':
@@ -6254,7 +6849,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               <div class="prep-print-header print-only"><div class="prep-print-brand">{logo}<div><h1>{h(farm_display_name(profile))}</h1><b>Rasyon Hazırlama / Toplam Yem Raporu</b></div></div><div><b>Rapor Tarihi</b><br>{date.today().strftime('%d/%m/%Y')}<br><b>İşletme No</b><br>{h(profile.get('business_no') or '-')}</div></div>
               <div class="prep-report-head"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Kaydedilmiş rasyon miktarları kullanılır.</span></div><div class="prep-report-controls no-print"><label>Hayvan Sayısı<input id="ration-animal-count" type="number" min="1" step="1" value="1" inputmode="numeric"></label><label>Dönem<select id="ration-period-days"><option value="1">1 Gün</option><option value="7">7 Gün</option><option value="30">30 Gün</option></select></label><button type="button" class="btn blue" id="ration-prep-print">🖨 Yazdır / PDF</button></div></div>
               <div class="prep-report-summary"><div><span>Hayvan Sayısı</span><b id="prep-headcount">1</b></div><div><span>Dönem</span><b id="prep-period-label">1 Gün</b></div><div><span>Toplam Yem</span><b id="prep-total-kg">{sm['as_fed_kg']:.2f} kg</b></div><div><span>Toplam Maliyet</span><b id="prep-total-cost">{money(sm['cost'])}</b></div></div>
-              <div class="prep-report-summary prep-nutrition-summary"><div><span>Günlük KM</span><b>{sm['dm_kg']:.2f} kg/baş</b></div><div><span>Nişasta</span><b>%{sm['starch_pct_dm']:.1f} KM</b></div><div><span>Nişasta Miktarı</span><b>{sm['starch_kg']:.2f} kg/baş/gün</b></div><div><span>İdeal / Üst Sınır</span><b>%{targets['starch_min']:.0f}–{targets['starch_ideal_max']:.0f} / %{targets['starch_max']:.0f}</b></div></div>
+              <div class="prep-report-summary prep-nutrition-summary"><div><span>Günlük KM</span><b>{sm['dm_kg']:.2f} kg/baş</b></div><div><span>Nişasta</span><b>%{sm['starch_pct_dm']:.1f} KM</b></div><div><span>Nişasta Miktarı</span><b>{sm['starch_kg']:.2f} kg/baş/gün</b></div><div><span>İdeal / Dikkat / Güvenlik</span><b>%{targets['starch_min']:.0f}–{targets['starch_ideal_max']:.0f} / %{targets['starch_max']:.0f} / %{targets.get('starch_hard_max',45):.0f}</b></div></div>
               <div class="prep-report-table-wrap"><table class="prep-report-table"><thead><tr><th>Yem</th><th>kg/baş/gün</th><th>Toplam kg/gün</th><th>Dönem Toplamı</th><th>Dönem Maliyeti</th></tr></thead><tbody id="ration-prep-body">{rows}</tbody></table></div>
               <div class="mut prep-report-note">Rapor, kaydedilmiş rasyon reçetesine göre hazırlanır. Çalışma masasındaki kaydedilmemiş değişiklikleri raporlamadan önce kaydedin.</div>
               <div class="prep-print-footer print-only"><span>ÇiftlikPro Enterprise · {h(farm_display_name(profile))}</span><span>{date.today().strftime('%d/%m/%Y')}</span></div>
@@ -6282,7 +6877,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
                     if rr:
                         sm=ration_summary(selected,c)
-                        item_rows=''.join(f'''<tr class="ration-row" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{_solver_nutrient(x,'cp_pct'):.8f}" data-ndf="{_solver_nutrient(x,'ndf_pct'):.8f}" data-endf="{_solver_nutrient(x,'effective_ndf_pct'):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{_solver_nutrient(x,'me_mcal_kg'):.8f}" data-nem="{_solver_nutrient(x,'nem_mcal_kg'):.8f}" data-neg="{_solver_nutrient(x,'neg_mcal_kg'):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        def _ration_feed_icon(x):
+                            _n=str(x['name'] or '').casefold(); _g=feed_group(x).casefold()
+                            if 'silaj' in _n: return '🌽'
+                            if 'yonca' in _n or 'kaba' in _g: return '🌿'
+                            if 'saman' in _n: return '🌾'
+                            if 'yem' in _n: return '🥣'
+                            if any(k in _n for k in ('arpa','buğday','bugday','mısır','misir')): return '🌾'
+                            return '🧂' if 'katk' in _g else '🌱'
+                        item_rows=''.join(f'''<tr class="ration-row" data-feed-icon="{_ration_feed_icon(x)}" data-item-id="{int(x['item_id'])}" data-locked="{int(x['locked'] or 0)}" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{_solver_nutrient(x,'cp_pct'):.8f}" data-ndf="{_solver_nutrient(x,'ndf_pct'):.8f}" data-endf="{_solver_nutrient(x,'effective_ndf_pct'):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{_solver_nutrient(x,'me_mcal_kg'):.8f}" data-nem="{_solver_nutrient(x,'nem_mcal_kg'):.8f}" data-neg="{_solver_nutrient(x,'neg_mcal_kg'):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><span class="hf122f-feed-thumb" aria-hidden="true">{_ration_feed_icon(x)}</span><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
                         feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
                         current_feed_qty={int(x['id']):float(x['kg_per_head_day'] or 0) for x in sm['items']}
                         quick_feed_rows=[]
@@ -6296,6 +6899,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                             quick_feed_rows.append(f"""<button type='button' class='quick-feed-result' data-feed-id='{fid}' data-feed-name='{h(x['name'])}' data-current='{cur:.2f}' data-search='{search_key}'><span><b>{h(x['name'])}</b><small>{meta}</small></span><span class='quick-feed-side'><b>{price_txt}</b><small>{stock_txt}{in_ration}</small></span></button>""")
                         quick_feed_html=''.join(quick_feed_rows)
                         pd_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in paddocks)
+                        ration_bulk_paddock_checks=''.join(
+                            f'''<label class="ration-bulk-paddock"><input type="checkbox" name="bulk_paddock_{int(x['id'])}" value="1"><span>🏠 <b>{h(x['name'])}</b></span></label>'''
+                            for x in paddocks
+                        ) or '<div class="mut">Aktif padok bulunamadı.</div>'
                         add_recs=ration_addition_recommendations(rr,sm,c,30)
                         reduce_recs=ration_reduction_recommendations(rr,sm,c,8)
                         combo_recs=ration_combined_recommendations(rr,sm,reduce_recs,add_recs,5)
@@ -6323,7 +6930,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                         if sim_feed:
                             sf=c.execute('select name from feed_catalog where id=?',(sim_feed,)).fetchone();ss=ration_simulated_summary(selected,sim_feed,sim_delta,c)
                             if sf: sim_html=f'''<div class="card" style="margin-top:14px;border:2px solid #2f78d0"><h3>🧪 Kaydetmeden Simülasyon: +{sim_delta:.2f} kg {h(sf['name'])}</h3><div class="grid"><div class="card stat">KM<b>{sm['dm_kg']:.2f} → {ss['dm_kg']:.2f}</b></div><div class="card stat">HP<b>%{sm['cp_pct_dm']:.1f} → %{ss['cp_pct_dm']:.1f}</b></div><div class="card stat">ME<b>{sm['me_mcal']:.1f} → {ss['me_mcal']:.1f}</b></div><div class="card stat">NDF<b>%{sm['ndf_pct_dm']:.1f} → %{ss['ndf_pct_dm']:.1f}</b></div><div class="card stat">Kaba/Kesif<b>%{sm['roughage_pct_dm']:.0f}/%{sm['concentrate_pct_dm']:.0f} → %{ss['roughage_pct_dm']:.0f}/%{ss['concentrate_pct_dm']:.0f}</b></div><div class="card stat metric orange">Maliyet<b>{money(sm['cost'])} → {money(ss['cost'])}</b></div></div><div class="actions"><form method="post" action="/ration/apply-suggestion"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="feed_id" value="{sim_feed}"><input type="hidden" name="delta" value="{sim_delta}"><button class="btn blue">✅ Bu Değişikliği Uygula</button></form><a class="btn alt" href="/rations?id={selected}">↩ Vazgeç</a></div></div>'''
-                        detail=f'''<div class="card workbench-shell" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Hedef ↔ mevcut → çalışma masası → yem ekle → akıllı çözüm</span></div><details><summary><b>✏️ Rasyon Bilgileri</b></summary><form method="post" action="/ration/edit" class="form" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="full">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form><form method="post" action="/ration/delete" style="margin-top:10px" onsubmit="return confirm('Bu rasyonu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">🗑 Rasyonu Sil</button></form></details></div>
+                        detail=f'''<div class="card workbench-shell" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Hedef ↔ mevcut → çalışma masası → yem ekle → akıllı çözüm</span></div><details class="ration-info-details"><summary><b>✏️ Rasyon Bilgileri</b></summary><form method="post" action="/ration/edit" class="form" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="full">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form><form method="post" action="/ration/delete" style="margin-top:10px" onsubmit="return confirm('Bu rasyonu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">🗑 Rasyonu Sil</button></form></details></div>
                         {ration_requirement_panel(rr,sm)}
                         <div id="ration-workbench" class="card" style="margin-top:14px"><div class="workbench-head"><div><h3 style="margin:0">🌾 Rasyon Çalışma Masası</h3><span class="mut">Miktarı yazın veya −/+ kullanın. Hedef ↔ mevcut değerler üstte canlı güncellenir.</span></div><div class="workbench-actions"><button type="button" class="btn" onclick="document.getElementById('quick-feed-add').open=true;setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)">➕ Yem Ekle</button><a class="btn alt" href="/ration-prep-report?id={selected}">🧾 Rasyonu Yazdır</a></div></div><form method="post" action="/ration/items-bulk" id="ration-bulk-form"><input type="hidden" name="ration_id" value="{selected}"><div class="ration-changebar compact-changebar"><span id="dirty-status" class="mut">Kaydedilmiş rasyon gösteriliyor.</span><button type="button" id="ration-reset" class="btn alt compact-btn" style="display:none">↩ Değişiklikleri Geri Al</button></div><div style="overflow:auto;margin-top:8px"><table class="ration-workbench-table"><thead><tr><th>Yem</th><th>Miktar kg/baş/gün</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr></thead><tbody>{item_rows}</tbody></table></div><div class="ration-savebar"><button class="btn blue" id="ration-save" disabled>💾 Değişiklikleri Kaydet</button></div></form></div><script>(()=>{{const form=document.getElementById('ration-bulk-form');if(!form)return;const scrollKey='cp-ration-scroll';const rows=[...form.querySelectorAll('.ration-row')],save=document.getElementById('ration-save'),reset=document.getElementById('ration-reset'),status=document.getElementById('dirty-status');const base={{asfed:{sm['as_fed_kg']:.8f},dm:{sm['dm_kg']:.8f},cp:{sm['cp_pct_dm']:.8f},me:{sm['me_mcal']:.8f},ndf:{sm['ndf_pct_dm']:.8f},endf:{sm['endf_pct_dm']:.8f},ca:{sm['ca_g']:.8f},p:{sm['p_g']:.8f},cost:{sm['cost']:.8f},rough:{sm['roughage_pct_dm']:.8f},conc:{sm['concentrate_pct_dm']:.8f}}};const targetsLive={{dm:{targets['dmi_kg']:.8f},cp:{targets['cp_pct']:.8f},me:{targets['me_mcal_day']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const setText=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};function targetStatus(actual,target,tol,upperTol){{upperTol=upperTol===undefined?tol:upperTol;const r=target?actual/target:1;if(r<1-tol)return '⚠️ Eksik %'+((1-r)*100).toFixed(0);if(r>1+upperTol)return '⬆️ Fazla %'+((r-1)*100).toFixed(0);return '✅ Uygun';}}function liveDiff(actual,target,unit,digits){{if(!target)return '—';const d=actual-target,p=d/target*100,sg=d>0?'+':'';return sg+d.toFixed(digits)+unit+' ('+sg+p.toFixed(0)+'%)';}}function updateTargetCard(key,current,status,diff){{setText('target-mini-'+key+'-current',current);setText('target-mini-'+key+'-status',status);setText('target-mini-'+key+'-diff',diff);const b=document.getElementById('target-mini-'+key);if(b){{b.classList.toggle('ok',status.indexOf('Uygun')>=0);b.classList.toggle('warn',status.indexOf('Uygun')<0);}}}}function updateTargetCards(dm,cp,me,ndf,endf,starch,starchKg,rapidStarch,coverage,ca,p,rough,conc,changed){{const ts=targetsLive;const dmS=targetStatus(dm,ts.dm,.10),cpS=targetStatus(cp,ts.cp,.05,.10),meS=targetStatus(me,ts.me,.08,.10),caS=targetStatus(ca,ts.ca,.10),pS=targetStatus(p,ts.p,.10),ndfS=(ndf>=ts.ndfMin&&ndf<=ts.ndfMax)?'✅ Uygun':(ndf<ts.ndfMin?'⚠️ Düşük':'⚠️ Yüksek'),rcS=(rough>=ts.roughMin&&rough<=ts.roughMax)?'✅ Uygun':(rough<ts.roughMin?'⚠️ Kaba yem düşük':'⚠️ Kaba yem yüksek'),starchS=(starch>=ts.starchMin&&starch<=ts.starchIdeal)?'✅ Uygun':(starch<ts.starchMin?'ℹ️ İdeal altı':(starch<=ts.starchIdeal+.5?'⚠️ Sınırda':(starch<=ts.starchMax?'⚠️ Sınıra yakın':'🔴 Yüksek')));updateTargetCard('dm',dm.toFixed(2)+' kg',dmS,liveDiff(dm,ts.dm,' kg',2));updateTargetCard('cp','%'+cp.toFixed(1),cpS,liveDiff(cp,ts.cp,' puan',1));updateTargetCard('me',me.toFixed(1),meS,liveDiff(me,ts.me,' Mcal',1));updateTargetCard('ndf','%'+ndf.toFixed(1),ndfS,ndfS.indexOf('Uygun')>=0?'Aralık içi':(ndf<ts.ndfMin?'Alt sınırın altında':'Üst sınırın üzerinde'));updateTargetCard('ca',ca.toFixed(0)+' g',caS,liveDiff(ca,ts.ca,' g',0));updateTargetCard('p',p.toFixed(0)+' g',pS,liveDiff(p,ts.p,' g',0));const mineral=document.getElementById('target-mini-mineral');if(mineral){{const mok=caS.indexOf('Uygun')>=0&&pS.indexOf('Uygun')>=0;mineral.classList.toggle('ok',mok);mineral.classList.toggle('warn',!mok);}}updateTargetCard('rc','%'+rough.toFixed(0)+' / %'+conc.toFixed(0),rcS,rcS.indexOf('Uygun')>=0?'Aralık içi':(rough<ts.roughMin?'Kaba yem düşük':'Kaba yem yüksek'));let riskScore=0;if(starch>ts.starchMax)riskScore+=2;else if(starch>ts.starchIdeal+.5)riskScore+=1;if(endf<ts.endfMin*.80)riskScore+=2;else if(endf<ts.endfMin)riskScore+=1;if(coverage>=.70&&rapidStarch>ts.starchIdeal*.75)riskScore+=1;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setText('target-mini-starch-current','%'+starch.toFixed(1));setText('target-mini-starch-status',starchS);setText('target-mini-starch-diff',starchKg.toFixed(2)+' kg/baş');setText('target-mini-ph-current',risk);setText('target-mini-ph-status',riskS);setText('target-mini-ph-diff','Veri güveni '+confidence);const sr=document.getElementById('target-mini-starch-rumen');if(sr){{const ok=starchS.indexOf('Uygun')>=0&&risk==='Düşük';sr.classList.toggle('ok',ok);sr.classList.toggle('warn',!ok);}}const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak canlı analiz ediliyor. Hedef kartları çalışma masasıyla birlikte değişiyor.':'🌾 Çalışma masası ile canlı bağlı: miktar değiştikçe bu kartlar anında güncellenir.';}}const trMoney=n=>'₺'+n.toLocaleString('tr-TR',{{minimumFractionDigits:2,maximumFractionDigits:2}});const delta=(id,n,b,suffix='')=>{{const e=document.getElementById(id),d=n-b;e.textContent=Math.abs(d)<0.005?'':((d>0?'+':'')+d.toFixed(2)+suffix);e.style.color=d>0?'#17733d':d<0?'#b33a2b':''}};function calc(){{let asfed=0,dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const i=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((i.value||'0').replace(',','.'))||0),orig=parseFloat(i.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),dmkg=kg*dmp/100;asfed+=kg;dm+=dmkg;cpkg+=dmkg*parseFloat(r.dataset.cp||0)/100;ndfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100;endfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=dmkg*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=dmkg*parseFloat(r.dataset.me||0);ca+=dmkg*parseFloat(r.dataset.ca||0)*10;p+=dmkg*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=dmkg;else if(r.dataset.group==='Kesif')concdm+=dmkg;const ch=Math.abs(kg-orig)>.0005;i.classList.toggle('ration-dirty',ch);r.querySelector('.qty-delta').textContent=ch?((kg-orig>0?'+':'')+(kg-orig).toFixed(2)+' kg'):'';if(ch)changed++;r.querySelector('.row-daily').textContent=trMoney(kg*parseFloat(r.dataset.price||0));}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapidStarch=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,rcdm=roughdm+concdm,rough=rcdm?roughdm/rcdm*100:0,conc=rcdm?concdm/rcdm*100:0;const dc=cost-base.cost;updateTargetCards(dm,cp,me,ndf,endf,starch,starchkg,rapidStarch,coverage,ca,p,rough,conc,changed);setText('target-mini-cost-current',trMoney(cost));setText('target-mini-cost-diff',Math.abs(cost-base.cost)<.005?'Değişiklik yok':((cost-base.cost>0?'+':'')+trMoney(cost-base.cost)));setText('target-mini-cost-status',cost<=base.cost?'💰 Maliyet düştü':'💰 Maliyet arttı');save.disabled=changed===0;reset.style.display=changed?'inline-flex':'none';status.className=changed?'ration-dirty-text':'mut';status.textContent=changed?('● '+changed+' yem kaleminde kaydedilmemiş değişiklik var'):'Kaydedilmiş rasyon gösteriliyor.';}}rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.addEventListener('input',calc);r.querySelectorAll('.qty-step').forEach(b=>b.onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value=Math.max(0,(parseFloat(i.value)||0)+parseFloat(b.dataset.delta)).toFixed(2);calc();requestAnimationFrame(()=>window.scrollTo(0,y));}});r.querySelector('.qty-zero').onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value='0.00';calc();requestAnimationFrame(()=>window.scrollTo(0,y));}};}});reset.onclick=()=>{{rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.value=parseFloat(i.dataset.original||0).toFixed(2);}});calc();}};form.addEventListener('submit',()=>sessionStorage.setItem(scrollKey,String(window.scrollY)));const saved=sessionStorage.getItem(scrollKey);if(saved!==null){{sessionStorage.removeItem(scrollKey);requestAnimationFrame(()=>window.scrollTo(0,parseFloat(saved)||0));}}calc();}})();</script>
                         <script id="dev413-science-live">(()=>{{const form=document.getElementById('ration-bulk-form');if(!form||!document.querySelector('.science-target-grid'))return;const rows=[...form.querySelectorAll('.ration-row')];const t={{weight:{targets['weight_kg']:.8f},sbw:{targets['sbw_kg']:.8f},ebw:{targets['ebw_kg']:.8f},age:{targets.get('age_months',0):.8f},adg:{targets['adg']:.8f},nemReq:{targets['nem_req_mcal']:.8f},negReq:{targets['neg_req_mcal']:.8f},gainCoefficient:{targets.get('gain_energy_coefficient',0.0635):.8f},cp:{targets['cp_pct']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const fmt=(n,d=1)=>Number(n||0).toLocaleString('tr-TR',{{minimumFractionDigits:d,maximumFractionDigits:d}});const set=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};const level=s=>s.includes('🔴')?'bad':s.includes('⚠️')?'warn':s.includes('✅')?'ok':'info';function setRow(key,target,current,status,diff=''){{set('target-mini-'+key+'-target',target);set('target-mini-'+key+'-current',current);set('target-mini-'+key+'-status',status);set('target-mini-'+key+'-diff',diff);const el=document.getElementById('target-mini-'+key);if(el){{el.classList.remove('ok','warn','bad','info');el.classList.add(level(status));}}}}function symmetric(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d>.10)return '⚠️ Yüksek %'+fmt(d*100,0);if(Math.abs(d)>.05)return '⚠️ Sınıra yakın';return '✅ Uygun';}}function minimum(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d<-.005)return '⚠️ Hedef altı %'+fmt(Math.abs(d)*100,1);return '✅ Yeterli';}}function range(a,lo,hi){{return a<lo?'🔴 Düşük':(a>hi?'⚠️ Yüksek':'✅ Aralıkta');}}function calcScience(){{let dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,nem=0,neg=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const input=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((input?.value||'0').replace(',','.'))||0),orig=parseFloat(input?.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),d=kg*dmp/100;dm+=d;cpkg+=d*parseFloat(r.dataset.cp||0)/100;ndfkg+=d*parseFloat(r.dataset.ndf||0)/100;endfkg+=d*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=d*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=d*parseFloat(r.dataset.me||0);nem+=d*parseFloat(r.dataset.nem||0);neg+=d*parseFloat(r.dataset.neg||0);ca+=d*parseFloat(r.dataset.ca||0)*10;p+=d*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=d;else if(r.dataset.group==='Kesif')concdm+=d;if(Math.abs(kg-orig)>.0005)changed++;}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapid=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,nemDensity=dm?nem/dm:0,negDensity=dm?neg/dm:0,rc=roughdm+concdm,rough=rc?roughdm/rc*100:0,conc=rc?concdm/rc*100:0;let ne=Math.max(.70,Math.min(nemDensity||1.60,2.50)),nema=Math.max(ne,.95),yearling=t.age>0?t.age>=12:t.weight>=300,pred=Math.pow(t.sbw,.75)*(.2435*nema-.0466*nema*nema-(yearling?.0869:.1128))/nema;pred=Math.max(t.weight*.018,Math.min(t.weight*.035,pred));let capacity=0;if(nemDensity>0&&negDensity>0){{const gain=Math.max(0,dm-t.nemReq/nemDensity)*negDensity;if(gain>0){{const ebg=Math.pow(gain/Math.max(t.gainCoefficient*Math.pow(t.ebw,.75),1e-9),1/1.097);capacity=Math.max(0,ebg/.956);if(cp<t.cp*.95)capacity*=Math.max(.70,cp/Math.max(t.cp*.95,.1));}}}}setRow('dm','≈ '+fmt(pred,2)+' kg',fmt(dm,2)+' kg',symmetric(dm,pred),(dm-pred>=0?'+':'')+fmt(dm-pred,2)+' kg');setRow('adg','≥ '+fmt(t.adg,2)+' kg',capacity?fmt(capacity,2)+' kg':'—',capacity?minimum(capacity,t.adg):'ℹ️ NEm/NEg verisi yok',(capacity-t.adg>=0?'+':'')+fmt(capacity-t.adg,2)+' kg');setRow('cp','≥ %'+fmt(t.cp,1),'%'+fmt(cp,1),minimum(cp,t.cp),'HP tabanı');setRow('ndf','%'+fmt(t.ndfMin,0)+'–'+fmt(t.ndfMax,0),'%'+fmt(ndf,1),range(ndf,t.ndfMin,t.ndfMax));setRow('endf','≥ %'+fmt(t.endfMin,1),'%'+fmt(endf,1),minimum(endf,t.endfMin));setRow('rc','Kaba %'+fmt(t.roughMin,0)+'–'+fmt(t.roughMax,0),'%'+fmt(rough,0)+' / %'+fmt(conc,0),range(rough,t.roughMin,t.roughMax));const starchS=starch>=t.starchMin&&starch<=t.starchIdeal?'✅ İdeal bant':(starch<t.starchMin?'ℹ️ İdeal altı':(starch<=t.starchIdeal+.5?'⚠️ Sınırda':(starch<=t.starchMax?'⚠️ Dikkat bandı':'🔴 Yüksek')));setRow('starch','İdeal %'+fmt(t.starchMin,0)+'–'+fmt(t.starchIdeal,0),'%'+fmt(starch,1),starchS,fmt(starchkg,2)+' kg/baş');let riskScore=0;if(starch>t.starchMax)riskScore+=2;else if(starch>t.starchIdeal+.5)riskScore++;if(endf<t.endfMin*.80)riskScore+=2;else if(endf<t.endfMin)riskScore++;if(coverage>=.70&&rapid>t.starchIdeal*.75)riskScore++;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setRow('ph','Düşük',risk,riskS,'Veri güveni '+confidence);const caSoft=Math.max(t.ca*1.5,pred*10*.85),pSoft=Math.max(t.p*1.5,pred*10*.50),caHard=Math.max(t.ca*2.25,pred*10*1.20),pHard=Math.max(t.p*2.25,pred*10*.70);function mineral(a,min,soft,hard){{if(a<min*.90)return '🔴 Eksik %'+fmt((1-a/min)*100,0);if(a<min)return '⚠️ Minimuma yakın';if(a>hard)return '🔴 Güvenlik üstü';if(a>soft)return '⚠️ Yüksek';return '✅ Yeterli';}}setRow('ca','≥ '+fmt(t.ca,0)+' g',fmt(ca,0)+' g',mineral(ca,t.ca,caSoft,caHard));setRow('p','≥ '+fmt(t.p,0)+' g',fmt(p,0)+' g',mineral(p,t.p,pSoft,pHard));const ratio=p>0?ca/p:0,ratioS=ratio>=1.2&&ratio<=3?'✅ Dengeli':(ratio<1?'🔴 Düşük':'⚠️ Kontrol');setRow('cap','1,2–3,0',fmt(ratio,2),ratioS);setRow('cost','—','₺'+fmt(cost,2),changed?'💰 Taslak':'💰 Güncel',changed?changed+' kalem değişti':'Kaydedilmiş');set('target-mini-me-current',fmt(me,1));const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak; tüm göstergeler canlı yeniden hesaplandı.':'NASEM hayvan profili · Dinamik KM · NEm/NEg performansı';}}rows.forEach(r=>r.querySelector('.ration-qty')?.addEventListener('input',calcScience));form.addEventListener('click',e=>{{if(e.target.closest('.qty-step,.qty-zero,#ration-reset'))requestAnimationFrame(calcScience);}});calcScience();}})();</script>
@@ -6332,7 +6939,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                         {sim_html}
                         <div id="smart-balance" class="card ration-section-collapse" style="margin-top:14px;border:1px solid #d8e4ff"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><h3 style="margin:0">🧠 Akıllı Dengeleme</h3><span class="mut">Hedef kartları çalışma masasıyla canlı bağlıdır. Akıllı çözüm önerileri kaydettiğiniz son rasyona göre yenilenir.</span></div></div><div class="smart-solution-grid">{quick_solutions_html}</div><details style="margin-top:12px"><summary><b>🔬 Tüm önerileri ve teknik analizi göster</b></summary><div style="margin-top:12px"><h3>✂️ Fazlalıkları Azaltmak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Mevcut Yem</th><th>Deneme</th><th>Beklenen Etki</th><th>Yeni Maliyet</th><th></th></tr>{reduce_html}</table></div><h3 style="margin-top:18px">➕ Eksikleri Tamamlamak İçin</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_top_html}</table></div><details style="margin-top:12px"><summary><b>📚 Tüm uygun yem adayları ({len(add_recs)})</b></summary><div style="overflow:auto;margin-top:8px"><table class="smart-tech-table"><tr><th>Yem</th><th>Beklenen Etki</th><th>Fiyat</th><th>Stok</th><th></th></tr>{add_all_html}</table></div></details><h3 style="margin-top:18px">⚖️ Kombine Dengeleme Fikirleri</h3><div style="overflow:auto"><table class="smart-tech-table"><tr><th>Azalt</th><th>Ekle</th><th>Beklenen Etki</th><th></th></tr>{combo_html}</table></div></div></details></div>
                         <div class="costbox"><b>Not:</b> ÇiftlikPro bu ekranda rasyonun besin içeriği ve maliyetini analiz eder. Nihai rasyon uygunluğu hayvanın canlı ağırlığı, yaş, sağlık ve hedef performansına göre veteriner/zooteknist tarafından değerlendirilmelidir.</div>
-                        <details class="card" style="margin-top:14px"><summary><b>🏠 Padoka Ata</b></summary><form method="post" action="/ration/assign" class="actions" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select><input type="date" name="start_date" value="{date.today().isoformat()}" required><button class="btn orange">Padoka Ata</button></form></details></div>'''
+                        <details class="card ration-bulk-assign-card" style="margin-top:14px" open><summary><b>🏠 Padoklara Toplu Ata</b></summary><form method="post" action="/ration/assign-bulk" class="ration-bulk-assign-form" style="margin-top:12px" data-submit-lock="1" data-submit-text="⏳ Atanıyor…"><input type="hidden" name="ration_id" value="{selected}"><div class="ration-bulk-head"><label>Başlangıç<input type="date" name="start_date" value="{date.today().isoformat()}" required></label><label>Not<input name="notes" placeholder="İsteğe bağlı"></label></div><div class="ration-bulk-actions"><button type="button" class="btn alt compact-btn" onclick="this.closest('form').querySelectorAll('input[name^=bulk_paddock_]').forEach(x=>x.checked=true)">✓ Tümünü Seç</button><button type="button" class="btn alt compact-btn" onclick="this.closest('form').querySelectorAll('input[name^=bulk_paddock_]').forEach(x=>x.checked=false)">Seçimi Temizle</button></div><div class="ration-bulk-paddock-grid">{ration_bulk_paddock_checks}</div><div class="ration-bulk-submit"><button class="btn orange">Seçili Padoklara Ata</button><button type="button" class="btn blue" onclick="const f=this.closest('form');f.querySelectorAll('input[name^=bulk_paddock_]').forEach(x=>x.checked=true);f.requestSubmit()">Tüm Aktif Padoklara Ata</button></div></form><style>.ration-bulk-assign-form{{display:grid;gap:12px}}.ration-bulk-head{{display:grid;grid-template-columns:180px minmax(220px,1fr);gap:10px}}.ration-bulk-head label{{display:grid;gap:5px;font-size:12px;color:#607166}}.ration-bulk-actions,.ration-bulk-submit{{display:flex;gap:8px;flex-wrap:wrap}}.ration-bulk-paddock-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;max-height:260px;overflow:auto;padding:4px}}.ration-bulk-paddock{{display:flex;align-items:center;gap:9px;border:1px solid #d7e5dc;background:#f9fcfa;border-radius:10px;padding:9px 11px;cursor:pointer}}.ration-bulk-paddock:has(input:checked){{background:#e6f5eb;border-color:#49aa73;box-shadow:0 0 0 1px #49aa73}}.ration-bulk-paddock input{{width:18px;height:18px;margin:0}}.ration-bulk-paddock span{{white-space:nowrap}}@media(max-width:700px){{.ration-bulk-head{{grid-template-columns:1fr}}.ration-bulk-paddock-grid{{grid-template-columns:repeat(2,minmax(0,1fr));max-height:300px}}.ration-bulk-submit .btn{{flex:1 1 100%}}}}</style></details></div>'''
             solve_feed_html=''.join(f'''<label class="solve-feed"><input type="checkbox" name="feed_{x["id"]}" value="1"><span><b>{h(x["name"])}</b><small>{h(x["category"] or "")} · KM %{float(x["dm_pct"] or 0):.0f} · HP %{float(x["cp_pct"] or 0):.1f} · NDF %{float(x["ndf_pct"] or 0):.1f}</small></span></label>''' for x in feeds)
             solve_assistant_html=''
             if (q.get('solve',[''])[0]=='1') and msg:
@@ -6344,7 +6951,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if is_workbench:
                 if not selected or not detail:
                     return self.redirect('/rations','Rasyon bulunamadı veya seçilmedi.')
-                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası</h1><p class="mut">Bu ekran yalnızca seçili rasyon üzerinde çalışmak içindir. Hedefler, yem miktarları, göreli asidoz riski ve maliyet birlikte değerlendirilir; klinik rumen pH tahmini yapılmaz.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}'''
+                body=f'''<div class="workbench-page-head"><div><a class="btn alt compact-btn" href="/rations">← Rasyonlara Dön</a><h1 class="ration-page-title" style="margin-top:10px">🧪 Rasyon Çalışma Masası 2</h1><p class="mut">Mevcut solver sonucu; hedefler, nedenler, düzeltme önerileri, maliyet ve alternatiflerle birlikte tek ekranda açıklanır.</p></div></div>{detail}{WORKBENCH_REFERENCE_UI_V3}{WORKBENCH2_UI}{WORKBENCH2_MOBILE_UI}{WORKBENCH2_DESKTOP_UI}'''
                 return self.send_html(page('Rasyon Çalışma Masası',body,'/rations',u,msg))
             body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyonlarınızı oluşturun, çözün ve yönetin. Bir rasyona tıklayınca ayrı Çalışma Masası açılır.</p><div class="ration-page-steps"><span>1️⃣ Rasyon oluştur / çöz</span><span>2️⃣ Rasyonu seç</span><span>3️⃣ Ayrı çalışma masasında düzenle</span></div>{action_cards}{new_ration_panel}{solve_panel}{drawer_script}<div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
@@ -6734,7 +7341,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                         if wd>0:
                             dd=wg/wd;daily_txt=f'{dd:.3f} kg/gün';monthly_txt=f'{dd*30:.1f} kg'
                     except Exception:pass
-                wrows.append(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["weight"]} kg</td><td>{gain_txt}</td><td>{daily_txt}</td><td>{monthly_txt}</td><td>{h(r["notes"])}</td></tr>')
+                wrows.append(f'<tr><td data-label="Tarih">{fmt_date(r["measure_date"])}</td><td data-label="Kilo">{r["weight"]} kg</td><td data-label="Fark">{gain_txt}</td><td data-label="Günlük Artış">{daily_txt}</td><td data-label="30 Günlük">{monthly_txt}</td><td data-label="Not">{h(r["notes"])}</td></tr>')
             wtr=''.join(reversed(wrows)) or '<tr><td colspan=6>Kayıt yok</td></tr>'
             mtr=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["liters"]} L</td><td>{h(r["notes"])}</td></tr>' for r in milk) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{fmt_date(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
@@ -6742,13 +7349,29 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             edit_url='/animal-edit?id='+str(aid)
             milk_metric=f'<span class="pill">Son Süt<br><b>{(str(latest_milk)+" L") if latest_milk is not None else "-"}</b></span>' if a['gender']=='Dişi' else ''
             performance_box=(f'<div class="costbox"><span class="perf-badge {perf_class}">{perf_label}</span><div class="quick-metrics"><span class="pill">Son Dönem Artışı<br><b>{period_perf["gain"]:+.1f} kg</b></span><span class="pill">Tartım Aralığı<br><b>{period_perf["days"]} gün</b></span><span class="pill">Günlük Artış<br><b>{period_perf["daily"]:.3f} kg/gün</b></span><span class="pill">30 Günlük Tahmin<br><b>{period_perf["monthly"]:.1f} kg</b></span></div></div>' if period_perf and period_perf['daily'] is not None else '<p class="mut">Performans hesabı için en az iki tartım girin.</p>') if a['gender']=='Erkek' else ''
-            weight_panel=f'''<div class="card panel-card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{performance_box}<form method="post" action="/animal/weight" class="actions" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<div class="panel-table-wrap"><table style="margin-top:12px"><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr>{wtr}</table></div></div>'''
+            overview_chart=weight_chart_svg(list(reversed(weights)))
+            pregnancy_month='—';pregnancy_progress=0;pregnancy_days=0;pregnancy_remaining='—'
+            if active_preg and due:
+                try:
+                    preg_start=date.fromisoformat(active_preg['insemination_date']);pregnancy_days=max(0,(date.today()-preg_start).days);pregnancy_progress=max(0,min(100,round(pregnancy_days/280*100)));pregnancy_month=f'{pregnancy_days/30.4:.1f} ay';pregnancy_remaining=f'{max(0,(date.fromisoformat(due)-date.today()).days)} gün'
+                except Exception:pass
+            overview_preg=(f'''<div class="card animal-360-card animal-360-preg"><div class="v117-panel-head"><h2>🐄 Gebelik Durumu</h2><span class="v117-chip">Gebe</span></div><div class="v117-panel-body"><div style="display:flex;justify-content:space-between;gap:10px"><span>Gebelik ilerlemesi</span><b>{pregnancy_days} / 280 gün · %{pregnancy_progress}</b></div><div style="height:11px;background:#e0ebe4;border-radius:99px;overflow:hidden;margin:9px 0 13px"><i style="display:block;width:{pregnancy_progress}%;height:100%;background:#0c8a50"></i></div><div class="quick-metrics"><span class="pill">Gebelik Yaşı<br><b>{pregnancy_month}</b></span><span class="pill">Tahmini Doğum<br><b>{fmt_date(due)}</b></span><span class="pill">Kalan Süre<br><b>{pregnancy_remaining}</b></span></div></div></div>''' if active_preg else f'''<div class="card animal-360-card animal-360-preg"><h2>🐄 Üreme Durumu</h2><p class="gender-note">Aktif pozitif gebelik kaydı bulunmuyor.</p><a class="btn" href="/reproduction-center?animal={aid}">Üreme Merkezini Aç</a></div>''') if a['gender']=='Dişi' else ''
+            overview_health=''.join(f'''<div class="v117-list-row"><div><b>{h(r['kind'])} · {h(r['product'])}</b><small>{fmt_date(r['applied_date'])}</small></div><span class="v117-chip">Tamamlandı</span></div>''' for r in health[:4]) or '<div class="workspace-empty">Sağlık kaydı yok.</div>'
+            timeline_events=[]
+            if a['purchase_date']:timeline_events.append((a['purchase_date'],'🏠 İşletmeye Giriş',f"{h(a['paddock']) or 'Padok belirtilmedi'}"))
+            for r in ins:timeline_events.append((r['insemination_date'],'💉 Tohumlama',f"{r['attempt']}. deneme · {h(r['pregnancy_result'])}"))
+            for r in health[:6]:timeline_events.append((r['applied_date'],f"💚 {h(r['kind'])}",h(r['product'])))
+            for r in weights[:5]:timeline_events.append((r['measure_date'],'⚖️ Tartım',f"{float(r['weight']):.1f} kg"))
+            timeline_events.sort(key=lambda x:str(x[0] or ''),reverse=True)
+            overview_timeline=''.join(f'''<div class="animal-360-event"><b>{fmt_date(d)}</b> · {title}<small>{detail}</small></div>''' for d,title,detail in timeline_events[:8]) or '<div class="workspace-empty">Geçmiş kaydı yok.</div>'
+            gender_icon='♀' if a['gender']=='Dişi' else '♂';preg_badge='<span class="pill">● Gebe</span>' if active_preg else ''
+            weight_panel=f'''<div class="card panel-card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{performance_box}<form method="post" action="/animal/weight" class="actions weight-entry-form" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<div class="panel-table-wrap weight-history-wrap"><table class="weight-history-table" style="margin-top:12px"><thead><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr></thead><tbody>{wtr}</tbody></table></div></div>'''
             milk_panel=f'''<div class="card panel-card"><h2>🥛 Süt Verimi</h2><form method="post" action="/animal/milk" class="actions" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>''' if a['gender']=='Dişi' else ''
             reproduction_tab='<button class="animal-card-tab" data-animal-tab="reproduction">Üreme</button>' if a['gender']=='Dişi' else ''
             reproduction_panel=f'''<section class="animal-card-panel" data-animal-panel="reproduction"><div class="panel-grid"><div class="card panel-card"><h2>Tohumlama ve Gebelik</h2>{pregnancy_panel}{pregnancy_line}<div class="panel-table-wrap"><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="actions"><a class="btn" href="/inseminations?animal={aid}">Tohumlama İşlemleri</a></div></div><div class="card panel-card"><h2>Buzağıları</h2><div class="panel-table-wrap"><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div></div></section>''' if a['gender']=='Dişi' else ''
-            body=f'''<header class="card animal-profile-head">{photo}<div><h1>{h(a['tag'])}</h1><h2>{h(a['nickname']) or 'Takma ad yok'}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">{h(a['breed']) or 'Irk belirtilmedi'}</span><span class="pill">Padok: {h(a['paddock']) or '-'}</span><span class="pill">Durum: {h(a['status'])}</span><div class="quick-metrics"><span class="pill">Yaş<br><b>{age_text(a['birth_date'])}</b></span><span class="pill">Son Kilo<br><b>{(str(latest_weight)+' kg') if latest_weight is not None else '-'}</b></span>{milk_metric}<span class="pill">Net Değer<br><b>{money(net_value)}</b></span></div></div><div class="animal-quick-actions"><a class="btn alt" href="/all-animals">← Sürü Merkezi</a><a class="btn" href="{edit_url}">Düzenle</a><button type="button" class="btn blue" onclick="showAnimalPanel('growth')">Tartım</button><a class="btn alt" href="/animal/print?id={aid}">Yazdır</a></div></header>
-            <nav class="animal-card-tabs"><button class="animal-card-tab active" data-animal-tab="general">Genel</button>{reproduction_tab}<button class="animal-card-tab" data-animal-tab="growth">{'Besi / Tartım' if a['gender']=='Erkek' else 'Kilo / Süt'}</button><button class="animal-card-tab" data-animal-tab="health">Sağlık</button><button class="animal-card-tab" data-animal-tab="finance">Finans</button><button class="animal-card-tab" data-animal-tab="photos">Fotoğraflar</button><button class="animal-card-tab" data-animal-tab="history">Çıkış / Geçmiş</button></nav>
-            <section class="animal-card-panel active" data-animal-panel="general"><div class="panel-grid"><div class="card panel-card"><h2>Hayvan Özeti</h2><p>{h(a['notes']) or 'Not girilmemiş.'}</p><p>Toplam masraf: <b>{money(total_cost)}</b>{(' · Buzağı: <b>'+str(len(calves))+'</b>') if a['gender']=='Dişi' else ''}</p></div><div class="card panel-card">{purchase_summary}</div></div></section>
+            body=f'''<div class="actions" style="justify-content:flex-end"><a class="btn alt" href="/all-animals">← Listeye Dön</a><a class="btn alt" href="/animal/print?id={aid}">Yazdır</a></div><header class="card animal-profile-head">{photo}<div><h1>{gender_icon} {h(a['tag'])}</h1><h2>{h(a['nickname']) or 'Takma ad yok'}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">● {h(a['status'])}</span>{preg_badge}<p class="mut">{h(a['breed']) or 'Irk belirtilmedi'} · {h(a['paddock']) or 'Padok yok'} · {age_text(a['birth_date'])} · {(str(latest_weight)+' kg') if latest_weight is not None else 'Kilo yok'}</p></div><div class="animal-quick-actions"><a class="btn" href="{edit_url}">✎ Düzenle</a><a class="btn alt" href="/paddocks">⇄ Padok Değiştir</a></div></header>
+            <nav class="animal-card-tabs"><button class="animal-card-tab active" data-animal-tab="general">⌂ Genel</button>{reproduction_tab}<button class="animal-card-tab" data-animal-tab="health">♡ Sağlık</button><button class="animal-card-tab" data-animal-tab="growth">▥ {'Besi & Kilo' if a['gender']=='Erkek' else 'Süt & Kilo'}</button><button class="animal-card-tab" data-animal-tab="finance">₺ Finans</button><button class="animal-card-tab" data-animal-tab="photos">▧ Fotoğraflar</button><button class="animal-card-tab" data-animal-tab="history">↶ Geçmiş</button></nav>
+            <section class="animal-card-panel active" data-animal-panel="general"><section class="v117-kpis"><div class="card v117-kpi"><span class="ico">⚖️</span><div><span>Canlı Ağırlık</span><b>{(str(latest_weight)+' kg') if latest_weight is not None else '—'}</b></div><em class="v117-chip">Son</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebelik</span><b>{pregnancy_month if a['gender']=='Dişi' else '—'}</b></div><em class="v117-chip">{h(preg)}</em></div><div class="card v117-kpi"><span class="ico">₺</span><div><span>Günlük Maliyet</span><b>{money(daily_cost)}</b></div><em class="v117-chip">Günlük</em></div><div class="card v117-kpi"><span class="ico">▣</span><div><span>Toplam Maliyet</span><b>{money(current_cost)}</b></div><em class="v117-chip">Anlık</em></div></section><div class="animal-360-grid">{overview_preg}<div class="card animal-360-card"><div class="v117-panel-head"><h2>✚ Son Sağlık İşlemleri</h2><button class="btn alt" onclick="showAnimalPanel('health')">Tümünü Gör</button></div><div class="v117-panel-body">{overview_health}</div></div><div class="card animal-360-card animal-360-timeline"><div class="v117-panel-head"><h2>↶ Hayvan Geçmişi</h2></div><div class="v117-panel-body">{overview_timeline}</div></div><div class="card animal-360-card mini-weight-chart"><div class="v117-panel-head"><h2>▥ Kilo Değişimi</h2><button class="btn alt" onclick="showAnimalPanel('growth')">Detay</button></div><div class="v117-panel-body">{overview_chart or '<div class="workspace-empty">Grafik için tartım verisi gerekli.</div>'}</div></div><div class="card animal-360-card"><div class="v117-panel-head"><h2>₺ Finans Özeti</h2><button class="btn alt" onclick="showAnimalPanel('finance')">Detay</button></div><div class="v117-panel-body"><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(total_cost)}</b></span><span class="pill">Net<br><b>{money(net_value)}</b></span></div></div></div></div><div class="card animal-360-fast"><b>⚡ Hızlı İşlemler</b><button class="btn" onclick="showAnimalPanel('growth')">⚖ Tartım Ekle</button><button class="btn alt" onclick="showAnimalPanel('health')">＋ Sağlık Kaydı</button><a class="btn alt" href="/inseminations?animal={aid}">💉 Tohumlama</a><button class="btn alt" onclick="showAnimalPanel('finance')">₺ Finans İşlemi</button><button class="btn alt" onclick="showAnimalPanel('photos')">▧ Fotoğraf Ekle</button></div></section>
             {reproduction_panel}<section class="animal-card-panel" data-animal-panel="growth"><div class="panel-grid">{weight_panel}{milk_panel}</div></section>
             <section class="animal-card-panel" data-animal-panel="health"><div class="card"><div class="filter-title"><div><h2>Sağlık Geçmişi</h2><p class="mut">Aşı, ilaç ve uygulamalar</p></div><a class="btn" href="/health">Sağlık Merkezine Git</a></div><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div></div></section>
             <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider + Sağlık<br><b>{money(total_cost)}</b></span><span class="pill">Net<br><b>{money(net_value)}</b></span></div><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
@@ -6820,6 +7443,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if not calf:return self.send_html('Buzağı bulunamadı',404)
                 health_rows=c.execute('select * from health where calf_id=? order by applied_date desc,id desc',(cid,)).fetchall()
                 weight_rows=c.execute('select * from calf_weights where calf_id=? order by measure_date desc,id desc',(cid,)).fetchall()
+                internal_rows=c.execute('''select cic.*,fc.name feed_name from calf_internal_costs cic
+                    left join feed_catalog fc on fc.id=cic.feed_id where cic.calf_id=? order by cic.cost_date desc,cic.id desc''',(cid,)).fetchall()
+                calf_feeds=c.execute('select id,name from feed_catalog where active=1 order by name').fetchall()
             promoted=''
             if calf['promoted_animal_id']:promoted=f'<p class="flash">Bu kayıt 10 ayını doldurduğu için yetişkin karta aktarıldı. <a class="taglink" href="/animal?id={calf["promoted_animal_id"]}">Yeni hayvan kartını aç</a></p>'
             icon='🐮' if calf['gender']=='Dişi' else '🐂'
@@ -6827,8 +7453,12 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             last_weight=float(weight_rows[0]['weight']) if weight_rows else None
             calf_days,calf_daily,calf_operating,calf_total=calf_cost_values(calf)
             calf_feed=animal_current_feed_context(calf)
+            internal_total=sum(float(x['amount'] or 0) for x in internal_rows)
             mother_html=(f'<a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a>' if calf['mother_id'] and calf['mother_tag'] else '<span class="mut">Girilmemiş</span>')
-            calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış / Başlangıç<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">Rasyon + Bakım<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}</p></div>'''
+            calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış / Başlangıç<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">İç Üretim<br><b>{money(internal_total)}</b></span><span class="pill">Rasyon + Bakım + İç Üretim<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}. İç üretim maliyeti nakit gideri ikinci kez yazmaz; buzağının maliyetine dağıtılır.</p></div>'''
+            feed_opts_internal=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in calf_feeds)
+            internal_table=''.join(f'''<tr><td>{fmt_date(x['cost_date'])}</td><td>{h(x['cost_type'])}</td><td>{h(x['feed_name'] or x['notes'] or '-')}</td><td>{float(x['quantity'] or 0):g} {h(x['unit'] or '')}</td><td>{money(x['unit_cost'])}</td><td><b>{money(x['amount'])}</b></td><td><form method="post" action="/calf-internal-cost/delete" onsubmit="return confirm('Bu iç üretim maliyeti silinsin mi?')"><input type="hidden" name="id" value="{x['id']}"><input type="hidden" name="calf_id" value="{cid}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in internal_rows) or '<tr><td colspan="7">Henüz iç üretim maliyeti kaydı yok.</td></tr>'
+            internal_cost_box=f'''<div class="card" style="margin-top:14px"><div class="filter-title"><div><h2>🍼 İç Üretim Maliyeti</h2><p class="mut">Süt, buzağı başlangıç/büyütme yemi, ot, yonca ve diğer büyütme maliyetlerini küpeye dağıtır. Nakit gideri ikinci kez oluşturmaz.</p></div><span class="pill">Toplam {money(internal_total)}</span></div><form method="post" action="/calf-internal-cost/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="cost_date" value="{date.today().isoformat()}" required></label><label>Tür<select name="cost_type" id="calfInternalCostType"><option>Süt</option><option>Yem</option><option>Bakım</option><option>Diğer</option></select></label><label id="calfInternalFeedLabel">Yem<select name="feed_id" id="calfInternalFeed"><option value="">Yem seçin…</option>{feed_opts_internal}</select></label><label>Miktar<input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label><label>Birim<select name="unit"><option value="L">Litre</option><option value="kg">kg</option><option value="adet">adet</option></select></label><label>Birim Maliyet (₺)<input type="number" name="unit_cost" min="0" step="0.01" value="0"><small class="mut">Yem seçilirse 0 bırakınca stok ortalama maliyeti kullanılır.</small></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah sütü / yonca / buzağı başlangıç yemi"></label><label class="full"><input type="checkbox" name="deduct_stock" value="1" checked> Yem türünde stoktan düş</label><div class="full"><button class="btn">Maliyete Ekle</button></div></form><div class="tablewrap" style="margin-top:12px"><table><tr><th>Tarih</th><th>Tür</th><th>Yem / Açıklama</th><th>Miktar</th><th>Birim Maliyet</th><th>Toplam</th><th></th></tr>{internal_table}</table></div><script>(function(){{const t=document.getElementById('calfInternalCostType'),l=document.getElementById('calfInternalFeedLabel'),f=document.getElementById('calfInternalFeed');if(!t)return;function s(){{const y=t.value==='Yem';l.style.display=y?'block':'none';f.required=y}}t.addEventListener('change',s);s()}})();</script></div>'''
             calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
             health_html=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{h(r["notes"])}</td></tr>' for r in health_rows) or '<tr><td colspan="5">Henüz sağlık/tedavi kaydı yok.</td></tr>'
             weight_html=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td><b>{float(r["weight"]):.1f} kg</b></td><td>{h(r["notes"])}</td></tr>' for r in weight_rows) or '<tr><td colspan="3">Henüz tartım kaydı yok.</td></tr>'
@@ -6837,9 +7467,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
             <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: {mother_html}</p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
             <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p><p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
-            <div class="grid" style="margin-top:14px"><div class="card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
-            <div class="card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
-            <div class="card" style="margin-top:14px"><h2>💉 Sağlık / Tedavi Geçmişi</h2><p><a class="btn" href="/health">Sağlık Kaydı Ekle</a></p><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Not</th></tr>{health_html}</table></div></div>
+            <div class="grid calf-entry-grid" style="margin-top:14px"><div class="card calf-photo-card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form calf-photo-form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
+            <div class="card calf-weight-card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form calf-weight-form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
+            {internal_cost_box}<div class="card" style="margin-top:14px"><h2>💉 Sağlık / Tedavi Geçmişi</h2><p><a class="btn" href="/health">Sağlık Kaydı Ekle</a></p><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Not</th></tr>{health_html}</table></div></div>
             <div class="card" style="margin-top:14px"><h2>⚖️ Kilo Geçmişi</h2><div class="tablewrap"><table><tr><th>Tarih</th><th>Kilo</th><th>Not</th></tr>{weight_html}</table></div></div>{calf_loss_box}'''
             return self.send_html(page('Buzağı Kartı',body,'/calves',u,msg))
         if path=='/estrus-edit':
@@ -6849,6 +7479,69 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if not rec:return self.redirect('/estrus','Kızgınlık kaydı bulunamadı.')
             body=f'''<h1>✏️ Kızgınlık Kaydını Düzenle</h1><div class="card"><form method="post" action="/estrus-edit" class="form"><input type="hidden" name="id" value="{rec['id']}"><label>Hayvan<input value="{h(rec['tag'])} · {h(rec['nickname'])}" disabled></label><label>Kızgınlık Tarihi<input type="date" name="estrus_date" max="{date.today().isoformat()}" value="{h(rec['estrus_date'])}" required></label><label class="full">Gözlenen Belirtiler<input name="signs" value="{h(rec['signs'])}" placeholder="Gözlenen belirtiler"></label><label class="full">Not<textarea name="notes" rows="3">{h(rec['notes'])}</textarea></label><div class="full actions"><button class="btn">💾 Değişiklikleri Kaydet</button><a class="btn alt" href="/estrus">İptal</a></div></form></div>'''
             return self.send_html(page('Kızgınlık Kaydı Düzenle',body,'/estrus',u,msg))
+        if path=='/reproduction-center':
+            selected_id=(q.get('animal',[''])[0] or '').strip()
+            today=date.today()
+            with db() as c:
+                females=c.execute("select id,tag,nickname,breed,paddock,birth_date from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                estrus_all=c.execute("select e.*,a.tag,a.nickname,a.breed,a.paddock from estrus_records e join animals a on a.id=e.animal_id where coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc").fetchall()
+                insem_all=c.execute("select i.*,a.tag,a.nickname,a.breed,a.paddock from inseminations i join animals a on a.id=i.animal_id where coalesce(a.status,'Aktif')='Aktif' order by i.insemination_date desc,i.id desc").fetchall()
+            latest_estrus={};latest_insem={}
+            for r in estrus_all:
+                if r['animal_id'] not in latest_estrus:latest_estrus[r['animal_id']]=r
+            for r in insem_all:
+                if r['animal_id'] not in latest_insem:latest_insem[r['animal_id']]=r
+            positive_ids={aid for aid,r in latest_insem.items() if is_pregnant_value(r['pregnancy_result'])}
+            estrus_stage=[]
+            with db() as c:
+                for aid,r in latest_estrus.items():
+                    if aid in positive_ids:continue
+                    cycle=next_estrus_cycle(c,r,today)
+                    if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):estrus_stage.append((cycle['center'],r,cycle))
+            estrus_stage.sort(key=lambda x:x[0])
+            inseminated_stage=[];control_stage=[];birth_stage=[]
+            for aid,r in latest_insem.items():
+                result=str(r['pregnancy_result'] or '').strip().lower()
+                try:days_since=(today-date.fromisoformat(r['insemination_date'])).days
+                except Exception:days_since=0
+                if is_pregnant_value(r['pregnancy_result']):
+                    try:days_left=(date.fromisoformat(r['due_date'])-today).days
+                    except Exception:days_left=999
+                    if days_left<=60:birth_stage.append((days_left,r))
+                elif result in ('','bekleniyor','belirsiz'):
+                    (control_stage if days_since>=18 else inseminated_stage).append((days_since,r))
+            inseminated_stage.sort(key=lambda x:x[0],reverse=True);control_stage.sort(key=lambda x:x[0],reverse=True);birth_stage.sort(key=lambda x:x[0])
+            def repro_card(r,meta,badge,action,selected=False):
+                return f'''<article class="repro-card {'selected' if selected else ''}" data-repro-search="{h((str(r['tag'] or '')+' '+str(r['nickname'] or '')+' '+str(r['paddock'] or '')).lower())}" data-repro-paddock="{h(str(r['paddock'] or ''))}"><div class="repro-card-top"><span style="font-size:24px">🐄</span><div><strong>♀ {h(r['tag'])}<br>{h(r['nickname']) or 'İsimsiz'}</strong><small>{h(r['paddock']) or 'Padok yok'} · {h(r['breed']) or 'Irk yok'}</small></div><span class="v117-chip">{h(badge)}</span></div><div class="repro-card-meta"><span class="mut" style="font-size:10px">{h(meta)}</span><a class="btn alt" href="/reproduction-center?animal={r['animal_id']}">Seç</a></div><div class="actions">{action}</div></article>'''
+            estrus_cards=[]
+            for center,r,cycle in estrus_stage:
+                active=cycle['start']<=today<=cycle['end'];meta=f"En olası {fmt_date(center.isoformat())}"
+                action=(f'''<form method="post" action="/estrus-inseminate"><input type="hidden" name="estrus_id" value="{r['id']}"><button class="btn">Tohumlandı</button></form>''' if active else f'''<form method="post" action="/estrus-send"><input type="hidden" name="estrus_id" value="{r['id']}"><input type="hidden" name="cycle_no" value="{cycle['cycle_no']}"><button class="btn">Tohumlamaya Gönder</button></form>''')
+                estrus_cards.append(repro_card(r,meta,'Aktif' if active else 'Yaklaşıyor',action,str(r['animal_id'])==selected_id))
+            insem_cards=[repro_card(r,f"{fmt_date(r['insemination_date'])} · {days} gün",f"{r['attempt']}. deneme",f'''<a class="btn" href="/insemination-edit?id={r['id']}">Sonuç Gir</a>''',str(r['animal_id'])==selected_id) for days,r in inseminated_stage]
+            control_cards=[repro_card(r,f"Tohumlamadan sonra {days} gün",'Kontrol zamanı',f'''<a class="btn" href="/insemination-edit?id={r['id']}">Kontrol Kaydet</a>''',str(r['animal_id'])==selected_id) for days,r in control_stage]
+            birth_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün",f'''<a class="btn" href="/animal-add">Doğum Kaydı</a>''',str(r['animal_id'])==selected_id) for days,r in birth_stage]
+            if not selected_id:
+                candidates=[x[1]['animal_id'] for x in estrus_stage]+[x[1]['animal_id'] for x in inseminated_stage]+[x[1]['animal_id'] for x in control_stage]+[x[1]['animal_id'] for x in birth_stage]
+                selected_id=str(candidates[0]) if candidates else ''
+            selected=next((r for r in females if str(r['id'])==selected_id),None)
+            sel_insem=latest_insem.get(int(selected_id)) if selected_id.isdigit() else None
+            sel_estrus=latest_estrus.get(int(selected_id)) if selected_id.isdigit() else None
+            stage_index=0
+            if sel_estrus:stage_index=1
+            if sel_insem:stage_index=2
+            if sel_insem and str(sel_insem['pregnancy_result'] or '').strip().lower() in ('','bekleniyor','belirsiz'):stage_index=3
+            if sel_insem and is_pregnant_value(sel_insem['pregnancy_result']):stage_index=4
+            steps=[('🔥','Kızgınlık'),('💉','Tohumlama'),('⌁','Kontrol'),('🐄','Gebelik'),('🐮','Doğum')]
+            flow=''.join((f'<div class="repro-step {"done" if i<stage_index else "active" if i==stage_index else ""}"><i>{icon}</i>{label}</div>'+('<span class="repro-arrow">→</span>' if i<len(steps)-1 else '')) for i,(icon,label) in enumerate(steps))
+            detail=(f'''<section class="card repro-detail"><div class="repro-detail-grid"><div class="repro-selected"><div class="filter-title"><div><h2>🐄 ♀ {h(selected['tag'])} · {h(selected['nickname']) or 'İsimsiz'}</h2><p class="mut">{h(selected['breed']) or '-'} · {h(selected['paddock']) or '-'} · {age_text(selected['birth_date'])}</p></div><a class="btn alt" href="/animal?id={selected['id']}">Hayvan Kartını Gör</a></div><div class="quick-metrics"><span class="pill">Küpe<br><b>{h(selected['tag'])}</b></span><span class="pill">Padok<br><b>{h(selected['paddock']) or '-'}</b></span><span class="pill">Aşama<br><b>{steps[stage_index][1]}</b></span></div></div><div class="repro-flow-wrap"><div class="repro-flow">{flow}</div><div class="repro-next-action"><span>ℹ️ Seçili hayvanın üreme süreci gerçek kayıtlarına göre gösteriliyor.</span><a class="btn" href="/animal?id={selected['id']}">Tüm Kayıtları Aç</a></div></div></div></section>''' if selected else '')
+            search_value=h(q.get('q',[''])[0] or '')
+            paddock_options='<option value="">Tüm Padoklar</option>'+''.join(f'<option value="{h(x)}">{h(x)}</option>' for x in sorted({str(r['paddock'] or '') for r in females if str(r['paddock'] or '')}))
+            body=f'''<div class="v117-head"><div><h1>🧬 Üreme Merkezi</h1><p>Kızgınlıktan doğuma tüm süreci yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/estrus">＋ Kızgınlık Kaydı</a><a class="btn alt" href="/inseminations">＋ Tohumlama</a></div></div><div class="card v118-toolbar"><input id="reproSearch" type="search" value="{search_value}" placeholder="Hayvan ara: küpe no, isim veya padok…"><label>🐄 <select id="reproPaddock">{paddock_options}</select></label></div>
+            <section class="v117-kpis"><div class="card v117-kpi"><span class="ico">🔥</span><div><span>Kızgınlık Bekleyen</span><b>{len(estrus_stage)}</b></div><em class="v117-chip">Takip</em></div><div class="card v117-kpi"><span class="ico">💉</span><div><span>Tohumlanan</span><b>{len(inseminated_stage)}</b></div><em class="v117-chip">Yeni</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebe</span><b>{len(positive_ids)}</b></div><em class="v117-chip">Pozitif</em></div><div class="card v117-kpi"><span class="ico">🐮</span><div><span>Doğuma Yaklaşan</span><b>{len(birth_stage)}</b></div><em class="v117-chip warn">60 gün</em></div></section>
+            <section class="v117-board"><div class="repro-column"><div class="repro-column-head"><h2>🔥 Kızgınlık</h2><b>{len(estrus_stage)}</b></div><div class="repro-column-sub">Tohumlama için uygun hayvanlar</div><div class="repro-cards">{''.join(estrus_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>💉 Tohumlama</h2><b>{len(inseminated_stage)}</b></div><div class="repro-column-sub">Son tohumlanan hayvanlar</div><div class="repro-cards">{''.join(insem_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>⌁ Gebelik Kontrolü</h2><b>{len(control_stage)}</b></div><div class="repro-column-sub">Kontrol zamanı gelen hayvanlar</div><div class="repro-cards">{''.join(control_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>🐮 Doğuma Yaklaşan</h2><b>{len(birth_stage)}</b></div><div class="repro-column-sub">Son 60 günde doğum beklenenler</div><div class="repro-cards">{''.join(birth_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div></section>{detail}
+            <script>(function(){{const i=document.getElementById('reproSearch'),p=document.getElementById('reproPaddock'),cards=[...document.querySelectorAll('.repro-card')];if(!i)return;function run(){{const q=i.value.toLocaleLowerCase('tr-TR').trim(),pad=p?p.value:'';cards.forEach(c=>c.style.display=(!q||c.dataset.reproSearch.includes(q))&&(!pad||c.dataset.reproPaddock===pad)?'':'none')}}i.addEventListener('input',run);if(p)p.addEventListener('change',run);run()}})();</script>'''
+            return self.send_html(page('Üreme Merkezi',body,'/reproduction-center',u,msg))
         if path=='/estrus':
             with db() as c:
                 female_rows=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
@@ -7027,7 +7720,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if not str(value or '').strip():value='Bu başlık için ayrıntı veteriner değerlendirmesiyle tamamlanmalıdır.'
                 return f'''<section class="disease-detail-card {'alert' if alert else ''}"><h3>{icon} {h(title)}</h3><p>{h(value)}</p></section>'''
             badges=f'''<span class="pill">{h(disease['category'])}</span><span class="pill">Öncelik: {h(disease['urgency'])}</span>{'<span class="pill" style="background:#fff0ed;color:#a93025">Bulaşıcı</span>' if disease['contagious'] else ''}{'<span class="pill" style="background:#fff0ed;color:#a93025">Zoonoz</span>' if disease['zoonotic'] else ''}'''
-            body=f'''<style>.disease-hero{{background:linear-gradient(135deg,#173f2b,#26734a);color:white;border-radius:18px;padding:24px;margin-bottom:14px}}.disease-hero h1{{margin:8px 0}}.disease-detail-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.disease-detail-card{{background:#fff;border:1px solid #dce8df;border-radius:14px;padding:17px}}.disease-detail-card h3{{margin:0 0 8px}}.disease-detail-card p{{margin:0;line-height:1.6}}.disease-detail-card.alert{{border-left:6px solid #d44a3a;background:#fff8f6}}@media(max-width:800px){{.disease-detail-grid{{grid-template-columns:1fr}}}}</style>
+            body=f'''<style>.disease-hero{{background:linear-gradient(135deg,#173f2b,#26734a);color:#fff!important;border-radius:18px;padding:24px;margin-bottom:14px}}.disease-hero>div:first-child{{color:#d9f3e4!important;font-weight:750;letter-spacing:.035em}}.disease-hero h1{{margin:8px 0;color:#fff!important;text-shadow:0 1px 2px rgba(0,0,0,.2)}}.disease-hero .pill{{background:#f3fbf6!important;color:#0b4f31!important;border:1px solid #c7e4d2!important;font-weight:800!important}}.disease-detail-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.disease-detail-card{{background:#fff;border:1px solid #dce8df;border-radius:14px;padding:17px}}.disease-detail-card h3{{margin:0 0 8px}}.disease-detail-card p{{margin:0;line-height:1.6}}.disease-detail-card.alert{{border-left:6px solid #d44a3a;background:#fff8f6}}@media(max-width:800px){{.disease-detail-grid{{grid-template-columns:1fr}}.disease-hero{{padding:20px}}.disease-hero h1{{font-size:27px;line-height:1.15}}}}</style>
             <div class="actions"><a class="btn alt" href="/medicines?tab=diseases">← Hastalık Kataloğuna Dön</a></div>
             <div class="disease-hero"><div>HASTALIK BİLGİ KARTI</div><h1>{h(disease['name'])}</h1><div>{badges}</div></div>
             {detail_card('📖','Nedir?',disease['description'])}
@@ -7309,6 +8002,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 milk_females=[a for a in animals if str(a['gender'] or '')=='Dişi']
                 categories=c.execute("select distinct category from finance where coalesce(category,'')<>'' order by category").fetchall()
                 finance_feeds=c.execute("select id,name from feed_catalog where active=1 order by name").fetchall()
+                internal_cost_total=float(c.execute('select coalesce(sum(amount),0) total from calf_internal_costs where cost_date between ? and ?',(start,end)).fetchone()['total'] or 0)
                 base_rows=list(c.execute(sql,args).fetchall())
                 needle=search.casefold()
                 if needle:
@@ -7404,7 +8098,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<form method="get" class="finance-toolbar finance-toolbar-modern">',f'''<form method="get" class="finance-toolbar finance-toolbar-modern"><label><span>🔎 Ara</span><input name="q" value="{h(search)}" placeholder="Açıklama, tedarikçi, fatura, küpe"></label><input type="hidden" name="status" value="{h(status_filter)}">''',1)
             body=body.replace('<div class="finance-filter-actions">',f'''<label><span>Sayfa</span><select name="per_page">{''.join(f'<option value="{n}" {"selected" if per_page==n else ""}>{n} kayıt</option>' for n in (10,20,50))}</select></label><div class="finance-filter-actions">''',1)
             body=body.replace('</table></div></div>','</table></div>'+finance_pager+'</div>',1)
-            body=body.replace(f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div>',f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Nakit Gider<b>{money(exp)}</b></div><div class="card stat">Zayiat / Zarar<b>{money(losses)}</b></div><div class="card stat">Nakit Net<b>{money(inc-exp)}</b></div>')
+            body=body.replace(f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Gider<b>{money(exp)}</b></div><div class="card stat">Net<b>{money(inc-exp)}</b></div>',f'<div class="card stat">Gelir<b>{money(inc)}</b></div><div class="card stat">Nakit Gider<b>{money(exp)}</b></div><div class="card stat">İç Üretim · Nakit Dışı<b>{money(internal_cost_total)}</b></div><div class="card stat">Zayiat / Zarar<b>{money(losses)}</b></div><div class="card stat">Nakit Net<b>{money(inc-exp)}</b></div>')
             body=body.replace('<th>Ödeme</th><th>Tutar</th><th>İşlem</th>','<th>Ödeme</th><th>Vade</th><th>Tutar</th><th>İşlem</th>')
             body=body.replace('<option value="">Gelir + Gider</option>', '<option value="">Tüm İşlemler</option>')
             body=body.replace(f"<option {'selected' if typ=='Gider' else ''}>Gider</option></select>", f"<option {'selected' if typ=='Gider' else ''}>Gider</option><option {'selected' if typ=='Zarar' else ''}>Zarar</option></select>")
@@ -7644,7 +8338,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
             b=json.dumps(export_payload(),ensure_ascii=False,indent=2).encode('utf-8');name=f'ciftlik_json_yedek_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
             self.send_response(200);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Content-Disposition',f'attachment; filename="{name}"');self.send_header('Content-Length',str(len(b)));self.end_headers();self.wfile.write(b);return
         if path=='/version-notes':
-            body='''<header class="workspace-hero"><div><h1>📝 Sürüm Notları</h1><p>ÇiftlikPro Enterprise · v3.9.23 DEV4 Hotfix1.16</p></div></header><div class="card"><h2>1.14–1.16 ortak çalışma paketi</h2><ul><li><b>Sürü Merkezi:</b> Dişi, erkek ve buzağılar; arama, padok/tür filtreleri, sayfalama ve satır işlemleriyle tek ekranda toplandı.</li><li><b>Hayvan kartı:</b> Cinsiyete göre ilgili sekmeler gösteriliyor; sağlık, finans, fotoğraf ve geçmiş ayrıştırıldı.</li><li><b>Sağlık, Finans ve Raporlar:</b> Sayaçlı filtreler, kompakt tablolar, çekmece formları ve mobil görünüm eklendi.</li><li><b>Yem ve Tarım:</b> Stok durumu, arama/sayfalama ve kayıt çekmeceleri eklendi; mevcut maliyet ve stok bağlantıları korundu.</li><li><b>Yönetim:</b> İşlem günlüğü filtrelendi, yedek silme işlemi POST ve yönetici doğrulamasına taşındı.</li><li><b>Düzeltme:</b> Rapor ekranındaki <code>display</code> NameError hatası giderildi.</li></ul><p class="mut"><b>Solver DEV4.19.3, rasyon hesapları ve mevcut finans/stok motorları değiştirilmemiştir.</b> Ayrıntılı kaynak geçmişi CHANGELOG.md içindedir.</p></div>'''
+            body='''<header class="workspace-hero"><div><h1>📝 Sürüm Notları</h1><p>ÇiftlikPro Enterprise · v3.9.23 DEV4 Hotfix1.19h</p></div></header><div class="card"><h2>İşlevsel Rasyon Masası</h2><ul><li><b>Yem kilidi:</b> Kilitli miktar elle ve Akıllı Dengeleme uygulamalarında korunur.</li><li><b>KM görünümü:</b> Her yemin KM kilogramı ve toplam rasyon KM payı canlı gösterilir.</li><li><b>Yaş/dönem kontrolü:</b> Ürün kaynağındaki açık kullanım dönemi hedef yaşla uyuşmuyorsa yem engellenir.</li><li><b>Değişiklik özeti:</b> Solver sonucu ve kaydedilmemiş önce/sonra farkları görünür.</li><li><b>Hedef şeritleri:</b> Rasyonun hedef bölgesindeki konumu mobil ve masaüstünde görselleştirilir.</li><li><b>Koruma:</b> Bilimsel nişasta bantları ve tam GCAA kayıt kapısı değiştirilmemiştir.</li></ul><p class="mut"><b>Solver DEV4.19.6 — çekirdek korunmuştur</b></p></div>'''
             return self.send_html(page('Sürüm Notları',body,'/version-notes',u,msg))
         if path=='/backups':
             if not self.require_admin():return
@@ -7808,6 +8502,17 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        # Dashboard görünümü yalnız kullanıcı tercihini günceller; yeni bir iş kaydı
+        # oluşturmaz. Mobil Safari aynı formu ağ seviyesinde tekrar gönderse bile
+        # işlem güvenli/idempotent biçimde uygulanır ve genel mükerrer kayıt kapısına girmez.
+        if path=='/dashboard-view':
+            view=(f.get('view') or '').strip().lower()
+            if view not in ('modern','classic'):
+                return self.redirect('/','Dashboard görünümü seçilemedi; mevcut görünüm korundu.')
+            with db() as c:
+                c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",('dashboard_view_'+username,view))
+            audit(username,'Dashboard görünümünü değiştirdi','Modern' if view=='modern' else 'Klasik',self.client_ip())
+            return self.redirect('/','Dashboard görünümü kaydedildi.')
         # DEV4: Arayüz kilidine ek olarak tüm kimlik doğrulanmış yazma isteklerini
         # sunucuda da atomik biçimde koru. Böylece çift dokunma/ağ tekrarı yeni
         # hayvan, finans, stok, sağlık veya padok kaydını iki kez oluşturamaz.
@@ -8040,6 +8745,25 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if not feed:return self.redirect('/feeds','Yem bulunamadı.')
                 c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(fid,d,price,(f.get('notes') or '').strip()))
             audit(username,'Yem fiyatı girdi',f'{feed["name"]}: {price}',self.client_ip());return self.redirect('/feeds','Yem fiyatı kaydedildi.')
+        if path=='/feed/stock-reconcile':
+            try:fid=int(f.get('feed_id') or 0);physical=float(f.get('physical_qty_kg') or 0)
+            except:return self.redirect('/feeds','Stok eşitleme bilgisi geçersiz.')
+            if fid<=0 or physical<0:return self.redirect('/feeds','Stok eşitleme bilgisi geçersiz.')
+            d=(f.get('tx_date') or date.today().isoformat()).strip();notes=(f.get('notes') or 'Fiziksel stok sayımı').strip()
+            try:count_day=date.fromisoformat(d);d=count_day.isoformat()
+            except Exception:return self.redirect('/feeds','Sayım tarihi geçersiz.')
+            if count_day>date.today():return self.redirect('/feeds','Fiziksel stok sayımı ileri tarihli olamaz.')
+            with db() as c:
+                feed=c.execute('select id,name from feed_catalog where id=? and active=1',(fid,)).fetchone()
+                if not feed:return self.redirect('/feeds','Yem bulunamadı.')
+                current=float(feed_stock_kg(fid,c,d) or 0);diff=round(physical-current,3)
+                if abs(diff)>=0.005:
+                    typ='Sayım +' if diff>0 else 'Sayım -'
+                    c.execute('insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes) values(?,?,?,?,?,?)',(fid,d,typ,abs(diff),0,notes+f' · Sistem {current:.2f} kg → Fiziksel {physical:.2f} kg'))
+                    rebuild_feed_cost_history(c,fid)
+            if abs(diff)<0.005:return self.redirect('/feeds',f'{feed["name"]} stoğu zaten fiziksel sayımla eşit: {physical:.2f} kg.')
+            audit(username,'Yem stok eşitledi',f'{feed["name"]}: {current:.2f} -> {physical:.2f} kg',self.client_ip())
+            return self.redirect('/feeds',f'{feed["name"]} stoğu {physical:.2f} kg olarak eşitlendi. Fark {diff:+.2f} kg sayım hareketiyle kaydedildi.')
         if path=='/feed/stock':
             try:fid=int(f.get('feed_id') or 0);qty=float(f.get('quantity_kg') or 0);unit=float(f.get('unit_price') or 0)
             except:return self.redirect('/feeds','Stok bilgisi geçersiz.')
@@ -8127,7 +8851,10 @@ setTimeout(()=>setFinanceDrawer(false),0);
             with db() as c:
                 rr=c.execute('select name from rations where id=? and active=1',(rid,)).fetchone()
                 if not rr:return self.redirect('/rations','Rasyon bulunamadı.')
-                active_pd=c.execute('''select p.name from paddock_rations pr join paddocks p on p.id=pr.paddock_id where pr.ration_id=? and pr.active=1 and (pr.end_date is null or pr.end_date='' or pr.end_date>=?) order by p.name''',(rid,date.today().isoformat())).fetchall()
+                active_pd=c.execute('''select p.name from paddock_rations pr join paddocks p on p.id=pr.paddock_id
+                    where pr.ration_id=? and pr.active=1 and p.active=1 and pr.start_date<=?
+                    and (pr.end_date is null or trim(pr.end_date)='' or pr.end_date>=?) order by p.name''',
+                    (rid,date.today().isoformat(),date.today().isoformat())).fetchall()
                 if active_pd:return self.redirect('/rations','Bu rasyon aktif olarak '+', '.join(x['name'] for x in active_pd)+' padokunda kullanılıyor. Önce padok atamasını kaldırın.')
                 hist=c.execute('select 1 from paddock_rations where ration_id=? limit 1',(rid,)).fetchone()
                 if hist:
@@ -8150,24 +8877,29 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except:return self.redirect('/rations','Geçersiz rasyon.')
             if rid<=0:return self.redirect('/rations','Geçersiz rasyon.')
             with db() as c:
-                valid={int(r['id']) for r in c.execute('select id from ration_items where ration_id=?',(rid,)).fetchall()}
-                for key,val in f.items():
-                    if not key.startswith('item_'):continue
-                    try:iid=int(key[5:]);kg=max(0.0,float(str(val).replace(',','.')))
-                    except:continue
-                    if iid not in valid:continue
-                    item=c.execute('select feed_id from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
-                    if not item:continue
+                valid={int(r['id']):r for r in c.execute('select id,feed_id,kg_per_head_day,coalesce(locked,0) locked from ration_items where ration_id=?',(rid,)).fetchall()}
+                for iid,item in valid.items():
+                    requested_lock=1 if str(f.get('lock_'+str(iid)) or '0')=='1' else 0
+                    val=f.get('item_'+str(iid))
+                    # Kilit açık kaldığı sürece doğrudan POST dahil miktar korunur.
+                    # Kullanıcı aynı kayıtta önce kilidi açıyorsa yeni miktar kabul edilir.
+                    if val is None or (int(item['locked'] or 0)==1 and requested_lock==1):
+                        c.execute('update ration_items set locked=? where id=? and ration_id=?',(requested_lock,iid,rid))
+                        continue
+                    try:kg=max(0.0,float(str(val).replace(',','.')))
+                    except:
+                        c.execute('update ration_items set locked=? where id=? and ration_id=?',(requested_lock,iid,rid));continue
                     if kg<0.001:c.execute('delete from ration_items where id=? and ration_id=?',(iid,rid))
-                    else:c.execute('update ration_items set kg_per_head_day=? where id=? and ration_id=?',(round(kg,3),iid,rid))
+                    else:c.execute('update ration_items set kg_per_head_day=?,locked=? where id=? and ration_id=?',(round(kg,3),requested_lock,iid,rid))
                     record_ration_item_history(c,rid,item['feed_id'],0 if kg<0.001 else round(kg,3),notes='Çalışma masası')
             return self.redirect('/rations?id='+str(rid),'Rasyon miktarları kaydedildi.')
         if path=='/ration/item-adjust':
             try:rid=int(f.get('ration_id') or 0);iid=int(f.get('item_id') or 0);delta=float(f.get('delta') or 0)
             except:return self.redirect('/rations','Geçersiz rasyon kalemi.')
             with db() as c:
-                row=c.execute('select kg_per_head_day from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
+                row=c.execute('select kg_per_head_day,coalesce(locked,0) locked from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
                 if not row:return self.redirect('/rations?id='+str(rid),'Yem kalemi bulunamadı.')
+                if int(row['locked'] or 0):return self.redirect('/rations?id='+str(rid),'Bu yem kilitli. Önce kilidi açın.')
                 new=max(0,float(row['kg_per_head_day'] or 0)+delta)
                 item=c.execute('select feed_id from ration_items where id=?',(iid,)).fetchone()
                 if new<0.001:c.execute('delete from ration_items where id=?',(iid,))
@@ -8180,13 +8912,15 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except:return self.redirect('/rations','Kombine öneri uygulanamadı.')
             if rid<=0 or rfid<=0 or afid<=0 or rd>=0 or ad<=0:return self.redirect('/rations?id='+str(rid),'Kombine öneri geçersiz.')
             with db() as c:
-                row=c.execute('select id,kg_per_head_day from ration_items where ration_id=? and feed_id=?',(rid,rfid)).fetchone()
+                row=c.execute('select id,kg_per_head_day,coalesce(locked,0) locked from ration_items where ration_id=? and feed_id=?',(rid,rfid)).fetchone()
                 if not row:return self.redirect('/rations?id='+str(rid),'Azaltılacak yem rasyonda bulunamadı.')
+                if int(row['locked'] or 0):return self.redirect('/rations?id='+str(rid),'Kombine dengeleme uygulanmadı: azaltılacak yem kilitli.')
+                addrow=c.execute('select id,kg_per_head_day,coalesce(locked,0) locked from ration_items where ration_id=? and feed_id=?',(rid,afid)).fetchone()
+                if addrow and int(addrow['locked'] or 0):return self.redirect('/rations?id='+str(rid),'Kombine dengeleme uygulanmadı: artırılacak yem kilitli.')
                 newkg=max(0.0,float(row['kg_per_head_day'] or 0)+rd)
                 if newkg<0.001:c.execute('delete from ration_items where id=?',(row['id'],))
                 else:c.execute('update ration_items set kg_per_head_day=? where id=?',(round(newkg,3),row['id']))
                 record_ration_item_history(c,rid,rfid,0 if newkg<0.001 else round(newkg,3),notes='Kombine akıllı dengeleme - azalt')
-                addrow=c.execute('select id,kg_per_head_day from ration_items where ration_id=? and feed_id=?',(rid,afid)).fetchone()
                 if addrow:
                     addkg=max(0.0,float(addrow['kg_per_head_day'] or 0)+ad);c.execute('update ration_items set kg_per_head_day=? where id=?',(round(addkg,3),addrow['id']))
                 else:
@@ -8198,8 +8932,9 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except:return self.redirect('/rations','Öneri uygulanamadı.')
             if rid<=0 or fid<=0 or abs(delta)<0.001:return self.redirect('/rations?id='+str(rid),'Öneri miktarı geçersiz.')
             with db() as c:
-                row=c.execute('select id,kg_per_head_day from ration_items where ration_id=? and feed_id=?',(rid,fid)).fetchone()
+                row=c.execute('select id,kg_per_head_day,coalesce(locked,0) locked from ration_items where ration_id=? and feed_id=?',(rid,fid)).fetchone()
                 if row:
+                    if int(row['locked'] or 0):return self.redirect('/rations?id='+str(rid)+'#smart-balance','Öneri uygulanmadı: bu yem kilitli.')
                     newkg=max(0.0,float(row['kg_per_head_day'] or 0)+delta)
                     if newkg<0.001:c.execute('delete from ration_items where id=?',(row['id'],))
                     else:c.execute('update ration_items set kg_per_head_day=? where id=?',(round(newkg,3),row['id']))
@@ -8214,6 +8949,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
             except:return self.redirect('/rations','Rasyon kalemi geçersiz.')
             if rid<=0 or fid<=0 or kg<=0:return self.redirect('/rations?id='+str(rid),'Rasyon kalemi geçersiz.')
             with db() as c:
+                existing=c.execute('select coalesce(locked,0) locked from ration_items where ration_id=? and feed_id=?',(rid,fid)).fetchone()
+                if existing and int(existing['locked'] or 0):return self.redirect('/rations?id='+str(rid),'Bu yem kilitli. Önce kilidi açın.')
                 c.execute('''insert into ration_items(ration_id,feed_id,kg_per_head_day) values(?,?,?) on conflict(ration_id,feed_id) do update set kg_per_head_day=excluded.kg_per_head_day''',(rid,fid,kg))
                 record_ration_item_history(c,rid,fid,kg,notes='Rasyona yem ekle/güncelle')
             keep=(f.get('keep_feed_add_open') or '').strip()=='1'
@@ -8222,21 +8959,110 @@ setTimeout(()=>setFinanceDrawer(false),0);
             try:iid=int(f.get('id') or 0);rid=int(f.get('ration_id') or 0)
             except:return self.redirect('/rations','Geçersiz kayıt.')
             with db() as c:
-                item=c.execute('select feed_id from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
+                item=c.execute('select feed_id,coalesce(locked,0) locked from ration_items where id=? and ration_id=?',(iid,rid)).fetchone()
+                if item and int(item['locked'] or 0):return self.redirect('/rations?id='+str(rid),'Bu yem kilitli. Önce kilidi açın.')
                 c.execute('delete from ration_items where id=?',(iid,))
                 if item:record_ration_item_history(c,rid,item['feed_id'],0,notes='Yem rasyondan çıkarıldı')
             return self.redirect('/rations?id='+str(rid),'Yem rasyondan çıkarıldı.')
+        if path=='/paddock-extra-feed/save':
+            try:
+                eid=int(f.get('id') or 0);pid=int(f.get('paddock_id') or 0);fid=int(f.get('feed_id') or 0)
+                kg=max(0.0,float(str(f.get('kg_per_head_day') or '0').replace(',','.')))
+            except Exception:return self.redirect('/paddocks','Ek yem bilgisi geçersiz.')
+            if pid<=0 or fid<=0 or kg<=0:return self.redirect('/paddocks','Padok, yem ve kg/baş/gün zorunludur.')
+            start=(f.get('start_date') or date.today().isoformat()).strip()
+            try:start_day=date.fromisoformat(start)
+            except Exception:return self.redirect('/paddocks?selected='+str(pid),'Başlangıç tarihi geçersiz.')
+            notes=(f.get('notes') or '').strip();now=datetime.now().isoformat(timespec='seconds')
+            with db() as c:
+                if not c.execute('select id from paddocks where id=? and active=1',(pid,)).fetchone():return self.redirect('/paddocks','Padok bulunamadı.')
+                if not c.execute('select id from feed_catalog where id=? and active=1',(fid,)).fetchone():return self.redirect('/paddocks?selected='+str(pid),'Yem bulunamadı.')
+                if eid>0:
+                    row=c.execute('select * from paddock_extra_feeds where id=? and paddock_id=?',(eid,pid)).fetchone()
+                    if not row:return self.redirect('/paddocks?selected='+str(pid),'Düzenlenecek ek yem kaydı bulunamadı.')
+                    duplicate=c.execute("select id from paddock_extra_feeds where paddock_id=? and feed_id=? and id<>? and active=1 and (end_date is null or trim(end_date)='')",(pid,fid,eid)).fetchone()
+                    if duplicate:return self.redirect('/paddocks?selected='+str(pid),'Bu yem padokta zaten aktif ek yem olarak bulunuyor.')
+                    c.execute('''update paddock_extra_feeds set feed_id=?,kg_per_head_day=?,start_date=?,notes=?,active=1,end_date=NULL,updated_at=? where id=?''',(fid,round(kg,3),start,notes,now,eid))
+                    action='Padok ek yemini düzenledi';message='Ek yem / takviye güncellendi.'
+                else:
+                    previous_end=(start_day-timedelta(days=1)).isoformat()
+                    if start_day>date.today():
+                        c.execute("update paddock_extra_feeds set end_date=?,updated_at=? where paddock_id=? and feed_id=? and active=1 and (end_date is null or trim(end_date)='')",(previous_end,now,pid,fid))
+                    else:
+                        c.execute("update paddock_extra_feeds set active=0,end_date=?,updated_at=? where paddock_id=? and feed_id=? and active=1 and (end_date is null or trim(end_date)='')",(previous_end,now,pid,fid))
+                    c.execute('''insert into paddock_extra_feeds(paddock_id,feed_id,kg_per_head_day,start_date,end_date,active,notes,created_at,updated_at) values(?,?,?,?,NULL,1,?,?,?)''',(pid,fid,round(kg,3),start,notes,now,now))
+                    action='Padoka ek yem ekledi';message='Ek yem / takviye kaydedildi.'
+                c.execute('update paddocks set updated_at=? where id=?',(now,pid))
+                if start<=date.today().isoformat():sync_daily_paddock_feed_stock(c,date.today().isoformat())
+            audit(username,action,f'Padok {pid} / Yem {fid} / {kg:.3f} kg/baş/gün',self.client_ip())
+            return self.redirect('/paddocks?selected='+str(pid),message)
+        if path=='/paddock-extra-feed/delete':
+            try:eid=int(f.get('id') or 0);pid=int(f.get('paddock_id') or 0)
+            except Exception:return self.redirect('/paddocks','Ek yem kaydı geçersiz.')
+            with db() as c:
+                row=c.execute('select * from paddock_extra_feeds where id=?',(eid,)).fetchone()
+                if row:
+                    pid=int(row['paddock_id']);today=date.today();yesterday=(today-timedelta(days=1)).isoformat()
+                    c.execute('update paddock_extra_feeds set active=0,end_date=?,updated_at=? where id=?',(yesterday,datetime.now().isoformat(timespec='seconds'),eid))
+                    sync_daily_paddock_feed_stock(c,today.isoformat())
+            audit(username,'Padok ek yemini kaldırdı',f'Ek yem #{eid}',self.client_ip())
+            return self.redirect('/paddocks?selected='+str(pid),'Ek yem kaldırıldı.')
+        if path=='/ration/assign-bulk':
+            try:rid=int(f.get('ration_id') or 0)
+            except:return self.redirect('/paddocks','Rasyon seçin.')
+            selected=[]
+            for key,value in f.items():
+                if not key.startswith('bulk_paddock_') or str(value)!='1':continue
+                try:selected.append(int(key[len('bulk_paddock_'):]))
+                except Exception:pass
+            selected=sorted({x for x in selected if x>0})
+            if rid<=0 or not selected:return self.redirect('/paddocks','Rasyon ve en az bir padok seçin.')
+            start=(f.get('start_date') or date.today().isoformat()).strip()
+            try:start_day=date.fromisoformat(start)
+            except Exception:return self.redirect('/paddocks','Başlangıç tarihi geçersiz.')
+            notes=(f.get('notes') or '').strip();changed=0;unchanged=0
+            with db() as c:
+                if not c.execute('select id from rations where id=? and active=1',(rid,)).fetchone():return self.redirect('/paddocks','Rasyon bulunamadı.')
+                valid={int(row['id']) for row in c.execute('select id from paddocks where active=1').fetchall()}
+                selected=[pid for pid in selected if pid in valid]
+                if not selected:return self.redirect('/paddocks','Seçili aktif padok bulunamadı.')
+                for pid in selected:
+                    current=c.execute("""select * from paddock_rations where paddock_id=? and active=1
+                        and (end_date is null or trim(end_date)='') order by id desc limit 1""",(pid,)).fetchone()
+                    if current and int(current['ration_id'])==rid and str(current['start_date'] or '')==start:
+                        unchanged+=1;continue
+                    previous_end=(start_day-timedelta(days=1)).isoformat()
+                    if start_day>date.today():
+                        c.execute("update paddock_rations set end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",(previous_end,pid))
+                    else:
+                        c.execute("update paddock_rations set active=0,end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",(previous_end,pid))
+                    c.execute('insert into paddock_rations(paddock_id,ration_id,start_date,end_date,active,notes) values(?,?,?,NULL,1,?)',(pid,rid,start,notes))
+                    c.execute('update paddocks set updated_at=? where id=?',(datetime.now().isoformat(timespec='seconds'),pid))
+                    changed+=1
+                sync_daily_paddock_feed_stock(c,date.today().isoformat())
+            audit(username,'Padoklara toplu rasyon atadı',f'Rasyon {rid} / {changed} padok / {unchanged} değişmedi',self.client_ip())
+            msg=f'Rasyon {changed} padoka atandı.'
+            if unchanged:msg+=f' {unchanged} padok zaten aynı atamadaydı.'
+            return self.redirect('/paddocks',msg)
+
         if path=='/ration/assign':
             try:pid=int(f.get('paddock_id') or 0);rid=int(f.get('ration_id') or 0)
             except:return self.redirect('/paddocks','Padok ve rasyon seçin.')
             if pid<=0 or rid<=0:return self.redirect('/paddocks','Padok ve rasyon seçin.')
             start=(f.get('start_date') or date.today().isoformat()).strip()
+            try:start_day=date.fromisoformat(start)
+            except Exception:return self.redirect('/paddocks','Başlangıç tarihi geçersiz.')
             with db() as c:
                 if not c.execute('select id from paddocks where id=? and active=1',(pid,)).fetchone():return self.redirect('/paddocks','Padok bulunamadı.')
                 if not c.execute('select id from rations where id=? and active=1',(rid,)).fetchone():return self.redirect('/paddocks','Rasyon bulunamadı.')
-                c.execute("update paddock_rations set active=0,end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",((date.fromisoformat(start)-timedelta(days=1)).isoformat(),pid))
+                previous_end=(start_day-timedelta(days=1)).isoformat()
+                if start_day>date.today():
+                    c.execute("update paddock_rations set end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",(previous_end,pid))
+                else:
+                    c.execute("update paddock_rations set active=0,end_date=? where paddock_id=? and active=1 and (end_date is null or end_date='')",(previous_end,pid))
                 c.execute('insert into paddock_rations(paddock_id,ration_id,start_date,end_date,active,notes) values(?,?,?,NULL,1,?)',(pid,rid,start,(f.get('notes') or '').strip()))
                 c.execute('update paddocks set updated_at=? where id=?',(datetime.now().isoformat(timespec='seconds'),pid))
+                if start<=date.today().isoformat():sync_daily_paddock_feed_stock(c,date.today().isoformat())
             try:return_pid=int(f.get('return_paddock_id') or pid)
             except Exception:return_pid=pid
             audit(username,'Padoka rasyon atadı',f'Padok {pid} / Rasyon {rid}',self.client_ip());return self.redirect('/paddocks?selected='+str(return_pid),'Rasyon padoka atandı.')
@@ -8638,6 +9464,46 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if stats['errors']:summary+=f", {len(stats['errors'])} hata"
                 return self.redirect('/data',summary)
             except Exception as e:return self.redirect('/data','İçe aktarma hatası: '+str(e))
+        if path=='/calf-internal-cost/save':
+            try:
+                cid=int(f.get('calf_id') or 0);qty=max(0.0,float(str(f.get('quantity') or '0').replace(',','.')))
+                unit_cost=max(0.0,float(str(f.get('unit_cost') or '0').replace(',','.')))
+            except Exception:return self.redirect('/calves','İç üretim maliyeti bilgisi geçersiz.')
+            cost_type=(f.get('cost_type') or 'Diğer').strip();cost_date=(f.get('cost_date') or date.today().isoformat()).strip()
+            try:date.fromisoformat(cost_date)
+            except Exception:return self.redirect('/calf?id='+str(cid),'Tarih geçersiz.')
+            try:fid=int(f.get('feed_id') or 0)
+            except Exception:fid=0
+            unit=(f.get('unit') or '').strip();notes=(f.get('notes') or '').strip();stock_tx_id=None
+            if cid<=0 or qty<=0:return self.redirect('/calves','Buzağı ve miktar zorunludur.')
+            with db() as c:
+                calf=c.execute('select id,tag from calves where id=?',(cid,)).fetchone()
+                if not calf:return self.redirect('/calves','Buzağı bulunamadı.')
+                if cost_type=='Yem':
+                    feed=c.execute('select id,name from feed_catalog where id=? and active=1',(fid,)).fetchone()
+                    if not feed:return self.redirect('/calf?id='+str(cid),'Yem seçin.')
+                    if unit_cost<=0:unit_cost=current_feed_price(fid,c,cost_date)
+                    if (f.get('deduct_stock') or '')=='1':
+                        cur=c.execute('''insert into feed_stock_transactions(feed_id,tx_date,tx_type,quantity_kg,unit_price,notes)
+                            values(?,?,'Tüketim',?,0,?)''',(fid,cost_date,round(qty,6),f'Buzağı iç üretim maliyeti | {calf["tag"]} | {feed["name"]}'))
+                        stock_tx_id=int(cur.lastrowid);rebuild_feed_cost_history(c,fid)
+                amount=round(qty*unit_cost,2)
+                c.execute('''insert into calf_internal_costs(calf_id,cost_date,cost_type,feed_id,quantity,unit,unit_cost,amount,stock_tx_id,notes,created_at)
+                    values(?,?,?,?,?,?,?,?,?,?,?)''',(cid,cost_date,cost_type,fid or None,qty,unit,unit_cost,amount,stock_tx_id,notes,datetime.now().isoformat(timespec='seconds')))
+            audit(username,'Buzağı iç üretim maliyeti ekledi',f'{cid} · {cost_type} · {money(amount)}',self.client_ip())
+            return self.redirect('/calf?id='+str(cid),'İç üretim maliyeti buzağı maliyetine eklendi. Nakit gider ikinci kez oluşturulmadı.')
+        if path=='/calf-internal-cost/delete':
+            try:rid=int(f.get('id') or 0);cid=int(f.get('calf_id') or 0)
+            except Exception:return self.redirect('/calves','İç üretim maliyeti kaydı geçersiz.')
+            with db() as c:
+                row=c.execute('select * from calf_internal_costs where id=? and calf_id=?',(rid,cid)).fetchone()
+                if row:
+                    if row['stock_tx_id']:
+                        c.execute('delete from feed_stock_transactions where id=?',(row['stock_tx_id'],))
+                        if row['feed_id']:rebuild_feed_cost_history(c,int(row['feed_id']))
+                    c.execute('delete from calf_internal_costs where id=?',(rid,))
+            audit(username,'Buzağı iç üretim maliyetini sildi',f'#{rid}',self.client_ip())
+            return self.redirect('/calf?id='+str(cid),'İç üretim maliyeti silindi; bağlı stok tüketimi geri alındı.')
         if path=='/calf/photo':
             cid=(f.get('calf_id') or '').strip()
             try:
@@ -9587,7 +10453,7 @@ def local_ip():
     except:return '127.0.0.1'
 
 if __name__=='__main__':
-    init_db(); ensure_archive_schema(); promote_mature_calves(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
+    init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
 
 
 # DEV4.3 — desktop-only ration workbench refinement; solver logic untouched
@@ -9832,3 +10698,1438 @@ _old_page_dev410 = page
 def page(title, body, path='/', user='admin', flash=''):
     html = _old_page_dev410(title, body, path, user, flash)
     return html.replace('</body>', DEV410_SIDEBAR_BRAND_FIX + '</body>')
+
+
+# Hotfix1.19d — hedef mobil görseldeki kompakt yem satırları.
+# Yalnız DOM/CSS sunum katmanıdır; solver, hedef ve kayıt uçları değişmez.
+HOTFIX119D_MOBILE_RATION_UI = r"""
+<style id="hotfix119d-mobile-ration-compact">
+@media(max-width:900px){
+  body:has(.workbench-shell){overflow-x:hidden!important}
+  body:has(.workbench-shell) .main{padding-left:8px!important;padding-right:8px!important;padding-bottom:132px!important}
+  body:has(.workbench-shell) .workbench-shell{padding:0!important;background:transparent!important}
+  body:has(.workbench-shell) .erp-ration-center{display:flex!important;flex-direction:column!important;gap:8px!important;min-width:0!important;width:100%!important}
+
+  /* Hedef görsel sırası: profil → durum → 2x2 kart → yemler. */
+  body:has(.workbench-shell) .wb2-mobile-profile{order:1!important;margin:0!important;padding:8px 10px!important;border-radius:11px!important;background:#f7faf8!important}
+  body:has(.workbench-shell) .wb2-decision-rail{order:2!important;margin:0!important;border-radius:11px!important;box-shadow:none!important}
+  body:has(.workbench-shell) .wb2-kpi-dashboard{order:3!important;margin:0!important}
+  body:has(.workbench-shell) .target-workspace{order:4!important;margin:0!important}
+  body:has(.workbench-shell) #ration-workbench{order:5!important}
+  body:has(.workbench-shell) #ration-workbench~*:not(script){order:6!important}
+  body:has(.workbench-shell) .wb2-decision-rail:not(.wb2-mobile-expanded) .wb2-body{display:none!important}
+  body:has(.workbench-shell) .target-controlbar{display:none!important}
+  body:has(.workbench-shell) .target-compare-sticky{display:none!important}
+  body:has(.workbench-shell) .target-compare-sticky.wb2-show-science{display:block!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;margin:8px 0!important}
+  body:has(.workbench-shell) .target-compare-sticky.wb2-show-science .science-target-grid{display:grid!important;grid-template-columns:1fr!important;grid-auto-flow:row!important;grid-auto-columns:auto!important;overflow:visible!important}
+
+  /* Üstteki yinelenen işlemler kalkar; mobilde yalnız sabit alt çubuk kalır. */
+  body:has(.workbench-shell) #ration-workbench{width:100%!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:10px 3px 7px!important;margin:0!important;background:transparent!important;border:0!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head>div:first-child{min-width:0!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head h3{font-size:20px!important;line-height:1.1!important;margin:0!important;white-space:nowrap!important}
+  body:has(.workbench-shell) #ration-workbench .workbench-head .mut,
+  body:has(.workbench-shell) #ration-workbench .workbench-actions{display:none!important}
+  body:has(.workbench-shell) .hf119d-total{flex:0 0 auto;padding:6px 9px;border-radius:9px;background:#f0f5f1;color:#334d3e;font-size:11px;font-weight:850;white-space:nowrap}
+  body:has(.workbench-shell) #ration-workbench form{padding:0!important}
+  body:has(.workbench-shell) .compact-changebar{margin:0 3px 6px!important;padding:0!important;min-height:20px!important;font-size:11px!important}
+  body:has(.workbench-shell) #ration-workbench form>div[style*="overflow:auto"]{overflow:visible!important;margin:0!important}
+  body:has(.workbench-shell) .ration-workbench-table,
+  body:has(.workbench-shell) .ration-workbench-table tbody{display:block!important;width:100%!important;min-width:0!important;border:0!important;background:transparent!important}
+  body:has(.workbench-shell) .ration-workbench-table thead{display:none!important}
+
+  /* Gerçek kompakt yem bileşeni. */
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row{
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) 144px 38px!important;
+    grid-template-areas:'thumb name qty remove' 'thumb price daily daily'!important;
+    align-items:center!important;
+    gap:5px 7px!important;
+    width:100%!important;min-width:0!important;
+    margin:0 0 7px!important;padding:9px 10px!important;
+    border:1px solid #dce7df!important;border-radius:12px!important;
+    background:#fff!important;box-shadow:0 2px 7px rgba(25,63,41,.035)!important;
+    box-sizing:border-box!important;
+  }
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{
+    content:attr(data-feed-icon);grid-area:thumb;
+    display:grid;width:42px;height:42px;place-items:center;
+    border-radius:50%;background:#f1f6ed;border:1px solid #dce8d7;
+    font-size:24px;line-height:1;
+  }
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td{display:none!important;border:0!important;background:transparent!important;padding:0!important;min-width:0!important;width:auto!important;font-size:11px!important;line-height:1.15!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){display:block!important;grid-area:name!important;border:0!important;padding:0!important;overflow:hidden!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>b{display:block;font-size:13.5px!important;line-height:1.12!important;white-space:normal!important;overflow-wrap:anywhere!important;display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2){display:block!important;grid-area:qty!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(6){display:block!important;grid-area:price!important;padding:0!important;color:#66766d!important;font-size:10.5px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(6)::before{content:''!important;display:none!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(7){display:flex!important;grid-area:daily!important;align-items:center!important;justify-content:flex-end!important;gap:4px!important;padding:0!important;color:#30483a!important;font-size:10.5px!important;white-space:nowrap!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(7)::before{content:'Günlük:'!important;display:inline!important;margin:0!important;color:#748178!important;font-size:9.5px!important;font-weight:700!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8){display:block!important;grid-area:remove!important;text-align:center!important;align-self:center!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper{display:grid!important;grid-template-columns:36px minmax(60px,1fr) 36px!important;gap:4px!important;width:100%!important;align-items:center!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper .btn{width:36px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:9px!important;font-size:21px!important;line-height:1!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper .qty-step[data-delta="0.10"]{background:#176b3a!important;border-color:#176b3a!important;color:#fff!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-qty{width:100%!important;height:38px!important;min-width:0!important;padding:4px 2px!important;border-radius:9px!important;font-size:15px!important;font-weight:900!important;text-align:center!important;box-sizing:border-box!important}
+  body:has(.workbench-shell) .ration-workbench-table .qty-delta{display:none!important}
+  body:has(.workbench-shell) .ration-workbench-table .qty-zero{display:grid!important;place-items:center!important;width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;border:0!important;border-radius:9px!important;background:#fff0f1!important;color:#d73540!important;font-size:17px!important;line-height:1!important;overflow:hidden!important}
+  body:has(.workbench-shell) .ration-savebar{display:none!important}
+
+  /* Alt işlem çubuğu içerikle çakışmadan hedef görsel gibi iki parçalıdır. */
+  body:has(.workbench-shell) .wb2-mobile-dock{left:8px!important;right:8px!important;bottom:40px!important;grid-template-columns:1fr 1.12fr!important;gap:7px!important;padding:8px!important;border-radius:14px!important;background:rgba(255,255,255,.98)!important;box-shadow:0 -5px 18px rgba(20,58,37,.12)!important}
+  body:has(.workbench-shell) .wb2-mobile-dock .btn{min-height:48px!important;border-radius:10px!important;font-size:14px!important}
+  body:has(.workbench-shell) .wb2-mobile-dock .wb2-dock-save:not(:disabled){background:#176b3a!important;color:#fff!important}
+}
+@media(max-width:390px){
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row{grid-template-columns:40px minmax(0,1fr) 134px 36px!important;gap:5px!important;padding:8px!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{width:38px;height:38px;font-size:21px}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper{grid-template-columns:34px minmax(56px,1fr) 34px!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-stepper .btn{width:34px!important;height:36px!important;min-height:36px!important}
+  body:has(.workbench-shell) .ration-workbench-table .ration-qty{height:36px!important;font-size:14px!important}
+  body:has(.workbench-shell) .ration-workbench-table .qty-zero{width:36px!important;height:36px!important;min-height:36px!important}
+}
+</style>
+<script id="hotfix119d-mobile-ration-compact-script">
+(function(){
+  function init(){
+    if(!window.matchMedia('(max-width:900px)').matches)return;
+    var work=document.getElementById('ration-workbench'),form=document.getElementById('ration-bulk-form');
+    if(!work||!form||work.dataset.hf119d==='1')return;
+    work.dataset.hf119d='1';
+    var rows=[].slice.call(form.querySelectorAll('tr.ration-row'));
+    function iconFor(row){
+      var group=(row.dataset.group||'').toLocaleLowerCase('tr-TR');
+      var name=(row.dataset.feedName||'').toLocaleLowerCase('tr-TR');
+      if(name.indexOf('silaj')>=0)return '🌽';
+      if(name.indexOf('yonca')>=0||group.indexOf('kaba')>=0)return '🌿';
+      if(name.indexOf('saman')>=0)return '🌾';
+      if(name.indexOf('yem')>=0)return '🥣';
+      if(name.indexOf('arpa')>=0||name.indexOf('buğday')>=0||name.indexOf('bugday')>=0||name.indexOf('mısır')>=0||name.indexOf('misir')>=0)return '🌾';
+      return group.indexOf('katk')>=0?'🧂':'🌱';
+    }
+    rows.forEach(function(row){
+      row.dataset.feedIcon=iconFor(row);
+      var remove=row.querySelector('.qty-zero'),name=row.querySelector('td:first-child b');
+      if(remove){remove.textContent='🗑';remove.title='Yemi rasyondan çıkar';remove.setAttribute('aria-label',(name?name.textContent+' ':'')+'rasyondan çıkar');}
+      var input=row.querySelector('.ration-qty');if(input)input.setAttribute('aria-label',(name?name.textContent+' ':'')+'kg/baş/gün');
+    });
+    var head=work.querySelector('.workbench-head');
+    if(head&&!head.querySelector('.hf119d-total')){
+      var total=document.createElement('span');total.className='hf119d-total';head.appendChild(total);
+      function syncTotal(){
+        var sum=rows.reduce(function(n,row){var i=row.querySelector('.ration-qty');return n+(parseFloat((i&&i.value||'0').replace(',','.'))||0);},0);
+        total.textContent='Toplam: '+sum.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})+' kg';
+      }
+      form.addEventListener('input',syncTotal);form.addEventListener('click',function(e){if(e.target.closest('.qty-step,.qty-zero,#ration-reset'))requestAnimationFrame(syncTotal);});syncTotal();
+    }
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+"""
+
+
+# Hotfix1.20 — rasyon çalışma masası görsel yerleşim düzeltmeleri.
+HOTFIX120_RATION_POLISH = r"""
+<style id="hotfix120-ration-polish">
+@media(min-width:901px){
+ body.erp-ration-reference .erp-ration-layout{grid-template-columns:226px minmax(0,1fr)!important}
+ body.erp-ration-reference .wb2-decision-rail{grid-column:2!important;position:static!important;max-height:none!important;margin:8px 0 0!important}
+ .wb2-decision-rail .wb2-body{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:0 12px;align-items:start}
+ .wb2-decision-rail .wb2-status-track{grid-column:1/-1;margin-bottom:6px}
+ .wb2-decision-rail .wb2-section{padding:7px 0}
+}
+/* Hedef özeti: iri dashboard kartları yerine ince ERP şeridi. */
+.wb2-desktop-kpis{padding:8px 10px!important;border-radius:8px!important}
+.wb2-desktop-kpi-head{margin-bottom:5px!important}.wb2-desktop-kpi-head span{font-size:9px!important}
+.wb2-desktop-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
+.wb2-desktop-kpi{min-height:58px!important;padding:7px 8px!important;border-radius:7px!important;display:grid!important;grid-template-columns:55px 1fr auto!important;align-items:center!important;gap:5px!important}
+.wb2-desktop-kpi-name small{display:none!important}.wb2-desktop-kpi-name b{font-size:13px!important}
+.wb2-desktop-kpi-values{display:flex!important;gap:12px!important}.wb2-desktop-kpi-values span{min-width:0!important}.wb2-desktop-kpi-values small{font-size:7px!important}.wb2-desktop-kpi-values b{font-size:12px!important}
+.wb2-desktop-kpi-status{font-size:8px!important;padding:3px 5px!important}.wb2-desktop-kpi .hf119h-range{grid-column:1/-1!important;margin-top:0!important}
+.wb2-desktop-secondary{margin-top:5px!important}.wb2-desktop-more{margin-top:5px!important}
+/* Rasyon bilgileri sağdan açılan panel; çalışma masasını itmez. */
+.ration-info-details>summary{cursor:pointer;list-style:none}.ration-info-details>summary::-webkit-details-marker{display:none}
+.ration-info-details[open]{position:fixed!important;z-index:130!important;right:0!important;top:0!important;width:min(430px,94vw)!important;height:100vh!important;margin:0!important;padding:72px 18px 18px!important;background:#fff!important;border:0!important;border-left:1px solid #d8e3db!important;border-radius:0!important;box-shadow:-18px 0 45px #173d2826!important;overflow:auto!important}
+.ration-info-details[open]::before{content:'Rasyon Bilgileri';display:block;font-size:18px;font-weight:900;margin-bottom:14px;color:#173d28}
+.ration-info-details[open]>summary{position:absolute;right:14px;top:16px;font-size:0}.ration-info-details[open]>summary:after{content:'×';font-size:30px;color:#52675b}
+.ration-info-details[open] .form{grid-template-columns:1fr!important}.ration-info-details[open] .full{grid-column:1!important}
+@media(max-width:900px){.wb2-desktop-kpi-grid{grid-template-columns:1fr 1fr!important}.wb2-desktop-kpi{grid-template-columns:48px 1fr auto!important}.ration-info-details[open]{width:100vw!important}}
+</style>
+<script id="hotfix120-ration-polish-script">
+(()=>{const start=()=>{const rail=document.querySelector('.wb2-decision-rail'),center=document.querySelector('.erp-ration-center'),workspace=center?.querySelector('.target-workspace');if(rail&&center&&workspace&&window.matchMedia('(min-width:901px)').matches)center.insertBefore(rail,workspace);};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>requestAnimationFrame(start));else requestAnimationFrame(start);})();
+</script>
+"""
+
+_old_page_hotfix119d = page
+
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix119d(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX119D_MOBILE_RATION_UI + HOTFIX120_RATION_POLISH + '</body>')
+
+
+# Hotfix1.19h — işlevsel rasyon masası katmanı.
+# Solver çekirdeğini değiştirmez; kilit, KM payı, profil uygunluğu, değişiklik özeti
+# ve hedef şeritlerini mevcut canlı hesapların üzerine ekler.
+HOTFIX119H_FUNCTIONAL_RATION_UI = r"""
+<style id="hotfix119h-functional-ration-ui">
+.hf119h-feed-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;clear:both;margin-top:4px;color:#66766d;font-size:9.5px;font-weight:750;line-height:1.2}
+.hf119h-feed-meta span{padding:2px 5px;border-radius:99px;background:#f0f5f1;white-space:nowrap}.hf119h-feed-meta .bad{background:#fde7e4;color:#aa302a}
+.hf119h-lock{display:inline-grid;place-items:center;vertical-align:middle;margin:4px 4px 0 0;width:27px;height:27px;min-height:27px!important;padding:0!important;border:1px solid #c9d8ce;border-radius:7px;background:#f5f8f6;color:#456052;font-size:13px;line-height:1;cursor:pointer}
+.hf119h-lock.on{border-color:#2c7a4b;background:#e4f4e9;color:#126635}.ration-row.hf119h-locked .ration-stepper,.ration-row.hf119h-locked .qty-zero{opacity:.48}.ration-row.hf119h-locked .ration-qty{background:#edf2ee!important;color:#405348!important}
+.ration-row.hf119h-incompatible{border-color:#d99431!important;background:#fff9ed!important}.hf119h-age-banner{display:none;margin:0 0 8px;padding:8px 10px;border:1px solid #e2ae4b;border-left:4px solid #d99319;border-radius:9px;background:#fff7e8;color:#704a09;font-size:10px;line-height:1.35}.hf119h-age-banner.on{display:block}.hf119h-age-banner b{display:block;margin-bottom:2px}
+.hf119h-change-summary{margin:0 0 8px;border:1px solid #d9e5dc;border-radius:9px;background:#f8fbf9;overflow:hidden}.hf119h-change-summary>summary{padding:8px 10px;cursor:pointer;color:#254d36;font-size:10.5px;font-weight:900}.hf119h-change-summary .body{padding:0 10px 9px}.hf119h-change-summary ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin:0;padding:0;list-style:none}.hf119h-change-summary li{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed #dce6df;font-size:9.5px}.hf119h-change-summary li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hf119h-change-summary li b{white-space:nowrap}.hf119h-change-summary .foot{margin-top:7px;color:#68776e;font-size:9px}
+.hf119h-range{position:relative;height:7px;margin-top:5px;border-radius:99px;background:#e7ece8;overflow:visible}.hf119h-range .zone{position:absolute;top:0;bottom:0;border-radius:99px;background:#bce4c8}.hf119h-range .fill{position:absolute;left:0;top:2px;height:3px;border-radius:99px;background:#25854d}.hf119h-range .needle{position:absolute;top:-3px;width:2px;height:13px;border-radius:2px;background:#164c2d;box-shadow:0 0 0 1px #fff}.science-target-row.warn .hf119h-range .fill,.wb2-kpi.warn .hf119h-range .fill,.wb2-desktop-kpi.warn .hf119h-range .fill{background:#df9d1c}.science-target-row.bad .hf119h-range .fill,.wb2-kpi.bad .hf119h-range .fill,.wb2-desktop-kpi.bad .hf119h-range .fill{background:#cb443a}
+.science-target-row .hf119h-range{grid-column:1/-1;margin:1px 8px 5px}.wb2-kpi .hf119h-range,.wb2-desktop-kpi .hf119h-range{grid-column:1/-1;width:100%;margin-top:6px}
+.hf119h-solve-guard{display:none;margin:8px 0;padding:9px 10px;border:1px solid #e0a941;border-radius:9px;background:#fff7e7;color:#714b08;font-size:12px;line-height:1.35}.hf119h-solve-guard.on{display:block}.solve-feed.hf119h-incompatible{border-color:#dca540!important;background:#fff8e9!important;opacity:.76}.hf119h-age-note{display:block!important;margin-top:4px!important;color:#8b5a08!important;font-weight:800}
+@media(max-width:900px){.hf119h-feed-meta{font-size:8.5px;gap:3px}.hf119h-feed-meta span{padding:1px 4px}.hf119h-lock{width:24px;height:24px;min-height:24px!important;margin:4px 3px 0 0}.hf119h-change-summary ul{grid-template-columns:1fr}.hf119h-change-summary{margin-left:2px;margin-right:2px}.wb2-kpi{grid-template-rows:auto auto auto}.wb2-kpi .hf119h-range{margin-top:5px}.ration-row td:first-child>b{padding-right:28px}}
+</style>
+<script id="hotfix119h-functional-ration-script">
+(function(){
+  var trFmt=function(n,d){return Number(n||0).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})};
+  var norm=function(v){return String(v||'').toLocaleUpperCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/İ/g,'I').replace(/Ş/g,'S').replace(/Ğ/g,'G').replace(/Ü/g,'U').replace(/Ö/g,'O').replace(/Ç/g,'C')};
+  var isCalfPeriodFeed=function(name){return norm(name).indexOf('SUNAR BUZAGI BUYUTME OZEL DONEM YEMI')>=0};
+  var ageIncompatible=function(age){age=Number(age||0);return age>0&&(age*30.4375<60||age*30.4375>120)};
+
+  function initWorkbench(){
+    var form=document.getElementById('ration-bulk-form');if(!form||form.dataset.hf119h==='1')return;form.dataset.hf119h='1';
+    var rows=[].slice.call(form.querySelectorAll('.ration-row')),save=document.getElementById('ration-save'),reset=document.getElementById('ration-reset'),status=document.getElementById('dirty-status');
+    var change=document.createElement('details');change.className='hf119h-change-summary';change.innerHTML='<summary>Değişiklik özeti</summary><div class="body"><ul></ul><div class="foot"></div></div>';
+    var tableWrap=form.querySelector('div[style*="overflow:auto"]');if(tableWrap)form.insertBefore(change,tableWrap);
+    var ageBanner=document.createElement('div');ageBanner.className='hf119h-age-banner';ageBanner.innerHTML='<b>⚠ Yaş / dönem uyumsuz yem</b><span></span>';
+    var head=document.querySelector('#ration-workbench .workbench-head');if(head)head.insertAdjacentElement('afterend',ageBanner);
+    var originalLocks=new Map();
+    function applyLock(row,on){
+      row.dataset.locked=on?'1':'0';row.classList.toggle('hf119h-locked',on);var input=row.querySelector('.ration-qty');if(input)input.readOnly=on;
+      row.querySelectorAll('.qty-step,.qty-zero').forEach(function(b){b.disabled=on});var button=row.querySelector('.hf119h-lock');if(button){button.classList.toggle('on',on);button.textContent=on?'🔒':'🔓';button.title=on?'Miktar korunuyor; açmak için dokunun':'Miktarı kilitle';button.setAttribute('aria-pressed',on?'true':'false')}
+      var hidden=row.querySelector('.hf119h-lock-input');if(hidden)hidden.value=on?'1':'0';
+    }
+    rows.forEach(function(row){
+      var id=row.dataset.itemId||((row.querySelector('.ration-qty')||{}).name||'').replace('item_',''),cell=row.querySelector('td:nth-child(2)'),initial=row.dataset.locked==='1';originalLocks.set(row,initial);
+      var hidden=document.createElement('input');hidden.type='hidden';hidden.className='hf119h-lock-input';hidden.name='lock_'+id;hidden.value=initial?'1':'0';form.appendChild(hidden);
+      var lock=document.createElement('button');lock.type='button';lock.className='hf119h-lock';lock.setAttribute('aria-label',(row.dataset.feedName||'Yem')+' miktarını kilitle');if(cell)cell.appendChild(lock);
+      var meta=document.createElement('div');meta.className='hf119h-feed-meta';if(cell)cell.appendChild(meta);
+      lock.addEventListener('click',function(){applyLock(row,row.dataset.locked!=='1');sync(true)});applyLock(row,initial);
+    });
+    function profileAge(){var e=document.querySelector('.target-form [name=target_age_months]');return Number(e&&e.value||0)}
+    function sync(forceOpen){
+      var totalDm=rows.reduce(function(sum,row){var q=parseFloat((row.querySelector('.ration-qty')?.value||'0').replace(',','.'))||0;return sum+q*(parseFloat(row.dataset.dm||0)||0)/100},0),items=[],lockChanges=0,bad=[];
+      rows.forEach(function(row){
+        var input=row.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((input?.value||'0').replace(',','.'))||0),orig=parseFloat(input?.dataset.original||0)||0,dm=kg*(parseFloat(row.dataset.dm||0)||0)/100,share=totalDm?dm/totalDm*100:0,name=row.dataset.feedName||'Yem',locked=row.dataset.locked==='1',lockChanged=locked!==originalLocks.get(row),meta=row.querySelector('.hf119h-feed-meta');
+        if(meta){meta.innerHTML='';[['KM '+trFmt(dm,2)+' kg',''],['Rasyon KM %'+trFmt(share,1),''],[row.dataset.group||'Yem','']].forEach(function(p){var s=document.createElement('span');s.textContent=p[0];meta.appendChild(s)});if(isCalfPeriodFeed(name)&&ageIncompatible(profileAge())){var s=document.createElement('span');s.className='bad';s.textContent='Yaşa uygun değil';meta.appendChild(s)}}
+        row.classList.toggle('hf119h-incompatible',isCalfPeriodFeed(name)&&ageIncompatible(profileAge()));if(row.classList.contains('hf119h-incompatible'))bad.push(name);
+        if(Math.abs(kg-orig)>.0005||lockChanged){items.push({name:name,text:(Math.abs(kg-orig)>.0005?trFmt(orig,2)+' → '+trFmt(kg,2)+' kg':'Miktar aynı')+(lockChanged?' · '+(locked?'kilitlendi':'kilit açıldı'):'')})}if(lockChanged)lockChanges++;
+      });
+      ageBanner.classList.toggle('on',bad.length>0);ageBanner.querySelector('span').textContent=bad.length?bad.join(', ')+' yalnız ürün kaynağındaki 60–120 günlük kullanım döneminde seçilebilir.':'';
+      var solver=document.querySelector('.science-target-grid')?.dataset.solverResult==='solved',list=change.querySelector('ul'),foot=change.querySelector('.foot');list.innerHTML='';
+      var display=items.length?items:(solver?rows.map(function(row){return{name:row.dataset.feedName||'Yem',text:'Seçildi → '+trFmt(parseFloat(row.querySelector('.ration-qty')?.value||0)||0,2)+' kg'}}):[]);
+      display.forEach(function(item){var li=document.createElement('li'),a=document.createElement('span'),b=document.createElement('b');a.textContent=item.name;b.textContent=item.text;li.append(a,b);list.appendChild(li)});
+      change.style.display=display.length?'block':'none';change.querySelector('summary').textContent=items.length?'Değişiklik özeti · '+items.length+' kalem':('Solver sonucu · '+rows.length+' yem miktarlandırıldı');foot.textContent=items.length?'Kaydettiğinizde yalnız bu farklar uygulanır; kilitli miktarlar korunur.':'Başlangıçta yalnız yem seçimi vardı; karşıdaki değer solverın ürettiği kg/baş/gün miktarıdır.';if(forceOpen)change.open=true;
+      var dirty=items.length;if(save)save.disabled=!dirty;if(reset)reset.style.display=dirty?'inline-flex':'none';if(status){status.className=dirty?'ration-dirty-text':'mut';status.textContent=dirty?('● '+items.length+' kalemde kaydedilmemiş değişiklik var'):'Kaydedilmiş rasyon gösteriliyor.'}
+    }
+    form.addEventListener('input',function(){requestAnimationFrame(function(){sync(false)})});form.addEventListener('click',function(e){if(e.target.closest('.qty-step,.qty-zero'))requestAnimationFrame(function(){sync(false)});if(e.target.closest('#ration-reset'))setTimeout(function(){rows.forEach(function(row){applyLock(row,originalLocks.get(row))});sync(false)},0)});
+    var ageInput=document.querySelector('.target-form [name=target_age_months]');if(ageInput)ageInput.addEventListener('input',function(){sync(false)});sync(false);
+  }
+
+  function initSolveAgeGuard(){
+    var form=document.querySelector('#rationSolveDrawer form'),grid=document.getElementById('solve-feed-grid');if(!form||!grid||form.dataset.hf119h==='1')return;form.dataset.hf119h='1';
+    var age=form.querySelector('[name=target_age_months]'),type=form.querySelector('[name=ration_type]'),guard=document.createElement('div');guard.className='hf119h-solve-guard';grid.parentNode.insertBefore(guard,grid);var labels=[].slice.call(grid.querySelectorAll('.solve-feed'));
+    labels.forEach(function(label){if(!isCalfPeriodFeed(label.querySelector('b')?.textContent))return;var note=document.createElement('small');note.className='hf119h-age-note';note.textContent='Ürün kullanım dönemi: 60–120 gün';label.querySelector('span')?.appendChild(note)});
+    function sync(){var incompatible=(type?.value||'Besi')!=='Süt'&&ageIncompatible(age?.value),blocked=[];labels.forEach(function(label){if(!isCalfPeriodFeed(label.querySelector('b')?.textContent))return;var c=label.querySelector('input[type=checkbox]');label.classList.toggle('hf119h-incompatible',incompatible);if(c){if(incompatible&&c.checked){c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}))}c.disabled=incompatible}if(incompatible)blocked.push(label.querySelector('b')?.textContent||'Buzağı büyütme yemi')});guard.classList.toggle('on',blocked.length>0);guard.textContent=blocked.length?'⚠ '+blocked.join(', ')+' hedef yaşla uyumsuz. Kaynak kullanım dönemi 60–120 gündür; yem seçim dışı bırakıldı.':''}
+    age?.addEventListener('input',sync);age?.addEventListener('change',sync);type?.addEventListener('change',sync);sync();
+  }
+
+  function initTargetBars(){
+    var target=document.querySelector('.science-target-grid');if(!target||target.dataset.hf119hBars==='1')return;target.dataset.hf119hBars='1';var busy=false;
+    function nums(text){return (String(text||'').replace(/,/g,'.').match(/\d+(?:\.\d+)?/g)||[]).map(Number)}
+    function model(row){var t=nums(row.querySelector('[id$="-target"]')?.textContent),c=nums(row.querySelector('[id$="-current"]')?.textContent);if(!t.length||!c.length)return null;var actual=c[0],lo,hi;if(t.length>=2){lo=t[0];hi=t[1]}else{lo=t[0]*(String(row.querySelector('[id$="-target"]')?.textContent||'').indexOf('≥')>=0?1:.92);hi=t[0]*1.08}var max=Math.max(hi*1.28,actual*1.10,1),pct=function(v){return Math.max(0,Math.min(100,v/max*100))};return{actual:pct(actual),lo:pct(lo),hi:pct(hi),title:'Hedef '+trFmt(lo,1)+'–'+trFmt(hi,1)+' · Rasyon '+trFmt(actual,1)}}
+    function paint(box,row){var m=model(row);if(!m)return;var bar=box.querySelector(':scope > .hf119h-range');if(!bar){bar=document.createElement('div');bar.className='hf119h-range';bar.innerHTML='<i class="zone"></i><b class="fill"></b><span class="needle"></span>';box.appendChild(bar)}bar.title=m.title;bar.querySelector('.zone').style.left=m.lo+'%';bar.querySelector('.zone').style.width=Math.max(1,m.hi-m.lo)+'%';bar.querySelector('.fill').style.width=m.actual+'%';bar.querySelector('.needle').style.left='calc('+m.actual+'% - 1px)'}
+    function sync(){busy=false;target.querySelectorAll('.science-target-row').forEach(function(row){if(!row.id.endsWith('-cost')&&!row.id.endsWith('-ph'))paint(row,row)});document.querySelectorAll('.wb2-kpi[data-key],.wb2-desktop-kpi[data-key]').forEach(function(box){var row=document.getElementById('target-mini-'+box.dataset.key);if(row)paint(box,row)})}
+    function schedule(){if(!busy){busy=true;requestAnimationFrame(sync)}}new MutationObserver(schedule).observe(target,{subtree:true,childList:true,characterData:true});setTimeout(sync,0);
+  }
+  function init(){initWorkbench();initSolveAgeGuard();initTargetBars()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+"""
+
+_old_page_hotfix119h = page
+
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix119h(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX119H_FUNCTIONAL_RATION_UI + '</body>')
+
+# Hotfix1.21 — reference UI: Çözüm Durumu Yem Havuzu altında, modern KPI kartları, kompakt kilitler.
+HOTFIX121_REFERENCE_UI = r'''
+<style id="hotfix121-reference-ui">
+@media(min-width:901px){
+ body.erp-ration-reference .erp-ration-layout{grid-template-columns:250px minmax(0,1fr)!important;gap:12px!important}
+ body.erp-ration-reference .erp-ration-left{display:flex!important;flex-direction:column!important;gap:10px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-decision-rail{position:static!important;grid-column:auto!important;width:100%!important;margin:0!important;max-height:none!important;box-shadow:0 3px 12px rgba(19,65,40,.07)!important}
+ body.erp-ration-reference .erp-ration-left .wb2-body{display:block!important;padding:10px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-status-track{display:none!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section{padding:6px 0!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section:nth-of-type(2),body.erp-ration-reference .erp-ration-left .wb2-section:nth-of-type(4){display:none!important}
+ body.erp-ration-reference .erp-ration-left .wb2-facts{grid-template-columns:repeat(3,1fr)!important;gap:5px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-head{padding:10px 11px!important;background:#f8fbf9!important}
+}
+/* Referans görseldeki modern KPI kartları */
+.wb2-desktop-kpis{padding:12px!important;border:1px solid #dce7e0!important;border-radius:13px!important;box-shadow:0 4px 16px rgba(18,67,41,.055)!important;background:#fff!important}
+.wb2-desktop-kpi-head{margin-bottom:10px!important}.wb2-desktop-kpi-head b{font-size:14px!important}.wb2-desktop-kpi-head span{display:none!important}
+.wb2-desktop-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important}
+.wb2-desktop-kpi{position:relative!important;display:block!important;min-height:112px!important;padding:14px 14px 12px 58px!important;border:1px solid #a8dec0!important;border-left:1px solid #a8dec0!important;border-radius:11px!important;background:linear-gradient(135deg,#f8fffb,#eefaf3)!important;overflow:hidden!important}
+.wb2-desktop-kpi:nth-child(2){border-color:#a9cdfb!important;background:linear-gradient(135deg,#f8fbff,#edf5ff)!important}.wb2-desktop-kpi:nth-child(3){border-color:#f2c38f!important;background:linear-gradient(135deg,#fffaf5,#fff0e1)!important}.wb2-desktop-kpi:nth-child(4){border-color:#cfb6f5!important;background:linear-gradient(135deg,#fbf9ff,#f3edff)!important}
+.wb2-desktop-kpi::before{position:absolute;left:14px;top:15px;font-size:27px;line-height:1}.wb2-desktop-kpi:nth-child(1)::before{content:'🌿'}.wb2-desktop-kpi:nth-child(2)::before{content:'🔬'}.wb2-desktop-kpi:nth-child(3)::before{content:'💪'}.wb2-desktop-kpi:nth-child(4)::before{content:'🌱'}
+.wb2-desktop-kpi-name b{font-size:17px!important}.wb2-desktop-kpi-name small{display:block!important;font-size:9px!important;margin-top:1px!important;color:#65766c!important}
+.wb2-desktop-kpi-values{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:16px!important}.wb2-desktop-kpi-values small{font-size:8px!important}.wb2-desktop-kpi-values b{font-size:14px!important}
+.wb2-desktop-kpi-status{position:absolute!important;right:11px!important;top:13px!important;width:20px!important;height:20px!important;overflow:hidden!important;padding:0!important;border-radius:50%!important;font-size:0!important;background:#10a15b!important}.wb2-desktop-kpi-status::after{content:'✓';font-size:12px!important;color:#fff;display:grid;place-items:center;height:20px}
+.wb2-desktop-kpi.warn .wb2-desktop-kpi-status{background:#e7a31a!important}.wb2-desktop-kpi.bad .wb2-desktop-kpi-status{background:#d94b43!important}
+.wb2-desktop-kpi .hf119h-range{display:none!important}
+.wb2-desktop-secondary{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-top:10px!important}.wb2-desktop-secondary>div{padding:9px 12px!important;border:1px solid #e0e9e3!important;border-radius:9px!important;background:#f8fbf9!important}.wb2-desktop-more{margin-top:8px!important}
+/* Kilit, eksi, miktar ve artı tek kompakt kontrol; ayrı satır oluşturmaz. */
+.ration-row td:nth-child(2){white-space:nowrap!important}.ration-row td:nth-child(2) .hf119h-lock{display:inline-grid!important;margin:0 5px 0 0!important;width:29px!important;height:29px!important;min-height:29px!important;vertical-align:middle!important;border-radius:7px!important}.ration-row td:nth-child(2) .ration-stepper{display:inline-flex!important;vertical-align:middle!important;align-items:center!important;gap:4px!important}.ration-row td:nth-child(2) .hf119h-feed-meta{display:flex!important;margin-top:5px!important;white-space:normal!important}
+@media(max-width:900px){
+ .hf119h-lock{width:25px!important;height:25px!important;min-height:25px!important;margin:0 3px 0 0!important;font-size:11px!important}
+ .ration-row td:nth-child(2){display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:3px!important;min-width:0!important}.ration-row td:nth-child(2) .ration-stepper{display:flex!important;flex:1 1 auto!important;min-width:0!important;gap:2px!important}.ration-row td:nth-child(2) .ration-qty{min-width:44px!important;width:48px!important}.ration-row td:nth-child(2) .hf119h-feed-meta{flex-basis:100%!important;margin-top:2px!important}
+ .wb2-kpi .hf119h-range{display:none!important}
+}
+</style>
+<script id="hotfix121-reference-script">
+(()=>{const init=()=>{
+ const rail=document.querySelector('.wb2-decision-rail'),left=document.querySelector('.erp-ration-left');
+ if(rail&&left&&window.matchMedia('(min-width:901px)').matches)left.appendChild(rail);
+ document.querySelectorAll('.ration-row').forEach(row=>{const lock=row.querySelector('.hf119h-lock'),step=row.querySelector('.ration-stepper');if(lock&&step&&lock.nextElementSibling!==step)step.parentNode.insertBefore(lock,step)});
+ const notes={dm:'Kuru Madde',adg:'Performans',cp:'Protein',ndf:'Lif bandı'};document.querySelectorAll('.wb2-desktop-kpi[data-key]').forEach(k=>{const s=k.querySelector('.wb2-desktop-kpi-name small');if(s)s.textContent=notes[k.dataset.key]||s.textContent});
+};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,0));else setTimeout(init,0)})();
+</script>
+'''
+_old_page_hotfix121 = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix121(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX121_REFERENCE_UI + '</body>')
+
+
+# Hotfix1.22 — referans görsele göre rasyon masasını yeniden düzenler.
+# Hesap/solver çekirdeğine dokunmaz; yalnız DOM sunumu ve responsive yerleşim.
+HOTFIX122_REFERENCE_REBUILD = r"""
+<style id="hotfix122-reference-rebuild">
+@media(min-width:901px){
+ body.erp-ration-reference .erp-ration-layout{grid-template-columns:270px minmax(0,1fr)!important;gap:14px!important;align-items:start!important}
+ body.erp-ration-reference .erp-ration-left{overflow:visible!important;border:0!important;background:transparent!important;box-shadow:none!important;display:flex!important;flex-direction:column!important;gap:10px!important}
+ body.erp-ration-reference .erp-ration-left>.erp-panel-head,body.erp-ration-reference .erp-ration-left>.erp-panel-body{background:#fff!important;border-left:1px solid #dfe7e2!important;border-right:1px solid #dfe7e2!important}
+ body.erp-ration-reference .erp-ration-left>.erp-panel-head{border-top:1px solid #dfe7e2!important;border-radius:12px 12px 0 0!important;padding:11px 12px!important}
+ body.erp-ration-reference .erp-ration-left>.erp-panel-body{border-bottom:1px solid #dfe7e2!important;border-radius:0 0 12px 12px!important;padding:9px!important;margin-top:-10px!important}
+ body.erp-ration-reference #quick-feed-add .quick-feed-results{max-height:300px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-decision-rail{display:block!important;visibility:visible!important;position:static!important;width:100%!important;margin:0!important;max-height:none!important;overflow:visible!important;border:1px solid #dfe7e2!important;border-radius:12px!important;background:#fff!important;box-shadow:0 5px 18px rgba(19,65,40,.07)!important}
+ body.erp-ration-reference .erp-ration-left .wb2-head{padding:10px 12px!important;border-radius:12px 12px 0 0!important;background:#fff!important}
+ body.erp-ration-reference .erp-ration-left .wb2-body{display:block!important;padding:0 10px 10px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section{padding:6px 0!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section:nth-of-type(2),body.erp-ration-reference .erp-ration-left .wb2-section:nth-of-type(4){display:none!important}
+ body.erp-ration-reference .erp-ration-left .wb2-status-track{display:none!important}
+ body.erp-ration-reference .erp-ration-left .wb2-facts{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important}
+ body.erp-ration-reference .erp-ration-center{min-width:0!important}
+}
+/* KPI kartları: referanstaki dört renkli kart; eski progress şeritleri yok. */
+.wb2-desktop-kpis{padding:14px!important;border:1px solid #dce7e0!important;border-radius:14px!important;background:#fff!important;box-shadow:0 4px 16px rgba(18,67,41,.05)!important}
+.wb2-desktop-kpi-head{margin-bottom:12px!important}.wb2-desktop-kpi-head b{font-size:15px!important}.wb2-desktop-kpi-head span{display:none!important}
+.wb2-desktop-kpi-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important}
+.wb2-desktop-kpi{position:relative!important;min-height:118px!important;padding:16px 14px 13px 62px!important;border-radius:12px!important;border:1px solid #9eddb9!important;background:linear-gradient(135deg,#f9fffb,#eaf8ef)!important;box-shadow:0 2px 7px rgba(25,72,45,.035)!important}
+.wb2-desktop-kpi:nth-child(2){border-color:#8fc3ff!important;background:linear-gradient(135deg,#fbfdff,#eaf4ff)!important}.wb2-desktop-kpi:nth-child(3){border-color:#f3bd82!important;background:linear-gradient(135deg,#fffdf9,#ffedda)!important}.wb2-desktop-kpi:nth-child(4){border-color:#c8a9f5!important;background:linear-gradient(135deg,#fdfbff,#f0e8ff)!important}
+.wb2-desktop-kpi::before{position:absolute;left:16px;top:17px;font-size:30px;line-height:1}.wb2-desktop-kpi:nth-child(1)::before{content:'🌿'}.wb2-desktop-kpi:nth-child(2)::before{content:'🔬'}.wb2-desktop-kpi:nth-child(3)::before{content:'💪'}.wb2-desktop-kpi:nth-child(4)::before{content:'🌱'}
+.wb2-desktop-kpi-name b{font-size:18px!important;line-height:1!important}.wb2-desktop-kpi-name small{display:block!important;margin-top:4px!important;font-size:10px!important;color:#66766d!important}.wb2-desktop-kpi-values{display:grid!important;grid-template-columns:1fr 1fr!important;gap:12px!important;margin-top:20px!important}.wb2-desktop-kpi-values small{font-size:8px!important;text-transform:uppercase!important}.wb2-desktop-kpi-values b{font-size:14px!important}.wb2-desktop-kpi-status{position:absolute!important;right:13px!important;top:14px!important;width:22px!important;height:22px!important;padding:0!important;border-radius:50%!important;background:#0aa25a!important;font-size:0!important}.wb2-desktop-kpi-status:after{content:'✓';display:grid;place-items:center;height:22px;color:#fff;font-size:13px!important}.wb2-desktop-kpi .hf119h-range{display:none!important}
+.wb2-desktop-secondary{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-top:10px!important}.wb2-desktop-secondary>div{padding:10px 12px!important;border:1px solid #e0e9e3!important;border-radius:10px!important;background:#f8fbf9!important}.wb2-desktop-more{margin-top:8px!important}
+/* Referanstaki kompakt, fotoğraflı tablo. */
+#ration-workbench{border-radius:14px!important;border:1px solid #dce7e0!important;box-shadow:0 4px 16px rgba(18,67,41,.045)!important}
+#ration-workbench .workbench-head{padding:12px 14px!important;background:#fff!important}#ration-workbench .workbench-head h3{font-size:15px!important}
+.ration-workbench-table{counter-reset:feedrow;border-collapse:separate!important;border-spacing:0!important;min-width:760px!important}
+.ration-workbench-table thead th{background:#f4f8f5!important;padding:9px 8px!important;font-size:10px!important;border-bottom:1px solid #dce7e0!important}
+.ration-workbench-table tr.ration-row{counter-increment:feedrow;background:#fff!important}.ration-workbench-table tr.ration-row:nth-child(even){background:#f9fbfa!important}
+.ration-workbench-table tr.ration-row td{padding:8px!important;border-bottom:1px solid #e7ede9!important;vertical-align:middle!important}
+.ration-workbench-table tr.ration-row td:first-child{position:relative!important;padding-left:66px!important;font-weight:900!important;min-height:48px!important}
+.ration-workbench-table tr.ration-row td:first-child:before{content:counter(feedrow);position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:10px;color:#66776d}
+.ration-workbench-table tr.ration-row td:first-child:after{content:'🌾';position:absolute;left:27px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#eef6f0;font-size:20px;box-shadow:inset 0 0 0 1px #dce8df}
+.ration-workbench-table tr.ration-row[data-feed-name*='MISIR'] td:first-child:after,.ration-workbench-table tr.ration-row[data-feed-name*='Mısır'] td:first-child:after{content:'🌽';background:#fff3d9}.ration-workbench-table tr.ration-row[data-feed-name*='YONCA'] td:first-child:after{content:'🌿';background:#eaf7e8}.ration-workbench-table tr.ration-row[data-feed-name*='YEMİ'] td:first-child:after{content:'🥣';background:#fff0dc}
+.ration-row td:nth-child(2){white-space:nowrap!important}.ration-row td:nth-child(2) .hf119h-lock{display:inline-grid!important;margin:0 4px 0 0!important;width:28px!important;height:28px!important;min-height:28px!important;vertical-align:middle!important}.ration-row td:nth-child(2) .ration-stepper{display:inline-flex!important;align-items:center!important;gap:3px!important;vertical-align:middle!important}.ration-row td:nth-child(2) .ration-stepper .btn{width:28px!important;height:28px!important;min-height:28px!important;padding:0!important}.ration-row td:nth-child(2) .ration-qty{width:54px!important;height:28px!important}.ration-row td:nth-child(2) .hf119h-feed-meta{display:flex!important;margin-top:4px!important;font-size:8px!important}
+.hf122-total td{padding:10px 12px!important;background:#fff0df!important;border-top:1px solid #ffd6ad!important;font-weight:900!important}.hf122-total .sum-label{color:#7a4a18}.hf122-total .sum-value{text-align:right;color:#6c3d10}
+/* Rasyon bilgileri drawer */
+.ration-info-details[open]{border-radius:14px 0 0 14px!important;box-shadow:-20px 0 55px rgba(20,60,38,.18)!important}
+@media(max-width:900px){
+ .ration-row td:nth-child(2){display:grid!important;grid-template-columns:26px minmax(0,1fr)!important;align-items:center!important;gap:4px!important;width:100%!important}.ration-row td:nth-child(2) .hf119h-lock{grid-column:1!important;margin:0!important;width:25px!important;height:25px!important;min-height:25px!important}.ration-row td:nth-child(2) .ration-stepper{grid-column:2!important;width:100%!important;display:grid!important;grid-template-columns:34px minmax(46px,1fr) 34px!important;gap:3px!important}.ration-row td:nth-child(2) .ration-stepper .btn{width:34px!important;height:34px!important;min-height:34px!important}.ration-row td:nth-child(2) .ration-qty{width:100%!important;min-width:0!important;height:34px!important}.ration-row td:nth-child(2) .hf119h-feed-meta{grid-column:1/-1!important;margin-top:1px!important}
+ .wb2-kpi .hf119h-range{display:none!important}
+}
+</style>
+<script id="hotfix122-reference-rebuild-script">
+(function(){
+ function init(){
+  var left=document.querySelector('.erp-ration-left'),rail=document.querySelector('.wb2-decision-rail');
+  if(left&&rail&&window.matchMedia('(min-width:901px)').matches) left.appendChild(rail);
+  var table=document.querySelector('.ration-workbench-table'); if(!table||table.dataset.hf122==='1')return; table.dataset.hf122='1';
+  var tbody=table.querySelector('tbody'); if(tbody){
+   var tr=document.createElement('tr');tr.className='hf122-total';tr.innerHTML='<td colspan="5" class="sum-label">Σ Toplam</td><td colspan="3" class="sum-value"><span id="hf122-total-cost">—</span></td>';tbody.appendChild(tr);
+   function sync(){var cost=document.getElementById('target-mini-cost-current')?.textContent||document.getElementById('wb2-desktop-cost')?.textContent||'—';var x=document.getElementById('hf122-total-cost');if(x)x.textContent='Günlük '+cost;}
+   sync();var src=document.getElementById('target-mini-cost-current');if(src)new MutationObserver(sync).observe(src,{subtree:true,childList:true,characterData:true});
+  }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(init)});else requestAnimationFrame(init);
+})();
+</script>
+"""
+_old_page_hotfix122 = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122_REFERENCE_REBUILD + '</body>')
+
+
+# Hotfix1.22a — mobil yem satırlarını tek satır kontrol düzeninde sıkıştırır.
+# Solver/veri hesabına dokunmaz.
+HOTFIX122A_MOBILE_ROWS = r"""
+<style id="hotfix122a-mobile-rows">
+@media(max-width:900px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row{
+  grid-template-columns:42px minmax(0,1fr) 142px 36px!important;
+  grid-template-areas:'thumb name qty remove' 'thumb price daily daily'!important;
+  align-items:center!important;column-gap:6px!important;row-gap:4px!important;
+  min-height:72px!important;padding:8px 9px!important;margin-bottom:6px!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{width:40px!important;height:40px!important;font-size:22px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){padding:0!important;border:0!important;min-width:0!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>b{font-size:13px!important;line-height:1.08!important;-webkit-line-clamp:2!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2){display:flex!important;grid-area:qty!important;flex-flow:row nowrap!important;align-items:center!important;justify-content:flex-end!important;gap:3px!important;width:142px!important;min-width:142px!important;max-width:142px!important;white-space:nowrap!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .hf119h-lock{display:grid!important;flex:0 0 28px!important;width:28px!important;height:32px!important;min-height:32px!important;margin:0!important;padding:0!important;border-radius:8px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper{display:grid!important;grid-template-columns:30px 48px 30px!important;flex:0 0 114px!important;width:114px!important;min-width:114px!important;gap:3px!important;margin:0!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper .btn{width:30px!important;height:32px!important;min-height:32px!important;padding:0!important;border-radius:8px!important;font-size:18px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-qty{width:48px!important;min-width:48px!important;max-width:48px!important;height:32px!important;padding:2px!important;font-size:14px!important;border-radius:8px!important}
+ body:has(.workbench-shell) .ration-workbench-table .hf119h-feed-meta{display:flex!important;flex-wrap:wrap!important;gap:3px!important;margin:3px 0 0!important;font-size:8px!important;line-height:1!important;white-space:normal!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8){align-self:center!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8) .btn,body:has(.workbench-shell) .ration-workbench-table .qty-zero{width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;border-radius:8px!important;font-size:0!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8) .btn::after,body:has(.workbench-shell) .ration-workbench-table .qty-zero::after{content:'🗑️';font-size:16px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(6),body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(7){font-size:10px!important;line-height:1!important}
+ .hf122-total{display:none!important}
+}
+@media(max-width:390px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row{grid-template-columns:38px minmax(0,1fr) 132px 32px!important;padding:7px!important;column-gap:5px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{width:36px!important;height:36px!important;font-size:20px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2){width:132px!important;min-width:132px!important;max-width:132px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .hf119h-lock{flex-basis:26px!important;width:26px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper{grid-template-columns:28px 44px 28px!important;flex-basis:106px!important;width:106px!important;min-width:106px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper .btn{width:28px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-qty{width:44px!important;min-width:44px!important;max-width:44px!important}
+}
+</style>
+<script id="hotfix122a-mobile-rows-script">
+(function(){function init(){if(!matchMedia('(max-width:900px)').matches)return;document.querySelectorAll('.ration-row').forEach(function(row){var qty=row.children[1],name=row.children[0];if(!qty||!name)return;var meta=qty.querySelector('.hf119h-feed-meta');if(meta&&!name.contains(meta))name.appendChild(meta);});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(init)});else requestAnimationFrame(init);})();
+</script>
+"""
+_old_page_hotfix122a = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122a(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122A_MOBILE_ROWS + '</body>')
+
+# Hotfix1.22b — referans görsele yakın masaüstü çalışma masası + mobil koruma.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22b'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122B_PIXEL_UI = r'''
+<style id="hotfix122b-pixel-ui">
+@media(min-width:901px){
+ body.erp-ration-reference .workbench-shell{max-width:none!important}
+ body.erp-ration-reference .erp-ration-layout{grid-template-columns:255px minmax(0,1fr)!important;gap:10px!important;align-items:start!important}
+ body.erp-ration-reference .erp-ration-left{position:sticky!important;top:84px!important;align-self:start!important;gap:8px!important}
+ body.erp-ration-reference .erp-ration-left>.erp-panel{border-radius:10px!important;box-shadow:0 2px 8px rgba(18,67,41,.05)!important}
+ body.erp-ration-reference #quick-feed-add .quick-feed-results{max-height:430px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-decision-rail{display:block!important;position:static!important;visibility:visible!important;opacity:1!important;transform:none!important;max-height:none!important;overflow:visible!important;border-radius:10px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-head{padding:8px 10px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-body{padding:7px 9px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section{padding:4px 0!important}
+ body.erp-ration-reference .erp-ration-left .wb2-section h4{font-size:8px!important;margin:0 0 4px!important}
+ body.erp-ration-reference .erp-ration-left .wb2-reasons,body.erp-ration-reference .erp-ration-left .wb2-all-good{font-size:9px!important;line-height:1.25!important}
+ body.erp-ration-reference .erp-ration-left .wb2-fact{padding:6px!important}.erp-ration-left .wb2-fact span{font-size:7px!important}.erp-ration-left .wb2-fact b{font-size:10px!important}
+ body.wb2-desktop .wb2-desktop-profile{min-height:46px!important;padding:8px 12px!important;border-radius:10px!important;margin-bottom:8px!important}
+ body.wb2-desktop .wb2-desktop-kpis{padding:11px!important;border-radius:11px!important;margin-bottom:10px!important}
+ body.wb2-desktop .wb2-desktop-kpi-grid{gap:8px!important}
+ body.wb2-desktop .wb2-desktop-kpi{min-height:126px!important;padding:14px 12px 24px 56px!important;border-radius:10px!important}
+ body.wb2-desktop .wb2-desktop-kpi .hf119h-range{display:block!important;position:absolute!important;left:12px!important;right:12px!important;bottom:10px!important;height:5px!important;margin:0!important;border-radius:99px!important;background:#dce9e0!important;overflow:visible!important}
+ body.wb2-desktop .wb2-desktop-kpi .hf119h-range .zone{position:absolute!important;top:0!important;height:5px!important;border-radius:99px!important;background:rgba(27,164,91,.22)!important}
+ body.wb2-desktop .wb2-desktop-kpi .hf119h-range .fill{position:absolute!important;left:0!important;top:1px!important;height:3px!important;border-radius:99px!important;background:#10a15b!important}
+ body.wb2-desktop .wb2-desktop-kpi:nth-child(2) .hf119h-range .fill{background:#2693e6!important}body.wb2-desktop .wb2-desktop-kpi:nth-child(3) .hf119h-range .fill{background:#f08a24!important}body.wb2-desktop .wb2-desktop-kpi:nth-child(4) .hf119h-range .fill{background:#7b45d6!important}
+ body.wb2-desktop .wb2-desktop-kpi .hf119h-range .needle{position:absolute!important;top:-3px!important;width:2px!important;height:11px!important;background:#244f37!important;border-radius:2px!important}
+ body.wb2-desktop .wb2-desktop-secondary{margin-top:8px!important}.wb2-desktop-secondary>div{padding:8px 11px!important}
+ body.wb2-desktop #ration-workbench{border-radius:11px!important;box-shadow:0 3px 12px rgba(18,67,41,.05)!important}
+ body.wb2-desktop #ration-workbench .workbench-head{min-height:46px!important;padding:9px 12px!important;background:#fff!important}
+ body.wb2-desktop #ration-workbench form{padding:0 10px 10px!important}
+ body.wb2-desktop .ration-workbench-table{min-width:0!important;width:100%!important;border-collapse:separate!important;border-spacing:0!important;font-size:10px!important}
+ body.wb2-desktop .ration-workbench-table thead th{height:31px!important;padding:6px 8px!important;background:#f1f7f3!important;border-top:1px solid #dce8df!important;border-bottom:1px solid #dce8df!important;color:#244c35!important;font-size:9px!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row{counter-increment:feedrow!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row td{height:49px!important;padding:5px 8px!important;border-bottom:1px solid #e5ece7!important;background:#fff!important;vertical-align:middle!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row:nth-child(even) td{background:#fbfdfc!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row td:first-child{position:relative!important;padding-left:68px!important;font-size:10.5px!important;font-weight:900!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row td:first-child:before{left:9px!important;font-size:9px!important}
+ body.wb2-desktop .ration-workbench-table tr.ration-row td:first-child:after{left:27px!important;width:32px!important;height:32px!important;border-radius:7px!important;font-size:20px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .hf119h-lock{width:27px!important;height:27px!important;min-height:27px!important;border-radius:6px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .ration-stepper .btn{width:27px!important;height:27px!important;min-height:27px!important;border-radius:6px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .ration-qty{width:51px!important;height:27px!important;border-radius:6px!important;font-weight:900!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .hf119h-feed-meta{gap:3px!important;margin-top:3px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .hf119h-feed-meta>*{padding:2px 4px!important;border-radius:99px!important;background:#edf5ef!important;color:#587063!important}
+ body.wb2-desktop .ration-row td:last-child .btn{width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;border-radius:6px!important;font-size:0!important;background:#ef4444!important}
+ body.wb2-desktop .ration-row td:last-child .btn:after{content:'🗑';font-size:15px!important;color:#fff!important}
+ body.wb2-desktop .hf122-total td{height:38px!important;padding:8px 12px!important;background:#fff0dc!important;color:#6d431c!important}
+ body.wb2-desktop .wb2-desktop-dock{position:static!important;left:auto!important;bottom:auto!important;width:100%!important;margin:0!important;padding:9px 10px!important;border:1px solid #dfe8e2!important;border-top:0!important;border-radius:0 0 11px 11px!important;box-shadow:none!important;background:#fff!important;display:flex!important;justify-content:flex-end!important;gap:8px!important}
+ body.wb2-desktop .wb2-desktop-dock .btn{min-height:34px!important;border-radius:7px!important;padding:7px 14px!important}
+ body.wb2-desktop .wb2-desktop-dock .wb2-desktop-save{min-width:230px!important;background:#0b9855!important}
+ body.wb2-desktop .wb2-desktop-dock .wb2-desktop-reset{min-width:105px!important}
+ body.wb2-desktop .wb2-desktop-dock .wb2-desktop-add{min-width:105px!important}
+ body.wb2-desktop .ration-info-details[open]{position:fixed!important;z-index:1200!important;right:0!important;top:58px!important;bottom:0!important;width:min(390px,92vw)!important;height:auto!important;margin:0!important;padding:0!important;background:#fff!important;border:0!important;border-left:1px solid #dbe5de!important;border-radius:14px 0 0 0!important;overflow:auto!important;box-shadow:-18px 0 48px rgba(18,55,35,.18)!important}
+ body.wb2-desktop .ration-info-details[open]>summary{position:sticky!important;top:0!important;z-index:2!important;padding:16px!important;background:#fff!important;border-bottom:1px solid #e3eae5!important;font-size:16px!important}
+ body.wb2-desktop .ration-info-details[open] .ration-info-body{padding:14px!important}
+}
+/* 1.22a mobil mimarisini koru; masaüstü kuralları telefona sızmasın. */
+@media(max-width:900px){
+ body.wb2-desktop .wb2-desktop-dock{display:none!important}
+ .wb2-decision-rail{position:static!important;transform:none!important}
+}
+</style>
+<script id="hotfix122b-pixel-script">
+(function(){function init(){if(!matchMedia('(min-width:901px)').matches)return;var left=document.querySelector('.erp-ration-left'),rail=document.querySelector('.wb2-decision-rail');if(left&&rail&&!left.contains(rail))left.appendChild(rail);var dock=document.querySelector('.wb2-desktop-dock'),work=document.getElementById('ration-workbench');if(dock&&work&&dock.previousElementSibling!==work)work.insertAdjacentElement('afterend',dock);var save=dock&&dock.querySelector('.wb2-desktop-save');if(save&&save.textContent.indexOf('Değişiklikleri')>=0&&save.disabled)save.textContent='✓ Kaydedildi';}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(init)});else requestAnimationFrame(init);})();
+</script>
+'''
+_old_page_hotfix122b = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122b(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122B_PIXEL_UI + '</body>')
+
+# --- Hotfix 1.22c: desktop quantity breathing room + subtle remove action ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22c'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122C_QTY_UI = r'''
+<style id="hotfix122c-qty-ui">
+@media(min-width:901px){
+ body.wb2-desktop .ration-workbench-table th:nth-child(2),
+ body.wb2-desktop .ration-workbench-table td:nth-child(2){min-width:190px!important;width:190px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .hf119h-lock{width:30px!important;height:30px!important;min-height:30px!important;margin-right:5px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .ration-stepper{display:inline-grid!important;grid-template-columns:32px 68px 32px!important;gap:5px!important;width:142px!important;min-width:142px!important;vertical-align:middle!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .ration-stepper .btn{width:32px!important;height:30px!important;min-height:30px!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .ration-qty{box-sizing:border-box!important;width:68px!important;min-width:68px!important;max-width:68px!important;height:30px!important;padding:2px 7px!important;font-size:14px!important;text-align:center!important}
+ body.wb2-desktop .ration-row td:nth-child(2) .hf119h-feed-meta{clear:both!important;margin-top:4px!important;max-width:188px!important}
+ body.wb2-desktop .ration-row td:last-child .btn{width:30px!important;height:30px!important;min-height:30px!important;border:1px solid #f3c9c9!important;border-radius:8px!important;background:#fff4f4!important;color:#d93636!important;box-shadow:none!important;font-size:0!important;transition:.15s ease!important}
+ body.wb2-desktop .ration-row td:last-child .btn:after{content:'⌫'!important;font-family:Arial,sans-serif!important;font-size:17px!important;font-weight:700!important;line-height:1!important;color:#d93636!important}
+ body.wb2-desktop .ration-row td:last-child .btn:hover{background:#ffe6e6!important;border-color:#eeaaaa!important;transform:none!important}
+ body.wb2-desktop .ration-row td:last-child .btn:hover:after{color:#b91c1c!important}
+}
+/* Mobile remains governed by 1.22a compact-card rules. */
+</style>
+'''
+_old_page_hotfix122c = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122c(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122C_QTY_UI + '</body>')
+
+# --- Hotfix 1.22d: restore a clear, elegant trash-can icon on desktop ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22d'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122D_TRASH_UI = r'''
+<style id="hotfix122d-trash-ui">
+@media(min-width:901px){
+ body.wb2-desktop .ration-row td:last-child .btn{
+   position:relative!important;width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;
+   padding:0!important;border:1px solid #f2caca!important;border-radius:9px!important;background:#fff3f3!important;
+   color:#dc3b3b!important;box-shadow:none!important;font-size:0!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ }
+ body.wb2-desktop .ration-row td:last-child .btn:after{
+   content:''!important;display:block!important;width:17px!important;height:18px!important;background:currentColor!important;
+   -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M4 7h16M9 7V4h6v3m-9 0 1 14h10l1-14M10 11v6m4-6v6'/%3E%3C/svg%3E") center/contain no-repeat!important;
+   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M4 7h16M9 7V4h6v3m-9 0 1 14h10l1-14M10 11v6m4-6v6'/%3E%3C/svg%3E") center/contain no-repeat!important;
+ }
+ body.wb2-desktop .ration-row td:last-child .btn:hover{background:#ffe5e5!important;border-color:#eba8a8!important;color:#bd2424!important}
+}
+</style>
+'''
+_old_page_hotfix122d = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122d(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122D_TRASH_UI + '</body>')
+
+# --- Hotfix 1.22e: mobile 2x2 target cards + compact solution status + dock clearance ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22e'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122E_MOBILE_TARGET_UI = r'''
+<style id="hotfix122e-mobile-target-ui">
+@media(max-width:900px){
+  /* 1.22e: sabit alt işlem çubuğu son yem satırının üstüne binmesin. */
+  body:has(.workbench-shell) .main{padding-bottom:190px!important}
+  body:has(.workbench-shell) #ration-workbench{padding-bottom:8px!important}
+  body:has(.workbench-shell) .ration-workbench-table tr.ration-row:last-child{margin-bottom:18px!important}
+
+  /* Çözüm Durumu: varsayılan görünüm tek, sade özet satırı. Ayrıntı istenirse açılır. */
+  body:has(.workbench-shell) .wb2-decision-rail{border:1px solid #dbe7df!important;border-radius:12px!important;background:#fff!important;overflow:hidden!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-head{min-height:44px!important;padding:7px 9px!important;gap:6px!important;background:#f8fbf9!important;border-bottom:0!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-head>b{font-size:12px!important;white-space:nowrap!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-mobile-count{margin-left:auto!important;font-size:9px!important;color:#66776d!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:34vw!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-current{padding:4px 7px!important;font-size:9px!important;white-space:nowrap!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-mobile-open{width:30px!important;height:30px!important;min-width:30px!important;padding:0!important;border:1px solid #dbe5de!important;border-radius:8px!important;background:#fff!important;color:#315b43!important;font-size:0!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-mobile-open:after{content:'⌄';font-size:18px!important;font-weight:900!important;line-height:1!important}
+  body:has(.workbench-shell) .wb2-decision-rail.wb2-mobile-expanded .wb2-mobile-open:after{content:'⌃'}
+  body:has(.workbench-shell) .wb2-decision-rail:not(.wb2-mobile-expanded) .wb2-body{display:none!important}
+  body:has(.workbench-shell) .wb2-decision-rail.wb2-mobile-expanded .wb2-body{display:block!important;padding:8px 9px 10px!important;border-top:1px solid #edf2ee!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-status-track{gap:4px!important;margin-bottom:7px!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-state{padding:5px 3px!important;font-size:8px!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-state span{font-size:12px!important;margin-bottom:1px!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-section{padding:6px 0!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-section h4{margin-bottom:4px!important;font-size:8px!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-lock-note{display:none!important}
+
+  /* Hedef kartları: telefonda gerçek 2x2, renk kodlu modern kartlar. */
+  body:has(.workbench-shell) .wb2-kpi-dashboard{margin:0!important}
+  body:has(.workbench-shell) .wb2-kpi-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  body:has(.workbench-shell) .wb2-kpi{position:relative!important;min-width:0!important;min-height:106px!important;padding:10px!important;border:1px solid transparent!important;border-left:0!important;border-radius:13px!important;overflow:hidden!important;box-shadow:0 2px 8px rgba(24,57,39,.055)!important}
+  body:has(.workbench-shell) .wb2-kpi:before{content:'';position:absolute;right:-18px;top:-18px;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.42)}
+  body:has(.workbench-shell) .wb2-kpi[data-key="dm"]{background:linear-gradient(145deg,#eaf7ee,#f8fcf9)!important;border-color:#cce7d4!important}
+  body:has(.workbench-shell) .wb2-kpi[data-key="adg"]{background:linear-gradient(145deg,#eaf3ff,#f8fbff)!important;border-color:#cddff4!important}
+  body:has(.workbench-shell) .wb2-kpi[data-key="cp"]{background:linear-gradient(145deg,#fff5df,#fffbf2)!important;border-color:#f1dfb8!important}
+  body:has(.workbench-shell) .wb2-kpi[data-key="ndf"]{background:linear-gradient(145deg,#f1ecff,#fbf9ff)!important;border-color:#ddd1f5!important}
+  body:has(.workbench-shell) .wb2-kpi.warn{background:linear-gradient(145deg,#fff1cf,#fffaf0)!important;border-color:#ebce86!important}
+  body:has(.workbench-shell) .wb2-kpi.bad{background:linear-gradient(145deg,#ffe8e5,#fff6f5)!important;border-color:#efc0bc!important}
+  body:has(.workbench-shell) .wb2-kpi-top{position:relative;z-index:1;align-items:center!important}
+  body:has(.workbench-shell) .wb2-kpi-name{font-size:14px!important;letter-spacing:-.15px!important}
+  body:has(.workbench-shell) .wb2-kpi-status{max-width:74px!important;padding:3px 5px!important;font-size:7.5px!important;background:rgba(255,255,255,.72)!important;border:1px solid rgba(28,87,53,.08)!important}
+  body:has(.workbench-shell) .wb2-kpi-values{position:relative;z-index:1;grid-template-columns:1fr 1fr!important;gap:5px!important;margin-top:12px!important}
+  body:has(.workbench-shell) .wb2-kpi-values small{font-size:7.5px!important;color:#6c7a71!important}
+  body:has(.workbench-shell) .wb2-kpi-values b{margin-top:3px!important;font-size:15px!important;color:#173d28!important}
+  body:has(.workbench-shell) .wb2-kpi-secondary{gap:5px!important;margin-top:6px!important}
+  body:has(.workbench-shell) .wb2-kpi-secondary>div{padding:6px 4px!important;border-radius:9px!important;background:#f7faf8!important}
+  body:has(.workbench-shell) .wb2-science-toggle{margin-top:6px!important;padding:7px!important;border-radius:9px!important;background:#f8fbf9!important}
+
+  /* Alt dock görünür kalır, fakat içerik için ayrılmış güvenli boşluğun üzerinde durur. */
+  body:has(.workbench-shell) .wb2-mobile-dock{bottom:42px!important;z-index:190!important}
+}
+@media(max-width:360px){
+  body:has(.workbench-shell) .wb2-kpi{min-height:100px!important;padding:8px!important}
+  body:has(.workbench-shell) .wb2-kpi-name{font-size:13px!important}
+  body:has(.workbench-shell) .wb2-kpi-values b{font-size:13px!important}
+  body:has(.workbench-shell) .wb2-decision-rail .wb2-mobile-count{display:none!important}
+}
+</style>
+'''
+_old_page_hotfix122e = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122e(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122E_MOBILE_TARGET_UI + '</body>')
+
+
+# --- Hotfix 1.22f: mısır flake katalog migrasyonu + ilk açılışta mobil yem ikonları ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22f'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122F_FEED_CATALOG_AND_MOBILE_THUMBS = r'''
+<style id="hotfix122f-feed-thumbs">
+.hf122f-feed-thumb{display:none}
+@media(max-width:900px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{content:none!important;display:none!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){
+   grid-area:auto!important;grid-column:1/3!important;grid-row:1!important;
+   display:flex!important;align-items:center!important;gap:7px!important;overflow:hidden!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>b{flex:1 1 auto;min-width:0!important}
+ body:has(.workbench-shell) .ration-workbench-table .hf122f-feed-thumb{
+   display:grid!important;place-items:center!important;flex:0 0 40px!important;
+   width:40px!important;height:40px!important;border-radius:50%!important;
+   background:#f1f6ed!important;border:1px solid #dce8d7!important;
+   font-size:22px!important;line-height:1!important;
+ }
+}
+@media(max-width:390px){
+ body:has(.workbench-shell) .ration-workbench-table .hf122f-feed-thumb{
+   flex-basis:36px!important;width:36px!important;height:36px!important;font-size:20px!important;
+ }
+}
+</style>
+'''
+_old_page_hotfix122f = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122f(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122F_FEED_CATALOG_AND_MOBILE_THUMBS + '</body>')
+
+
+# --- Hotfix 1.22g: okunabilir mobil yem kartları + masaüstü dilli mobil hedef kartları ---
+# Yalnız responsive sunum katmanıdır; solver ve hedef hesapları değişmez.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22g'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122G_MOBILE_RATION_READABILITY = r'''
+<style id="hotfix122g-mobile-ration-readability">
+@media(max-width:900px){
+ /* Yem kartı: gerçek ikon + geniş ad alanı + ayrı miktar kontrolleri. */
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row{
+   position:relative!important;
+   grid-template-columns:minmax(0,1fr) 114px 34px!important;
+   grid-template-areas:'name qty remove' 'price daily daily'!important;
+   column-gap:7px!important;row-gap:5px!important;
+   min-height:82px!important;padding:9px 10px!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){
+   grid-area:name!important;grid-column:auto!important;grid-row:auto!important;
+   display:grid!important;grid-template-columns:40px minmax(0,1fr)!important;
+   grid-template-rows:auto auto!important;align-items:center!important;
+   column-gap:8px!important;row-gap:2px!important;min-width:0!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table .hf122f-feed-thumb{
+   grid-column:1!important;grid-row:1/3!important;align-self:center!important;
+   width:40px!important;height:40px!important;min-width:40px!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>b{
+   grid-column:2!important;grid-row:1!important;min-width:0!important;padding:0!important;
+   font-size:13.5px!important;line-height:1.08!important;-webkit-line-clamp:2!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>.hf119h-feed-meta{
+   grid-column:2!important;grid-row:2!important;display:flex!important;align-items:center!important;
+   flex-wrap:wrap!important;gap:1px 4px!important;margin:1px 0 0!important;
+   color:#6a786f!important;font-size:8px!important;line-height:1.05!important;overflow:hidden!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>.hf119h-feed-meta span{
+   padding:0!important;border-radius:0!important;background:transparent!important;white-space:nowrap!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1)>.hf119h-feed-meta span+span:before{
+   content:'·';margin-right:4px;color:#a1aca5;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2){
+   grid-area:qty!important;display:block!important;width:114px!important;min-width:114px!important;max-width:114px!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper{
+   display:grid!important;grid-template-columns:30px 48px 30px!important;width:114px!important;min-width:114px!important;
+ }
+ /* Kilit işlevi korunur; ikonun üzerinde küçük bir rozet olur ve ad alanını daraltmaz. */
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .hf119h-lock{
+   position:absolute!important;left:38px!important;top:38px!important;z-index:3!important;
+   display:grid!important;width:22px!important;height:22px!important;min-width:22px!important;min-height:22px!important;
+   margin:0!important;border-radius:50%!important;background:#fff!important;box-shadow:0 1px 4px rgba(24,61,39,.14)!important;font-size:10px!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(8){grid-area:remove!important}
+
+ /* Masaüstü hedef kartlarının görsel dili, telefonda gerçek 2x2 düzen. */
+ body:has(.workbench-shell) .wb2-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+ body:has(.workbench-shell) .wb2-kpi{
+   position:relative!important;display:block!important;min-height:122px!important;
+   padding:12px 10px 10px 52px!important;border-width:1px!important;border-style:solid!important;
+   border-radius:12px!important;overflow:hidden!important;box-shadow:0 3px 10px rgba(20,60,38,.06)!important;
+ }
+ body:has(.workbench-shell) .wb2-kpi:before{
+   position:absolute!important;left:12px!important;right:auto!important;top:14px!important;
+   width:30px!important;height:30px!important;display:grid!important;place-items:center!important;
+   border-radius:9px!important;background:rgba(255,255,255,.72)!important;font-size:21px!important;line-height:1!important;
+ }
+ body:has(.workbench-shell) .wb2-kpi[data-key="dm"]:before{content:'🌿'!important}
+ body:has(.workbench-shell) .wb2-kpi[data-key="adg"]:before{content:'🔬'!important}
+ body:has(.workbench-shell) .wb2-kpi[data-key="cp"]:before{content:'💪'!important}
+ body:has(.workbench-shell) .wb2-kpi[data-key="ndf"]:before{content:'🌱'!important}
+ body:has(.workbench-shell) .wb2-kpi-top{display:block!important;min-width:0!important}
+ body:has(.workbench-shell) .wb2-kpi-name{display:block!important;font-size:16px!important;font-weight:900!important;line-height:1!important;color:#183d29!important}
+ body:has(.workbench-shell) .wb2-kpi-name:after{display:block;margin-top:4px;color:#6b7b71;font-size:8px;font-weight:750;line-height:1}
+ body:has(.workbench-shell) .wb2-kpi[data-key="dm"] .wb2-kpi-name:after{content:'Kuru madde tüketimi'}
+ body:has(.workbench-shell) .wb2-kpi[data-key="adg"] .wb2-kpi-name:after{content:'Günlük canlı ağırlık artışı'}
+ body:has(.workbench-shell) .wb2-kpi[data-key="cp"] .wb2-kpi-name:after{content:'Ham protein'}
+ body:has(.workbench-shell) .wb2-kpi[data-key="ndf"] .wb2-kpi-name:after{content:'Lif güvenlik bandı'}
+ body:has(.workbench-shell) .wb2-kpi-status{
+   position:absolute!important;right:8px!important;top:8px!important;max-width:64px!important;
+   padding:3px 6px!important;border-radius:99px!important;background:rgba(255,255,255,.82)!important;
+   font-size:7px!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+ }
+ body:has(.workbench-shell) .wb2-kpi-values{
+   display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;
+   margin-top:18px!important;padding-top:8px!important;border-top:1px solid rgba(37,91,57,.11)!important;
+ }
+ body:has(.workbench-shell) .wb2-kpi-values small{font-size:7px!important;letter-spacing:.25px!important;text-transform:uppercase!important}
+ body:has(.workbench-shell) .wb2-kpi-values b{font-size:14px!important;line-height:1.05!important;white-space:normal!important}
+}
+@media(max-width:390px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row{grid-template-columns:minmax(0,1fr) 106px 32px!important;padding:8px!important;column-gap:5px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(1){grid-template-columns:36px minmax(0,1fr)!important;column-gap:6px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2),
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper{width:106px!important;min-width:106px!important;max-width:106px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .ration-stepper{grid-template-columns:28px 44px 28px!important}
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2) .hf119h-lock{left:32px!important;top:35px!important;width:21px!important;height:21px!important;min-width:21px!important;min-height:21px!important}
+ body:has(.workbench-shell) .wb2-kpi{min-height:116px!important;padding:10px 8px 9px 46px!important}
+ body:has(.workbench-shell) .wb2-kpi:before{left:9px!important;top:11px!important;width:28px!important;height:28px!important;font-size:19px!important}
+ body:has(.workbench-shell) .wb2-kpi-name{font-size:14px!important}
+ body:has(.workbench-shell) .wb2-kpi-values{gap:5px!important;margin-top:15px!important}
+ body:has(.workbench-shell) .wb2-kpi-values b{font-size:12px!important}
+}
+</style>
+'''
+_old_page_hotfix122g = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122g(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122G_MOBILE_RATION_READABILITY + '</body>')
+
+
+# --- Hotfix 1.22h: iOS/Safari çift yem simgesi kesin temizliği ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22h'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122H_SINGLE_FEED_THUMB = r'''
+<style id="hotfix122h-single-feed-thumb">
+@media(max-width:900px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row::before{
+   content:''!important;display:none!important;visibility:hidden!important;opacity:0!important;
+   position:absolute!important;width:0!important;height:0!important;min-width:0!important;min-height:0!important;
+   margin:0!important;padding:0!important;border:0!important;background:none!important;overflow:hidden!important;
+ }
+ body:has(.workbench-shell) .ration-workbench-table .hf122f-feed-thumb{display:grid!important}
+}
+</style>
+<script id="hotfix122h-single-feed-thumb-script">
+(function(){
+ function init(){
+  if(!window.matchMedia('(max-width:900px)').matches)return;
+  document.querySelectorAll('.ration-workbench-table tr.ration-row').forEach(function(row){
+   row.removeAttribute('data-feed-icon');
+   var thumbs=row.querySelectorAll('.hf122f-feed-thumb');
+   for(var i=1;i<thumbs.length;i++)thumbs[i].remove();
+  });
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+'''
+HOTFIX122H_DESKTOP_TARGET_BOOT_CSS = r'''
+<style id="hotfix122h-desktop-target-boot">
+/* Eski hedef tablosunu ilk masaüstü boyamasında göstermeyip yeni kartları bekletir. */
+@media(min-width:901px){
+ body:has(.workbench-shell):not(.wb2-desktop-ready) .target-workspace{
+   visibility:hidden!important;opacity:0!important;
+ }
+ body:has(.workbench-shell).wb2-desktop-ready .target-workspace{
+   visibility:visible!important;opacity:1!important;
+ }
+}
+</style>
+'''
+HOTFIX122H_DESKTOP_TARGET_BOOT_JS = r'''
+<script id="hotfix122h-desktop-target-boot-script">
+(function(){
+ function init(){
+  if(!window.matchMedia('(min-width:901px)').matches)return;
+  var body=document.body,observer;
+  function ready(){
+   if(!document.querySelector('.wb2-desktop-kpis'))return false;
+   body.classList.add('wb2-desktop-ready');
+   if(observer)observer.disconnect();
+   return true;
+  }
+  if(ready())return;
+  observer=new MutationObserver(ready);
+  observer.observe(body,{childList:true,subtree:true});
+  /* Beklenmeyen JS hatasında eski bilimsel alanın kalıcı gizlenmesini önler. */
+  window.setTimeout(function(){body.classList.add('wb2-desktop-ready');observer.disconnect();},1500);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+'''
+_old_page_hotfix122h = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122h(title, body, path, user, flash)
+    html = html.replace('</head>', HOTFIX122H_DESKTOP_TARGET_BOOT_CSS + '</head>')
+    return html.replace('</body>', HOTFIX122H_SINGLE_FEED_THUMB + HOTFIX122H_DESKTOP_TARGET_BOOT_JS + '</body>')
+
+
+# --- Hotfix 1.22i: mobil yem kartında tek logo + temiz kilit rozeti ---
+# Yalnız responsive sunum katmanıdır; yem verileri ve solver hesapları değişmez.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22i'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122I_MOBILE_FEED_BADGES = r'''
+<style id="hotfix122i-mobile-feed-badges">
+@media(max-width:900px){
+ /* Eski sıra numarası ve CSS ile üretilen ikinci yem logosunu kesin olarak kaldır. */
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:first-child::before,
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:first-child::after{
+   content:none!important;display:none!important;visibility:hidden!important;opacity:0!important;
+   width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;
+ }
+ /* Satırda yalnız sunucudan gelen gerçek yem logosu görünür. */
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:first-child>.hf122f-feed-thumb{
+   display:grid!important;position:relative!important;left:auto!important;top:auto!important;
+   transform:none!important;margin:0!important;
+ }
+ /* Kilit, ikinci logo gibi görünmeden gerçek logonun köşesinde küçük rozet olarak kalır. */
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2)>.hf119h-lock{
+   left:38px!important;top:38px!important;width:20px!important;height:20px!important;
+   min-width:20px!important;min-height:20px!important;border:1px solid #c8d8ce!important;
+   background:#fffdf5!important;font-size:9px!important;line-height:1!important;
+ }
+}
+@media(max-width:390px){
+ body:has(.workbench-shell) .ration-workbench-table tr.ration-row td:nth-child(2)>.hf119h-lock{
+   left:33px!important;top:36px!important;width:19px!important;height:19px!important;
+   min-width:19px!important;min-height:19px!important;
+ }
+}
+</style>
+'''
+_old_page_hotfix122i = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122i(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122I_MOBILE_FEED_BADGES + '</body>')
+
+
+# --- Hotfix 1.22j: mobil Dashboard yoğunluğu + gerçek stok takibi ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22j'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122J_MOBILE_DASHBOARD = r'''
+<style id="hotfix122j-mobile-dashboard">
+@media(max-width:650px){
+ body.v118-shell .v117-kpi.v122j-month-net{
+   grid-template-columns:28px minmax(0,1fr)!important;column-gap:6px!important;
+ }
+ body.v118-shell .v117-kpi.v122j-month-net .ico{font-size:22px!important}
+ body.v118-shell .v117-kpi.v122j-month-net .v122j-money{
+   display:block!important;max-width:100%!important;white-space:nowrap!important;
+   overflow:visible!important;font-size:clamp(11px,3.45vw,15px)!important;
+   line-height:1.05!important;letter-spacing:-.55px!important;font-variant-numeric:tabular-nums!important;
+ }
+ /* Mobil özet kısa kalır; ayrıntının tamamı Tümünü Gör bağlantısında korunur. */
+ body.v118-shell .v122j-recent-panel .v122j-recent-row:nth-child(n+4){display:none!important}
+}
+</style>
+'''
+_old_page_hotfix122j = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122j(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122J_MOBILE_DASHBOARD + '</body>')
+
+
+# --- Hotfix 1.22k: tek Dashboard görünümü + kalıcı Modern/Klasik seçimi ---
+# Yalnız Dashboard sunum ve kullanıcı tercihi katmanıdır; solver hesapları değişmez.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22k'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122K_DASHBOARD_MODE = r'''
+<style id="hotfix122k-dashboard-mode">
+.v122k-dashboard-head{align-items:center!important}
+.v122k-dashboard-tools{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.v122k-dashboard-switch{display:inline-flex;gap:3px;padding:4px;border:1px solid #c9dbd0;border-radius:12px;background:#edf4ef;box-shadow:0 2px 7px rgba(24,61,39,.05)}
+.v122k-dashboard-switch form{display:flex;flex:1;margin:0}.v122k-dashboard-switch button{min-height:36px;padding:7px 14px;border:0;border-radius:9px;background:transparent;color:#486052;font:inherit;font-weight:850;cursor:pointer;white-space:nowrap}
+.v122k-dashboard-switch button:hover{background:#fff;color:#17653d}
+.v122k-dashboard-switch button.active{background:#176d42;color:#fff;box-shadow:0 2px 6px rgba(23,109,66,.22)}
+@media(max-width:650px){
+ body.v118-shell .v122k-dashboard-head{align-items:flex-start!important;gap:10px!important}
+ body.v118-shell .v122k-dashboard-tools{width:100%;align-items:flex-start;justify-content:space-between;gap:8px}
+ body.v118-shell .v122k-dashboard-switch{width:100%;box-sizing:border-box}
+ body.v118-shell .v122k-dashboard-switch form{display:flex;flex:1}body.v118-shell .v122k-dashboard-switch button{flex:1;min-width:0;min-height:40px;padding:8px 10px}
+}
+</style>
+'''
+_old_page_hotfix122k = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122k(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122K_DASHBOARD_MODE + '</body>')
+
+
+# --- Hotfix 1.22l: Dashboard tercih işlemi mobil tekrar-gönderim düzeltmesi ---
+# Solver ve görünüm tasarımı değişmez; yalnız idempotent tercih kaydı düzeltilir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22l'
+APP_LABEL='v'+APP_VERSION
+
+
+# --- Hotfix 1.22m: aktif padok rasyonundan günlük yem stok tüketimi ---
+# Solver değişmez; yalnız operasyonel stok muhasebesi idempotent biçimde eşitlenir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22q'
+APP_LABEL='v'+APP_VERSION
+
+
+# --- Hotfix 1.22r: mobil kompakt yem ekleme + buzağı kartı düşük çözünürlük ---
+# Solver/rasyon matematiği değişmez; yalnız responsive UI katmanıdır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22r'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122R_COMPACT_MOBILE = r'''<style id="hotfix122r-compact-mobile">
+.calf-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:start}
+.calf-entry-grid>.card{min-width:0!important;overflow:hidden}
+.calf-entry-grid .form{grid-template-columns:repeat(2,minmax(0,1fr))!important;min-width:0}
+.calf-entry-grid .form>*{min-width:0!important}
+.calf-entry-grid input,.calf-entry-grid select,.calf-entry-grid textarea{min-width:0!important;max-width:100%!important;width:100%!important;box-sizing:border-box!important}
+@media(max-width:1180px){
+ .calf-entry-grid{grid-template-columns:1fr 1fr!important;gap:10px!important}
+ .calf-entry-grid .card{padding:14px!important}
+ .calf-weight-form{grid-template-columns:1fr 1fr!important}
+ .calf-weight-form .full{grid-column:1/-1!important}
+}
+@media(max-width:760px){
+ .calf-entry-grid{grid-template-columns:1fr!important}
+ .calf-entry-grid .form{grid-template-columns:1fr!important}
+ .calf-entry-grid .full{grid-column:1!important}
+}
+@media(max-width:900px){
+ body.hf122r-feed-open .wb2-mobile-dock{display:none!important}
+ body.hf122r-feed-open{overflow:hidden!important}
+ body.hf122r-feed-open #quick-feed-add[open]{position:fixed!important;left:8px!important;right:8px!important;top:calc(74px + env(safe-area-inset-top,0px))!important;bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;z-index:2400!important;margin:0!important;padding:0!important;max-height:none!important;overflow:hidden!important;border-radius:18px!important;border:1px solid #afc3b5!important;background:#f5f8f6!important;box-shadow:0 18px 54px rgba(10,35,22,.30)!important;display:flex!important;flex-direction:column!important}
+ body.hf122r-feed-open #quick-feed-add[open]::before{content:''!important;position:fixed!important;inset:0!important;background:rgba(10,34,22,.42)!important;z-index:-1!important}
+ #quick-feed-add[open]>.quick-feed-head{display:flex!important;position:relative!important;top:auto!important;flex:0 0 auto!important;padding:12px 48px 10px 12px!important;margin:0!important;background:#fff!important;border-bottom:1px solid #dce8df!important;align-items:flex-start!important}
+ #quick-feed-add[open]>.quick-feed-head h3{font-size:18px!important;line-height:1.15!important}
+ #quick-feed-add[open]>.quick-feed-head .mut{display:block!important;margin:4px 0 0!important;font-size:11px!important;line-height:1.2!important}
+ #quick-feed-add[open]>.quick-feed-head .pill{font-size:11px!important;padding:5px 8px!important}
+ .hf122r-feed-close{position:absolute!important;right:8px!important;top:8px!important;width:34px!important;height:34px!important;display:grid!important;place-items:center!important;border:0!important;border-radius:10px!important;background:#edf3ef!important;color:#234b35!important;font-size:22px!important;font-weight:900!important;z-index:3!important}
+ #quick-feed-add[open] .quick-feed-body{display:flex!important;flex-direction:column!important;min-height:0!important;flex:1 1 auto!important;padding:8px!important;overflow:hidden!important}
+ #quick-feed-add[open] .quick-feed-tools{flex:0 0 auto!important;margin:0 0 7px!important;display:grid!important;gap:6px!important}
+ #quick-feed-add[open] .quick-feed-tools>input{min-width:0!important;width:100%!important;box-sizing:border-box!important;padding:10px 11px!important;font-size:14px!important}
+ #quick-feed-add[open] .quick-feed-shortcuts{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
+ #quick-feed-add[open] .quick-feed-shortcuts .btn{min-height:36px!important;padding:6px 4px!important;font-size:12px!important;border-radius:8px!important}
+ #quick-feed-add[open] .quick-feed-results{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow:auto!important;margin:0!important;padding:0 0 6px!important;display:grid!important;grid-template-columns:1fr!important;gap:6px!important;overscroll-behavior:contain}
+ #quick-feed-add[open] .quick-feed-result{min-height:58px!important;padding:8px 10px!important;border-radius:9px!important;gap:8px!important;align-items:center!important}
+ #quick-feed-add[open] .quick-feed-result b{font-size:13px!important;line-height:1.15!important}
+ #quick-feed-add[open] .quick-feed-result small{font-size:10.5px!important;line-height:1.2!important}
+ #quick-feed-add[open] .quick-feed-side{font-size:11px!important}
+ #quick-feed-add[open] .quick-feed-selected{flex:0 0 auto!important;position:relative!important;bottom:auto!important;z-index:4!important;margin:0!important;padding:7px!important;border-radius:11px!important;background:#fff!important;border:1px solid #cbded1!important;box-shadow:0 -4px 14px rgba(20,58,37,.08)!important;display:grid!important;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)!important;gap:6px!important;align-items:center!important}
+ #quick-feed-add[open] .quick-feed-selected>div:first-child{grid-column:1/-1!important;min-width:0!important;display:block!important}
+ #quick-feed-add[open] .quick-feed-selected>div:first-child .mut{display:none!important}
+ #quick-feed-add[open] #quick-feed-name{display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;font-size:12px!important;line-height:1.15!important}
+ #quick-feed-add[open] .ration-stepper{display:grid!important;grid-template-columns:32px minmax(58px,1fr) 32px!important;gap:4px!important;justify-content:stretch!important;min-width:0!important}
+ #quick-feed-add[open] .ration-stepper .btn{min-height:36px!important;padding:4px!important;border-radius:8px!important}
+ #quick-feed-add[open] .ration-stepper input{width:100%!important;min-width:0!important;height:36px!important;padding:5px 3px!important;text-align:center!important;box-sizing:border-box!important;font-size:14px!important}
+ #quick-feed-add[open] #quick-feed-submit{min-height:36px!important;padding:6px 7px!important;font-size:11.5px!important;line-height:1.15!important;border-radius:8px!important;white-space:normal!important}
+ #quick-feed-add[open] #quick-feed-close{display:none!important}
+}
+@media(max-width:390px){
+ #quick-feed-add[open]>.quick-feed-head h3{font-size:16px!important}
+ #quick-feed-add[open] .quick-feed-shortcuts .btn{font-size:11px!important}
+ #quick-feed-add[open] .quick-feed-selected{grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr)!important}
+ #quick-feed-add[open] #quick-feed-submit{font-size:10.5px!important}
+}
+</style>
+<script id="hotfix122r-compact-mobile-script">
+(function(){
+ function init(){
+   if(!window.matchMedia || !matchMedia('(max-width:900px)').matches)return;
+   const box=document.getElementById('quick-feed-add'); if(!box)return;
+   const head=box.querySelector('.quick-feed-head');
+   if(head && !head.querySelector('.hf122r-feed-close')){
+     const close=document.createElement('button');close.type='button';close.className='hf122r-feed-close';close.setAttribute('aria-label','Yem ekleme penceresini kapat');close.textContent='×';
+     close.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();box.open=false;});head.appendChild(close);
+   }
+   const sync=function(){document.body.classList.toggle('hf122r-feed-open',!!box.open);if(box.open)setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)};
+   box.addEventListener('toggle',sync);sync();
+   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&box.open)box.open=false});
+   box.querySelectorAll('.quick-feed-result').forEach(function(row){row.addEventListener('click',function(){setTimeout(function(){const q=document.getElementById('quick-feed-qty');if(q){q.focus({preventScroll:true});q.select();}},40);});});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
+'''
+_old_page_hotfix122r = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122r(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122R_COMPACT_MOBILE + '</body>')
+
+# --- Hotfix 1.22s: iOS mobil yem modalı gerçek scroll + alt dock gizleme ---
+# Solver/rasyon matematiği değişmez; yalnız mobil UI katmanıdır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22s'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122S_IOS_FEED_MODAL = r'''<style id="hotfix122s-ios-feed-modal">
+@media(max-width:900px){
+ body.hf122s-feed-open{overflow:hidden!important;touch-action:none!important}
+ body.hf122s-feed-open .wb2-mobile-dock{display:none!important;visibility:hidden!important;pointer-events:none!important}
+ body.hf122s-feed-open #quick-feed-add[open] .quick-feed-body{
+   display:grid!important;
+   grid-template-rows:auto minmax(0,1fr) auto!important;
+   min-height:0!important;
+   height:100%!important;
+   overflow:hidden!important;
+ }
+ body.hf122s-feed-open #quick-feed-add[open] .quick-feed-tools{grid-row:1!important;min-height:0!important}
+ body.hf122s-feed-open #quick-feed-add[open] .quick-feed-results{
+   grid-row:2!important;
+   display:block!important;
+   min-height:0!important;
+   height:auto!important;
+   max-height:none!important;
+   overflow-y:scroll!important;
+   overflow-x:hidden!important;
+   -webkit-overflow-scrolling:touch!important;
+   overscroll-behavior-y:contain!important;
+   touch-action:pan-y!important;
+   padding:0 2px 8px 0!important;
+   margin:0!important;
+ }
+ body.hf122s-feed-open #quick-feed-add[open] .quick-feed-result{display:flex!important;margin:0 0 6px!important}
+ body.hf122s-feed-open #quick-feed-add[open] .quick-feed-selected{
+   grid-row:3!important;
+   position:relative!important;
+   inset:auto!important;
+   flex:none!important;
+   margin:6px 0 0!important;
+ }
+}
+</style>
+<script id="hotfix122s-ios-feed-modal-script">
+(function(){
+ function init(){
+  if(!window.matchMedia || !matchMedia('(max-width:900px)').matches)return;
+  var box=document.getElementById('quick-feed-add');if(!box)return;
+  var dock=document.querySelector('.wb2-mobile-dock');
+  function sync(){
+   var open=!!box.open;
+   document.body.classList.toggle('hf122s-feed-open',open);
+   if(dock){
+    if(open){dock.style.setProperty('display','none','important');dock.setAttribute('aria-hidden','true');}
+    else{dock.style.removeProperty('display');dock.removeAttribute('aria-hidden');}
+   }
+   var results=box.querySelector('.quick-feed-results');
+   if(open&&results){results.style.webkitOverflowScrolling='touch';}
+  }
+  box.addEventListener('toggle',sync);
+  new MutationObserver(sync).observe(box,{attributes:true,attributeFilter:['open']});
+  sync();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>'''
+_old_page_hotfix122s = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122s(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122S_IOS_FEED_MODAL + '</body>')
+
+# --- Hotfix 1.22t: mobil yem seç -> miktar adımı, scroll bağımsız akış ---
+# Solver/rasyon matematiği değişmez; yalnız mobil yem seçme UX katmanıdır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22t'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122T_MOBILE_FEED_STEPPER = r'''<style id="hotfix122t-mobile-feed-stepper">
+@media(max-width:900px){
+ body.hf122t-feed-open{overflow:hidden!important}
+ body.hf122t-feed-open .wb2-mobile-dock{display:none!important;visibility:hidden!important;pointer-events:none!important}
+ body.hf122t-feed-open #quick-feed-add[open] .quick-feed-body{display:grid!important;grid-template-rows:auto minmax(0,1fr) auto!important;min-height:0!important;height:100%!important;overflow:hidden!important}
+ body.hf122t-feed-open #quick-feed-add[open] .quick-feed-results{display:block!important;height:42vh!important;max-height:42vh!important;min-height:160px!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important;overscroll-behavior-y:contain!important}
+ body.hf122t-feed-open #quick-feed-add[open] .quick-feed-selected{display:none!important}
+ body.hf122t-feed-open #quick-feed-add[open] .hf122t-change-feed{display:none!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-tools,
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-results{display:none!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-body{grid-template-rows:auto 1fr!important;align-content:start!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .hf122t-change-feed{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-height:42px!important;margin:0 0 8px!important;border-radius:10px!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-selected{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;align-self:start!important;margin:0!important;padding:14px!important;border:1px solid #c9ddd0!important;border-radius:14px!important;background:#fff!important;box-shadow:none!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-selected>div:first-child{grid-column:1!important;padding:4px 2px 8px!important;border-bottom:1px solid #e4ece7!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .quick-feed-selected>div:first-child .mut{display:block!important;font-size:11px!important;margin-bottom:3px!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected #quick-feed-name{font-size:15px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .ration-stepper{display:grid!important;grid-template-columns:48px minmax(0,1fr) 48px!important;gap:8px!important;width:100%!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .ration-stepper .btn{height:48px!important;min-height:48px!important;font-size:22px!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected .ration-stepper input{height:48px!important;font-size:20px!important;width:100%!important}
+ body.hf122t-feed-open #quick-feed-add[open].hf122t-selected #quick-feed-submit{width:100%!important;min-height:50px!important;font-size:15px!important;padding:10px!important}
+}
+</style>
+<script id="hotfix122t-mobile-feed-stepper-script">
+(function(){
+ function init(){
+  if(!window.matchMedia || !matchMedia('(max-width:900px)').matches)return;
+  var box=document.getElementById('quick-feed-add');if(!box)return;
+  var body=box.querySelector('.quick-feed-body');
+  var results=box.querySelector('.quick-feed-results');
+  var qty=document.getElementById('quick-feed-qty');
+  var fid=document.getElementById('quick-feed-id');
+  var dock=document.querySelector('.wb2-mobile-dock');
+  var change=document.createElement('button');
+  change.type='button';change.className='btn alt hf122t-change-feed';change.textContent='← Yem Değiştir';
+  if(body && !body.querySelector('.hf122t-change-feed')){
+    var selected=box.querySelector('.quick-feed-selected');
+    if(selected)body.insertBefore(change,selected);
+  }
+  function setSelected(on){
+    box.classList.toggle('hf122t-selected',!!on);
+    if(on){
+      setTimeout(function(){if(qty){try{qty.focus({preventScroll:true});}catch(e){qty.focus();}qty.select();}},30);
+    }else{
+      setTimeout(function(){document.getElementById('quick-feed-search')?.focus();},30);
+    }
+  }
+  box.querySelectorAll('.quick-feed-result').forEach(function(row){
+    row.addEventListener('click',function(){setSelected(true);});
+  });
+  change.addEventListener('click',function(){setSelected(false);if(results)results.scrollTop=0;});
+  function sync(){
+    var open=!!box.open;
+    document.body.classList.toggle('hf122t-feed-open',open);
+    if(dock){
+      if(open){dock.style.setProperty('display','none','important');dock.setAttribute('aria-hidden','true');}
+      else{dock.style.removeProperty('display');dock.removeAttribute('aria-hidden');}
+    }
+    if(!open)setSelected(false);
+  }
+  box.addEventListener('toggle',sync);
+  new MutationObserver(sync).observe(box,{attributes:true,attributeFilter:['open']});
+  sync();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>'''
+_old_page_hotfix122t = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_hotfix122t(title, body, path, user, flash)
+    return html.replace('</body>', HOTFIX122T_MOBILE_FEED_STEPPER + '</body>')
+
+
+# --- Hotfix 1.22u: Yem Kataloğu tüm katalog arama ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22u'
+APP_LABEL='v'+APP_VERSION
+
+
+# --- Hotfix 1.22v: düşük çözünürlük rasyon + stok eşitleme + katalog filtre/sıralama ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22v'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122V_UI="""<style id='hotfix122v-responsive-stock-sort'>
+.feed-sort-link{color:inherit;text-decoration:none;font-weight:900;white-space:nowrap}.feed-sort-link:hover{text-decoration:underline;color:#0a7542}
+@media (min-width:901px) and (max-width:1500px){body:has(.workbench-shell) .target-compare-sticky.science-target-shell{position:static!important;top:auto!important;height:auto!important;max-height:none!important;overflow:visible!important;align-self:stretch!important}body:has(.workbench-shell) .science-target-grid{position:static!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-rows:auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}body:has(.workbench-shell) .science-target-card{position:static!important;height:auto!important;min-height:0!important;max-height:none!important}body:has(.workbench-shell) #ration-workbench{position:relative!important;z-index:1!important;clear:both!important}}
+@media (min-width:901px) and (max-width:1120px){body:has(.workbench-shell) .science-target-grid{grid-template-columns:1fr!important}}
+</style>"""
+_old_page_hotfix122v=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122v(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122V_UI+'</body>')
+
+
+# --- Hotfix 1.22w: çapraz modül tutarlılık + düşük çözünürlük bilimsel panel ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22w'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122W_UI=r"""<style id="hotfix122w-science-panel-visibility">
+/* 901–1500 CSS piksel aralığında bilimsel kartlar eski masaüstü kurallarıyla
+   sıfır yüksekliğe düşebiliyordu. Açık paneli normal belge akışında tut. */
+@media (min-width:901px) and (max-width:1500px){
+ body.wb2-desktop .target-workspace{flex:0 0 auto!important;width:100%!important;min-width:0!important;height:auto!important;max-height:none!important;overflow:visible!important}
+ body.wb2-desktop .target-workspace:has(.science-target-shell.wb2-desktop-open){display:block!important;visibility:visible!important;opacity:1!important}
+ body.wb2-desktop .science-target-shell.wb2-desktop-open{
+   display:block!important;position:relative!important;inset:auto!important;float:none!important;
+   width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;max-height:none!important;
+   margin:0 0 10px!important;padding:8px!important;overflow:visible!important;
+   visibility:visible!important;opacity:1!important;contain:none!important;content-visibility:visible!important;
+ }
+ body.wb2-desktop .science-target-shell.wb2-desktop-open .target-compare-title{display:flex!important;min-height:24px!important}
+ body.wb2-desktop .science-target-shell.wb2-desktop-open .science-target-grid{
+   display:grid!important;position:relative!important;inset:auto!important;
+   grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;grid-auto-rows:auto!important;
+   gap:8px!important;width:100%!important;height:auto!important;min-height:1px!important;max-height:none!important;
+   overflow:visible!important;visibility:visible!important;opacity:1!important;
+ }
+ body.wb2-desktop .science-target-shell.wb2-desktop-open .science-target-card{
+   display:block!important;position:relative!important;inset:auto!important;float:none!important;
+   width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;
+   overflow:visible!important;visibility:visible!important;opacity:1!important;
+ }
+ body.wb2-desktop .science-target-shell.wb2-desktop-open .science-target-row{display:grid!important;visibility:visible!important;opacity:1!important}
+ body.wb2-desktop .science-target-shell.wb2-desktop-open + #ration-workbench{clear:both!important}
+}
+@media (min-width:901px) and (max-width:1120px){
+ body.wb2-desktop .science-target-shell.wb2-desktop-open .science-target-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="hotfix122w-science-panel-visibility-script">
+(function(){
+ function init(){
+  var science=document.querySelector('.science-target-shell'),button=document.querySelector('.wb2-desktop-science');
+  if(!science||!button)return;
+  function sync(){
+   if(!window.matchMedia('(min-width:901px) and (max-width:1500px)').matches)return;
+   var open=science.classList.contains('wb2-desktop-open');
+   science.setAttribute('aria-hidden',open?'false':'true');
+   if(open){science.hidden=false;requestAnimationFrame(function(){science.scrollIntoView({block:'nearest'});});}
+  }
+  button.addEventListener('click',function(){setTimeout(sync,0);});
+  new MutationObserver(sync).observe(science,{attributes:true,attributeFilter:['class']});
+  window.addEventListener('resize',sync,{passive:true});sync();
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""
+_old_page_hotfix122w=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122w(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122W_UI+'</body>')
+
+
+# --- Hotfix 1.22x: düşük çözünürlük bilimsel panel gerçek akış düzeltmesi ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22y'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122X_LOWRES_FLOW=r"""<style id="hotfix122x-lowres-flow">
+/* 1366x768 / %100 gibi masaüstü çözünürlüklerinde bilimsel panel asla yem tablosunun üstüne binmez. */
+@media (min-width:901px) and (max-width:1600px){
+ body:has(.workbench-shell).wb2-desktop .target-workspace{
+   display:block!important;position:static!important;width:100%!important;height:auto!important;min-height:0!important;
+   max-height:none!important;overflow:visible!important;contain:none!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell,
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.is-floating,
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open,
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open.is-floating{
+   display:block!important;position:static!important;inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+   float:none!important;transform:none!important;width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;
+   max-width:none!important;max-height:none!important;margin:8px 0 12px!important;padding:8px!important;overflow:visible!important;
+   z-index:2!important;box-sizing:border-box!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder,
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder.active{
+   display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .science-target-shell .science-target-grid{
+   display:grid!important;position:static!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+   grid-auto-flow:row!important;grid-auto-rows:auto!important;gap:8px!important;width:100%!important;height:auto!important;
+   min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .science-target-shell .science-target-card{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;width:auto!important;
+   height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop #ration-workbench{
+   display:block!important;position:relative!important;clear:both!important;z-index:1!important;margin-top:0!important;
+ }
+}
+@media (min-width:901px) and (max-width:1080px){
+ body:has(.workbench-shell).wb2-desktop .science-target-shell .science-target-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="hotfix122x-lowres-flow-script">
+(function(){
+ function normalize(){
+  if(!window.matchMedia('(min-width:901px) and (max-width:1600px)').matches)return;
+  var panel=document.querySelector('.target-compare-sticky.science-target-shell');
+  if(!panel)return;
+  panel.classList.remove('is-floating');
+  ['left','right','top','bottom','width','height','max-width','max-height','position','transform'].forEach(function(k){panel.style.removeProperty(k);});
+  document.querySelectorAll('.target-compare-placeholder').forEach(function(p){p.classList.remove('active');p.style.height='';p.style.width='';});
+ }
+ var queued=false;
+ function schedule(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;normalize();});}
+ function init(){normalize();window.addEventListener('resize',schedule,{passive:true});window.addEventListener('scroll',schedule,{passive:true});}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""
+_old_page_hotfix122x=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122x(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122X_LOWRES_FLOW+'</body>')
+
+# Hotfix1.22y: 1.22x low-resolution observer loop removed; solver untouched.
+
+
+# --- Hotfix 1.22z: bilimsel panel aç/kapat + scroll kilidi düzeltmesi ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22z'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122Z_SCIENCE_TOGGLE=r"""<style id="hotfix122z-science-toggle-fix">
+/* Bilimsel panel masaüstünde varsayılan kapalıdır; yalnız kullanıcı açtığında görünür. */
+@media (min-width:901px) and (max-width:1600px){
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell:not(.wb2-desktop-open){
+   display:none!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;transform:none!important;
+   width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;max-height:none!important;
+   margin:8px 0 12px!important;padding:8px!important;overflow:visible!important;z-index:auto!important;box-sizing:border-box!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open .science-target-grid{
+   display:grid!important;position:static!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+   grid-auto-flow:row!important;grid-auto-rows:auto!important;gap:8px!important;width:100%!important;height:auto!important;
+   min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open .science-target-card{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;width:auto!important;
+   height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder,
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder.active{display:none!important;height:0!important;margin:0!important;padding:0!important}
+ body:has(.workbench-shell).wb2-desktop #ration-workbench{position:relative!important;clear:both!important;z-index:1!important}
+}
+@media (min-width:901px) and (max-width:1080px){
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.wb2-desktop-open .science-target-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="hotfix122z-science-toggle-script">
+(function(){
+ function init(){
+  if(!window.matchMedia('(min-width:901px)').matches)return;
+  var panel=document.querySelector('.target-compare-sticky.science-target-shell');
+  var btn=document.querySelector('.wb2-desktop-science');
+  if(!panel||!btn)return;
+  // Önceki hotfixlerden kalan inline/floating durumlarını bir kez temizle; scroll'a müdahale etme.
+  panel.classList.remove('is-floating');
+  ['left','right','top','bottom','width','height','max-width','max-height','position','transform'].forEach(function(k){panel.style.removeProperty(k);});
+  document.querySelectorAll('.target-compare-placeholder').forEach(function(p){p.classList.remove('active');p.style.height='';p.style.width='';});
+  // Sayfa her açıldığında bilimsel ayrıntılar kapalı başlar.
+  panel.classList.remove('wb2-desktop-open');
+  panel.removeAttribute('hidden');
+  panel.setAttribute('aria-hidden','true');
+  btn.textContent='🔬 Tüm bilimsel değerler';
+  btn.addEventListener('click',function(){
+    requestAnimationFrame(function(){
+      var open=panel.classList.contains('wb2-desktop-open');
+      panel.setAttribute('aria-hidden',open?'false':'true');
+      btn.textContent=open?'✕ Bilimsel değerleri kapat':'🔬 Tüm bilimsel değerler';
+    });
+  });
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>"""
+_old_page_hotfix122z=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122z(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122Z_SCIENCE_TOGGLE+'</body>')
+
+# --- Hotfix 1.22aa: bilimsel panel temiz toggle + scroll serbest ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22aa'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AA_SCIENCE_TOGGLE=r"""<style id="hotfix122aa-science-toggle-clean">
+/* Önceki sürümlerin wb2-desktop-open zincirinden tamamen bağımsız görünürlük. */
+@media (min-width:901px){
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell:not(.hf122aa-open){display:none!important}
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.hf122aa-open{
+   display:block!important;position:static!important;inset:auto!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+   float:none!important;transform:none!important;width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;
+   max-height:none!important;margin:8px 0 12px!important;padding:8px!important;overflow:visible!important;z-index:auto!important;box-sizing:border-box!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.hf122aa-open .science-target-grid{
+   display:grid!important;position:static!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-flow:row!important;
+   grid-auto-rows:auto!important;gap:8px!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.hf122aa-open .science-target-card{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;width:auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder,
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder.active{display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important}
+ body:has(.workbench-shell).wb2-desktop #ration-workbench{position:relative!important;clear:both!important;z-index:1!important}
+}
+@media (min-width:901px) and (max-width:1080px){
+ body:has(.workbench-shell).wb2-desktop .target-compare-sticky.science-target-shell.hf122aa-open .science-target-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="hotfix122aa-science-toggle-clean-script">
+(function(){
+ function unlockPage(){
+   try{document.body.style.removeProperty('overflow');document.body.style.removeProperty('overflow-y');}catch(e){}
+   try{document.documentElement.style.removeProperty('overflow');document.documentElement.style.removeProperty('overflow-y');}catch(e){}
+ }
+ function init(){
+   if(!window.matchMedia('(min-width:901px)').matches)return;
+   var panel=document.querySelector('.target-compare-sticky.science-target-shell');
+   var oldBtn=document.querySelector('.wb2-desktop-science');
+   if(!panel||!oldBtn)return;
+
+   /* Eski onclick/addEventListener zincirini tek hamlede sök. */
+   var btn=oldBtn.cloneNode(true);
+   oldBtn.parentNode.replaceChild(btn,oldBtn);
+
+   /* Eski açık/floating durumlarını sıfırla; yalnız hf122aa-open kullanılacak. */
+   panel.classList.remove('wb2-desktop-open','wb2-show-science','is-floating');
+   panel.classList.remove('hf122aa-open');
+   panel.removeAttribute('hidden');
+   panel.setAttribute('aria-hidden','true');
+   ['left','right','top','bottom','width','height','max-width','max-height','position','transform'].forEach(function(k){panel.style.removeProperty(k);});
+   document.querySelectorAll('.target-compare-placeholder').forEach(function(p){p.classList.remove('active');p.style.height='';p.style.width='';});
+   btn.textContent='🔬 Tüm bilimsel değerler';
+   btn.setAttribute('aria-expanded','false');
+   unlockPage();
+
+   btn.addEventListener('click',function(ev){
+     ev.preventDefault();ev.stopPropagation();
+     var open=!panel.classList.contains('hf122aa-open');
+     panel.classList.toggle('hf122aa-open',open);
+     panel.setAttribute('aria-hidden',open?'false':'true');
+     btn.setAttribute('aria-expanded',open?'true':'false');
+     btn.textContent=open?'✕ Bilimsel değerleri kapat':'🔬 Tüm bilimsel değerler';
+     unlockPage();
+   },true);
+
+   /* Başka eski handler bir sınıf eklemeye çalışırsa görünürlüğü bizim sınıf yönetir. */
+   window.addEventListener('resize',unlockPage,{passive:true});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>"""
+_old_page_hotfix122aa=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122aa(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122AA_SCIENCE_TOGGLE+'</body>')
