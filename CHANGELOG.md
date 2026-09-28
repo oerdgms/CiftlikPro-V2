@@ -1,11 +1,18 @@
-# Hotfix1.22ae – GitHub Test/Paketleme Düzeltmesi
+# 3.9.23 DEV4 Hotfix1.22af
+
+- Windows installer artık kullanıcı profiline kurulum için yönetici hesabını zorunlu tutmaz (`PrivilegesRequired=lowest`).
+- Yönetici yetkisi gerektiren otomatik `netsh` güvenlik duvarı komutları kurulum/uninstall akışından kaldırıldı; bu komutlar artık kurulumu bloke etmez.
+- Dashboard > Bugünün İşleri satırında tarih alanı 84 px yapıldı; tarih, içerik ve kalan-gün rozeti düşük çözünürlükte birbirine binmez.
+- 1.22ae süt/rasyon responsive düzenlemeleri korunur.
+
+# Hotfix1.22af – GitHub Test/Paketleme Düzeltmesi
 
 - 1.22ae ile uyumsuz kalan 9 regresyon testi 1.22ae sürüm beklentisine güncellendi.
-- GitHub Actions ve Inno Setup çıktı adı `Hotfix1_22ae_Setup.exe` olarak eşitlendi.
+- GitHub Actions ve Inno Setup çıktı adı `Hotfix1_22af_Setup.exe` olarak eşitlendi.
 - Rasyon/süt işlev kodunda geri alma yapılmadı.
 
 
-## v3.9.23 DEV4 Hotfix1.22ae
+## v3.9.23 DEV4 Hotfix1.22af
 - Mobil Süt & Laktasyon giriş kartları kompaktlaştırıldı; giriş kutuları kısaltıldı ve alt durum çubuğu için güvenli boşluk artırıldı.
 - Rasyon Hedef ↔ Rasyon kartlarında düşük çözünürlükte KM/GCAA/HP/NDF hedef ve rasyon değerlerinin taşması azaltıldı.
 - Hedef kartlarının altındaki tamamlama/progress şeritleri kaldırıldı.

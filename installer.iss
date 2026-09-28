@@ -1,5 +1,5 @@
 #define MyAppName "ÇiftlikPro Enterprise"
-#define MyAppVersion "3.9.23 DEV4 Hotfix1.22ae"
+#define MyAppVersion "3.9.23 DEV4 Hotfix1.22af"
 #define MyAppPublisher "ÇiftlikPro"
 #define MyAppExeName "CiftlikPro.exe"
 
@@ -11,10 +11,10 @@ AppPublisher={#MyAppPublisher}
 DefaultDirName={localappdata}\Programs\CiftlikPro
 DefaultGroupName=ÇiftlikPro
 OutputDir=release
-OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22ae_Setup
+OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22af_Setup
 SetupIconFile=CiftlikPro.ico
 UninstallDisplayIcon={app}\CiftlikPro.exe
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
@@ -39,12 +39,9 @@ Name: "{userprograms}\ÇiftlikPro"; Filename: "{app}\CiftlikPro.exe"; WorkingDir
 Name: "{userstartup}\ÇiftlikPro Arka Plan"; Filename: "{app}\CiftlikPro.exe"; Parameters: "--background"; WorkingDir: "{app}"; Tasks: autostart
 
 [Run]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ÇiftlikPro LAN 8953"""; Flags: runhidden waituntilterminated
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""ÇiftlikPro LAN 8953"" dir=in action=allow protocol=TCP localport=8953 profile=any"; Flags: runhidden waituntilterminated
 Filename: "{app}\CiftlikPro.exe"; Description: "ÇiftlikPro'yu başlat"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""ÇiftlikPro LAN 8953"""; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

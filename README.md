@@ -1,12 +1,12 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ae
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22af
 
-## Hotfix1.22ae – Mobil Süt Girişi Responsive
+## Hotfix1.22af – Mobil Süt Girişi Responsive
 
 Mobil süt girişi kart düzenine geçirildi; masaüstü tablo korunmuştur.
 
 Bu hotfix, Hotfix1.22aa üzerine yapılan bütünlük kontrolünü ve iki doğrulanmış düzeltmeyi içerir. Bilimsel değerler panelinin eski `w/x/z/aa` denetleyicileri son HTML'den temizlenerek tek aç/kapat denetleyicisine indirildi. Aktif ek yem kaydı ileri bir tarihe düzenlendiğinde bugünkü tüketim artık kaybolmaz; mevcut dönem planlanan tarihten bir gün önce kapanır ve yeni dönem ayrıca oluşturulur. Solver DEV4.19.6 korunmuştur.
 
-## Hotfix1.22ae – Süt & Laktasyon Yönetimi V1
+## Hotfix1.22af – Süt & Laktasyon Yönetimi V1
 
 - Yeni Süt & Laktasyon Merkezi: toplu sabah/akşam süt girişi, DIM, 7/30 günlük ortalama, laktasyon toplamı, 305 gün tahmini ve süt düşüş uyarısı.
 - Hayvan kartında süt kalite alanları (yağ, protein, SCC) ve laktasyon KPI kartları.
