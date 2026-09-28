@@ -135,8 +135,8 @@ class ReportImportTests(unittest.TestCase):
     def test_3921_dev51_github_workflow_targets_current_version_and_setup(self):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
-        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22ad'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22ad_Setup.exe",workflow)
+        self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22ae'",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22ae_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_hotfix116_workspace_and_security_guards_are_packaged(self):
@@ -159,7 +159,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('v118-restored-dashboard',source)
         for restored in ('Dashboard Kartlarım','Yaklaşan Kızgınlık','Gebelik / Aşı Alarmı','Yaklaşan Ödemeler','Son 6 Ay Finans Eğilimi','İşletme Özeti'):
             self.assertIn(restored,source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix118d_menu_drawer_and_contrast_are_packaged(self):
         source=Path(server.__file__).read_text(encoding='utf-8')
@@ -203,7 +203,7 @@ class ReportImportTests(unittest.TestCase):
                        'hf119h-lock-input','hf119h-feed-meta','hf119h-change-summary',
                        'hf119h-range','hf119h-solve-guard'):
             self.assertIn(marker,source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
         self.assertIn('Solver DEV4.19.6',source)
 
     def test_3923_hotfix122f_flaked_corn_and_mobile_thumbs_are_packaged(self):
@@ -269,7 +269,7 @@ class ReportImportTests(unittest.TestCase):
                        "APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
             self.assertIn(marker,source)
         self.assertNotIn('<a class="v118-dashboard-jump" href="#dashboard-tools">',source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix122l_dashboard_choice_bypasses_record_dedupe_and_changes_view(self):
         server.SESSIONS['dashboard-choice']={'username':'admin','role':'admin'}
@@ -307,7 +307,7 @@ class ReportImportTests(unittest.TestCase):
         self.assertIn('<input type="hidden" name="view" value="classic">',source)
         self.assertNotIn('button type="submit" name="view" value="classic"',source)
         self.assertIn("view=(f.get('view') or '').strip().lower()",source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix122n_bulk_ration_assignment_updates_selected_paddocks(self):
         ids={'ration':None,'paddocks':[]}
@@ -357,7 +357,7 @@ class ReportImportTests(unittest.TestCase):
         for marker in ('Padoklara Toplu Ata','Tümünü Seç','Seçimi Temizle','Seçili Padoklara Ata','Tüm Aktif Padoklara Ata','ration-bulk-paddock-grid','action="/ration/assign-bulk"'):
             self.assertIn(marker,source)
         self.assertNotIn('<select name="paddock_id" required><option value="">Padok seçin</option>{pd_opts}</select>',source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix119h_calf_period_feed_rejects_eleven_month_profile(self):
         with server.db() as con:
@@ -1420,7 +1420,7 @@ class ReportImportTests(unittest.TestCase):
         source=Path(server.__file__).read_text(encoding='utf-8')
         for item in ('/feed/stock-reconcile','Fiziksel Stok Eşitle','feed-sort-link',"sort_key=(q.get('sort'",'hotfix122v-responsive-stock-sort','max-width:1500px',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
             self.assertIn(item,source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix122w_feed_search_ignores_punctuation_and_turkish_case(self):
         self.assertEqual(server._feed_search_norm('yon..'),'yon')
@@ -1558,7 +1558,7 @@ class ReportImportTests(unittest.TestCase):
                        'content-visibility:visible','grid-template-columns:repeat(2,minmax(0,1fr))',
                        'max-width:1500px',"APP_VERSION='3.9.23 DEV4 Hotfix1.22w'"):
             self.assertIn(marker,source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix122ab_rendered_page_has_one_science_controller(self):
         rendered=server.page('Test',"<div class='workbench-shell'></div>",'/rations')
@@ -1573,7 +1573,7 @@ class ReportImportTests(unittest.TestCase):
         ):
             self.assertNotIn(f'id="{old_id}"',rendered)
         self.assertNotIn("window.addEventListener('resize',unlockPage",rendered)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ad')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ae')
 
     def test_3923_hotfix122ab_future_extra_feed_edit_keeps_current_period(self):
         stamp=str(time.time_ns());today=server.date.today();future=today+server.timedelta(days=3);ids={}

@@ -1,3 +1,9 @@
+# Hotfix1.22ae – GitHub Test/Paketleme Düzeltmesi
+
+- 1.22ae ile uyumsuz kalan 9 regresyon testi 1.22ae sürüm beklentisine güncellendi.
+- GitHub Actions ve Inno Setup çıktı adı `Hotfix1_22ae_Setup.exe` olarak eşitlendi.
+- Rasyon/süt işlev kodunda geri alma yapılmadı.
+
 
 ## v3.9.23 DEV4 Hotfix1.22ae
 - Mobil Süt & Laktasyon giriş kartları kompaktlaştırıldı; giriş kutuları kısaltıldı ve alt durum çubuğu için güvenli boşluk artırıldı.
