@@ -1,6 +1,6 @@
-# Hotfix1.22y Solver Koruma Notu
+# Hotfix1.22ab Solver Koruma Notu
 
-Hotfix1.22y yalnızca düşük çözünürlük rasyon yerleşimi ve floating davranışını düzeltir. Solver/rasyon hesap fonksiyonları Hotfix1.22w tabanıyla değiştirilmemiştir.
+Hotfix1.22ab yalnızca bilimsel panel sunumundaki eski denetleyicileri temizler ve ileri tarihli ek yem dönemini güvenli saklar. Solver/rasyon hesap fonksiyonları Hotfix1.22aa tabanıyla değiştirilmemiştir.
 
 # Solver Değişiklik ve Güvenlik Raporu
 
@@ -27,6 +27,7 @@ Bu rapor, `ÇiftlikPro Enterprise v3.9.23 DEV4 Hotfix1.22w` paketini kapsar. Pak
 - Hotfix1.22q Dashboard görünüm seçimini, toplu padok-rasyon atamasını, padok ek yem/takviye ve buzağı iç üretim maliyeti katmanlarını ekler. Solver DEV4.19.6 matematiği ve bilimsel hedefleri değişmez.
 - Hotfix1.22v düşük çözünürlük rasyon sunumunu, Yem Kataloğu sıralama/filtrelemeyi ve fiziksel stok eşitlemeyi ekler; 28 solver/rasyon ilişkili üst-seviye fonksiyon Hotfix1.22u ile AST olarak birebir aynıdır.
 - Hotfix1.22w düşük çözünürlük bilimsel ayrıntı görünürlüğünü, katalog aramasını, tarih-etkin günlük kullanımı, gelecek tarihli atamayı ve tarihsel stok sayımını düzeltir. Hotfix1.22v tabanındaki 28 solver/rasyon ilişkili üst-seviye fonksiyon AST olarak birebir aynıdır (`a263d9db8bae80e39276bc89cacecb6cf25b137a4e40e60e501846470c984843`).
+- Hotfix1.22ab bilimsel paneli tek denetleyiciye indirir ve ileri tarihli ek yem düzenlemesini dönemlendirir; 28 solver/rasyon fonksiyonu Hotfix1.22aa tabanıyla AST düzeyinde birebir aynıdır (`68f9ca142da80e20713a95e729d098830bee2849b401af31f8e80eb51ea88091`).
 
 ## Değiştirilen alanlar
 

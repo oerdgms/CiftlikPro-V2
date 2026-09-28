@@ -1036,6 +1036,15 @@ def init_db():
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_min_daily_gain','1.0')")
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_warning_ratio','0.90')")
         ration_cols={r[1] for r in c.execute('pragma table_info(rations)').fetchall()}
+        # Hotfix1.22ac Süt & Laktasyon Yönetimi V1: eski milk tablosunu geriye uyumlu genişlet.
+        milk_cols={r[1] for r in c.execute('pragma table_info(milk)').fetchall()}
+        for col,typ in [
+            ('morning_liters','REAL DEFAULT 0'),('noon_liters','REAL DEFAULT 0'),('evening_liters','REAL DEFAULT 0'),
+            ('fat_pct','REAL DEFAULT 0'),('protein_pct','REAL DEFAULT 0'),('scc','INTEGER DEFAULT 0'),
+            ('source',"TEXT DEFAULT 'Hayvan Kartı'"),('updated_at','TEXT')
+        ]:
+            if col not in milk_cols:c.execute(f'ALTER TABLE milk ADD COLUMN {col} {typ}')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_milk_animal_date ON milk(animal_id,measure_date)')
         for col,typ in [('target_weight_kg','REAL DEFAULT 450'),('target_adg_kg','REAL DEFAULT 1.3'),('animal_type',"TEXT DEFAULT 'Besi Erkek'"),('ration_type',"TEXT DEFAULT 'Besi'"),('target_milk_l','REAL DEFAULT 25'),('milk_fat_pct','REAL DEFAULT 3.8'),('milk_protein_pct','REAL DEFAULT 3.2'),('target_age_months','REAL DEFAULT 0'),('target_beef_phase',"TEXT DEFAULT 'Otomatik'")]:
             if col not in ration_cols:c.execute(f'ALTER TABLE rations ADD COLUMN {col} {typ}')
         ration_item_cols={r[1] for r in c.execute('pragma table_info(ration_items)').fetchall()}
@@ -5154,6 +5163,7 @@ def page(title,body,path='/',user='admin',flash=''):
     groups=[
         ('🐄 Hayvanlar',[('Sürü Merkezi','/all-animals'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
         ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
+        ('🥛 Süt Yönetimi',[('Süt & Laktasyon Merkezi','/milk-center')]),
         ('🩺 Üreme & Sağlık',[('Üreme Merkezi','/reproduction-center'),('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
         ('🌾 Tarım & Ziraat',[('Genel Bakış','/agriculture'),('Tarlalar','/agriculture/fields'),('Üretim Sezonları','/agriculture/seasons'),('Tarla İşlemleri','/agriculture/operations'),('Girdi & Depo','/agriculture/inputs'),('Hasat & Mahsul','/agriculture/harvests'),('Satış & İç Transfer','/agriculture/transfers'),('Tarım Finans','/agriculture/finance'),('Tarım Raporları','/agriculture/reports')]),
         ('💰 Finans',[('Finans','/finance'),('Raporlar','/reports')]),
@@ -5543,7 +5553,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 @media(max-width:820px){{.prep-report-summary{{grid-template-columns:repeat(2,minmax(0,1fr))}}.prep-report-controls{{width:100%}}.prep-report-controls label{{flex:1}}.prep-report-controls input{{width:100%}}.prep-report-controls .btn{{flex:1}}}}
 @media(max-width:520px){{.prep-report-summary{{grid-template-columns:1fr}}.prep-report-table th:nth-child(4),.prep-report-table td:nth-child(4){{display:none}}}}
 .command-edit{{border:0;border-left:1px solid #dde5df;background:#f6faf7;min-width:44px;font-size:18px;cursor:pointer}}.command-editor{{border:0;border-radius:16px;box-shadow:0 20px 70px #0004;max-width:420px;width:calc(100% - 28px)}}.command-editor::backdrop{{background:#10281c66}}.command-editor h3{{margin-top:0}}.command-choice{{display:flex;align-items:center;gap:10px;padding:9px;border-bottom:1px solid #edf1ee}}.command-choice input{{width:18px;height:18px}}.command-editor-actions{{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}}@media(max-width:700px){{.command-edit{{position:sticky;right:0;background:#eef7f1;flex:0 0 46px}}}}
-</style></head><body><div class="top"><div class="top-left"><button type="button" class="menu-toggle" id="menuToggle" aria-label="Menüyü aç" aria-controls="sideMenu" aria-expanded="false">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar" id="customCommandbar"><a data-qid="dashboard" class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a data-qid="new" href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a data-qid="rations" href="/rations"><span class="ico">⚖</span>Rasyon</a><a data-qid="feeds" href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a data-qid="finance" href="/finance"><span class="ico">₺</span>Finans</a><a data-qid="reports" href="/reports"><span class="ico">▥</span>Raporlar</a><a data-qid="data" href="/data"><span class="ico">⇄</span>Veri</a><a data-qid="paddocks" href="/paddocks"><span class="ico">🏠</span>Padoklar</a><a data-qid="health" href="/health"><span class="ico">💉</span>Sağlık</a><button type="button" class="command-edit" id="commandEditBtn" title="Üst menüyü özelleştir">⚙</button></div><dialog id="commandEditor" class="command-editor"><form method="dialog"><h3>Üst Menüyü Özelleştir</h3><p class="mut">Gösterilecek hızlı erişimleri seçin. Ayar bu cihazda saklanır.</p><div id="commandChoices"></div><div class="command-editor-actions"><button type="button" class="btn alt" id="commandReset">Varsayılana Dön</button><button class="btn">Tamam</button></div></form></dialog><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu" aria-hidden="true">{nav}</aside><div class="side-menu-backdrop" id="sideMenuBackdrop" aria-hidden="true"></div><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">{h(APP_LABEL)}</span></div><script>
+</style></head><body><div class="top"><div class="top-left"><button type="button" class="menu-toggle" id="menuToggle" aria-label="Menüyü aç" aria-controls="sideMenu" aria-expanded="false">☰</button><a class="brand" href="/" title="Ana Sayfa">🐄 ÇiftlikPro</a></div><div class="top-user"><a href="/#approaching-estrus">🔔 Bildirimler</a> &nbsp;&nbsp; <a href="/farm-profile">⚙ Ayarlar</a> &nbsp;&nbsp; <b>{h(display)}</b> · <a href="/logout">Çıkış</a></div></div><div class="erp-commandbar" id="customCommandbar"><a data-qid="dashboard" class="mobile-dashboard-command" href="/"><span class="ico">⌂</span>Dashboard</a><a data-qid="new" href="/animal-add"><span class="ico">＋</span>Yeni Kayıt</a><a data-qid="rations" href="/rations"><span class="ico">⚖</span>Rasyon</a><a data-qid="feeds" href="/feeds"><span class="ico">🌾</span>Yem Kataloğu</a><a data-qid="finance" href="/finance"><span class="ico">₺</span>Finans</a><a data-qid="reports" href="/reports"><span class="ico">▥</span>Raporlar</a><a data-qid="data" href="/data"><span class="ico">⇄</span>Veri</a><a data-qid="paddocks" href="/paddocks"><span class="ico">🏠</span>Padoklar</a><a data-qid="health" href="/health"><span class="ico">💉</span>Sağlık</a><a data-qid="milk" href="/milk-center"><span class="ico">🥛</span>Süt</a><button type="button" class="command-edit" id="commandEditBtn" title="Üst menüyü özelleştir">⚙</button></div><dialog id="commandEditor" class="command-editor"><form method="dialog"><h3>Üst Menüyü Özelleştir</h3><p class="mut">Gösterilecek hızlı erişimleri seçin. Ayar bu cihazda saklanır.</p><div id="commandChoices"></div><div class="command-editor-actions"><button type="button" class="btn alt" id="commandReset">Varsayılana Dön</button><button class="btn">Tamam</button></div></form></dialog><div class="erp-tabs {'dashboard-tabs' if path=='/' else ''}"><div class="erp-tab">{h(title)}</div></div><div class="layout {'dashboard-layout' if path=='/' else ''}"><aside class="side" id="sideMenu" aria-hidden="true">{nav}</aside><div class="side-menu-backdrop" id="sideMenuBackdrop" aria-hidden="true"></div><main class="main">{fl}{body}</main></div><div class="erp-statusbar"><span>Durum: Hazır</span><span>Veritabanı: Bağlı</span><span>Aktif Kullanıcı: {h(display)}</span><span class="erp-version">{h(APP_LABEL)}</span></div><script>
 (function(){{
  const modernPaths=['/','/reproduction-center','/animal'];
  if(modernPaths.includes(location.pathname)){{document.body.classList.add('v118-shell');const bar=document.getElementById('customCommandbar'),first=bar&&bar.querySelector('[data-qid="new"]');if(bar&&first&&!bar.querySelector('.v118-animals-link')){{const animals=document.createElement('a');animals.className='v118-animals-link';animals.href='/all-animals';animals.innerHTML='<span class="ico">🐄</span>Hayvanlar';const repro=document.createElement('a');repro.href='/reproduction-center';repro.innerHTML='<span class="ico">◉</span>Tohumlama';bar.insertBefore(repro,first);bar.insertBefore(animals,repro);}}}}
@@ -5569,7 +5579,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
 
  document.querySelectorAll('#customCommandbar a[href]').forEach(function(a){{if(a.getAttribute('href')===location.pathname)a.setAttribute('aria-current','page');}});
  const cb=document.getElementById('customCommandbar'),edit=document.getElementById('commandEditBtn'),dlg=document.getElementById('commandEditor'),choices=document.getElementById('commandChoices'),reset=document.getElementById('commandReset');
- if(cb&&edit&&dlg&&choices){{const defaults=['dashboard','new','rations','feeds','finance','reports','data'];const labels={{dashboard:'Dashboard',new:'Yeni Kayıt',rations:'Rasyon',feeds:'Yem Kataloğu',finance:'Finans',reports:'Raporlar',data:'Veri',paddocks:'Padoklar',health:'Sağlık'}};function saved(){{try{{return JSON.parse(localStorage.getItem('ciftlikpro_quick_menu')||'null')||defaults}}catch(e){{return defaults}}}}function apply(){{const on=saved();cb.querySelectorAll('[data-qid]').forEach(a=>a.style.display=on.includes(a.dataset.qid)?'':'none')}}function build(){{const on=saved();choices.innerHTML='';Object.keys(labels).forEach(id=>{{const l=document.createElement('label');l.className='command-choice';l.innerHTML='<input type="checkbox" value="'+id+'" '+(on.includes(id)?'checked':'')+'><span>'+labels[id]+'</span>';choices.appendChild(l)}});}}edit.addEventListener('click',()=>{{build();dlg.showModal()}});dlg.addEventListener('close',()=>{{const vals=[...choices.querySelectorAll('input:checked')].map(x=>x.value);if(vals.length)localStorage.setItem('ciftlikpro_quick_menu',JSON.stringify(vals));apply()}});reset.addEventListener('click',()=>{{localStorage.removeItem('ciftlikpro_quick_menu');build();apply()}});apply();}}
+ if(cb&&edit&&dlg&&choices){{const defaults=['dashboard','new','rations','feeds','finance','reports','data'];const labels={{dashboard:'Dashboard',new:'Yeni Kayıt',rations:'Rasyon',feeds:'Yem Kataloğu',finance:'Finans',reports:'Raporlar',data:'Veri',paddocks:'Padoklar',health:'Sağlık',milk:'Süt Yönetimi'}};function saved(){{try{{return JSON.parse(localStorage.getItem('ciftlikpro_quick_menu')||'null')||defaults}}catch(e){{return defaults}}}}function apply(){{const on=saved();cb.querySelectorAll('[data-qid]').forEach(a=>a.style.display=on.includes(a.dataset.qid)?'':'none')}}function build(){{const on=saved();choices.innerHTML='';Object.keys(labels).forEach(id=>{{const l=document.createElement('label');l.className='command-choice';l.innerHTML='<input type="checkbox" value="'+id+'" '+(on.includes(id)?'checked':'')+'><span>'+labels[id]+'</span>';choices.appendChild(l)}});}}edit.addEventListener('click',()=>{{build();dlg.showModal()}});dlg.addEventListener('close',()=>{{const vals=[...choices.querySelectorAll('input:checked')].map(x=>x.value);if(vals.length)localStorage.setItem('ciftlikpro_quick_menu',JSON.stringify(vals));apply()}});reset.addEventListener('click',()=>{{localStorage.removeItem('ciftlikpro_quick_menu');build();apply()}});apply();}}
  const c=document.getElementById("financeCategory"),a=document.getElementById("financeAnimal"),w=document.getElementById("statusWarning"),bulk=document.getElementById("bulkAnimalIds");if(c&&a&&w){{function x(){{const r=c.value==="Hayvan Satışı"||c.value==="Kesim Geliri";w.style.display=r?"block":"none";a.required=r&&!bulk;}}c.addEventListener("change",x);x();}}
 }})();
 function copyDeviceSimple(id,btn){{
@@ -5877,6 +5887,50 @@ def normalize_tr_tag(value):
     if not digits:raise ValueError('Küpe numarasının TR sonrasındaki rakamlarını girin.')
     if len(digits)<8 or len(digits)>14:raise ValueError('Küpe numarası TR sonrası 8-14 rakam olmalıdır.')
     return 'TR'+digits
+
+def dairy_lactation_summary(c, animal_id, as_of=None):
+    """Son doğumdan itibaren süt/laktasyon özetini döndürür."""
+    as_of=as_of or date.today()
+    if isinstance(as_of,str):
+        try:as_of=date.fromisoformat(as_of)
+        except Exception:as_of=date.today()
+    births=c.execute("select birth_date from calves where mother_id=? and coalesce(birth_date,'')<>'' and birth_date<=? order by birth_date",(animal_id,as_of.isoformat())).fetchall()
+    lact_no=len(births);lact_start=births[-1]['birth_date'] if births else ''
+    try:dim=max(1,(as_of-date.fromisoformat(lact_start)).days+1) if lact_start else None
+    except Exception:dim=None
+    rows=c.execute("select * from milk where animal_id=? and measure_date<=? order by measure_date,id",(animal_id,as_of.isoformat())).fetchall()
+    daily={};quality=[]
+    for r in rows:
+        d=str(r['measure_date'] or '')
+        if not d or (lact_start and d<lact_start):continue
+        daily[d]=daily.get(d,0.0)+float(r['liters'] or 0)
+        try:
+            if float(r['fat_pct'] or 0)>0 or float(r['protein_pct'] or 0)>0 or int(r['scc'] or 0)>0:quality.append(r)
+        except Exception:pass
+    def avg_since(days):
+        cutoff=(as_of-timedelta(days=days-1)).isoformat();vals=[v for d,v in daily.items() if cutoff<=d<=as_of.isoformat()]
+        return sum(vals)/len(vals) if vals else 0.0
+    today=float(daily.get(as_of.isoformat(),0) or 0);avg7=avg_since(7);avg30=avg_since(30);total=sum(daily.values())
+    peak=max(daily.values()) if daily else 0.0;peak_date=max(daily,key=daily.get) if daily else ''
+    projected=(total/max(1,dim)*305) if dim and total>0 else 0.0
+    prev_start=(as_of-timedelta(days=13)).isoformat();prev_end=(as_of-timedelta(days=7)).isoformat();prev=[v for d,v in daily.items() if prev_start<=d<=prev_end]
+    prev7=sum(prev)/len(prev) if prev else 0.0;change=((avg7-prev7)/prev7*100) if prev7>0 else 0.0
+    alert=f'Son 7 gün ortalaması önceki haftaya göre %{abs(change):.1f} düştü.' if prev7>0 and change<=-15 else ''
+    return {'lactation_no':lact_no,'lactation_start':lact_start,'dim':dim,'today':today,'avg7':avg7,'avg30':avg30,'total':total,'peak':peak,'peak_date':peak_date,'projected305':projected,'change7':change,'alert':alert,'quality':quality[-1] if quality else None,'daily':daily}
+
+def upsert_daily_milk(c, animal_id, measure_date, morning=None, noon=None, evening=None, total=None, notes='', fat_pct=0, protein_pct=0, scc=0, source='Süt Merkezi'):
+    existing=c.execute('select * from milk where animal_id=? and measure_date=? order by id desc',(animal_id,measure_date)).fetchall()
+    def num(v):
+        try:return max(0.0,float(v or 0))
+        except Exception:return 0.0
+    m=num(morning);n=num(noon);e=num(evening);liters=num(total) if total not in (None,'') else m+n+e
+    if existing:
+        keep=existing[0]
+        c.execute('update milk set liters=?,morning_liters=?,noon_liters=?,evening_liters=?,fat_pct=?,protein_pct=?,scc=?,notes=?,source=?,updated_at=? where id=?',(liters,m,n,e,num(fat_pct),num(protein_pct),int(num(scc)),notes,source,datetime.now().isoformat(timespec='seconds'),keep['id']))
+        for extra in existing[1:]:c.execute('delete from milk where id=?',(extra['id'],))
+        return keep['id']
+    cur=c.execute('insert into milk(animal_id,measure_date,liters,notes,morning_liters,noon_liters,evening_liters,fat_pct,protein_pct,scc,source,updated_at) values(?,?,?,?,?,?,?,?,?,?,?,?)',(animal_id,measure_date,liters,notes,m,n,e,num(fat_pct),num(protein_pct),int(num(scc)),source,datetime.now().isoformat(timespec='seconds')))
+    return cur.lastrowid
 
 def animal_age_months(birth_date,as_of=None):
     if not birth_date:return None
@@ -6955,6 +7009,70 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 return self.send_html(page('Rasyon Çalışma Masası',body,'/rations',u,msg))
             body=f'''<h1 class="ration-page-title">🥣 Rasyon Yönetimi</h1><p class="mut ration-page-subtitle">Rasyonlarınızı oluşturun, çözün ve yönetin. Bir rasyona tıklayınca ayrı Çalışma Masası açılır.</p><div class="ration-page-steps"><span>1️⃣ Rasyon oluştur / çöz</span><span>2️⃣ Rasyonu seç</span><span>3️⃣ Ayrı çalışma masasında düzenle</span></div>{action_cards}{new_ration_panel}{solve_panel}{drawer_script}<div class="ration-picker-grid">{''.join(cards) if cards else '<div class="card">Henüz rasyon oluşturulmadı.</div>'}</div>'''
             return self.send_html(page('Rasyon Yönetimi',body,'/rations',u,msg))
+        if path=='/milk-center':
+            with db() as c:
+                animals=c.execute("select * from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by coalesce(paddock,''),tag").fetchall()
+                summaries=[];today_total=0.0;recorded=0;dims=[];alerts=[]
+                for a in animals:
+                    sm=dairy_lactation_summary(c,a['id']);today_total+=sm['today']
+                    if sm['today']>0:recorded+=1
+                    if sm['dim']:dims.append(sm['dim'])
+                    if sm['alert']:alerts.append((a,sm))
+                    today_row=c.execute("select * from milk where animal_id=? and measure_date=? order by id desc limit 1",(a['id'],date.today().isoformat())).fetchone()
+                    summaries.append((a,sm,today_row))
+            avg_today=today_total/recorded if recorded else 0.0;avg_dim=sum(dims)/len(dims) if dims else 0
+            rows=[]
+            for a,sm,tr in summaries:
+                change=sm['change7'];change_html='—' if not change else f'<span class="{"status-good" if change>=0 else "status-low"}">{change:+.1f}%</span>'
+                warn=f'<div class="perf-due">⚠ {h(sm["alert"])}</div>' if sm['alert'] else ''
+                m=float(tr['morning_liters'] or 0) if tr else 0;e=float(tr['evening_liters'] or 0) if tr else 0
+                search_text=h((str(a['tag'])+' '+str(a['nickname'] or '')+' '+str(a['paddock'] or '')).lower())
+                rows.append(f"""<tr class='milk-row' data-search='{search_text}'><td><a class='animal-tag-btn' href='/animal?id={a['id']}'>{h(a['tag'])}</a><small style='display:block'>{h(a['nickname']) or '—'}</small>{warn}</td><td>{h(a['paddock']) or '—'}</td><td><b>{sm['dim'] if sm['dim'] else '—'}</b><small style='display:block'>{(str(sm['lactation_no'])+'. laktasyon') if sm['lactation_no'] else 'Doğum kaydı yok'}</small></td><td><input class='milk-entry' type='number' min='0' step='0.1' name='morning_{a['id']}' value='{m if m else ''}' placeholder='0,0'></td><td><input class='milk-entry' type='number' min='0' step='0.1' name='evening_{a['id']}' value='{e if e else ''}' placeholder='0,0'></td><td><b>{sm['today']:.1f} L</b></td><td>{sm['avg7']:.1f} L</td><td>{sm['avg30']:.1f} L</td><td>{change_html}</td><td>{sm['total']:.0f} L<small style='display:block'>305 tahmin {sm['projected305']:.0f} L</small></td></tr>""")
+            alerts_html=''.join(f"<div class='v117-list-row'><div><b>⚠ {h(a['tag'])} · {h(a['nickname'])}</b><small>{h(sm['alert'])}</small></div><a class='btn alt' href='/animal?id={a['id']}'>Aç</a></div>" for a,sm in alerts[:8]) or '<div class="workspace-empty">Belirgin süt düşüşü uyarısı yok.</div>'
+            body=f"""<header class='workspace-hero'><div><h1>🥛 Süt & Laktasyon Merkezi</h1><p>Günlük süt, DIM, laktasyon performansı ve düşüş uyarılarını tek ekrandan yönetin.</p></div><div class='workspace-actions'><a class='btn alt' href='/rations'>🥣 Süt Rasyonları</a></div></header><section class='v117-kpis'><div class='card v117-kpi'><span class='ico'>🥛</span><div><span>Bugünkü Süt</span><b>{today_total:.1f} L</b></div><em class='v117-chip'>{recorded} hayvan</em></div><div class='card v117-kpi'><span class='ico'>🐄</span><div><span>Sağmal Takip</span><b>{len(animals)}</b></div><em class='v117-chip'>Aktif dişi</em></div><div class='card v117-kpi'><span class='ico'>📊</span><div><span>İnek Başı</span><b>{avg_today:.1f} L</b></div><em class='v117-chip'>Kayıtlı bugün</em></div><div class='card v117-kpi'><span class='ico'>📅</span><div><span>Ortalama DIM</span><b>{avg_dim:.0f}</b></div><em class='v117-chip'>Laktasyon günü</em></div></section><div class='two' style='margin-top:12px'><div class='card'><h2>⚠ Süt Düşüş Uyarıları</h2>{alerts_html}</div><div class='card'><h2>Nasıl çalışır?</h2><p class='mut'>DIM son kayıtlı doğumdan otomatik hesaplanır. 7 günlük ortalama önceki 7 günle karşılaştırılır; %15 ve üzeri düşüş uyarı üretir. 305 günlük tahmin mevcut laktasyon toplamı ve geçen gün üzerinden güncellenir.</p></div></div><div class='card' style='margin-top:12px'><div class='filter-title'><div><h2>Günlük Sağım Girişi</h2><p class='mut'>Sabah ve akşam litrelerini girin; toplam otomatik kaydedilir.</p></div><input id='milkSearch' type='search' placeholder='Küpe, ad veya padok ara' style='max-width:320px'></div><form method='post' action='/milk-center' data-submit-lock='1'><input type='hidden' name='measure_date' value='{date.today().isoformat()}'><div class='perf-table-wrap'><table class='performance-table milk-center-table'><thead><tr><th>Hayvan</th><th>Padok</th><th>DIM</th><th>Sabah L</th><th>Akşam L</th><th>Bugün</th><th>7 Gün</th><th>30 Gün</th><th>Haftalık</th><th>Laktasyon</th></tr></thead><tbody>{''.join(rows) or '<tr><td colspan="10">Aktif dişi hayvan bulunamadı.</td></tr>'}</tbody></table></div><div class='actions' style='justify-content:flex-end;margin-top:12px'><button class='btn blue'>💾 Günlük Sütleri Kaydet</button></div></form></div><style>
+.milk-entry{{width:94px;min-width:82px;text-align:right}}
+.milk-center-table small{{color:#718078}}
+@media(max-width:700px){{
+  .filter-title{{align-items:stretch;gap:10px}}
+  #milkSearch{{width:100%!important;max-width:none!important}}
+  .perf-table-wrap{{overflow:visible!important}}
+  .milk-center-table{{display:block!important;width:100%!important;min-width:0!important;border:0!important;background:transparent!important}}
+  .milk-center-table thead{{display:none!important}}
+  .milk-center-table tbody{{display:grid!important;gap:10px!important;width:100%!important}}
+  .milk-center-table tr.milk-row{{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:8px 10px!important;width:100%!important;padding:12px!important;border:1px solid #d8e5dc!important;border-radius:14px!important;background:#fff!important;box-shadow:0 1px 3px rgba(20,60,35,.05)!important}}
+  .milk-center-table tr.milk-row[hidden]{{display:none!important}}
+  .milk-center-table td{{display:block!important;width:auto!important;min-width:0!important;border:0!important;padding:3px 0!important;background:transparent!important;text-align:left!important;white-space:normal!important}}
+  .milk-center-table td:nth-child(1){{grid-column:1/-1;padding-bottom:6px!important;border-bottom:1px solid #e8efea!important}}
+  .milk-center-table td:nth-child(2)::before{{content:'Padok';}}
+  .milk-center-table td:nth-child(3)::before{{content:'DIM / Laktasyon';}}
+  .milk-center-table td:nth-child(4)::before{{content:'Sabah';}}
+  .milk-center-table td:nth-child(5)::before{{content:'Akşam';}}
+  .milk-center-table td:nth-child(6)::before{{content:'Bugün';}}
+  .milk-center-table td:nth-child(7)::before{{content:'7 Gün';}}
+  .milk-center-table td:nth-child(8)::before{{content:'30 Gün';}}
+  .milk-center-table td:nth-child(9)::before{{content:'Haftalık';}}
+  .milk-center-table td:nth-child(10)::before{{content:'Laktasyon';}}
+  .milk-center-table td:not(:nth-child(1))::before{{display:block;margin-bottom:4px;font-size:11px;font-weight:700;color:#718078;text-transform:uppercase;letter-spacing:.02em}}
+  .milk-entry{{display:block!important;width:100%!important;min-width:0!important;height:44px!important;font-size:16px!important;padding:8px 10px!important;text-align:right!important;border-radius:10px!important}}
+  .milk-center-table .animal-tag-btn{{display:inline-flex!important;min-height:42px!important;align-items:center!important}}
+  .milk-center-table td:nth-child(6) b{{font-size:18px;color:#17623a}}
+  .milk-center-table td:nth-child(10){{padding-top:5px!important}}
+  .milk-center-table + *{{max-width:100%}}
+  form[action='/milk-center'] .actions{{justify-content:stretch!important}}
+  form[action='/milk-center'] .actions .btn{{width:100%;min-height:48px;font-size:16px}}
+}}
+</style><script>(function(){{
+const s=document.getElementById('milkSearch');
+if(s)s.addEventListener('input',()=>{{const q=s.value.toLowerCase().trim();document.querySelectorAll('.milk-row').forEach(r=>r.hidden=q&&!r.dataset.search.includes(q));}});
+const num=v=>parseFloat(String(v||'').replace(',','.'))||0;
+document.querySelectorAll('.milk-row').forEach(r=>{{
+ const inputs=r.querySelectorAll('.milk-entry');
+ const today=r.children[5]?.querySelector('b');
+ const update=()=>{{if(today)today.textContent=(num(inputs[0]?.value)+num(inputs[1]?.value)).toFixed(1)+' L';}};
+ inputs.forEach(i=>i.addEventListener('input',update));
+}});
+}})();</script>"""
+            return self.send_html(page('Süt & Laktasyon Merkezi',body,path,u,msg))
         if path=='/performance':
             status_filter=(q.get('status',[''])[0] or '').strip();scope=(q.get('scope',['active'])[0] or 'active').strip();search=(q.get('search',[''])[0] or '').strip()
             if scope not in ('all','active','due','low','good','completed'):scope='active'
@@ -7281,6 +7399,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 milk=c.execute('select * from milk where animal_id=? order by measure_date desc',(aid,)).fetchall()
                 calves=c.execute('select * from calves where mother_id=? order by birth_date desc',(aid,)).fetchall()
                 photos=c.execute('select * from animal_photos where animal_id=? order by created_at desc',(aid,)).fetchall()
+            with db() as mc:milk_summary=dairy_lactation_summary(mc,aid) if a['gender']=='Dişi' else None
             latest=ins[-1] if ins else None
             with db() as pc:
                 active_preg=current_pregnancy_record(pc,aid) if a['gender']=='Dişi' else None
@@ -7343,7 +7462,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     except Exception:pass
                 wrows.append(f'<tr><td data-label="Tarih">{fmt_date(r["measure_date"])}</td><td data-label="Kilo">{r["weight"]} kg</td><td data-label="Fark">{gain_txt}</td><td data-label="Günlük Artış">{daily_txt}</td><td data-label="30 Günlük">{monthly_txt}</td><td data-label="Not">{h(r["notes"])}</td></tr>')
             wtr=''.join(reversed(wrows)) or '<tr><td colspan=6>Kayıt yok</td></tr>'
-            mtr=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td>{r["liters"]} L</td><td>{h(r["notes"])}</td></tr>' for r in milk) or '<tr><td colspan=3>Kayıt yok</td></tr>'
+            mtr=''.join(f"<tr><td>{fmt_date(r['measure_date'])}</td><td>{float(r['morning_liters'] or 0):.1f}</td><td>{float(r['evening_liters'] or 0):.1f}</td><td><b>{float(r['liters'] or 0):.1f} L</b></td><td>{('%'+format(float(r['fat_pct']),'.1f')) if float(r['fat_pct'] or 0)>0 else '—'}</td><td>{int(r['scc']) if int(r['scc'] or 0)>0 else '—'}</td><td>{h(r['notes'])}</td></tr>" for r in milk) or '<tr><td colspan=7>Kayıt yok</td></tr>'
             ctr=''.join(f'<tr><td>{h(r["tag"])}</td><td>{fmt_date(r["birth_date"])}</td><td>{h(r["gender"])}</td></tr>' for r in calves) or '<tr><td colspan=3>Kayıt yok</td></tr>'
             ftr=''.join(f'<tr><td>{fmt_date(r["tx_date"])}</td><td>{h(r["tx_type"])}</td><td>{h(r["category"])}</td><td>{h(r["description"]) or "-"}</td><td><b>{money(r["amount"])}</b></td></tr>' for r in fin) or '<tr><td colspan="5">Bu hayvana bağlı finans kaydı yok.</td></tr>'
             edit_url='/animal-edit?id='+str(aid)
@@ -7366,7 +7485,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             overview_timeline=''.join(f'''<div class="animal-360-event"><b>{fmt_date(d)}</b> · {title}<small>{detail}</small></div>''' for d,title,detail in timeline_events[:8]) or '<div class="workspace-empty">Geçmiş kaydı yok.</div>'
             gender_icon='♀' if a['gender']=='Dişi' else '♂';preg_badge='<span class="pill">● Gebe</span>' if active_preg else ''
             weight_panel=f'''<div class="card panel-card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{performance_box}<form method="post" action="/animal/weight" class="actions weight-entry-form" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<div class="panel-table-wrap weight-history-wrap"><table class="weight-history-table" style="margin-top:12px"><thead><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr></thead><tbody>{wtr}</tbody></table></div></div>'''
-            milk_panel=f'''<div class="card panel-card"><h2>🥛 Süt Verimi</h2><form method="post" action="/animal/milk" class="actions" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="liters" placeholder="Litre" required><input name="notes" placeholder="Not"><button class="btn">Ekle</button></form><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Litre</th><th>Not</th></tr>{mtr}</table></div></div>''' if a['gender']=='Dişi' else ''
+            milk_panel=(f"""<div class='card panel-card'><div class='filter-title'><div><h2>🥛 Süt & Laktasyon</h2><p class='mut'>DIM ve performans doğum/süt kayıtlarından otomatik hesaplanır.</p></div><a class='btn alt' href='/milk-center'>Süt Merkezini Aç</a></div><div class='quick-metrics'><span class='pill'>Laktasyon Günü<br><b>{milk_summary['dim'] if milk_summary and milk_summary['dim'] else '—'} DIM</b></span><span class='pill'>Bugün<br><b>{milk_summary['today']:.1f} L</b></span><span class='pill'>7 Gün Ort.<br><b>{milk_summary['avg7']:.1f} L</b></span><span class='pill'>Laktasyon Toplamı<br><b>{milk_summary['total']:.0f} L</b></span><span class='pill'>305 Gün Tahmini<br><b>{milk_summary['projected305']:.0f} L</b></span></div>{('<p class="gender-note" style="margin-top:10px">⚠ '+h(milk_summary['alert'])+'</p>') if milk_summary and milk_summary['alert'] else ''}<form method='post' action='/animal/milk' class='form' data-submit-lock='1'><input type='hidden' name='animal_id' value='{aid}'><label>Tarih<input type='date' name='measure_date' required value='{date.today().isoformat()}'></label><label>Sabah (L)<input type='number' min='0' step='0.1' name='morning_liters' placeholder='0,0'></label><label>Akşam (L)<input type='number' min='0' step='0.1' name='evening_liters' placeholder='0,0'></label><label>Süt Yağı %<input type='number' min='0' step='0.1' name='fat_pct' placeholder='opsiyonel'></label><label>Süt Proteini %<input type='number' min='0' step='0.1' name='protein_pct' placeholder='opsiyonel'></label><label>SCC<input type='number' min='0' step='1' name='scc' placeholder='opsiyonel'></label><label class='full'>Not<input name='notes'></label><div class='full'><button class='btn'>🥛 Süt Kaydını Ekle / Güncelle</button></div></form><div class='panel-table-wrap'><table><tr><th>Tarih</th><th>Sabah</th><th>Akşam</th><th>Toplam</th><th>Yağ</th><th>SCC</th><th>Not</th></tr>{mtr}</table></div></div>""" if a['gender']=='Dişi' else '')
             reproduction_tab='<button class="animal-card-tab" data-animal-tab="reproduction">Üreme</button>' if a['gender']=='Dişi' else ''
             reproduction_panel=f'''<section class="animal-card-panel" data-animal-panel="reproduction"><div class="panel-grid"><div class="card panel-card"><h2>Tohumlama ve Gebelik</h2>{pregnancy_panel}{pregnancy_line}<div class="panel-table-wrap"><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="actions"><a class="btn" href="/inseminations?animal={aid}">Tohumlama İşlemleri</a></div></div><div class="card panel-card"><h2>Buzağıları</h2><div class="panel-table-wrap"><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div></div></section>''' if a['gender']=='Dişi' else ''
             body=f'''<div class="actions" style="justify-content:flex-end"><a class="btn alt" href="/all-animals">← Listeye Dön</a><a class="btn alt" href="/animal/print?id={aid}">Yazdır</a></div><header class="card animal-profile-head">{photo}<div><h1>{gender_icon} {h(a['tag'])}</h1><h2>{h(a['nickname']) or 'Takma ad yok'}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">● {h(a['status'])}</span>{preg_badge}<p class="mut">{h(a['breed']) or 'Irk belirtilmedi'} · {h(a['paddock']) or 'Padok yok'} · {age_text(a['birth_date'])} · {(str(latest_weight)+' kg') if latest_weight is not None else 'Kilo yok'}</p></div><div class="animal-quick-actions"><a class="btn" href="{edit_url}">✎ Düzenle</a><a class="btn alt" href="/paddocks">⇄ Padok Değiştir</a></div></header>
@@ -8982,8 +9101,18 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not row:return self.redirect('/paddocks?selected='+str(pid),'Düzenlenecek ek yem kaydı bulunamadı.')
                     duplicate=c.execute("select id from paddock_extra_feeds where paddock_id=? and feed_id=? and id<>? and active=1 and (end_date is null or trim(end_date)='')",(pid,fid,eid)).fetchone()
                     if duplicate:return self.redirect('/paddocks?selected='+str(pid),'Bu yem padokta zaten aktif ek yem olarak bulunuyor.')
-                    c.execute('''update paddock_extra_feeds set feed_id=?,kg_per_head_day=?,start_date=?,notes=?,active=1,end_date=NULL,updated_at=? where id=?''',(fid,round(kg,3),start,notes,now,eid))
-                    action='Padok ek yemini düzenledi';message='Ek yem / takviye güncellendi.'
+                    row_start=date.fromisoformat(str(row['start_date'] or date.today().isoformat())[:10])
+                    if start_day>date.today() and row_start<=date.today() and int(row['active'] or 0)==1:
+                        # Bugün kullanılan ek yemi ileri tarihe taşımak bugünkü tüketimi kesmemeli.
+                        # Mevcut satır planlanan güne kadar sürer, değişiklik yeni dönem olarak eklenir.
+                        previous_end=(start_day-timedelta(days=1)).isoformat()
+                        c.execute('update paddock_extra_feeds set end_date=?,updated_at=? where id=?',(previous_end,now,eid))
+                        c.execute('''insert into paddock_extra_feeds(paddock_id,feed_id,kg_per_head_day,start_date,end_date,active,notes,created_at,updated_at)
+                            values(?,?,?,?,NULL,1,?,?,?)''',(pid,fid,round(kg,3),start,notes,now,now))
+                        action='Padok ek yem değişikliğini zamanladı';message='Ek yem değişikliği gelecek tarihe planlandı; bugünkü kayıt korundu.'
+                    else:
+                        c.execute('''update paddock_extra_feeds set feed_id=?,kg_per_head_day=?,start_date=?,notes=?,active=1,end_date=NULL,updated_at=? where id=?''',(fid,round(kg,3),start,notes,now,eid))
+                        action='Padok ek yemini düzenledi';message='Ek yem / takviye güncellendi.'
                 else:
                     previous_end=(start_day-timedelta(days=1)).isoformat()
                     if start_day>date.today():
@@ -9802,8 +9931,24 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     return_to=(f.get('return_to') or '').strip()
                     if return_to.startswith('/performance') and not return_to.startswith('//'):return self.redirect(return_to,msg)
                     return self.redirect('/animal?id='+aid,msg)
+                if path=='/milk-center':
+                    measure_date=(f.get('measure_date') or date.today().isoformat()).strip()
+                    try:date.fromisoformat(measure_date)
+                    except Exception:return self.redirect('/milk-center','Tarih geçersiz.')
+                    rows=c.execute("select id from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif'").fetchall();saved=0
+                    for row in rows:
+                        aid=int(row['id']);mk=f.get(f'morning_{aid}','').strip();ev=f.get(f'evening_{aid}','').strip()
+                        if mk=='' and ev=='':continue
+                        try:upsert_daily_milk(c,aid,measure_date,morning=mk,evening=ev,source='Süt Merkezi');saved+=1
+                        except Exception:continue
+                    audit(username,'Günlük süt girişi',f'{fmt_date(measure_date)} · {saved} hayvan',self.client_ip())
+                    return self.redirect('/milk-center',f'{saved} hayvan için günlük süt kaydı güncellendi.')
                 if path=='/animal/milk':
-                    c.execute('insert into milk(animal_id,measure_date,liters,notes) values(?,?,?,?)',(f['animal_id'],f['measure_date'],float(f['liters']),f.get('notes')));return self.redirect('/animal?id='+f['animal_id'],'Süt kaydı eklendi.')
+                    aid=int(f['animal_id']);measure_date=f['measure_date']
+                    try:date.fromisoformat(measure_date)
+                    except Exception:return self.redirect('/animal?id='+str(aid),'Süt tarihi geçersiz.')
+                    upsert_daily_milk(c,aid,measure_date,morning=f.get('morning_liters'),evening=f.get('evening_liters'),notes=f.get('notes') or '',fat_pct=f.get('fat_pct'),protein_pct=f.get('protein_pct'),scc=f.get('scc'),source='Hayvan Kartı')
+                    return self.redirect('/animal?id='+str(aid),'Süt kaydı eklendi / güncellendi.')
                 if path in ('/animals','/males'):
                     upload=f.get('photo_file'); photo_url=f.get('photo_url','')
                     if upload and isinstance(upload,dict) and upload.get('content'):
@@ -12133,3 +12278,219 @@ _old_page_hotfix122aa=page
 def page(title,body,path='/',user='admin',flash=''):
     html=_old_page_hotfix122aa(title,body,path,user,flash)
     return html.replace('</body>',HOTFIX122AA_SCIENCE_TOGGLE+'</body>')
+
+
+# --- Hotfix 1.22ab: tek bilimsel panel denetleyicisi + zamanlı ek yem güvenliği ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ab'
+APP_LABEL='v'+APP_VERSION
+
+_OBSOLETE_SCIENCE_LAYER_IDS=(
+    'hotfix122w-science-panel-visibility',
+    'hotfix122w-science-panel-visibility-script',
+    'hotfix122x-lowres-flow',
+    'hotfix122x-lowres-flow-script',
+    'hotfix122z-science-toggle-fix',
+    'hotfix122z-science-toggle-script',
+    'hotfix122aa-science-toggle-clean',
+    'hotfix122aa-science-toggle-clean-script',
+)
+
+def _remove_obsolete_science_layers(html):
+    """Önceki geçici panel katmanlarını son HTML'den çıkarır."""
+    for element_id in _OBSOLETE_SCIENCE_LAYER_IDS:
+        escaped=re.escape(element_id)
+        html=re.sub(r'<style\s+id=["\']'+escaped+r'["\'][^>]*>.*?</style>','',html,flags=re.I|re.S)
+        html=re.sub(r'<script\s+id=["\']'+escaped+r'["\'][^>]*>.*?</script>','',html,flags=re.I|re.S)
+    return html
+
+HOTFIX122AB_SCIENCE_UI=r"""<style id="hotfix122ab-science-controller">
+@media (min-width:901px){
+ body:has(.workbench-shell).wb2-desktop .target-workspace{
+   display:block!important;position:static!important;align-self:stretch!important;
+   width:100%!important;min-width:0!important;max-width:100%!important;
+   height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .science-target-shell:not([data-hf122ab-open="true"]){display:none!important}
+ body:has(.workbench-shell).wb2-desktop .science-target-shell[data-hf122ab-open="true"]{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;clear:both!important;
+   transform:none!important;width:100%!important;min-width:0!important;max-width:100%!important;
+   height:auto!important;min-height:0!important;max-height:none!important;margin:8px 0 12px!important;
+   padding:8px!important;overflow:visible!important;z-index:auto!important;box-sizing:border-box!important;
+   visibility:visible!important;opacity:1!important;contain:none!important;content-visibility:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .science-target-shell[data-hf122ab-open="true"] .science-target-grid{
+   display:grid!important;position:static!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+   grid-auto-flow:row!important;grid-auto-rows:auto!important;gap:8px!important;width:100%!important;min-width:0!important;
+   height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .science-target-shell[data-hf122ab-open="true"] .science-target-card{
+   display:block!important;position:static!important;inset:auto!important;float:none!important;width:auto!important;
+   height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;
+ }
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder,
+ body:has(.workbench-shell).wb2-desktop .target-compare-placeholder.active{
+   display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;
+ }
+ body:has(.workbench-shell).wb2-desktop #ration-workbench{
+   display:block!important;position:relative!important;clear:both!important;z-index:auto!important;
+   width:100%!important;min-width:0!important;max-width:100%!important;margin-top:0!important;
+ }
+}
+@media (min-width:901px) and (max-width:1080px){
+ body:has(.workbench-shell).wb2-desktop .science-target-shell[data-hf122ab-open="true"] .science-target-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="hotfix122ab-science-controller-script">
+(function(){
+ function clearStalePageLock(){
+  document.body.style.removeProperty('overflow');document.body.style.removeProperty('overflow-y');
+  document.documentElement.style.removeProperty('overflow');document.documentElement.style.removeProperty('overflow-y');
+ }
+ function init(){
+  if(!window.matchMedia('(min-width:901px)').matches)return;
+  var panel=document.querySelector('.target-compare-sticky.science-target-shell');
+  var oldButton=document.querySelector('.wb2-desktop-science');
+  if(!panel||!oldButton)return;
+  var button=oldButton.cloneNode(true);
+  oldButton.parentNode.replaceChild(button,oldButton);
+  panel.classList.remove('wb2-desktop-open','wb2-show-science','is-floating','hf122aa-open');
+  panel.removeAttribute('hidden');panel.setAttribute('data-hf122ab-open','false');panel.setAttribute('aria-hidden','true');
+  ['left','right','top','bottom','width','height','max-width','max-height','position','transform'].forEach(function(k){panel.style.removeProperty(k);});
+  document.querySelectorAll('.target-compare-placeholder').forEach(function(p){p.classList.remove('active');p.style.height='';p.style.width='';});
+  button.textContent='🔬 Tüm bilimsel değerler';button.setAttribute('aria-expanded','false');clearStalePageLock();
+  button.addEventListener('click',function(event){
+   event.preventDefault();event.stopImmediatePropagation();
+   var open=panel.getAttribute('data-hf122ab-open')!=='true';
+   panel.setAttribute('data-hf122ab-open',open?'true':'false');panel.setAttribute('aria-hidden',open?'false':'true');
+   button.setAttribute('aria-expanded',open?'true':'false');
+   button.textContent=open?'✕ Bilimsel değerleri kapat':'🔬 Tüm bilimsel değerler';clearStalePageLock();
+  },true);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>"""
+
+_old_page_hotfix122ab=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_remove_obsolete_science_layers(_old_page_hotfix122ab(title,body,path,user,flash))
+    return html.replace('</body>',HOTFIX122AB_SCIENCE_UI+'</body>')
+
+# --- Hotfix1.22ad: Mobil Süt Girişi Responsive Kartlar ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ad'
+APP_LABEL='v'+APP_VERSION
+
+
+# --- Hotfix1.22ae: Kompakt mobil süt + düşük çözünürlük rasyon hedef kartları ---
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ae'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AE_COMPACT_UI=r"""<style id="hotfix122ae-compact-ui">
+/* Rasyon hedef kartları: düşük çözünürlükte değerleri görünür tut, eski ilerleme şeridini kaldır. */
+@media (min-width:901px){
+ body.wb2-desktop .wb2-desktop-kpi{
+   min-width:0!important;min-height:112px!important;
+   padding:13px 10px 12px 54px!important;overflow:hidden!important;
+ }
+ body.wb2-desktop .wb2-desktop-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px!important}
+ body.wb2-desktop .wb2-desktop-kpi::before{left:13px!important;top:15px!important;font-size:27px!important}
+ body.wb2-desktop .wb2-desktop-kpi-name{min-width:0!important;padding-right:24px!important}
+ body.wb2-desktop .wb2-desktop-kpi-name b{font-size:17px!important;white-space:nowrap!important}
+ body.wb2-desktop .wb2-desktop-kpi-name small{font-size:9px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ body.wb2-desktop .wb2-desktop-kpi-values{
+   display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+   gap:6px!important;margin-top:15px!important;min-width:0!important;
+ }
+ body.wb2-desktop .wb2-desktop-kpi-values span{min-width:0!important;text-align:center!important}
+ body.wb2-desktop .wb2-desktop-kpi-values span+span{border-left:1px solid rgba(80,110,92,.16)!important}
+ body.wb2-desktop .wb2-desktop-kpi-values small{font-size:7.5px!important;line-height:1!important;white-space:nowrap!important}
+ body.wb2-desktop .wb2-desktop-kpi-values b{
+   display:block!important;font-size:13px!important;line-height:1.2!important;margin-top:4px!important;
+   white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important;letter-spacing:-.15px!important;
+ }
+ /* Kullanıcının istediği alt tamamlama/progress şeridi tamamen kaldırıldı. */
+ body.wb2-desktop .wb2-desktop-kpi .hf119h-range{display:none!important}
+ body.wb2-desktop .wb2-desktop-kpi{padding-bottom:12px!important}
+
+ /* Alt üç özet kutusu: başlık + hedef + mevcut değer tek satır/kompakt. */
+ body.wb2-desktop .wb2-desktop-secondary{display:grid!important;grid-template-columns:1fr 1.35fr 1fr!important;gap:8px!important;margin-top:8px!important}
+ body.wb2-desktop .wb2-desktop-secondary>div{
+   display:grid!important;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr)!important;
+   align-items:center!important;column-gap:9px!important;min-width:0!important;padding:8px 10px!important;
+ }
+ body.wb2-desktop .wb2-desktop-secondary>div>span:first-child{font-size:10px!important;font-weight:800!important;white-space:nowrap!important}
+ body.wb2-desktop .wb2-desktop-secondary .hf122ae-sub{
+   display:flex!important;flex-direction:column!important;min-width:0!important;padding-left:8px!important;border-left:1px solid #dfe8e2!important;
+ }
+ body.wb2-desktop .wb2-desktop-secondary .hf122ae-sub small{font-size:7px!important;color:#708078!important;font-weight:800!important;text-transform:uppercase!important;line-height:1!important}
+ body.wb2-desktop .wb2-desktop-secondary .hf122ae-sub b{font-size:11px!important;white-space:nowrap!important;margin-top:2px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ body.wb2-desktop .wb2-desktop-secondary>div:last-child{grid-template-columns:auto minmax(0,1fr)!important}
+ body.wb2-desktop .wb2-desktop-secondary>div:last-child>b{justify-self:end!important;white-space:nowrap!important;font-size:12px!important}
+}
+/* 1366px ve benzeri çözünürlüklerde hedef/rasyon metinlerini ayrıca sıkıştır. */
+@media (min-width:901px) and (max-width:1400px){
+ body.wb2-desktop .wb2-desktop-kpis{padding:10px!important}
+ body.wb2-desktop .wb2-desktop-kpi-grid{gap:6px!important}
+ body.wb2-desktop .wb2-desktop-kpi{padding:11px 7px 10px 46px!important;min-height:104px!important}
+ body.wb2-desktop .wb2-desktop-kpi::before{left:10px!important;top:13px!important;font-size:24px!important}
+ body.wb2-desktop .wb2-desktop-kpi-name b{font-size:15px!important}
+ body.wb2-desktop .wb2-desktop-kpi-name small{font-size:8px!important}
+ body.wb2-desktop .wb2-desktop-kpi-values{gap:3px!important;margin-top:13px!important}
+ body.wb2-desktop .wb2-desktop-kpi-values small{font-size:6.8px!important}
+ body.wb2-desktop .wb2-desktop-kpi-values b{font-size:11.5px!important;letter-spacing:-.25px!important}
+ body.wb2-desktop .wb2-desktop-kpi-status{right:8px!important;top:10px!important;width:19px!important;height:19px!important}
+ body.wb2-desktop .wb2-desktop-kpi-status:after{height:19px!important;font-size:11px!important}
+ body.wb2-desktop .wb2-desktop-secondary>div{column-gap:6px!important;padding:7px 8px!important}
+ body.wb2-desktop .wb2-desktop-secondary>div>span:first-child{font-size:9px!important}
+ body.wb2-desktop .wb2-desktop-secondary .hf122ae-sub b{font-size:10px!important}
+}
+/* Mobil süt girişi: aynı bilgi, daha kısa kart ve daha çok hayvan. */
+@media(max-width:650px){
+ form[action='/milk-center'] .perf-table-wrap{padding-bottom:78px!important}
+ .milk-center-table tbody{gap:7px!important}
+ .milk-center-table tr.milk-row{gap:4px 9px!important;padding:9px 10px!important;border-radius:12px!important}
+ .milk-center-table td{padding:1px 0!important;line-height:1.15!important}
+ .milk-center-table td:nth-child(1){padding-bottom:4px!important}
+ .milk-center-table td:not(:nth-child(1))::before{margin-bottom:2px!important;font-size:9.5px!important}
+ .milk-center-table small{font-size:10px!important;line-height:1.1!important}
+ .milk-center-table .animal-tag-btn{min-height:35px!important;padding:6px 10px!important}
+ .milk-entry{height:37px!important;min-height:37px!important;padding:5px 8px!important;font-size:15px!important;border-radius:8px!important}
+ .milk-center-table td:nth-child(6) b{font-size:16px!important}
+ form[action='/milk-center'] .actions{margin-top:8px!important;padding-bottom:72px!important}
+ form[action='/milk-center'] .actions .btn{min-height:42px!important;font-size:14px!important}
+}
+</style>
+<script id="hotfix122ae-compact-script">
+(function(){
+ function init(){
+   /* Nişasta ve Kaba/Kesif kutularında hedef ile rasyonu aynı kutuda göster. */
+   var secondary=document.querySelector('.wb2-desktop-secondary');
+   if(secondary && secondary.dataset.hf122ae!=='1'){
+     secondary.dataset.hf122ae='1';
+     var boxes=secondary.children;
+     function upgrade(box,key){
+       if(!box)return;
+       var value=box.querySelector('b'); if(!value)return;
+       value.style.display='none';
+       var target=document.getElementById('target-mini-'+key+'-target');
+       var current=document.getElementById('target-mini-'+key+'-current');
+       var targetWrap=document.createElement('span');targetWrap.className='hf122ae-sub hf122ae-target';
+       var currentWrap=document.createElement('span');currentWrap.className='hf122ae-sub hf122ae-current';
+       targetWrap.innerHTML='<small>Hedef</small><b>—</b>';currentWrap.innerHTML='<small>Rasyon</small><b>—</b>';
+       box.appendChild(targetWrap);box.appendChild(currentWrap);
+       function sync(){
+         targetWrap.querySelector('b').textContent=target?target.textContent:'—';
+         currentWrap.querySelector('b').textContent=current?current.textContent:(value.textContent||'—');
+       }
+       sync();
+       if(target)new MutationObserver(sync).observe(target,{subtree:true,childList:true,characterData:true});
+       if(current)new MutationObserver(sync).observe(current,{subtree:true,childList:true,characterData:true});
+     }
+     upgrade(boxes[0],'starch');upgrade(boxes[1],'rc');
+   }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(init)},{once:true});else requestAnimationFrame(init);
+})();
+</script>"""
+_old_page_hotfix122ae=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_old_page_hotfix122ae(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122AE_COMPACT_UI+'</body>')

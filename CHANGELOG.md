@@ -1,4 +1,35 @@
-# Hotfix1.22aa
+
+## v3.9.23 DEV4 Hotfix1.22ae
+- Mobil Süt & Laktasyon giriş kartları kompaktlaştırıldı; giriş kutuları kısaltıldı ve alt durum çubuğu için güvenli boşluk artırıldı.
+- Rasyon Hedef ↔ Rasyon kartlarında düşük çözünürlükte KM/GCAA/HP/NDF hedef ve rasyon değerlerinin taşması azaltıldı.
+- Hedef kartlarının altındaki tamamlama/progress şeritleri kaldırıldı.
+- Nişasta ve Kaba/Kesif özetlerine hedef aralığı ile mevcut rasyon değeri birlikte eklendi.
+- Solver/hesap çekirdeği değiştirilmedi.
+# Hotfix1.22ad – Mobil Süt Girişi Responsive
+
+- Mobilde Süt & Laktasyon tablosu kart düzenine çevrildi; yatay taşma kaldırıldı.
+- Sabah/Akşam girişleri dokunmatik kullanım için büyütüldü.
+- Girilen Sabah + Akşam değeri kartta Bugün toplamını anlık günceller.
+- Arama ve kaydet butonu mobilde tam genişlik oldu.
+- Masaüstü süt tablosu ve 1.22ac süt altyapısı korunmuştur.
+
+# Hotfix1.22ad – Süt & Laktasyon Yönetimi V1
+
+- Süt & Laktasyon Merkezi eklendi.
+- Sabah/akşam toplu süt girişi ve günlük toplam.
+- DIM, laktasyon numarası, 7/30 gün ortalaması, pik, laktasyon toplamı ve 305 gün tahmini.
+- Önceki 7 güne göre %15+ düşüşte uyarı.
+- Hayvan kartında süt yağı, protein ve SCC kaydı.
+- Eski süt kayıtları ve veritabanı korunur.
+
+# Hotfix1.22ab
+- Hotfix1.22aa paketi tüm testler ve sürüm dosyalarıyla yeniden kontrol edildi.
+- Bilimsel panelde aynı anda çalışan eski `w/x/z/aa` aç/kapat katmanları final HTML'den kaldırıldı; tek, bağımsız denetleyici bırakıldı.
+- Düşük çözünürlükte panel doğal sayfa akışında görünür; rasyon tablosuyla çakışmaz ve sayfa kaydırması kilitlenmez.
+- Aktif ek yem ileri tarihe düzenlendiğinde mevcut dönem korunur, yeni miktar/yem ayrı gelecek dönem kaydı olarak planlanır.
+- Solver DEV4.19.6 ve bilimsel hedefler değiştirilmedi; 134 otomatik test geçti.
+
+## Devralınan Hotfix1.22aa
 - Bilimsel değerler butonundaki eski üst üste click handler zinciri temizlendi.
 - Bilimsel panel artık bağımsız aç/kapat sınıfıyla yönetilir; ikinci tıklamada güvenli biçimde kapanır.
 - Panel açılırken body/html scroll kilidi temizlenir; sayfa yukarı-aşağı kaymaya devam eder.

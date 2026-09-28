@@ -1,6 +1,28 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22aa
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ae
 
-Bu hotfix, bilimsel değerler panelinin açıldıktan sonra kapanmaması ve sayfa kaydırmasını kilitlemesi sorununu giderir. Eski buton event zinciri temizlenmiş, panel bağımsız toggle mantığına alınmıştır. Solver DEV4.19.6 korunmuştur.
+## Hotfix1.22ae – Mobil Süt Girişi Responsive
+
+Mobil süt girişi kart düzenine geçirildi; masaüstü tablo korunmuştur.
+
+Bu hotfix, Hotfix1.22aa üzerine yapılan bütünlük kontrolünü ve iki doğrulanmış düzeltmeyi içerir. Bilimsel değerler panelinin eski `w/x/z/aa` denetleyicileri son HTML'den temizlenerek tek aç/kapat denetleyicisine indirildi. Aktif ek yem kaydı ileri bir tarihe düzenlendiğinde bugünkü tüketim artık kaybolmaz; mevcut dönem planlanan tarihten bir gün önce kapanır ve yeni dönem ayrıca oluşturulur. Solver DEV4.19.6 korunmuştur.
+
+## Hotfix1.22ae – Süt & Laktasyon Yönetimi V1
+
+- Yeni Süt & Laktasyon Merkezi: toplu sabah/akşam süt girişi, DIM, 7/30 günlük ortalama, laktasyon toplamı, 305 gün tahmini ve süt düşüş uyarısı.
+- Hayvan kartında süt kalite alanları (yağ, protein, SCC) ve laktasyon KPI kartları.
+- Mevcut milk tablosu geriye uyumlu migration ile genişletilir; eski veritabanları korunur.
+- Hotfix1.22ab QA paneli ve tarihli ek yem geliştirmeleri aynen korunur.
+
+## Hotfix1.22ab
+
+- Düşük çözünürlük bilimsel panelinde birikmiş eski CSS/JavaScript katmanları final sayfadan kaldırılır; yalnız tek denetleyici çalışır.
+- Panel normal belge akışında 2 kolon, dar masaüstünde tek kolon açılır; rasyon satırlarının üzerine binmez ve sayfa kaydırmasını kilitlemez.
+- Aktif ek yemin ileri tarihli miktar/yem değişikliği bugünkü kaydı geleceğe taşımaz; tarihsel dönemler korunur.
+- Toplam **134 otomatik test** geçmiştir; 28 solver/rasyon fonksiyonu Hotfix1.22aa ile AST düzeyinde birebir aynıdır.
+
+## Devralınan paket: Hotfix1.22aa
+
+Bilimsel panelin aç/kapat ve kaydırma düzeltmeleri korunmuştur; yukarıdaki tek denetleyici katmanı eski geçici uygulamaların yerini alır.
 
 # Hotfix1.22z
 - Bilimsel değerler paneli masaüstünde varsayılan kapalı başlar.
