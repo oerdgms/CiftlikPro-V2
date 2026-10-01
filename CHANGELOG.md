@@ -1,3 +1,66 @@
+# Hotfix1.22aq - Kompakt seçili hayvan kartı
+
+- Mobil Üreme Merkezi seçili hayvan detayı yeniden boyutlandırıldı; yatay taşma ve gereksiz dikey alan azaltıldı.
+- Tekrarlanan küpe metriği mobilde gizlendi; padok ve aşama iki kompakt rozet olarak gösterilir.
+- Beş aşamalı üreme akışı küçük ikonlarla ekran genişliğine sabitlendi.
+- Hayvan kartı ve tüm kayıtlar bağlantıları mobilde kısa etiketlere dönüştürüldü.
+- Masaüstü detay kartının bilgi yoğunluğu ve yerleşimi değiştirilmedi.
+
+# Hotfix1.22ap - Aşama filtreli Üreme Merkezi
+
+- Mobil Safari kaydırmasında oluşan `resize` olayının akordeonu başlangıç durumuna döndürmesi engellendi; durum yalnız mobil/masaüstü eşiği gerçekten değiştiğinde yeniden kurulur.
+- İşlem düğmeleri tek satır, sınırlı genişlik ve güvenli kutu ölçüsüyle kart içine sabitlendi.
+- Masaüstü Üreme Merkezi aşama sekmeleriyle filtrelenen tek geniş liste düzenine geçirildi.
+- Pozitif gebelik kayıtları için ayrı `Gebe` filtresi eklendi; mobilde mevcut dört akordeon korunarak tekrar eden gebe bölümü gizlendi.
+- Arama, padok ve aşama filtreleri birlikte çalışır; mevcut kayıt formları ve işlem uçları değiştirilmedi.
+
+# Hotfix1.22ao - Mobil Üreme Merkezi
+
+- Üreme Merkezi'nin dört operasyon bölümü mobilde açılır/kapanır kompakt kartlara dönüştürüldü.
+- Açık bölümde ilk üç hayvan fotoğraf, kimlik özeti, durum ve işlemle gösterilir; daha uzun listeler isteğe bağlı açılır.
+- Fotoğraf kaynağı hayvan profil fotoğrafından, yoksa fotoğraf geçmişindeki ilk kayıttan alınır; fotoğraf yoksa güvenli simge kullanılır.
+- Arama ve padok filtresi akordeon görünümüyle birlikte çalışır; eşleşen bölüm otomatik açılır.
+- Masaüstü dört sütun görünümü ile mevcut Tohumlandı, Sonuç Gir, Kontrol Kaydet ve Doğum Kaydet akışları korunmuştur.
+
+# Hotfix1.22an - Fotoğraflı ve sıralanabilir Sürü Merkezi
+
+- Masaüstü filtre denetimleri kalıcı görünür hale getirildi; boş kalan sağ alan giderildi.
+- Aktif hayvan ve buzağı sorgularına profil fotoğrafı eklendi; galeri fotoğrafı yedek kaynak olarak kullanılır.
+- Hayvan, Tür, Irk, Padok, Yaş ve Durum sütunlarına sunucu taraflı artan/azalan sıralama eklendi.
+- Masaüstü satırı fotoğraflı kimlik özetine; mobil satır fotoğraflı kompakt karta dönüştürüldü.
+- Sıralama, filtre, kategori ve sayfalama parametreleri birlikte korunur.
+
+# Hotfix1.22am - Sürü Merkezi araç çubuğu
+
+- Filtre formu sunucu HTML'inde yenilendi; masaüstünde hizalı, mobilde açılır bölüm.
+- Tür alanı yerine mevcut kategori sekmeleri kullanılır; arama ve padok seçimi kategori/sayfalama bağlantılarında korunur.
+- Sonuç özeti eklendi; mobil hayvan kartları kompaktlaştırıldı. İşlem düğmelerinin tek sırası korunur.
+- Sürü Merkezi dışındaki filtre formları, solver ve stok hesapları değiştirilmedi.
+
+# Hotfix1.22al - Mobil hayvan işlem satırı
+
+- Sürü Merkezi mobil kartlarında Görüntüle, Düzenle ve Sil işlemleri tek satırda düzenlendi.
+- Silme düğmesi kompakt ikon görünümüne geçirildi; 44 px dokunma alanı ve kayıt silme onayı korundu.
+- Kural yalnız Sürü Merkezi mobil tablosuna sınırlandı; masaüstü ve diğer modüller etkilenmez.
+
+# Hotfix1.22ak - Dashboard ilk çizim düzeltmesi
+
+- Modern/Klasik Dashboard anahtarının CSS'i ilk HTML çiziminden önce `<head>` içinde yüklenir.
+- Mobil Safari'de görülen ham mavi, alt alta buton parlaması kaldırıldı.
+- `APP_LABEL`, `APP_VERSION` ile eşitlendi; alt durum çubuğu artık gerçek paket sürümünü gösterir.
+- Modern/Klasik tercih davranışı, sağlık ajandası, solver ve stok hesapları değiştirilmedi.
+
+# Hotfix1.22aj - Sağlık Merkezi ve yaklaşan işler
+
+- Ana sayfadaki bekleyen işler artık eski planları, yeni doz/tedavi görevlerini ve önümüzdeki 30 günün gebelik aşılarını birlikte gösterir. İlk dört sağlık satırı sınırı kaldırıldı; liste kendi içinde kayar.
+- Bugün Yapılacak göstergesi yalnız bugün tarihli işleri sayar.
+- Sağlık kartları tarih kutusu, durum rozeti ve daha kompakt işlem düğmeleriyle yeniden düzenlendi; planlar tarih sırasıyla gösterilir.
+- PDF indir / Yazdır ana sayfadan Sağlık ekranına taşındı. Çıktı seçili filtre ve küpe/ürün/işlem aramasını takip eder; yalnız bekleyen sağlık işlerini içerir. Hayvan Dosyaları geçmiş ekranında çıktı düğmeleri gizlidir.
+- Padok uygulamaları çıktıdaki tek satırda hayvan sayısıyla özetlenir. Gebelik aşıları 30 günlük pencereyle alınır.
+- Rasyon taslak koruması korunur. Solver, bilimsel eşikler ve stok tüketimi değiştirilmedi.
+
+Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon taslak betiği testleri tekrar geçti. Çok sayfalı A4 PDF görsel olarak kontrol edildi. Tarayıcı yerleşimi ve kullanıcının kendi kayıtlarıyla kurulum testi henüz doğrulanmadı.
+
 # 3.9.23 DEV4 Hotfix1.22af
 
 - Windows installer artık kullanıcı profiline kurulum için yönetici hesabını zorunlu tutmaz (`PrivilegesRequired=lowest`).
@@ -898,3 +961,8 @@
 - İç üretim maliyeti Finans ekranında nakit dışı ayrı toplam olarak gösterilir ve nakit gideri ikinci kez azaltmaz.
 - Buzağı 10 aylık olduğunda yetişkin karta aktarılırken iç üretim maliyeti de devredilir.
 - Rasyon solver çekirdeği DEV4.19.6 değiştirilmedi.
+
+## Hotfix1.22aj — Sağlık Ajandası
+- Günlere göre ajanda varsayılan; Kartlar görünümü seçilebilir ve tarayıcıda hatırlanır.
+- Arama ve filtreler boş gün gruplarını gizler; mevcut aşı/tedavi işlemleri korunur.
+- Mobilde satırlar alt alta; ikincil işlemler üç nokta menüsündedir.

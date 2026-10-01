@@ -1694,6 +1694,96 @@ def animal_report_xlsx(rows,profile,columns=None):
     ws.page_setup.orientation='landscape';ws.page_setup.fitToWidth=1;ws.page_setup.fitToHeight=0
     output=io.BytesIO();wb.save(output);wb.close();return output.getvalue()
 
+TASK_FILTERS={'all':'Tümü','overdue':'Geciken','today':'Bugün','upcoming':'Yaklaşan'}
+
+def health_plan_entries(con, horizon_days=None):
+    """Sağlık planları: eski plan, doz/tedavi görevleri ve gebelik aşıları."""
+    result=[]
+    legacy=con.execute("select h.*,a.tag animal_tag,ca.tag calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where coalesce(h.next_date,'')<>'' order by h.next_date,h.id").fetchall()
+    for r in legacy:
+        result.append({'date':r['next_date'],'subject':r['animal_tag'] or r['calf_tag'] or '-', 'task':r['kind'] or 'Sağlık işlemi','detail':r['product'] or '', 'source':'legacy','key':'legacy:'+str(r['id'])})
+    tasks=con.execute("""select t.*,hc.kind,hc.product,hc.scope_type,p.name paddock_name,a.tag animal_tag,ca.tag calf_tag
+        from health_tasks t join health_courses hc on hc.id=t.course_id left join paddocks p on p.id=hc.paddock_id
+        left join animals a on a.id=t.animal_id left join calves ca on ca.id=t.calf_id
+        where t.status='Bekliyor' and coalesce(hc.active,1)=1 order by t.planned_date,t.course_id,t.dose_no,t.day_no,t.application_no,t.id""").fetchall()
+    groups={}
+    for r in tasks:
+        key=('P',r['course_id'],r['planned_date'],r['dose_no'],r['day_no'],r['application_no']) if r['scope_type']=='paddock' else ('S',r['id'])
+        groups.setdefault(key,[]).append(r)
+    for key,items in groups.items():
+        r=items[0]
+        dose=f"{int(r['dose_no'] or 1)} / {int(r['dose_total'] or 1)}. doz" if r['kind']=='Aşı' else f"{int(r['day_no'] or 1)} / {int(r['day_total'] or 1)}. gün · {int(r['application_no'] or 1)} / {int(r['applications_per_day'] or 1)} uygulama"
+        subject=(r['paddock_name'] or 'Padok') if r['scope_type']=='paddock' else (r['animal_tag'] or r['calf_tag'] or '-')
+        detail=(r['product'] or '')+' · '+dose
+        if r['scope_type']=='paddock': detail+=f' · {len(items)} hayvan'
+        result.append({'date':r['planned_date'],'subject':subject,'task':r['kind'] or 'Tedavi','detail':detail,'source':'course','key':str(key)})
+    for t in pregnancy_vaccine_tasks(con,horizon_days=30 if horizon_days is None else horizon_days):
+        result.append({'date':t['task_date'],'subject':t['tag'],'task':str(t['month'])+'. Ay Gebelik Aşısı','detail':'Gebelik planından otomatik','source':'pregnancy','key':f"pregnancy:{t['insemination_id']}:{t['month']}"})
+    today=date.today()
+    if horizon_days is not None: result=[r for r in result if r['date']<=(today+timedelta(days=horizon_days)).isoformat()]
+    for r in result:
+        try: days=(date.fromisoformat(r['date'])-today).days
+        except ValueError: days=9999
+        r['state']='overdue' if days<0 else 'today' if days==0 else 'upcoming'
+        r['status']=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
+    return sorted(result,key=lambda r:(r['date'],str(r['subject']),r['key']))
+
+def health_export_tasks(task_filter='all', search=''):
+    if task_filter not in TASK_FILTERS: task_filter='all'
+    with db() as con: rows=health_plan_entries(con)
+    norm=lambda value:str(value or '').replace('I','ı').replace('İ','i').casefold().strip()
+    term=norm(search)
+    return [r for r in rows if (task_filter=='all' or r['state']==task_filter) and (not term or term in norm(' '.join(str(r[k]) for k in ('subject','task','detail'))))]
+
+def dashboard_export_tasks(task_filter='all', on_date=None):
+    today=on_date or date.today()
+    if task_filter not in TASK_FILTERS: task_filter='all'
+    with db() as c:
+        health=c.execute("select h.next_date,h.kind,h.product,a.tag animal_tag,ca.tag calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where coalesce(h.next_date,'')<>'' and h.next_date<=? order by h.next_date limit 4",((today+timedelta(days=30)).isoformat(),)).fetchall()
+        payments=c.execute("select due_date,category,supplier,amount from finance where payment_method='Vadeli' and coalesce(payment_status,'Bekliyor')<>'Ödendi' and coalesce(due_date,'')<>'' and due_date<=? order by due_date,id limit 2",((today+timedelta(days=7)).isoformat(),)).fetchall()
+    rows=[]
+    for r in health:
+        rows.append({'date':r['next_date'],'subject':r['animal_tag'] or r['calf_tag'] or 'Genel','task':r['kind'] or 'Sağlık işlemi','detail':r['product'] or ''})
+    for r in payments:
+        rows.append({'date':r['due_date'],'subject':r['supplier'] or r['category'] or 'Vadeli ödeme','task':'Vadeli ödeme','detail':money(r['amount'])})
+    for r in rows:
+        try: days=(date.fromisoformat(r['date'])-today).days
+        except ValueError: days=99
+        r['state']='overdue' if days<0 else 'today' if days==0 else 'upcoming'
+        r['status']=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
+    return [r for r in rows if task_filter=='all' or r['state']==task_filter]
+
+def dashboard_tasks_print(rows, task_filter='all'):
+    label=TASK_FILTERS.get(task_filter,'Tümü')
+    trs=''.join('<tr><td><span class="check"></span></td>'+''.join('<td>'+h(v)+'</td>' for v in (fmt_date(r['date']),r['subject'],r['task']+' - '+r['detail'],r['status']))+'</tr>' for r in rows)
+    if not trs: trs='<tr><td colspan="5">Seçili filtrede bekleyen görev bulunmuyor.</td></tr>'
+    return '''<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bugünün İşleri</title><style>body{font:14px Arial,sans-serif;color:#203b2c;max-width:1000px;margin:24px auto;padding:12px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:12px 8px;border:1px solid #ccdacf;text-align:left;overflow-wrap:anywhere}th{background:#edf5ef}thead{display:table-header-group}tr{break-inside:avoid}.check{display:block;width:14px;height:14px;border:1px solid #52695a}button,a{padding:12px;display:inline-block} @page{size:A4;margin:15mm}@media print{.actions{display:none}body{margin:0;padding:0;font-size:10pt}}</style><body>'''+f'<div class="actions"><button onclick="window.print()">Yazdır / PDF olarak kaydet</button><a href="/dashboard/tasks.pdf?filter={task_filter if task_filter in TASK_FILTERS else "all"}">PDF indir</a></div><h1>{h(farm_display_name(farm_profile()))}</h1><h2>Bugünün İşleri</h2><p>{date.today().strftime("%d/%m/%Y")} · Filtre: {h(label)} · {len(rows)} görev</p><p>Dashboard’da gösterilen sağlık ve vadeli ödeme görevleri. Kutuları çıktıda elle işaretleyebilirsiniz; kayıtları değiştirmez.</p><table><colgroup><col style="width:7%"><col style="width:17%"><col style="width:23%"><col style="width:35%"><col style="width:18%"></colgroup><thead><tr><th>✓</th><th>Tarih</th><th>Küpe / İlgili</th><th>İşlem / Açıklama</th><th>Durum</th></tr></thead><tbody>{trs}</tbody></table></body></html>'
+
+def dashboard_tasks_pdf(rows, task_filter='all', report_title='Bugünün İşleri', report_note='Dashboard’da gösterilen sağlık ve vadeli ödeme görevleri. Kutuları elle işaretleyebilirsiniz; kayıtları değiştirmez.'):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Table,TableStyle
+    import reportlab
+    fonts=Path(reportlab.__file__).resolve().parent/'fonts'
+    if 'TaskVera' not in pdfmetrics.getRegisteredFontNames(): pdfmetrics.registerFont(TTFont('TaskVera',str(fonts/'Vera.ttf')))
+    style=ParagraphStyle('task',fontName='TaskVera',fontSize=9,leading=13)
+    title=ParagraphStyle('tasktitle',parent=style,fontSize=18,leading=23,textColor=colors.HexColor('#176b3a'))
+    cell=lambda value:Paragraph(h(str(value).replace('₺','TL ')),style)
+    out=io.BytesIO();doc=SimpleDocTemplate(out,pagesize=A4,leftMargin=36,rightMargin=36,topMargin=36,bottomMargin=36,title=report_title)
+    data=[[cell(x) for x in ('','Tarih','Küpe / İlgili','İşlem / Açıklama','Durum')]]
+    for r in rows: data.append([cell('[  ]'),cell(fmt_date(r['date'])),cell(r['subject']),cell(r['task']+' - '+r['detail']),cell(r['status'])])
+    if not rows: data.append([cell(''),cell(''),cell('Seçili filtrede bekleyen görev bulunmuyor.'),cell(''),cell('')])
+    table=Table(data,colWidths=[25,70,115,175,doc.width-385],repeatRows=1)
+    table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#edf5ef')),('GRID',(0,0),(-1,-1),.5,colors.HexColor('#ccdacf')),('VALIGN',(0,0),(-1,-1),'TOP'),('TOPPADDING',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),9)]))
+    if not rows: table.setStyle(TableStyle([('SPAN',(2,1),(4,1))]))
+    def footer(canvas,doc):
+        canvas.setFont('TaskVera',8);canvas.drawString(36,20,'ÇiftlikPro - '+report_title);canvas.drawRightString(A4[0]-36,20,str(doc.page))
+    doc.build([Paragraph(h(farm_display_name(farm_profile())),title),Spacer(1,12),Paragraph(h(report_title),title),Spacer(1,12),cell(date.today().strftime('%d/%m/%Y')+' · Filtre: '+TASK_FILTERS.get(task_filter,'Tümü')+f' · {len(rows)} görev'),Spacer(1,10),cell(report_note),Spacer(1,16),table],onFirstPage=footer,onLaterPages=footer)
+    return out.getvalue()
+
 def animal_report_pdf(rows,profile,subtitle='Aktif Kayıtlar · Tüm Hayvanlar',columns=None):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT,TA_RIGHT
@@ -6355,6 +6445,28 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        if path in ('/health/tasks.pdf','/health/tasks/print'):
+            task_filter=q.get('filter',['all'])[0]
+            if task_filter not in TASK_FILTERS: task_filter='all'
+            search=q.get('search',[''])[0].strip()
+            rows=health_export_tasks(task_filter,search)
+            note='Bekleyen sağlık planları, doz/tedavi görevleri ve önümüzdeki 30 günün gebelik aşıları. Kutular elle işaretleme içindir; kayıtları değiştirmez.'
+            if search: note+=' Arama: '+search
+            if path.endswith('/print'):
+                html=dashboard_tasks_print(rows,task_filter).replace('Bugünün İşleri','Sağlık İş Planı')
+                html=html.replace('Dashboard’da gösterilen sağlık ve vadeli ödeme görevleri. Kutuları çıktıda elle işaretleyebilirsiniz; kayıtları değiştirmez.',h(note))
+                query=urllib.parse.urlencode({'filter':task_filter,'search':search})
+                html=html.replace('/dashboard/tasks.pdf?filter='+task_filter,'/health/tasks.pdf?'+h(query))
+                return self.send_html(html)
+            raw=dashboard_tasks_pdf(rows,task_filter,'Sağlık İş Planı',note)
+            self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition',f'attachment; filename="saglik_is_plani_{date.today().strftime("%Y%m%d")}_{task_filter}.pdf"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
+        if path in ('/dashboard/tasks.pdf','/dashboard/tasks/print'):
+            task_filter=q.get('filter',['all'])[0]
+            if task_filter not in TASK_FILTERS: task_filter='all'
+            rows=dashboard_export_tasks(task_filter)
+            if path.endswith('/print'): return self.send_html(dashboard_tasks_print(rows,task_filter))
+            raw=dashboard_tasks_pdf(rows,task_filter)
+            self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition',f'attachment; filename="bugunun_isleri_{date.today().strftime("%Y%m%d")}_{task_filter}.pdf"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
         if path=='/api/animal-tag-check':
             try:tag=normalize_tr_tag((q.get('tag') or [''])[0])
             except ValueError:
@@ -6672,20 +6784,18 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 low_feed_rows=c.execute("""select f.name,coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 and exists(select 1 from feed_stock_transactions entered where entered.feed_id=f.id and entered.tx_type in ('Giriş','Sayım +')) order by stock asc,f.name limit 5""").fetchall()
                 recent_actions=c.execute("select created_at,username,action,detail from audit_log order by id desc limit 5").fetchall()
             month_net=(months[-1][1]-months[-1][2]) if months else 0
-            today_tasks=[];overdue_task_count=0
-            for r in health_rows[:4]:
-                try:days=(date.fromisoformat(r['next_date'])-date.today()).days
-                except Exception:days=99
-                overdue_task_count+=1 if days<0 else 0
-                label=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
-                tag=r['animal_tag'] or r['calf_tag'] or 'Genel'
-                today_tasks.append(f'''<div class="v117-task" data-task-state="{'overdue' if days<0 else 'today' if days==0 else 'upcoming'}"><b>{fmt_date(r['next_date'])}</b><div><strong>💉 {h(r['kind'])} · {h(tag)}</strong><small>{h(r['product']) or 'Sağlık işlemi'}</small></div><span class="v117-chip {'danger' if days<0 else 'warn' if days<=3 else ''}">{h(label)}</span></div>''')
-            for r in payment_due_rows[:2]:
-                try:days=(date.fromisoformat(r['due_date'])-date.today()).days
-                except Exception:days=99
-                overdue_task_count+=1 if days<0 else 0
-                label=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
-                today_tasks.append(f'''<div class="v117-task" data-task-state="{'overdue' if days<0 else 'today' if days==0 else 'upcoming'}"><b>{fmt_date(r['due_date'])}</b><div><strong>₺ {h(r['supplier'] or r['category'])}</strong><small>{money(r['amount'])} · Vadeli ödeme</small></div><span class="v117-chip {'danger' if days<0 else 'warn'}">{h(label)}</span></div>''')
+            with db() as c: dashboard_health=health_plan_entries(c,horizon_days=30)
+            dashboard_entries=list(dashboard_health)
+            for r in payment_due_rows:
+                days=(date.fromisoformat(r['due_date'])-date.today()).days
+                dashboard_entries.append({'date':r['due_date'],'subject':r['supplier'] or r['category'] or 'Vadeli ödeme','task':'Vadeli ödeme','detail':money(r['amount']),'state':'overdue' if days<0 else 'today' if days==0 else 'upcoming','status':f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı','source':'finance'})
+            dashboard_entries.sort(key=lambda r:(r['date'],str(r['subject'])))
+            overdue_task_count=sum(r['state']=='overdue' for r in dashboard_entries)
+            today_tasks=[]
+            for r in dashboard_entries:
+                link='/finance' if r['source']=='finance' else '/health?'+urllib.parse.urlencode({'filter':r['state'],'search':r['subject']})
+                icon='₺' if r['source']=='finance' else '💉'
+                today_tasks.append(f'''<div class="v117-task" data-task-state="{r['state']}"><b>{fmt_date(r['date'])}</b><div><strong><a href="{h(link)}">{icon} {h(r['task'])} · {h(r['subject'])}</a></strong><small>{h(r['detail'])}</small></div><span class="v117-chip {'danger' if r['state']=='overdue' else 'warn' if r['state']=='today' else ''}">{h(r['status'])}</span></div>''')
             dashboard_v117_tasks=''.join(today_tasks) or '<div class="workspace-empty">Bugün için bekleyen görev bulunmuyor.</div>'
             birth_rows=''.join(f'''<div class="v117-list-row"><div><b>♀ {h(r['tag'])} {h(r['nickname'])}</b><small>Tahmini doğum: {fmt_date(r['due_date'])}</small></div><span class="v117-chip {'danger' if (date.fromisoformat(r['due_date'])-date.today()).days<=7 else ''}">{max(0,(date.fromisoformat(r['due_date'])-date.today()).days)} gün</span></div>''' for r in due_rows[:5]) or '<div class="workspace-empty">45 gün içinde doğum beklenmiyor.</div>'
             feed_rows_html=''.join(f'''<div class="v117-list-row"><div><b>🌾 {h(r['name'])}</b><small>Kalan takipli yem stoku</small></div><span class="v117-chip {'danger' if float(r['stock'] or 0)<=0 else 'warn' if float(r['stock'] or 0)<500 else ''}">{float(r['stock'] or 0):,.0f} kg</span></div>''' for r in low_feed_rows) or '<div class="workspace-empty">Henüz stok girişi yapılmış yem bulunmuyor.</div>'
@@ -6701,16 +6811,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             modern_dashboard_html=f'''<section class="v117-kpis">
               <a class="card v117-kpi" href="/all-animals"><span class="ico">🐄</span><div><span>Toplam Hayvan</span><b>{active_total}</b></div><em class="v117-chip">Aktif</em></a>
               <a class="card v117-kpi" href="/paddocks"><span class="ico">🏠</span><div><span>Aktif Padok</span><b>{active_paddocks}</b></div><em class="v117-chip">Padok</em></a>
-              <a class="card v117-kpi" href="/health"><span class="ico">☑</span><div><span>Bugün Yapılacak</span><b>{len(today_tasks)}</b></div><em class="v117-chip {'danger' if overdue_task_count else ''}">{overdue_task_count} gecikmiş</em></a>
+              <a class="card v117-kpi" href="/health"><span class="ico">☑</span><div><span>Bugün Yapılacak</span><b>{sum(r['state']=='today' for r in dashboard_entries)}</b></div><em class="v117-chip {'danger' if overdue_task_count else ''}">{overdue_task_count} gecikmiş</em></a>
               <a class="card v117-kpi v122j-month-net" href="/finance"><span class="ico">₺</span><div><span>Aylık Net</span><b class="v122j-money">{money(month_net)}</b></div><em class="v117-chip {'danger' if month_net<0 else ''}">{'Zarar' if month_net<0 else 'Net'}</em></a>
             </section>
             <section class="v117-dashboard">
-              <div class="card v117-panel"><div class="v117-panel-head"><h2>📋 Bugünün İşleri</h2><a href="/health">Tümünü Gör →</a></div><div class="v118-task-tabs"><button class="v118-task-tab active" data-task-filter="all">Tümü ({len(today_tasks)})</button><button class="v118-task-tab" data-task-filter="overdue">🔴 Geciken ({overdue_task_count})</button><button class="v118-task-tab" data-task-filter="today">🕒 Bugün</button><button class="v118-task-tab" data-task-filter="upcoming">🗓 Yaklaşan</button></div><div class="v117-panel-body">{dashboard_v117_tasks}</div></div>
+<div class="card v117-panel"><div class="v117-panel-head" style="flex-wrap:wrap;gap:8px"><h2>📋 Bugünün İşleri</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="/health">Tümünü Gör →</a></div></div><div class="v118-task-tabs"><button class="v118-task-tab active" data-task-filter="all">Tümü ({len(today_tasks)})</button><button class="v118-task-tab" data-task-filter="overdue">🔴 Geciken ({overdue_task_count})</button><button class="v118-task-tab" data-task-filter="today">🕒 Bugün</button><button class="v118-task-tab" data-task-filter="upcoming">🗓 Yaklaşan</button></div><div class="v117-panel-body" style="max-height:360px;overflow:auto">{dashboard_v117_tasks}<p id="dashboard-task-empty" class="mut" hidden>Seçili filtrede bekleyen iş bulunmuyor.</p></div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🐄 Sürü Dağılımı</h2><a href="/all-animals">Tümünü Gör →</a></div><div class="v117-panel-body v117-donut-wrap"><div class="v117-donut" style="--p1:{p1:.1f}%;--p2:{p2:.1f}%;--p3:{p3:.1f}%"><b>{active_total}<small>hayvan</small></b></div><div class="v117-legend"><div><span>● Dişi</span><b>{animals}</b></div><div><span>● Erkek</span><b>{males}</b></div><div><span>● Buzağı</span><b>{calves}</b></div><div><span>● Gebe</span><b>{pregnant}</b></div></div></div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🐮 Yaklaşan Doğumlar</h2><a href="/reproduction-center">Tümünü Gör →</a></div><div class="v117-panel-body">{birth_rows}</div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🌾 Kritik Stoklar</h2><a href="/feeds">Tümünü Gör →</a></div><div class="v117-panel-body">{feed_rows_html}</div></div>
               <div class="card v117-panel v117-span-2 v122j-recent-panel"><div class="v117-panel-head"><h2>↻ Son Hareketler</h2><a href="/audit-log">Tümünü Gör →</a></div><div class="v117-panel-body">{action_rows}</div></div>
-            </section><script>(function(){{const tabs=[...document.querySelectorAll('[data-task-filter]')],tasks=[...document.querySelectorAll('[data-task-state]')];tabs.forEach(tab=>tab.addEventListener('click',function(){{tabs.forEach(x=>x.classList.toggle('active',x===tab));const state=tab.dataset.taskFilter;tasks.forEach(x=>x.hidden=state!=='all'&&x.dataset.taskState!==state);}}));}})();</script>'''
+            </section><script>(function(){{const tabs=[...document.querySelectorAll('[data-task-filter]')],tasks=[...document.querySelectorAll('[data-task-state]')];tabs.forEach(tab=>tab.addEventListener('click',function(){{tabs.forEach(x=>x.classList.toggle('active',x===tab));const state=tab.dataset.taskFilter;document.querySelectorAll('[data-task-export]').forEach(a=>a.href=a.dataset.taskExport+'?filter='+encodeURIComponent(state));tasks.forEach(x=>x.hidden=state!=='all'&&x.dataset.taskState!==state);const empty=document.getElementById('dashboard-task-empty');if(empty)empty.hidden=tasks.some(x=>!x.hidden);}}));}})();</script>'''
             selected_dashboard_html=restored_dashboard_html if dashboard_view_mode=='classic' else modern_dashboard_html
             body=dashboard_header_html+selected_dashboard_html
             print(f'[PERF] Dashboard hazır: {time.perf_counter()-_dash_t0:.3f} sn')
@@ -6939,7 +7049,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                             if 'yem' in _n: return '🥣'
                             if any(k in _n for k in ('arpa','buğday','bugday','mısır','misir')): return '🌾'
                             return '🧂' if 'katk' in _g else '🌱'
-                        item_rows=''.join(f'''<tr class="ration-row" data-feed-icon="{_ration_feed_icon(x)}" data-item-id="{int(x['item_id'])}" data-locked="{int(x['locked'] or 0)}" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{_solver_nutrient(x,'cp_pct'):.8f}" data-ndf="{_solver_nutrient(x,'ndf_pct'):.8f}" data-endf="{_solver_nutrient(x,'effective_ndf_pct'):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{_solver_nutrient(x,'me_mcal_kg'):.8f}" data-nem="{_solver_nutrient(x,'nem_mcal_kg'):.8f}" data-neg="{_solver_nutrient(x,'neg_mcal_kg'):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><span class="hf122f-feed-thumb" aria-hidden="true">{_ration_feed_icon(x)}</span><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
+                        item_rows=''.join(f'''<tr class="ration-row" data-feed-icon="{_ration_feed_icon(x)}" data-feed-id="{int(x['id'])}" data-item-id="{int(x['item_id'])}" data-locked="{int(x['locked'] or 0)}" data-feed-name="{h(x['name'])}" data-dm="{float(x['dm_pct'] or 0):.8f}" data-cp="{_solver_nutrient(x,'cp_pct'):.8f}" data-ndf="{_solver_nutrient(x,'ndf_pct'):.8f}" data-endf="{_solver_nutrient(x,'effective_ndf_pct'):.8f}" data-starch="{_solver_starch_pct(x):.8f}" data-starch-deg="{float(_rowval(x,'starch_degradability_pct',0) or 0):.8f}" data-me="{_solver_nutrient(x,'me_mcal_kg'):.8f}" data-nem="{_solver_nutrient(x,'nem_mcal_kg'):.8f}" data-neg="{_solver_nutrient(x,'neg_mcal_kg'):.8f}" data-ca="{float(x['ca_pct'] or 0):.8f}" data-p="{float(x['p_pct'] or 0):.8f}" data-price="{float(x['price'] or 0):.8f}" data-group="{feed_group(x)}"><td><span class="hf122f-feed-thumb" aria-hidden="true">{_ration_feed_icon(x)}</span><b>{h(x['name'])}</b></td><td><div class="ration-stepper"><button type="button" class="btn alt compact-btn qty-step" data-delta="-0.10">−</button><input class="ration-qty" type="number" min="0" step="0.01" name="item_{x['item_id']}" value="{float(x['kg_per_head_day']):.2f}" data-original="{float(x['kg_per_head_day']):.2f}"><button type="button" class="btn alt compact-btn qty-step" data-delta="0.10">+</button></div><small class="qty-delta mut"></small></td><td>{float(x['dm_pct'] or 0):.1f}%</td><td>{float(x['cp_pct'] or 0):.1f}%</td><td>{float(x['ndf_pct'] or 0):.1f}%</td><td>{money(x['price'])}/kg</td><td class="row-daily">{money(float(x['kg_per_head_day'])*float(x['price'] or 0))}</td><td><button type="button" class="btn red compact-btn qty-zero">Çıkar</button></td></tr>''' for x in sm['items']) or '<tr><td colspan="8">Henüz yem eklenmedi.</td></tr>'
                         feed_opts=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in feeds)
                         current_feed_qty={int(x['id']):float(x['kg_per_head_day'] or 0) for x in sm['items']}
                         quick_feed_rows=[]
@@ -7228,15 +7338,25 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             search=(q.get('q',[''])[0] or '').strip()
             kind=(q.get('kind',['all'])[0] or 'all').lower()
             paddock=(q.get('paddock',[''])[0] or '').strip()
+            sort_key=(q.get('sort',['animal'])[0] or 'animal').lower()
+            sort_dir=(q.get('dir',['asc'])[0] or 'asc').lower()
             if kind not in ('all','female','male','calf'):kind='all'
+            if sort_key not in ('animal','kind','breed','paddock','age','status'):sort_key='animal'
+            if sort_dir not in ('asc','desc'):sort_dir='asc'
             try:per_page=int(q.get('per_page',['15'])[0])
             except Exception:per_page=15
             if per_page not in (10,15,30):per_page=15
             try:page_no=max(1,int(q.get('page',['1'])[0]))
             except Exception:page_no=1
             with db() as c:
-                adults=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date,status from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag").fetchall()
-                calves_all=c.execute("select id,tag,nickname,gender,breed,paddock,birth_date,status from calves where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag").fetchall()
+                adults=c.execute("""select id,tag,nickname,gender,breed,paddock,birth_date,status,
+                    coalesce(nullif(photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=animals.id order by ap.id limit 1),'') list_photo
+                    from animals where coalesce(status,'Aktif')='Aktif'
+                    and not exists(select 1 from animal_losses l where l.animal_id=animals.id) order by tag""").fetchall()
+                calves_all=c.execute("""select id,tag,nickname,gender,breed,paddock,birth_date,status,
+                    coalesce(nullif(photo_url,''),(select '/uploads/'||cp.filename from calf_photos cp where cp.calf_id=calves.id order by cp.id limit 1),'') list_photo
+                    from calves where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif'
+                    and not exists(select 1 from animal_losses l where l.calf_id=calves.id) order by tag""").fetchall()
                 sold_count=c.execute("select count(*) from animals where status='Satıldı'").fetchone()[0]
                 cut_count=c.execute("select count(*) from animals where status='Kesildi'").fetchone()[0]
                 lost_count=c.execute("select count(*) from animal_losses").fetchone()[0]
@@ -7244,9 +7364,9 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             records=[]
             for r in adults:
                 code='female' if r['gender']=='Dişi' else 'male'
-                records.append({'id':r['id'],'tag':r['tag'],'nickname':r['nickname'],'gender':r['gender'],'breed':r['breed'],'paddock':r['paddock'],'birth_date':r['birth_date'],'code':code,'label':r['gender'],'calf':False})
+                records.append({'id':r['id'],'tag':r['tag'],'nickname':r['nickname'],'gender':r['gender'],'breed':r['breed'],'paddock':r['paddock'],'birth_date':r['birth_date'],'photo_url':r['list_photo'],'code':code,'label':r['gender'],'calf':False})
             for r in calves_all:
-                records.append({'id':r['id'],'tag':r['tag'],'nickname':r['nickname'],'gender':r['gender'],'breed':r['breed'],'paddock':r['paddock'],'birth_date':r['birth_date'],'code':'calf','label':'Buzağı · '+str(r['gender'] or ''),'calf':True})
+                records.append({'id':r['id'],'tag':r['tag'],'nickname':r['nickname'],'gender':r['gender'],'breed':r['breed'],'paddock':r['paddock'],'birth_date':r['birth_date'],'photo_url':r['list_photo'],'code':'calf','label':'Buzağı · '+str(r['gender'] or ''),'calf':True})
             needle=search.casefold()
             filtered=[]
             for r in records:
@@ -7255,7 +7375,17 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 hay=' '.join(str(r.get(x) or '') for x in ('tag','nickname','breed','paddock','label')).casefold()
                 if needle and needle not in hay:continue
                 filtered.append(r)
-            filtered.sort(key=lambda x:str(x['tag'] or '').casefold())
+            def herd_sort_value(rec):
+                if sort_key=='animal':return str(rec.get('tag') or '').casefold()
+                if sort_key=='kind':return str(rec.get('label') or '').casefold()
+                if sort_key=='breed':return str(rec.get('breed') or '').casefold()
+                if sort_key=='paddock':return str(rec.get('paddock') or '').casefold()
+                if sort_key=='age':return animal_age_months(rec.get('birth_date'))
+                return str(rec.get('status') or 'Aktif').casefold()
+            populated=[r for r in filtered if herd_sort_value(r) not in (None,'')]
+            empty=[r for r in filtered if herd_sort_value(r) in (None,'')]
+            populated.sort(key=herd_sort_value,reverse=sort_dir=='desc')
+            filtered=populated+empty
             total_count=len(filtered);total_pages=max(1,(total_count+per_page-1)//per_page)
             if page_no>total_pages:page_no=total_pages
             start=(page_no-1)*per_page;shown=filtered[start:start+per_page]
@@ -7266,20 +7396,31 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 delete_url='/calf-delete' if r['calf'] else '/animal-delete'
                 delete_text='Bu buzağı kaydı kalıcı olarak silinsin mi?' if r['calf'] else 'Bu hayvan ve bağlı kayıtları kalıcı olarak silinsin mi?'
                 actions=f'''<div class="row-actions"><a class="btn alt compact-btn" href="{card_url}">Görüntüle</a><a class="btn alt compact-btn" href="{edit_url}">Düzenle</a><form method="post" action="{delete_url}" onsubmit="return confirm('{delete_text}')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil</button></form></div>'''
-                row_parts.append(f'''<tr><td data-label="Küpe"><a class="animal-tag-btn" href="{card_url}">{h(r['tag'])}</a><div class="mut">{h(r['nickname']) or 'Takma ad yok'}</div></td><td data-label="Tür"><span class="pill">{h(r['label'])}</span></td><td data-label="Irk">{h(r['breed']) or '-'}</td><td data-label="Padok">{h(r['paddock']) or 'Padoksuz'}</td><td data-label="Yaş">{age_text(r['birth_date'])}</td><td data-label="Durum"><span class="pill"><span class="status-dot ok"></span>Aktif</span></td><td data-label="İşlemler">{actions}</td></tr>''')
+                icon='🐮' if r['calf'] else ('🐄' if r['gender']=='Dişi' else '🐂')
+                photo=(f'<img src="{h(r["photo_url"])}" alt="{h(r["tag"])} fotoğrafı" loading="lazy">' if str(r.get('photo_url') or '').strip() else f'<span aria-hidden="true">{icon}</span>')
+                animal_summary=' · '.join(x for x in [str(r['label'] or ''),str(r['breed'] or 'Irk yok'),str(r['paddock'] or 'Padoksuz'),age_text(r['birth_date'])] if x)
+                identity=f'''<div class="herd-animal-cardhead"><a class="herd-photo" href="{card_url}" aria-label="{h(r['tag'])} kartını aç">{photo}</a><div class="herd-identity"><a class="animal-tag-btn" href="{card_url}">{h(r['tag'])}</a><div class="herd-animal-name">{h(r['nickname']) or 'Takma ad yok'}</div><div class="herd-animal-summary">{h(animal_summary)}</div></div><span class="herd-mobile-status"><span class="status-dot ok"></span>Aktif</span></div>'''
+                row_parts.append(f'''<tr><td data-label="Hayvan">{identity}</td><td data-label="Tür"><span class="pill">{h(r['label'])}</span></td><td data-label="Irk">{h(r['breed']) or '-'}</td><td data-label="Padok">{h(r['paddock']) or 'Padoksuz'}</td><td data-label="Yaş">{age_text(r['birth_date'])}</td><td data-label="Durum"><span class="pill"><span class="status-dot ok"></span>Aktif</span></td><td data-label="İşlemler">{actions}</td></tr>''')
             trs=''.join(row_parts) or '<tr><td colspan="7" class="workspace-empty">Filtrelere uygun hayvan bulunamadı.</td></tr>'
             paddock_options=''.join(f'<option value="{h(x)}">{h(x)}</option>' for x in paddocks)
             counts={'all':len(records),'female':sum(1 for r in records if r['code']=='female'),'male':sum(1 for r in records if r['code']=='male'),'calf':sum(1 for r in records if r['code']=='calf')}
             def herd_url(n,extra=None):
-                vals={'q':search,'kind':kind,'paddock':paddock,'per_page':per_page,'page':n}
+                vals={'q':search,'kind':kind,'paddock':paddock,'per_page':per_page,'page':n,'sort':sort_key,'dir':sort_dir}
                 if extra:vals.update(extra)
                 return '/all-animals?'+urllib.parse.urlencode(vals)
+            def herd_sort_link(key,label):
+                next_dir='desc' if sort_key==key and sort_dir=='asc' else 'asc'
+                indicator=('↑' if sort_dir=='asc' else '↓') if sort_key==key else '↕'
+                current=' active' if sort_key==key else ''
+                url=herd_url(1,{'sort':key,'dir':next_dir})
+                return f'<a class="herd-sort{current}" href="{h(url)}" aria-label="{h(label)} sütununu sırala">{h(label)} <span aria-hidden="true">{indicator}</span></a>'
             tabs=''.join(f'<a class="count-tab {"active" if kind==key else ""}" href="{h(herd_url(1,{"kind":key}))}">{label}<b>{counts[key]}</b></a>' for key,label in [('all','Tüm Aktif'),('female','Dişi'),('male','Erkek'),('calf','Buzağı')])
             tabs+=f'<a class="count-tab" href="/archive/sold">Satılan<b>{sold_count}</b></a><a class="count-tab" href="/archive/slaughtered">Kesilen<b>{cut_count}</b></a><a class="count-tab" href="/archive/lost">Ölen / Kayıp<b>{lost_count}</b></a>'
             pager=f'''<div class="workspace-pager"><span class="mut">{total_count} kayıttan {start+1 if total_count else 0}–{min(start+per_page,total_count)} arası · Sayfa {page_no}/{total_pages}</span><div>{f'<a class="btn alt" href="{h(herd_url(page_no-1))}">← Önceki</a>' if page_no>1 else ''}{f'<a class="btn alt" href="{h(herd_url(page_no+1))}">Sonraki →</a>' if page_no<total_pages else ''}</div></div>'''
             kind_options=''.join(f'<option value="{key}" {"selected" if kind==key else ""}>{label}</option>' for key,label in [('all','Tüm Türler'),('female','Dişi'),('male','Erkek'),('calf','Buzağı')])
             per_options=''.join(f'<option value="{n}" {"selected" if per_page==n else ""}>{n} kayıt</option>' for n in (10,15,30))
-            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs">{tabs}</nav><form class="card compact-filter" method="get"><label>Hayvan Ara<input name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok"></label><label>Padok<select name="paddock"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label>Tür<select name="kind">{kind_options}</select></label><label>Sayfa Boyutu<select name="per_page">{per_options}</select></label><input type="hidden" name="page" value="1"><div class="compact-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></form><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card"><div class="workspace-table-wrap"><table class="workspace-table"><thead><tr><th>Hayvan</th><th>Tür</th><th>Irk</th><th>Padok</th><th>Yaş</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
+            headers=''.join(f'<th>{herd_sort_link(key,label)}</th>' for key,label in [('animal','Hayvan'),('kind','Tür'),('breed','Irk'),('paddock','Padok'),('age','Yaş'),('status','Durum')])+'<th>İşlemler</th>'
+            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs">{tabs}</nav><form class="card herd-filter" method="get" action="/all-animals"><label class="herd-search"><span>Hayvan ara</span><input type="search" name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok ara…" aria-label="Hayvan ara"></label><input type="hidden" name="kind" value="{h(kind)}"><input type="hidden" name="page" value="1"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"><details class="herd-filter-details" open><summary>⚲ Filtreler{' <b class="herd-filter-badge">1</b>' if paddock else ''}<span class="herd-filter-chevron">⌄</span></summary><div class="herd-filter-controls"><label><span>Padok</span><select name="paddock"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label><span>Göster</span><select name="per_page">{per_options}</select></label><div class="herd-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></div></details></form><div class="herd-result-summary" role="status">{total_count} hayvan · {h(paddock) if paddock else 'Tüm padoklar'}{(' · '+h(search)) if search else ''}</div><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card herd-list-card"><div class="workspace-table-wrap"><table class="workspace-table herd-table"><thead><tr>{headers}</tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
             return self.send_html(page('Tüm Aktif Hayvanlar',body,'/all-animals',u,msg))
 
         if path=='/animals':
@@ -7602,9 +7743,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             selected_id=(q.get('animal',[''])[0] or '').strip()
             today=date.today()
             with db() as c:
-                females=c.execute("select id,tag,nickname,breed,paddock,birth_date from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
-                estrus_all=c.execute("select e.*,a.tag,a.nickname,a.breed,a.paddock from estrus_records e join animals a on a.id=e.animal_id where coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc").fetchall()
-                insem_all=c.execute("select i.*,a.tag,a.nickname,a.breed,a.paddock from inseminations i join animals a on a.id=i.animal_id where coalesce(a.status,'Aktif')='Aktif' order by i.insemination_date desc,i.id desc").fetchall()
+                females=c.execute("""select id,tag,nickname,breed,paddock,birth_date,
+                    coalesce(nullif(photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=animals.id order by ap.id limit 1),'') photo_url
+                    from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag""").fetchall()
+                estrus_all=c.execute("""select e.*,a.tag,a.nickname,a.breed,a.paddock,
+                    coalesce(nullif(a.photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=a.id order by ap.id limit 1),'') photo_url
+                    from estrus_records e join animals a on a.id=e.animal_id where coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc""").fetchall()
+                insem_all=c.execute("""select i.*,a.tag,a.nickname,a.breed,a.paddock,
+                    coalesce(nullif(a.photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=a.id order by ap.id limit 1),'') photo_url
+                    from inseminations i join animals a on a.id=i.animal_id where coalesce(a.status,'Aktif')='Aktif' order by i.insemination_date desc,i.id desc""").fetchall()
             latest_estrus={};latest_insem={}
             for r in estrus_all:
                 if r['animal_id'] not in latest_estrus:latest_estrus[r['animal_id']]=r
@@ -7618,7 +7765,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     cycle=next_estrus_cycle(c,r,today)
                     if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):estrus_stage.append((cycle['center'],r,cycle))
             estrus_stage.sort(key=lambda x:x[0])
-            inseminated_stage=[];control_stage=[];birth_stage=[]
+            inseminated_stage=[];control_stage=[];pregnant_stage=[];birth_stage=[]
             for aid,r in latest_insem.items():
                 result=str(r['pregnancy_result'] or '').strip().lower()
                 try:days_since=(today-date.fromisoformat(r['insemination_date'])).days
@@ -7626,12 +7773,14 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if is_pregnant_value(r['pregnancy_result']):
                     try:days_left=(date.fromisoformat(r['due_date'])-today).days
                     except Exception:days_left=999
+                    pregnant_stage.append((days_left,r))
                     if days_left<=60:birth_stage.append((days_left,r))
                 elif result in ('','bekleniyor','belirsiz'):
                     (control_stage if days_since>=18 else inseminated_stage).append((days_since,r))
-            inseminated_stage.sort(key=lambda x:x[0],reverse=True);control_stage.sort(key=lambda x:x[0],reverse=True);birth_stage.sort(key=lambda x:x[0])
+            inseminated_stage.sort(key=lambda x:x[0],reverse=True);control_stage.sort(key=lambda x:x[0],reverse=True);pregnant_stage.sort(key=lambda x:x[0]);birth_stage.sort(key=lambda x:x[0])
             def repro_card(r,meta,badge,action,selected=False):
-                return f'''<article class="repro-card {'selected' if selected else ''}" data-repro-search="{h((str(r['tag'] or '')+' '+str(r['nickname'] or '')+' '+str(r['paddock'] or '')).lower())}" data-repro-paddock="{h(str(r['paddock'] or ''))}"><div class="repro-card-top"><span style="font-size:24px">🐄</span><div><strong>♀ {h(r['tag'])}<br>{h(r['nickname']) or 'İsimsiz'}</strong><small>{h(r['paddock']) or 'Padok yok'} · {h(r['breed']) or 'Irk yok'}</small></div><span class="v117-chip">{h(badge)}</span></div><div class="repro-card-meta"><span class="mut" style="font-size:10px">{h(meta)}</span><a class="btn alt" href="/reproduction-center?animal={r['animal_id']}">Seç</a></div><div class="actions">{action}</div></article>'''
+                photo=(f'''<img src="{h(r['photo_url'])}" alt="{h(r['tag'])} fotoğrafı" loading="lazy">''' if str(r['photo_url'] or '').strip() else '<span aria-hidden="true">🐄</span>')
+                return f'''<article class="repro-card {'selected' if selected else ''}" data-repro-search="{h((str(r['tag'] or '')+' '+str(r['nickname'] or '')+' '+str(r['paddock'] or '')).lower())}" data-repro-paddock="{h(str(r['paddock'] or ''))}"><div class="repro-card-top"><a class="repro-photo" href="/reproduction-center?animal={r['animal_id']}">{photo}</a><div class="repro-card-identity"><a href="/reproduction-center?animal={r['animal_id']}"><strong>♀ {h(r['tag'])}<br>{h(r['nickname']) or 'İsimsiz'}</strong></a><small>{h(r['paddock']) or 'Padok yok'} · {h(r['breed']) or 'Irk yok'}</small></div><span class="v117-chip">{h(badge)}</span></div><div class="repro-card-meta"><span class="mut">{h(meta)}</span><a class="btn alt repro-select" href="/reproduction-center?animal={r['animal_id']}">Seç</a></div><div class="actions repro-card-action">{action}</div></article>'''
             estrus_cards=[]
             for center,r,cycle in estrus_stage:
                 active=cycle['start']<=today<=cycle['end'];meta=f"En olası {fmt_date(center.isoformat())}"
@@ -7639,9 +7788,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 estrus_cards.append(repro_card(r,meta,'Aktif' if active else 'Yaklaşıyor',action,str(r['animal_id'])==selected_id))
             insem_cards=[repro_card(r,f"{fmt_date(r['insemination_date'])} · {days} gün",f"{r['attempt']}. deneme",f'''<a class="btn" href="/insemination-edit?id={r['id']}">Sonuç Gir</a>''',str(r['animal_id'])==selected_id) for days,r in inseminated_stage]
             control_cards=[repro_card(r,f"Tohumlamadan sonra {days} gün",'Kontrol zamanı',f'''<a class="btn" href="/insemination-edit?id={r['id']}">Kontrol Kaydet</a>''',str(r['animal_id'])==selected_id) for days,r in control_stage]
-            birth_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün",f'''<a class="btn" href="/animal-add">Doğum Kaydı</a>''',str(r['animal_id'])==selected_id) for days,r in birth_stage]
+            pregnant_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün kaldı",f'''<a class="btn" href="/animal?id={r['animal_id']}">Takibi Aç</a>''',str(r['animal_id'])==selected_id) for days,r in pregnant_stage]
+            birth_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün",f'''<a class="btn" href="/animal-add">Doğum Kaydet</a>''',str(r['animal_id'])==selected_id) for days,r in birth_stage]
             if not selected_id:
-                candidates=[x[1]['animal_id'] for x in estrus_stage]+[x[1]['animal_id'] for x in inseminated_stage]+[x[1]['animal_id'] for x in control_stage]+[x[1]['animal_id'] for x in birth_stage]
+                candidates=[x[1]['animal_id'] for x in estrus_stage]+[x[1]['animal_id'] for x in inseminated_stage]+[x[1]['animal_id'] for x in control_stage]+[x[1]['animal_id'] for x in pregnant_stage]+[x[1]['animal_id'] for x in birth_stage]
                 selected_id=str(candidates[0]) if candidates else ''
             selected=next((r for r in females if str(r['id'])==selected_id),None)
             sel_insem=latest_insem.get(int(selected_id)) if selected_id.isdigit() else None
@@ -7653,13 +7803,31 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if sel_insem and is_pregnant_value(sel_insem['pregnancy_result']):stage_index=4
             steps=[('🔥','Kızgınlık'),('💉','Tohumlama'),('⌁','Kontrol'),('🐄','Gebelik'),('🐮','Doğum')]
             flow=''.join((f'<div class="repro-step {"done" if i<stage_index else "active" if i==stage_index else ""}"><i>{icon}</i>{label}</div>'+('<span class="repro-arrow">→</span>' if i<len(steps)-1 else '')) for i,(icon,label) in enumerate(steps))
-            detail=(f'''<section class="card repro-detail"><div class="repro-detail-grid"><div class="repro-selected"><div class="filter-title"><div><h2>🐄 ♀ {h(selected['tag'])} · {h(selected['nickname']) or 'İsimsiz'}</h2><p class="mut">{h(selected['breed']) or '-'} · {h(selected['paddock']) or '-'} · {age_text(selected['birth_date'])}</p></div><a class="btn alt" href="/animal?id={selected['id']}">Hayvan Kartını Gör</a></div><div class="quick-metrics"><span class="pill">Küpe<br><b>{h(selected['tag'])}</b></span><span class="pill">Padok<br><b>{h(selected['paddock']) or '-'}</b></span><span class="pill">Aşama<br><b>{steps[stage_index][1]}</b></span></div></div><div class="repro-flow-wrap"><div class="repro-flow">{flow}</div><div class="repro-next-action"><span>ℹ️ Seçili hayvanın üreme süreci gerçek kayıtlarına göre gösteriliyor.</span><a class="btn" href="/animal?id={selected['id']}">Tüm Kayıtları Aç</a></div></div></div></section>''' if selected else '')
+            detail=(f'''<section class="card repro-detail"><div class="repro-detail-grid"><div class="repro-selected"><div class="filter-title"><div><h2>🐄 ♀ {h(selected['tag'])} · {h(selected['nickname']) or 'İsimsiz'}</h2><p class="mut">{h(selected['breed']) or '-'} · {h(selected['paddock']) or '-'} · {age_text(selected['birth_date'])}</p></div><a class="btn alt repro-animal-link" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Hayvan Kartını Gör</span><span class="repro-link-mobile">Kartı Aç</span></a></div><div class="quick-metrics repro-selected-metrics"><span class="pill repro-tag-metric">Küpe<br><b>{h(selected['tag'])}</b></span><span class="pill">Padok<br><b>{h(selected['paddock']) or '-'}</b></span><span class="pill">Aşama<br><b>{steps[stage_index][1]}</b></span></div></div><div class="repro-flow-wrap"><div class="repro-flow">{flow}</div><div class="repro-next-action"><span>ℹ️ Seçili hayvanın üreme süreci gerçek kayıtlarına göre gösteriliyor.</span><a class="btn" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Tüm Kayıtları Aç</span><span class="repro-link-mobile">Tüm Kayıtlar</span></a></div></div></div></section>''' if selected else '')
             search_value=h(q.get('q',[''])[0] or '')
             paddock_options='<option value="">Tüm Padoklar</option>'+''.join(f'<option value="{h(x)}">{h(x)}</option>' for x in sorted({str(r['paddock'] or '') for r in females if str(r['paddock'] or '')}))
+            mobile_open='control' if control_stage else 'birth' if birth_stage else 'estrus' if estrus_stage else 'inseminated'
             body=f'''<div class="v117-head"><div><h1>🧬 Üreme Merkezi</h1><p>Kızgınlıktan doğuma tüm süreci yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/estrus">＋ Kızgınlık Kaydı</a><a class="btn alt" href="/inseminations">＋ Tohumlama</a></div></div><div class="card v118-toolbar"><input id="reproSearch" type="search" value="{search_value}" placeholder="Hayvan ara: küpe no, isim veya padok…"><label>🐄 <select id="reproPaddock">{paddock_options}</select></label></div>
             <section class="v117-kpis"><div class="card v117-kpi"><span class="ico">🔥</span><div><span>Kızgınlık Bekleyen</span><b>{len(estrus_stage)}</b></div><em class="v117-chip">Takip</em></div><div class="card v117-kpi"><span class="ico">💉</span><div><span>Tohumlanan</span><b>{len(inseminated_stage)}</b></div><em class="v117-chip">Yeni</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebe</span><b>{len(positive_ids)}</b></div><em class="v117-chip">Pozitif</em></div><div class="card v117-kpi"><span class="ico">🐮</span><div><span>Doğuma Yaklaşan</span><b>{len(birth_stage)}</b></div><em class="v117-chip warn">60 gün</em></div></section>
-            <section class="v117-board"><div class="repro-column"><div class="repro-column-head"><h2>🔥 Kızgınlık</h2><b>{len(estrus_stage)}</b></div><div class="repro-column-sub">Tohumlama için uygun hayvanlar</div><div class="repro-cards">{''.join(estrus_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>💉 Tohumlama</h2><b>{len(inseminated_stage)}</b></div><div class="repro-column-sub">Son tohumlanan hayvanlar</div><div class="repro-cards">{''.join(insem_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>⌁ Gebelik Kontrolü</h2><b>{len(control_stage)}</b></div><div class="repro-column-sub">Kontrol zamanı gelen hayvanlar</div><div class="repro-cards">{''.join(control_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div><div class="repro-column"><div class="repro-column-head"><h2>🐮 Doğuma Yaklaşan</h2><b>{len(birth_stage)}</b></div><div class="repro-column-sub">Son 60 günde doğum beklenenler</div><div class="repro-cards">{''.join(birth_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div></div></section>{detail}
-            <script>(function(){{const i=document.getElementById('reproSearch'),p=document.getElementById('reproPaddock'),cards=[...document.querySelectorAll('.repro-card')];if(!i)return;function run(){{const q=i.value.toLocaleLowerCase('tr-TR').trim(),pad=p?p.value:'';cards.forEach(c=>c.style.display=(!q||c.dataset.reproSearch.includes(q))&&(!pad||c.dataset.reproPaddock===pad)?'':'none')}}i.addEventListener('input',run);if(p)p.addEventListener('change',run);run()}})();</script>'''
+            <nav class="repro-stage-tabs" aria-label="Üreme aşaması filtresi"><button type="button" class="active" data-repro-filter="all">Tümü <b>{len(estrus_stage)+len(inseminated_stage)+len(control_stage)+len(birth_stage)}</b></button><button type="button" data-repro-filter="estrus">🔥 Kızgınlık <b>{len(estrus_stage)}</b></button><button type="button" data-repro-filter="inseminated">💉 Tohumlandı <b>{len(inseminated_stage)}</b></button><button type="button" data-repro-filter="control">⌁ Kontrol <b>{len(control_stage)}</b></button><button type="button" data-repro-filter="pregnant">🐄 Gebe <b>{len(pregnant_stage)}</b></button><button type="button" data-repro-filter="birth">🐮 Doğuma Yaklaşan <b>{len(birth_stage)}</b></button></nav>
+            <section class="v117-board repro-board-compact">
+              <div class="repro-column {'is-collapsed' if mobile_open!='estrus' else ''}" data-repro-section="estrus" data-mobile-open="{'1' if mobile_open=='estrus' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='estrus' else 'false'}"><h2>🔥 Kızgınlık</h2><span><b>{len(estrus_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Tohumlama için uygun hayvanlar</div><div class="repro-cards">{''.join(estrus_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(estrus_stage)})</button></div></div>
+              <div class="repro-column {'is-collapsed' if mobile_open!='inseminated' else ''}" data-repro-section="inseminated" data-mobile-open="{'1' if mobile_open=='inseminated' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='inseminated' else 'false'}"><h2>💉 Tohumlama</h2><span><b>{len(inseminated_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son tohumlanan hayvanlar</div><div class="repro-cards">{''.join(insem_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(inseminated_stage)})</button></div></div>
+              <div class="repro-column {'is-collapsed' if mobile_open!='control' else ''}" data-repro-section="control" data-mobile-open="{'1' if mobile_open=='control' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='control' else 'false'}"><h2>⌁ Gebelik Kontrolü</h2><span><b>{len(control_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Kontrol zamanı gelen hayvanlar</div><div class="repro-cards">{''.join(control_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(control_stage)})</button></div></div>
+              <div class="repro-column is-collapsed repro-pregnant-duplicate" data-repro-section="pregnant" data-mobile-open="0"><button type="button" class="repro-column-head repro-toggle" aria-expanded="false"><h2>🐄 Gebe</h2><span><b>{len(pregnant_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Pozitif gebelik kaydı bulunan hayvanlar</div><div class="repro-cards">{''.join(pregnant_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(pregnant_stage)})</button></div></div>
+              <div class="repro-column {'is-collapsed' if mobile_open!='birth' else ''}" data-repro-section="birth" data-mobile-open="{'1' if mobile_open=='birth' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='birth' else 'false'}"><h2>🐮 Doğuma Yaklaşan</h2><span><b>{len(birth_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son 60 günde doğum beklenenler</div><div class="repro-cards">{''.join(birth_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(birth_stage)})</button></div></div>
+            </section>{detail}
+            <script>(function(){{
+              const search=document.getElementById('reproSearch'),paddock=document.getElementById('reproPaddock'),sections=[...document.querySelectorAll('.repro-column')],stageButtons=[...document.querySelectorAll('[data-repro-filter]')];
+              if(!search)return;
+              const mobile=()=>window.matchMedia('(max-width:650px)').matches;
+              let wasMobile=mobile(),selectedStage='all';
+              function applyAccordion(reset){{if(!mobile()){{sections.forEach(s=>s.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true'));return}}if(!reset)return;let opened=sections.some(s=>s.dataset.mobileOpen==='1');sections.forEach((s,index)=>{{if(s.classList.contains('repro-pregnant-duplicate'))return;const open=s.dataset.mobileOpen==='1'||(!opened&&index===0);s.classList.toggle('is-collapsed',!open);s.querySelector('.repro-toggle')?.setAttribute('aria-expanded',open?'true':'false')}})}}
+              function run(){{const isMobile=mobile(),q=search.value.toLocaleLowerCase('tr-TR').trim(),pad=paddock?paddock.value:'';sections.forEach(section=>{{const sectionStage=section.dataset.reproSection,cards=[...section.querySelectorAll('.repro-card')],matches=cards.filter(c=>(!q||c.dataset.reproSearch.includes(q))&&(!pad||c.dataset.reproPaddock===pad)),showAll=section.dataset.showAll==='1';if(isMobile)section.hidden=section.classList.contains('repro-pregnant-duplicate');else section.hidden=selectedStage==='all'?section.classList.contains('repro-pregnant-duplicate'):sectionStage!==selectedStage;cards.forEach(c=>c.hidden=true);matches.forEach((c,index)=>c.hidden=isMobile&&!showAll&&index>=3);const more=section.querySelector('.repro-show-all');if(more){{more.hidden=!isMobile||matches.length<=3;more.textContent=showAll?'Daha Az Göster':`Tümünü Gör (${{matches.length}})`}}if(isMobile&&(q||pad)&&matches.length&&!section.hidden){{section.classList.remove('is-collapsed');section.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true')}}}})}}
+              sections.forEach(section=>{{section.querySelector('.repro-toggle')?.addEventListener('click',()=>{{if(!mobile())return;section.classList.toggle('is-collapsed');section.querySelector('.repro-toggle').setAttribute('aria-expanded',section.classList.contains('is-collapsed')?'false':'true')}});section.querySelector('.repro-show-all')?.addEventListener('click',()=>{{section.dataset.showAll=section.dataset.showAll==='1'?'0':'1';run()}})}});
+              stageButtons.forEach(button=>button.addEventListener('click',()=>{{selectedStage=button.dataset.reproFilter||'all';stageButtons.forEach(x=>x.classList.toggle('active',x===button));run()}}));
+              search.addEventListener('input',run);if(paddock)paddock.addEventListener('change',run);window.addEventListener('resize',()=>{{const nowMobile=mobile();if(nowMobile!==wasMobile){{wasMobile=nowMobile;applyAccordion(true)}}run()}});applyAccordion(true);run();document.querySelector('.repro-board-compact')?.classList.add('repro-ready');
+            }})();</script>'''
             return self.send_html(page('Üreme Merkezi',body,'/reproduction-center',u,msg))
         if path=='/estrus':
             with db() as c:
@@ -8021,16 +8189,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     title='🐄 '+str(r['animal_tag'] or r['calf_tag'] or '-');meta=detail
                     action=f'''<form method="post" action="/health/task-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="task_id" value="{r['id']}"><button class="btn">✅ Yapıldı</button></form>'''
                 action+=f'''<div class="health-plan-controls"><a class="btn alt" href="/health-plan-edit?id={r['course_id']}">Düzenle</a><form method="post" action="/health-plan-delete" data-submit-lock="1" data-submit-text="⏳ Siliniyor…" onsubmit="return confirm('Bu planın bekleyen uygulamaları silinsin mi? Tamamlanmış sağlık geçmişi korunur.')"><input type="hidden" name="course_id" value="{r['course_id']}"><button class="btn red">Sil</button></form></div>'''
-                task_cards.append(f'''<div class="health-plan-card" data-health-status="{due_scope(r['planned_date'])}" data-health-search="{h((title+' '+str(r['product'] or '')+' '+meta).casefold())}"><div class="health-plan-main"><div><b>{h(title)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">{h(meta)} · {fmt_date(r['planned_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
+                task_cards.append(f'''<div class="health-plan-card" data-health-date="{h(r['planned_date'])}" data-health-status="{due_scope(r['planned_date'])}" data-health-search="{h((title+' '+str(r['kind'] or '')+' '+str(r['product'] or '')+' '+meta))}"><div class="health-plan-main"><div><b>{h(title)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">{h(meta)} · {fmt_date(r['planned_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
             for r in legacy_plans:
                 tag=r['animal_tag'] or r['calf_tag'] or '-';badge=due_badge(r['next_date'])
                 action=(f'''<form method="post" action="/health/second-dose-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ 2. Doz Yapıldı</button></form>''' if str(r['kind'] or '')=='Aşı' and 'IKINCI_DOZ_PLAN' in str(r['notes'] or '') else f'''<form method="post" action="/health/plan-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="source_id" value="{r['id']}"><input type="hidden" name="return_to" value="/health"><button class="btn">✅ Yapıldı</button></form>''')
-                task_cards.append(f'''<div class="health-plan-card" data-health-status="{due_scope(r['next_date'])}" data-health-search="{h((str(tag)+' '+str(r['product'] or '')).casefold())}"><div class="health-plan-main"><div><b>🐄 {h(tag)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">Eski plan · {fmt_date(r['next_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
+                task_cards.append(f'''<div class="health-plan-card" data-health-date="{h(r['next_date'])}" data-health-status="{due_scope(r['next_date'])}" data-health-search="{h((str(tag)+' '+str(r['kind'] or '')+' '+str(r['product'] or '')))}"><div class="health-plan-main"><div><b>🐄 {h(tag)}</b><div class="health-plan-product">{h(r['product'])}</div><div class="mut">Eski plan · {fmt_date(r['next_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action">{action}</div></div>''')
             pregnancy_cards=[]
             for t in pregnancy_health_tasks:
                 badge=due_badge(t['task_date'])
-                pregnancy_cards.append(f'''<div class="health-plan-card" data-health-status="{due_scope(t['task_date'])}" data-health-search="{h((str(t['tag'])+' gebelik aşısı').casefold())}" style="border-left:5px solid #c8392b"><div class="health-plan-main"><div><b>💉 🐄 {h(t['tag'])}</b><div class="health-plan-product">{t['month']}. Ay Gebelik Aşısı</div><div class="mut">Gebelik planından otomatik · {fmt_date(t['task_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action"><form method="post" action="/pregnancy-vaccine/done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn">💉 Aşıyı Yap</button></form><div class="health-plan-controls"><a class="btn alt" href="/animal?id={t['animal_id']}">Hayvanı Aç</a><form method="post" action="/pregnancy-vaccine/postpone" data-submit-lock="1" data-submit-text="⏳ Erteleniyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn alt">⏰ 1 Gün Ertele</button></form></div></div></div>''')
-            all_plan_cards=pregnancy_cards+task_cards
+                pregnancy_cards.append(f'''<div class="health-plan-card" data-health-date="{h(t['task_date'])}" data-health-status="{due_scope(t['task_date'])}" data-health-search="{h((str(t['tag'])+' '+str(t['month'])+'. Ay Gebelik Aşısı Gebelik planından otomatik'))}" style="border-left:5px solid #c8392b"><div class="health-plan-main"><div><b>💉 🐄 {h(t['tag'])}</b><div class="health-plan-product">{t['month']}. Ay Gebelik Aşısı</div><div class="mut">Gebelik planından otomatik · {fmt_date(t['task_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action"><form method="post" action="/pregnancy-vaccine/done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn">💉 Aşıyı Yap</button></form><div class="health-plan-controls"><a class="btn alt" href="/animal?id={t['animal_id']}">Hayvanı Aç</a><form method="post" action="/pregnancy-vaccine/postpone" data-submit-lock="1" data-submit-text="⏳ Erteleniyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn alt">⏰ 1 Gün Ertele</button></form></div></div></div>''')
+            all_plan_cards=sorted(pregnancy_cards+task_cards,key=lambda card:re.search(r'data-health-date="([^"]+)"',card).group(1))
             planned_html=''.join(all_plan_cards) or '<p class="mut">Planlanmış sağlık işlemi yok.</p>'
             body=f'''<style>.health-mode-box{{background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px}}.health-plan-list{{display:grid;gap:10px}}.health-plan-card{{border:1px solid #dfe9e2;border-radius:15px;padding:14px;background:#fff}}.health-plan-main{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.health-plan-product{{font-weight:800;margin:5px 0}}.health-due{{white-space:nowrap;font-weight:800}}.health-plan-action{{margin-top:12px}}.health-plan-action>form{{margin:0}}.health-plan-controls{{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}}.health-plan-controls form{{margin:0}}.health-plan-controls .btn{{padding:8px 11px}}@media(max-width:700px){{.health-plan-main{{display:block}}.health-due{{display:inline-block;margin-top:8px}}.health-plan-action>form>.btn{{width:100%}}.health-plan-controls{{display:grid;grid-template-columns:1fr 1fr}}.health-plan-controls .btn{{width:100%;text-align:center}}.health-group summary{{align-items:flex-start;flex-direction:column}}}}</style><h1>Sağlık</h1>
             <div class="card"><form method="post" class="form" id="healthForm" data-submit-lock="1" data-submit-text="⏳ Oluşturuluyor…"><label>Uygulama Kapsamı<select name="scope_type" id="healthScope"><option value="single">Tek Hayvan / Buzağı</option><option value="paddock">Padok Bazında Aşılama</option></select></label><label>Tür<select name="kind" id="healthKind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label>
@@ -8047,7 +8215,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             body=body.replace('<div class="card"><form method="post" class="form" id="healthForm"', '<div class="section-drawer-backdrop" id="healthPlanDrawerBackdrop" onclick="if(event.target===this)toggleSectionDrawer(\'healthPlanDrawer\',false)"></div><aside class="section-drawer" id="healthPlanDrawer"><div class="section-drawer-head"><div><h2>Yeni Sağlık Planı</h2><div class="mut">Tek hayvan veya padok için plan oluşturun.</div></div><button type="button" class="section-drawer-close" onclick="toggleSectionDrawer(\'healthPlanDrawer\',false)">×</button></div><div class="section-drawer-body"><div class="card"><form method="post" class="form" id="healthForm"',1)
             body=body.replace('</form></div>\n            <div class="card" style="margin-top:14px"><h2>💉 Planlanan Aşı / Tedavi İşlemleri</h2>', '</form></div></div></aside><div class="card module-panel active" data-health-panel="plans"><h2>💉 Planlanan Aşı / Tedavi İşlemleri</h2>',1)
             body=body.replace('<div class="card" style="margin-top:14px"><h2>🩺 Hayvan Bazlı Sağlık Dosyaları</h2>', '<div class="card module-panel" data-health-panel="history"><h2>🩺 Hayvan Bazlı Sağlık Dosyaları</h2>',1)
-            body+='''<script>(function(){const cards=[...document.querySelectorAll('.health-plan-card')],groups=[...document.querySelectorAll('.health-group')],tabs=[...document.querySelectorAll('[data-health-filter]')],plans=document.querySelector('[data-health-panel="plans"]'),history=document.querySelector('[data-health-panel="history"]'),search=document.getElementById('healthWorkspaceSearch');window.toggleSectionDrawer=function(id,on){const d=document.getElementById(id),b=document.getElementById(id+'Backdrop');if(d)d.classList.toggle('open',!!on);if(b)b.classList.toggle('open',!!on);document.body.style.overflow=on?'hidden':''};let active='all';function norm(v){return (v||'').toLocaleLowerCase('tr-TR').trim()}function paint(){const term=norm(search&&search.value);if(active==='history'){plans.classList.remove('active');history.classList.add('active');groups.forEach(x=>x.style.display=(!term||norm(x.dataset.healthSearch).includes(term))?'':'none');return}history.classList.remove('active');plans.classList.add('active');cards.forEach(x=>{const okStatus=active==='all'||x.dataset.healthStatus===active;const okSearch=!term||norm(x.dataset.healthSearch||x.textContent).includes(term);x.style.display=okStatus&&okSearch?'':'none'})}tabs.forEach(t=>t.addEventListener('click',()=>{active=t.dataset.healthFilter;tabs.forEach(x=>x.classList.toggle('active',x===t));paint()}));if(search)search.addEventListener('input',paint);['all','overdue','today','upcoming'].forEach(k=>{const el=document.querySelector('[data-health-count="'+k+'"]');if(el)el.textContent=k==='all'?cards.length:cards.filter(x=>x.dataset.healthStatus===k).length});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleSectionDrawer('healthPlanDrawer',false)});paint()})();</script>'''
+            body+='''<script>(function(){const cards=[...document.querySelectorAll('.health-plan-card')],groups=[...document.querySelectorAll('.health-group')],tabs=[...document.querySelectorAll('[data-health-filter]')],plans=document.querySelector('[data-health-panel="plans"]'),history=document.querySelector('[data-health-panel="history"]'),search=document.getElementById('healthWorkspaceSearch');window.toggleSectionDrawer=function(id,on){const d=document.getElementById(id),b=document.getElementById(id+'Backdrop');if(d)d.classList.toggle('open',!!on);if(b)b.classList.toggle('open',!!on);document.body.style.overflow=on?'hidden':''};const query=new URLSearchParams(location.search);let active=['all','overdue','today','upcoming','history'].includes(query.get('filter'))?query.get('filter'):'all';if(search)search.value=query.get('search')||'';tabs.forEach(x=>x.classList.toggle('active',x.dataset.healthFilter===active));function norm(v){return (v||'').toLocaleLowerCase('tr-TR').trim()}function paint(){const term=norm(search&&search.value);if(active==='history'){plans.classList.remove('active');history.classList.add('active');groups.forEach(x=>x.style.display=(!term||norm(x.dataset.healthSearch).includes(term))?'':'none');return}history.classList.remove('active');plans.classList.add('active');cards.forEach(x=>{const okStatus=active==='all'||x.dataset.healthStatus===active;const okSearch=!term||norm(x.dataset.healthSearch||x.textContent).includes(term);x.style.display=okStatus&&okSearch?'':'none'})}tabs.forEach(t=>t.addEventListener('click',()=>{active=t.dataset.healthFilter;tabs.forEach(x=>x.classList.toggle('active',x===t));paint()}));if(search)search.addEventListener('input',paint);['all','overdue','today','upcoming'].forEach(k=>{const el=document.querySelector('[data-health-count="'+k+'"]');if(el)el.textContent=k==='all'?cards.length:cards.filter(x=>x.dataset.healthStatus===k).length});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleSectionDrawer('healthPlanDrawer',false)});paint()})();</script>'''
             return self.send_html(page('Sağlık',body,'/health',u,msg))
         if path=='/finance/edit':
             record_id=int(q.get('id',['0'])[0])
@@ -12381,7 +12549,7 @@ APP_LABEL='v'+APP_VERSION
 
 
 # --- Hotfix1.22af: Kompakt mobil süt + düşük çözünürlük rasyon hedef kartları ---
-APP_VERSION='3.9.23 DEV4 Hotfix1.22af'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ag'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122AE_COMPACT_UI=r"""<style id="hotfix122ae-compact-ui">
 /* Rasyon hedef kartları: düşük çözünürlükte değerleri görünür tut, eski ilerleme şeridini kaldır. */
@@ -12494,3 +12662,551 @@ _old_page_hotfix122ae=page
 def page(title,body,path='/',user='admin',flash=''):
     html=_old_page_hotfix122ae(title,body,path,user,flash)
     return html.replace('</body>',HOTFIX122AE_COMPACT_UI+'</body>')
+
+# Hotfix1.22ah: Yem ekleme dönüşünde kaydedilmemiş çalışma masası taslağını koru.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ah'
+HOTFIX122AH_DRAFT=r"""
+<script>
+(function(){
+ function init(){
+  const form=document.getElementById('ration-bulk-form'),add=document.getElementById('quick-feed-form');
+  if(!form||!add)return;
+  const rid=form.querySelector('[name="ration_id"]').value;
+  const key='cp-workbench-add-draft:'+document.body.dataset.draftUser+':'+rid;
+  const rows=()=>Array.from(form.querySelectorAll('.ration-row'));
+  const number=v=>Number(String(v).replace(',','.'));
+  function capture(){
+   return rows().map(row=>{
+    const input=row.querySelector('.ration-qty'),lock=form.querySelector('[name="lock_'+row.dataset.itemId+'"]');
+    return {id:row.dataset.itemId,feed:row.dataset.feedId,value:input.value,original:input.dataset.original,locked:lock?lock.value:row.dataset.locked};
+   });
+  }
+  add.addEventListener('submit',function(e){
+   if(e.defaultPrevented||!add.checkValidity())return;
+   const draft={rid:rid,at:Date.now(),items:capture(),selected:add.querySelector('[name="feed_id"]').value,quantity:add.querySelector('[name="kg_per_head_day"]').value};
+   try{sessionStorage.setItem(key,JSON.stringify(draft));}
+   catch(err){e.preventDefault();e.stopImmediatePropagation();alert('Taslak korunamadı. Değişikliklerinizi önce Kaydet ile kaydedip ardından yem ekleyin.');}
+  },true);
+  // Aynı yem yeniden seçildiğinde kayıtlı miktar yerine çalışma miktarını göster.
+  document.querySelectorAll('.quick-feed-result').forEach(button=>button.addEventListener('click',function(){
+   const row=rows().find(r=>r.dataset.feedId===button.dataset.feedId);
+   if(row)document.getElementById('quick-feed-qty').value=row.querySelector('.ration-qty').value;
+  }));
+  let draft;
+  try{draft=JSON.parse(sessionStorage.getItem(key)||'null');sessionStorage.removeItem(key);}catch(err){return;}
+  if(!draft||draft.rid!==rid||Date.now()-draft.at>300000)return;
+  let restored=false;
+  draft.items.forEach(item=>{
+   const row=rows().find(r=>r.dataset.itemId===item.id);if(!row)return;
+   const input=row.querySelector('.ration-qty');
+   // Eklenen/güncellenen yemin yeni miktarı korunur; başarısız eklemede taslak geri gelir.
+   const updated=item.feed===draft.selected&&Math.abs(number(input.dataset.original)-number(draft.quantity))<.005;
+   if(!updated&&Number.isFinite(number(item.value))&&number(item.value)>=0){input.value=item.value;restored=true;}
+   const lock=form.querySelector('[name="lock_'+row.dataset.itemId+'"]');
+   if(lock&&lock.value!==item.locked){row.querySelector('.hf119h-lock')?.click();restored=true;}
+   input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  if(restored){
+   const note=document.createElement('p');note.className='mut';note.textContent='Yem eklenirken miktar ve kilit taslağınız korundu. Diğer değişiklikleri uygulamak için Kaydet’e basın.';
+   form.prepend(note);
+  }
+ }
+ function ready(){requestAnimationFrame(()=>requestAnimationFrame(init));}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else ready();
+})();
+</script>
+"""
+_page_before_hotfix122ah=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ah(title,body,path,user,flash)
+    if path=='/rations':
+        html=html.replace('<body','<body data-draft-user="'+h(user)+'"',1)
+        html=html.replace('</body>',HOTFIX122AH_DRAFT+'</body>')
+    return html
+
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ai'
+HOTFIX122AI_HEALTH=r"""
+<style>
+.v117-task[hidden]{display:none!important}
+body.hf122ai-health .workspace-hero{padding:20px!important;background:linear-gradient(120deg,#eef8f2,#fff);border-color:#d7e8dd}
+body.hf122ai-health .compact-filter{padding:14px!important}
+body.hf122ai-health .compact-filter label{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px;color:#52695c}
+body.hf122ai-health #healthWorkspaceSearch{flex:1;min-width:180px;max-width:600px;padding:11px 14px;border-radius:10px}
+body.hf122ai-health #healthStatusTabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+body.hf122ai-health #healthStatusTabs .module-tab{display:flex;align-items:center;justify-content:space-between;gap:16px;min-width:125px;padding:13px 16px;border-radius:12px;background:#fff;border:1px solid #dce7df;color:#31503d}
+body.hf122ai-health #healthStatusTabs .module-tab b{font-size:19px;font-weight:700}
+body.hf122ai-health #healthStatusTabs .module-tab.active{background:#176b3a;color:#fff;border-color:#176b3a}
+body.hf122ai-health [data-health-panel=plans]{padding:18px!important;background:#f5f9f6}
+body.hf122ai-health [data-health-panel=plans]>h2{font-size:18px;margin:0 0 16px}
+body.hf122ai-health .health-plan-list{grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px;align-items:start}
+body.hf122ai-health .health-plan-card{padding:16px!important;border-radius:16px;border-left:4px solid #74a486!important;box-shadow:0 3px 12px #24452e06}
+body.hf122ai-health .health-plan-card[data-health-status=overdue]{border-left-color:#c64c3c!important}
+body.hf122ai-health .health-plan-card[data-health-status=today]{border-left-color:#d89c2d!important}
+body.hf122ai-health .health-plan-main{display:grid;grid-template-columns:60px minmax(0,1fr);gap:8px 14px;align-items:start}
+body.hf122ai-health .health-date-box{grid-row:1/3;background:#eff5f1;border-radius:10px;padding:9px 3px;text-align:center;color:#375842;line-height:1.25}
+body.hf122ai-health .health-date-box b{display:block;font-size:23px;font-weight:700}
+body.hf122ai-health .health-date-box small{font-size:11px}
+body.hf122ai-health .health-plan-main>div:not(.health-date-box)>b{font-size:13px;color:#536c5c;font-weight:600;overflow-wrap:anywhere}
+body.hf122ai-health .health-plan-product{font-size:17px;line-height:1.3;font-weight:650;margin:5px 0;overflow-wrap:anywhere}
+body.hf122ai-health .health-plan-main .mut{font-size:12px;line-height:1.5}
+body.hf122ai-health .health-due{grid-column:2;justify-self:start;border-radius:20px;background:#edf5ef;color:#34744c;padding:5px 9px;font-size:11px;font-weight:600;white-space:normal;margin:0}
+body.hf122ai-health [data-health-status=overdue] .health-due{background:#fff0ec;color:#af4030}
+body.hf122ai-health [data-health-status=today] .health-due{background:#fff5df;color:#94681a}
+body.hf122ai-health .health-plan-action{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-top:1px solid #edf2ee;padding-top:12px;margin-top:12px}
+body.hf122ai-health .health-plan-controls{display:flex!important;gap:6px;margin:0!important;flex-wrap:wrap}
+body.hf122ai-health .health-plan-action form{margin:0!important}
+body.hf122ai-health .health-plan-action .btn{min-height:36px;padding:8px 11px!important;font-size:12px;line-height:1.2;width:auto!important;border-radius:8px;white-space:normal}
+body.hf122ai-health .health-plan-controls .btn.red{background:#fff0ee;color:#af4030;border:1px solid #f1dad5}
+body.hf122ai-health #health-filter-empty{padding:20px;text-align:center;border:1px dashed #cadccf;border-radius:12px;background:#fff;color:#627569}
+@media(max-width:600px){body.hf122ai-health .workspace-hero{padding:15px!important}body.hf122ai-health .workspace-actions{width:100%;gap:6px}body.hf122ai-health .workspace-actions .btn{flex:1;min-width:125px;font-size:12px}body.hf122ai-health #healthStatusTabs{display:grid;grid-template-columns:1fr 1fr}body.hf122ai-health #healthStatusTabs .module-tab{min-width:0;font-size:12px;padding:10px}body.hf122ai-health .health-plan-card{padding:12px!important}body.hf122ai-health .health-plan-list{grid-template-columns:1fr}body.hf122ai-health .health-plan-product{font-size:16px}}
+</style>
+<script>
+(function(){function init(){
+ if(!document.getElementById('healthStatusTabs'))return;
+ document.body.classList.add('hf122ai-health');
+ const actions=document.querySelector('.workspace-hero .workspace-actions'),search=document.getElementById('healthWorkspaceSearch');
+ const pdf=document.createElement('a'),print=document.createElement('a');
+ pdf.className=print.className='btn alt';pdf.textContent='PDF indir';print.textContent='Yazdır';print.target='_blank';print.rel='noopener';actions.append(pdf,print);
+ const empty=document.createElement('p');empty.id='health-filter-empty';empty.textContent='Seçili filtre ve aramada bekleyen sağlık işlemi bulunmuyor.';document.querySelector('.health-plan-list').after(empty);
+ document.querySelectorAll('.health-plan-card').forEach(card=>{
+  const due=card.dataset.healthDate;if(!due)return;
+  const parts=due.split('-'),box=document.createElement('div');box.className='health-date-box';
+  const day=document.createElement('b'),month=document.createElement('small');day.textContent=parts[2];month.textContent=parts[1]+'/'+parts[0];box.append(day,month);card.querySelector('.health-plan-main').prepend(box);
+ });
+ function sync(){
+  const active=document.querySelector('[data-health-filter].active')?.dataset.healthFilter||'all';
+  const query=new URLSearchParams({filter:active,search:search.value.trim()});
+  pdf.href='/health/tasks.pdf?'+query;print.href='/health/tasks/print?'+query;
+  pdf.style.display=print.style.display=active==='history'?'none':'';
+  empty.hidden=active==='history'||Array.from(document.querySelectorAll('.health-plan-card')).some(c=>c.style.display!=='none');
+ }
+ document.querySelectorAll('[data-health-filter]').forEach(t=>t.addEventListener('click',sync));search.addEventListener('input',sync);sync();
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
+</script>
+"""
+_page_before_hotfix122ai=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ai(title,body,path,user,flash)
+    return html.replace('</body>',HOTFIX122AI_HEALTH+'</body>')
+
+APP_VERSION='3.9.23 DEV4 Hotfix1.22aj'
+HOTFIX122AJ_AGENDA=r"""
+<style>
+.health-view-switch{display:flex;gap:6px;margin:0 0 16px}.health-view-switch button{padding:10px 24px;border:1px solid #cbded1;border-radius:9px;background:white;color:#315d40;cursor:pointer;font:inherit}.health-view-switch button[aria-pressed=true]{background:#176b3a;color:white}
+.health-day[hidden]{display:none!important}.health-day-title{display:flex;gap:12px;align-items:center;margin:20px 0 10px;font-size:18px;color:#284936}.health-day-title small{font-size:12px;font-weight:500;background:#e8f3ec;padding:5px 9px;border-radius:20px}
+body.hf122ai-health .health-plan-list.health-agenda{display:block}
+.health-agenda .health-day-rows{display:grid;gap:0;border:1px solid #dce8df;border-radius:12px;background:#fff}
+body.hf122ai-health .health-agenda .health-plan-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;border:0!important;border-bottom:1px solid #e6eee8!important;border-radius:0;box-shadow:none;padding:14px 16px!important}
+body.hf122ai-health .health-agenda .health-plan-card:last-child{border-bottom:0!important}
+body.hf122ai-health .health-agenda .health-plan-main{grid-template-columns:minmax(0,1fr);gap:4px}
+body.hf122ai-health .health-agenda .health-date-box{display:none}
+body.hf122ai-health .health-agenda .health-due{grid-column:1}
+body.hf122ai-health .health-agenda .health-plan-action{border:0;padding:0;margin:0;justify-content:flex-end}
+.health-more{position:relative}.health-more>summary{cursor:pointer;list-style:none;background:#f0f6f2;border:1px solid #d8e6dd;border-radius:8px;padding:9px 13px;font-size:18px;line-height:1}
+body.hf122ai-health .health-more[open] .health-plan-controls{position:absolute;right:0;top:40px;z-index:15;min-width:170px;background:white;padding:10px;border:1px solid #d6e4da;border-radius:10px;box-shadow:0 8px 24px #12382122;flex-direction:column}
+body.hf122ai-health .health-more .health-plan-controls .btn{width:100%!important;display:block;text-align:left}
+@media(max-width:700px){body.hf122ai-health .health-agenda .health-plan-card{grid-template-columns:1fr;gap:10px}body.hf122ai-health .health-agenda .health-plan-action{justify-content:flex-start}body.hf122ai-health .health-agenda .health-plan-action>form{flex:1}body.hf122ai-health .health-agenda .health-plan-action>form .btn{width:100%!important;min-height:42px}.health-day-title{font-size:16px}.health-view-switch button{flex:1}}
+</style>
+<script>
+(function(){function init(){
+ const list=document.querySelector('.health-plan-list');if(!list)return;
+ const cards=Array.from(list.querySelectorAll('.health-plan-card'));
+ const switcher=document.createElement('div');switcher.className='health-view-switch';switcher.setAttribute('role','group');switcher.setAttribute('aria-label','Sağlık görünümü');
+ const agenda=document.createElement('button'),tiles=document.createElement('button');agenda.type=tiles.type='button';agenda.textContent='Ajanda';tiles.textContent='Kartlar';switcher.append(agenda,tiles);list.before(switcher);
+ let mode='agenda';const key='ciftlikpro.health.view.'+(document.body.dataset.healthUser||'current');try{if(localStorage.getItem(key)==='cards')mode='cards'}catch(e){}
+ const groups=new Map();cards.forEach(card=>{
+  const date=card.dataset.healthDate;if(!groups.has(date)){
+   const section=document.createElement('section'),title=document.createElement('h3'),rows=document.createElement('div');section.className='health-day';title.className='health-day-title';rows.className='health-day-rows';
+   const parts=date.split('-'),d=new Date(Number(parts[0]),Number(parts[1])-1,Number(parts[2]));title.textContent=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long',year:'numeric'});
+   const count=document.createElement('small');title.append(count);section.append(title,rows);groups.set(date,{section,rows,count});
+  }
+  const controls=card.querySelector('.health-plan-controls');if(controls){const more=document.createElement('details'),summary=document.createElement('summary');more.className='health-more';summary.textContent='⋯';summary.setAttribute('aria-label','Diğer işlemler');more.append(summary);controls.before(more);more.append(controls);}
+ });
+ function sync(){groups.forEach(g=>{const n=Array.from(g.rows.children).filter(c=>c.style.display!=='none'&&!c.hidden).length;g.section.hidden=n===0;g.count.textContent=n+' iş';});}
+ function render(){list.replaceChildren();list.classList.toggle('health-agenda',mode==='agenda');agenda.setAttribute('aria-pressed',String(mode==='agenda'));tiles.setAttribute('aria-pressed',String(mode==='cards'));
+  if(mode==='agenda'){Array.from(groups.keys()).sort().forEach(date=>{const g=groups.get(date);cards.filter(c=>c.dataset.healthDate===date).forEach(c=>g.rows.append(c));list.append(g.section);});}else cards.forEach(c=>list.append(c));sync();
+ }
+ agenda.addEventListener('click',()=>{mode='agenda';try{localStorage.setItem(key,mode)}catch(e){}render()});tiles.addEventListener('click',()=>{mode='cards';try{localStorage.setItem(key,mode)}catch(e){}render()});
+ const observer=new MutationObserver(sync);cards.forEach(c=>observer.observe(c,{attributes:true,attributeFilter:['style','hidden']}));render();
+ document.addEventListener('click',e=>{document.querySelectorAll('.health-more[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.health-more[open]').forEach(d=>d.open=false)});
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
+</script>
+"""
+_page_before_hotfix122aj=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122aj(title,body,path,user,flash)
+    if path=='/health':
+        html=html.replace('<body','<body data-health-user="'+h(user)+'"',1)
+        html=html.replace('</body>',HOTFIX122AJ_AGENDA+'</body>')
+    return html
+
+
+# --- Hotfix 1.22ak: Dashboard ilk çizim / sürüm etiketi düzeltmesi ---
+# Modern/Klasik seçicisinin CSS'i önceki katmanda </body> önüne ekleniyordu. Mobil
+# Safari bu sırada ham HTML butonlarını kısa süre boyayabildiği için stil bloğunu
+# yalnız Dashboard sayfasında <head> içine taşıyoruz. Tercih ve POST akışı değişmez.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ak'
+APP_LABEL='v'+APP_VERSION
+_page_before_hotfix122ak=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ak(title,body,path,user,flash)
+    if path=='/' and HOTFIX122K_DASHBOARD_MODE in html:
+        html=html.replace(HOTFIX122K_DASHBOARD_MODE,'',1)
+        html=html.replace('</head>',HOTFIX122K_DASHBOARD_MODE+'</head>',1)
+    return html
+
+
+# --- Hotfix 1.22al: mobil sürü kartlarında kompakt işlem satırı ---
+# Genel mobil `.row-actions` kuralı düğmeleri tam genişliğe çektiği için Sürü
+# Merkezi kartları gereksiz uzuyordu. Yalnız bu tablonun İşlemler hücresi hedeflenir;
+# masaüstü görünümü, silme onayı ve diğer modüllerin işlem satırları korunur.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22al'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AL_MOBILE_ANIMAL_ACTIONS=r"""
+<style id="hotfix122al-mobile-animal-actions">
+@media(max-width:650px){
+ body .workspace-table td[data-label="İşlemler"]{
+  display:block!important;
+  width:100%!important;
+  padding:10px 0 0!important;
+  margin-top:7px;
+  border-top:1px solid #e7eee9!important;
+ }
+ body .workspace-table td[data-label="İşlemler"]::before{display:none!important}
+ body .workspace-table td[data-label="İşlemler"] .row-actions{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 46px!important;
+  gap:7px!important;
+  width:100%!important;
+  align-items:stretch;
+  flex-wrap:nowrap!important;
+ }
+ body .workspace-table td[data-label="İşlemler"] .row-actions>a.btn{
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  width:100%!important;
+  min-width:0!important;
+  min-height:44px!important;
+  padding:9px 7px!important;
+  font-size:12px!important;
+  line-height:1.15;
+  white-space:nowrap;
+ }
+ body .workspace-table td[data-label="İşlemler"] .row-actions>form{
+  display:block!important;
+  width:46px!important;
+  min-width:46px!important;
+  margin:0!important;
+ }
+ body .workspace-table td[data-label="İşlemler"] .row-actions>form .btn{
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  width:46px!important;
+  min-width:46px!important;
+  height:44px!important;
+  min-height:44px!important;
+  padding:0!important;
+  font-size:0!important;
+  line-height:1!important;
+  border-radius:9px!important;
+ }
+ body .workspace-table td[data-label="İşlemler"] .row-actions>form .btn::before{
+  content:"🗑";
+  font-size:18px;
+  line-height:1;
+ }
+}
+@media(max-width:350px){
+ body .workspace-table td[data-label="İşlemler"] .row-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px!important;gap:5px!important}
+ body .workspace-table td[data-label="İşlemler"] .row-actions>a.btn{font-size:11px!important;padding-inline:4px!important}
+ body .workspace-table td[data-label="İşlemler"] .row-actions>form,
+ body .workspace-table td[data-label="İşlemler"] .row-actions>form .btn{width:44px!important;min-width:44px!important}
+}
+</style>
+"""
+_page_before_hotfix122al=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122al(title,body,path,user,flash)
+    return html.replace('</head>',HOTFIX122AL_MOBILE_ANIMAL_ACTIONS+'</head>',1)
+
+# Hotfix1.22am: Sürü Merkezi filtre araç çubuğu, ilk çizimden itibaren responsive.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22am'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AM_HERD=r"""
+<style id="hotfix122am-herd-toolbar">
+.herd-filter{display:grid!important;grid-template-columns:minmax(240px,1.2fr) minmax(480px,1.6fr);gap:12px!important;align-items:end;padding:16px!important;background:#f7fbf8!important;margin-bottom:12px!important}
+.herd-filter label{display:flex!important;flex-direction:column!important;gap:6px!important;min-width:0;font-size:12px!important;font-weight:650!important;color:#355547}
+.herd-filter input,.herd-filter select{display:block;width:100%!important;max-width:none!important;min-width:0!important;height:44px!important;margin:0!important;padding:10px 12px!important;border:1px solid #ceded4!important;border-radius:9px!important;background:#fff!important;font:inherit!important;font-size:14px!important;box-sizing:border-box}
+.herd-filter input:focus,.herd-filter select:focus{outline:2px solid #2b8056;outline-offset:2px}
+.herd-filter-details{min-width:0;border:0;margin:0;padding:0}
+.herd-filter-details>summary{display:none}
+.herd-filter-details>.herd-filter-controls{display:grid!important;grid-template-columns:minmax(130px,1fr) 115px auto;gap:10px;align-items:end}
+.herd-filter-actions{display:flex;gap:7px;align-items:stretch}
+.herd-filter-actions .btn{display:flex;align-items:center;justify-content:center;min-height:44px!important;height:44px!important;padding:9px 16px!important;white-space:nowrap;font-size:13px!important;box-sizing:border-box;border-radius:9px!important}
+.herd-result-summary{margin:12px 0 15px;color:#607168;font-size:13px;overflow-wrap:anywhere}
+body.hf122am-herd .workspace-table-wrap{border-radius:12px}
+body.hf122am-herd .workspace-table th{padding:12px!important;font-weight:650}
+body.hf122am-herd .workspace-table td{padding:12px!important}
+body.hf122am-herd .workspace-table .row-actions{gap:6px}
+body.hf122am-herd .workspace-table .row-actions .btn{border-radius:8px}
+@media(min-width:651px) and (max-width:1100px){.herd-filter{grid-template-columns:1fr!important}.herd-filter-details>.herd-filter-controls{grid-template-columns:minmax(150px,1fr) 130px auto}}
+@media(max-width:650px){
+ .herd-filter{grid-template-columns:1fr!important;gap:12px!important;padding:12px!important;background:#fff!important;border-radius:14px!important}
+ .herd-filter input,.herd-filter select{font-size:16px!important;height:46px!important}
+ .herd-filter-details{border:1px solid #dce8df;border-radius:10px;overflow:hidden}
+ .herd-filter-details>summary{display:flex!important;gap:8px;align-items:center;list-style:none;padding:12px;background:#eef7f1;color:#315a40;font-weight:700;cursor:pointer;min-height:44px;box-sizing:border-box}
+ .herd-filter-details>summary::-webkit-details-marker{display:none}
+ .herd-filter-chevron{margin-left:auto;transition:transform .15s}
+ .herd-filter-details[open] .herd-filter-chevron{transform:rotate(180deg)}
+ .herd-filter-badge{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#176b3a;color:#fff;font-size:12px}
+ .herd-filter-details:not([open])>.herd-filter-controls{display:none!important}
+ .herd-filter-details[open]>.herd-filter-controls{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:10px!important;padding:12px}
+ .herd-filter-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr}
+ .herd-filter-actions .btn{width:100%!important}
+ body.hf122am-herd .workspace-table-wrap{border:0;overflow:visible}
+ body.hf122am-herd .workspace-table tbody>tr{display:grid!important;grid-template-columns:1fr 1fr;gap:4px 12px;padding:14px!important;margin:0 0 12px!important;border:1px solid #dce7df!important;border-radius:13px;background:#fff}
+ body.hf122am-herd .workspace-table tbody>tr>td{display:block!important;width:auto!important;padding:3px 0!important;min-width:0;overflow-wrap:anywhere;font-size:13px}
+ body.hf122am-herd .workspace-table tbody>tr>td:before{font-size:11px;margin-right:6px;color:#6f8176;font-weight:500}
+ body.hf122am-herd .workspace-table tbody>tr>td:first-child{grid-column:1/-1;padding-bottom:8px!important}
+ body.hf122am-herd .workspace-table tbody>tr>td:first-child:before{display:none!important}
+ body.hf122am-herd .workspace-table .animal-tag-btn{max-width:100%;font-size:15px;border:0!important;background:transparent!important;padding:0!important;justify-content:flex-start}
+ body.hf122am-herd .workspace-table .animal-tag-btn:before{display:none}
+ body.hf122am-herd .workspace-table td:first-child .mut{font-size:11px;margin-top:4px}
+ body.hf122am-herd .workspace-table td .pill{padding:4px 8px!important;min-width:0!important;width:auto!important;font-size:12px}
+ body.hf122am-herd .workspace-table tbody>tr>td[data-label="İşlemler"]{grid-column:1/-1;width:100%!important;padding-top:10px!important;border-top:1px solid #e7eee9!important}
+ body.hf122am-herd .workspace-table td[colspan]{grid-column:1/-1}
+}
+</style>
+"""
+_page_before_hotfix122am=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122am(title,body,path,user,flash)
+    if path=='/all-animals':
+        html=html.replace('<body','<body class="hf122am-herd" data-herd-view="compact"',1)
+        html=html.replace('</head>',HOTFIX122AM_HERD+'</head>',1)
+    return html
+
+# Hotfix1.22an: Sürü Merkezi masaüstü görsel liste, fotoğraflı mobil kart ve sıralama.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22an'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AN_HERD=r"""
+<style id="hotfix122an-herd-list">
+body.hf122am-herd .herd-filter{grid-template-columns:minmax(320px,1.35fr) minmax(560px,1.65fr)!important;padding:14px!important;border:1px solid #d9e7dd!important;box-shadow:0 3px 12px #173b280a!important}
+body.hf122am-herd .herd-filter-details>.herd-filter-controls{grid-template-columns:minmax(150px,1fr) 120px auto!important}
+body.hf122am-herd .herd-result-summary{margin:10px 2px 12px!important;font-weight:650;color:#65786b}
+body.hf122am-herd .herd-list-card{padding:0!important;overflow:hidden;border:1px solid #dbe7de!important;border-radius:14px!important}
+body.hf122am-herd .herd-list-card .workspace-pager{padding:12px 14px}
+body.hf122am-herd .herd-table{table-layout:fixed}
+body.hf122am-herd .herd-table th:nth-child(1){width:25%}
+body.hf122am-herd .herd-table th:nth-child(2){width:11%}
+body.hf122am-herd .herd-table th:nth-child(3){width:13%}
+body.hf122am-herd .herd-table th:nth-child(4){width:11%}
+body.hf122am-herd .herd-table th:nth-child(5){width:11%}
+body.hf122am-herd .herd-table th:nth-child(6){width:10%}
+body.hf122am-herd .herd-table th:nth-child(7){width:19%}
+body.hf122am-herd .herd-table thead th{background:#eaf3ed!important;border-bottom:1px solid #d1e1d6!important;vertical-align:middle}
+body.hf122am-herd .herd-table tbody tr{transition:background .15s ease,box-shadow .15s ease}
+body.hf122am-herd .herd-table tbody tr:hover{background:#f7fbf8;box-shadow:inset 3px 0 #2d8958}
+body.hf122am-herd .herd-table td{vertical-align:middle!important;overflow-wrap:anywhere}
+.herd-sort{display:inline-flex;align-items:center;gap:5px;color:#20392b;text-decoration:none;font-weight:800;white-space:nowrap}
+.herd-sort span{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;color:#688075;font-size:12px}
+.herd-sort:hover,.herd-sort.active{color:#13733f}.herd-sort:hover span,.herd-sort.active span{background:#d8ecdf;color:#13733f}
+.herd-animal-cardhead{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;align-items:center;min-width:0}
+.herd-photo{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;overflow:hidden;border:1px solid #d3e2d7;background:linear-gradient(145deg,#edf7ef,#fff);text-decoration:none;font-size:24px;box-sizing:border-box}
+.herd-photo img{display:block;width:100%;height:100%;object-fit:cover}
+.herd-identity{min-width:0}.herd-identity .animal-tag-btn{display:inline-flex;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none!important;font-size:14px!important}
+.herd-identity .animal-tag-btn:before,.herd-identity .animal-tag-btn:after{display:none!important}
+.herd-animal-name{margin-top:3px;color:#738178;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.herd-animal-summary,.herd-mobile-status{display:none}
+body.hf122am-herd .herd-table .row-actions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:center;width:100%;max-width:310px}
+body.hf122am-herd .herd-table .row-actions>a{display:flex!important;align-items:center;justify-content:center;min-width:0!important;padding-inline:8px!important;white-space:nowrap}
+body.hf122am-herd .herd-table .row-actions>form{display:block!important;margin:0!important}
+body.hf122am-herd .herd-table .row-actions>form .btn{min-width:45px!important;padding-inline:10px!important}
+@media(min-width:651px) and (max-width:1180px){
+ body.hf122am-herd .herd-filter{grid-template-columns:1fr!important}
+ body.hf122am-herd .herd-table{table-layout:auto;min-width:940px}
+}
+@media(max-width:650px){
+ body.hf122am-herd .herd-filter{grid-template-columns:1fr!important;padding:12px!important}
+ body.hf122am-herd .herd-filter-details>.herd-filter-controls{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+ body.hf122am-herd .herd-list-card{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
+ body.hf122am-herd .herd-list-card .workspace-table-wrap{overflow:visible!important}
+ body.hf122am-herd .herd-table{display:block!important;width:100%!important;table-layout:auto!important}
+ body.hf122am-herd .herd-table tbody{display:block!important;width:100%!important}
+ body.hf122am-herd .herd-table tbody>tr{display:block!important;padding:14px!important;margin:0 0 12px!important;border:1px solid #d9e6dd!important;border-radius:15px!important;background:#fff!important;box-shadow:0 4px 14px #173b280b!important}
+ body.hf122am-herd .herd-table tbody>tr:hover{box-shadow:0 4px 14px #173b280b!important}
+ body.hf122am-herd .herd-table tbody>tr>td{display:none!important}
+ body.hf122am-herd .herd-table tbody>tr>td:first-child,body.hf122am-herd .herd-table tbody>tr>td[data-label="İşlemler"]{display:block!important;width:100%!important;grid-column:auto!important}
+ body.hf122am-herd .herd-table tbody>tr>td:first-child{padding:0 0 12px!important}
+ .herd-animal-cardhead{grid-template-columns:58px minmax(0,1fr) auto;gap:11px;align-items:center}
+ .herd-photo{width:58px;height:58px;border-radius:15px;font-size:28px}
+ .herd-identity .animal-tag-btn{font-size:16px!important;line-height:1.2}
+ .herd-animal-name{font-size:12px;margin-top:4px}
+ .herd-animal-summary{display:block;margin-top:5px;color:#61756a;font-size:11px;line-height:1.35;white-space:normal}
+ .herd-mobile-status{display:inline-flex;align-items:center;gap:5px;padding:6px 8px;border-radius:999px;background:#e9f6ed;color:#176b3a;font-size:11px;font-weight:800;white-space:nowrap}
+ body.hf122am-herd .herd-table tbody>tr>td[data-label="İşlemler"]{padding:11px 0 0!important;border-top:1px solid #e5ede7!important}
+ body.hf122am-herd .herd-table .row-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 48px!important;max-width:none!important;gap:7px!important}
+ body.hf122am-herd .herd-table .row-actions>a{height:44px!important;font-size:12px!important}
+ body.hf122am-herd .herd-table .row-actions>form,body.hf122am-herd .herd-table .row-actions>form .btn{width:48px!important;min-width:48px!important;height:44px!important}
+ body.hf122am-herd .herd-list-card .workspace-pager{padding:4px 2px 12px!important}
+}
+@media(max-width:390px){
+ .herd-animal-cardhead{grid-template-columns:52px minmax(0,1fr)}
+ .herd-photo{width:52px;height:52px}
+ .herd-mobile-status{grid-column:2;justify-self:start;margin-top:2px}
+}
+</style>
+"""
+_page_before_hotfix122an=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122an(title,body,path,user,flash)
+    if path=='/all-animals':html=html.replace('</head>',HOTFIX122AN_HERD+'</head>',1)
+    return html
+
+# Hotfix1.22ao: Üreme Merkezi mobilde fotoğraflı kompakt akordeon görünümü.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ao'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AO_REPRO=r"""
+<style id="hotfix122ao-reproduction-center">
+.repro-toggle{width:100%;border:0;color:inherit;font:inherit;text-align:left;cursor:default}
+.repro-toggle>span{display:flex;align-items:center;gap:6px}.repro-toggle i{display:none;font-style:normal;font-size:17px;color:#537163;transition:transform .18s}
+.repro-column-body{min-width:0}.repro-show-all{display:none}
+.repro-photo{flex:0 0 38px;width:38px;height:38px;border:1px solid #d6e5db;border-radius:10px;background:linear-gradient(145deg,#edf7ef,#fff);display:grid;place-items:center;overflow:hidden;text-decoration:none;font-size:21px}
+.repro-photo img{display:block;width:100%;height:100%;object-fit:cover}
+.repro-card-identity{min-width:0;flex:1}.repro-card-identity>a{display:block;color:inherit;text-decoration:none}.repro-card-identity strong{display:block;overflow:hidden;text-overflow:ellipsis}.repro-card-meta{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px}.repro-card-meta .mut{font-size:10px;line-height:1.25}.repro-card[hidden]{display:none!important}
+@media(max-width:650px){
+ .repro-board-compact{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}
+ .repro-board-compact .repro-column{border-radius:14px!important;background:#fff!important;box-shadow:0 4px 14px #173b280b;overflow:hidden}
+ .repro-board-compact .repro-toggle{cursor:pointer;padding:13px 14px!important;min-height:50px;border-bottom:0!important}
+ .repro-board-compact .repro-toggle h2{font-size:16px!important}
+ .repro-board-compact .repro-toggle i{display:inline-block}
+ .repro-board-compact .repro-column:not(.is-collapsed) .repro-toggle{border-bottom:1px solid #dce8e0!important}
+ .repro-board-compact .repro-column:not(.is-collapsed) .repro-toggle i{transform:rotate(180deg)}
+ .repro-board-compact .repro-column.is-collapsed .repro-column-body{display:none!important}
+ .repro-board-compact:not(.repro-ready) .repro-card:nth-of-type(n+4){display:none!important}
+ .repro-board-compact .repro-column-sub{padding:9px 13px 3px!important;font-size:11px;color:#718177}
+ .repro-board-compact .repro-cards{display:grid!important;gap:8px!important;padding:8px 10px!important;max-height:none!important;overflow:visible!important}
+ .repro-board-compact .repro-card{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:7px 9px;padding:10px!important;border-radius:12px!important;box-shadow:0 2px 8px #173b2808}
+ .repro-board-compact .repro-card-top{grid-column:1/-1;display:grid!important;grid-template-columns:52px minmax(0,1fr) auto;gap:9px;align-items:center}
+ .repro-board-compact .repro-photo{width:52px;height:52px;border-radius:13px;font-size:26px;grid-row:1/3}
+ .repro-board-compact .repro-card-identity strong{font-size:14px!important;line-height:1.18;white-space:normal}
+ .repro-board-compact .repro-card-identity small{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .repro-board-compact .repro-card-top>.v117-chip{align-self:start;white-space:nowrap;padding:5px 8px;font-size:9px}
+ .repro-board-compact .repro-card-meta{grid-column:1;grid-row:2;margin:0;min-width:0;align-self:center}
+ .repro-board-compact .repro-card-meta .mut{font-size:11px!important;white-space:normal;color:#66786e}
+ .repro-board-compact .repro-select{display:none!important}
+ .repro-board-compact .repro-card-action{grid-column:2;grid-row:2;margin:0!important;align-self:center}
+ .repro-board-compact .repro-card-action form{margin:0}
+ .repro-board-compact .repro-card-action .btn{min-width:108px;min-height:38px;display:flex;align-items:center;justify-content:center;padding:7px 10px!important;font-size:10px!important;white-space:normal;text-align:center;line-height:1.15}
+ .repro-board-compact .repro-show-all{display:flex;width:calc(100% - 20px);margin:2px 10px 11px;min-height:42px;border:1px solid #cfe0d5;border-radius:10px;background:#eef7f1;color:#176b3a;align-items:center;justify-content:center;font-weight:850;font-size:12px;cursor:pointer}
+ .repro-board-compact .repro-show-all[hidden]{display:none!important}
+ .repro-detail{margin-top:12px!important}
+}
+@media(max-width:390px){
+ .repro-board-compact .repro-card-top{grid-template-columns:46px minmax(0,1fr)}
+ .repro-board-compact .repro-photo{width:46px;height:46px}
+ .repro-board-compact .repro-card-top>.v117-chip{grid-column:2;justify-self:start}
+ .repro-board-compact .repro-card{grid-template-columns:minmax(0,1fr) 98px}
+ .repro-board-compact .repro-card-action .btn{min-width:98px}
+}
+</style>
+"""
+_page_before_hotfix122ao=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ao(title,body,path,user,flash)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122AO_REPRO+'</head>',1)
+    return html
+
+# Hotfix1.22ap: Üreme Merkezi masaüstü aşama filtresi ve kararlı mobil akordeon.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ap'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AP_REPRO=r"""
+<style id="hotfix122ap-reproduction-center">
+.repro-column[hidden],.repro-card[hidden]{display:none!important}
+.repro-stage-tabs{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:7px;border:1px solid #d9e7dd;border-radius:13px;background:#fff;overflow-x:auto;box-shadow:0 3px 12px #173b2808}
+.repro-stage-tabs button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:8px 13px;border:1px solid #dbe7de;border-radius:10px;background:#f7faf8;color:#315744;font:inherit;font-size:12px;font-weight:850;white-space:nowrap;cursor:pointer}
+.repro-stage-tabs button b{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 7px;border-radius:99px;background:#e4f1e8;color:#176b3a;font-size:10px}
+.repro-stage-tabs button:hover{border-color:#8bb79a;background:#eef7f1}.repro-stage-tabs button.active{background:#176f3d;border-color:#176f3d;color:#fff}.repro-stage-tabs button.active b{background:#ffffff2b;color:#fff}
+@media(min-width:651px){
+ .repro-board-compact{grid-template-columns:1fr!important;gap:12px!important}
+ .repro-board-compact .repro-column{border-radius:13px!important;background:#fff!important;overflow:hidden;box-shadow:0 3px 12px #173b2808}
+ .repro-board-compact .repro-toggle{cursor:default;padding:12px 14px!important}
+ .repro-board-compact .repro-column-body{display:block!important}
+ .repro-board-compact .repro-column-sub{padding:8px 14px;border-bottom:1px solid #e3ebe5;color:#6b7d72;font-size:11px}
+ .repro-board-compact .repro-cards{display:grid!important;gap:0!important;padding:0!important;max-height:none!important;overflow:visible!important}
+ .repro-board-compact .repro-card{display:grid!important;grid-template-columns:minmax(320px,1.4fr) minmax(180px,.8fr) 145px;gap:14px;align-items:center;border:0!important;border-bottom:1px solid #e5ede7!important;border-radius:0!important;padding:10px 14px!important;background:#fff}
+ .repro-board-compact .repro-card:last-child{border-bottom:0!important}
+ .repro-board-compact .repro-card:hover{background:#f7fbf8;box-shadow:inset 3px 0 #2d8958}
+ .repro-board-compact .repro-card-top{display:grid!important;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:center;min-width:0}
+ .repro-board-compact .repro-photo{width:48px;height:48px;border-radius:12px;font-size:24px}
+ .repro-board-compact .repro-card-identity strong{font-size:13px!important;line-height:1.2}.repro-board-compact .repro-card-identity small{font-size:11px}
+ .repro-board-compact .repro-card-meta{margin:0!important;justify-content:flex-start;min-width:0}.repro-board-compact .repro-card-meta .mut{font-size:11px!important}.repro-board-compact .repro-select{display:none!important}
+ .repro-board-compact .repro-card-action{margin:0!important;justify-self:end;width:145px}.repro-board-compact .repro-card-action form{margin:0;width:100%}
+ .repro-board-compact .repro-card-action .btn{display:flex!important;align-items:center;justify-content:center;width:100%!important;min-width:0!important;max-width:100%!important;min-height:38px;padding:7px 9px!important;box-sizing:border-box;white-space:nowrap!important;font-size:10px!important;line-height:1!important}
+ .repro-board-compact .repro-show-all{display:none!important}
+}
+@media(max-width:650px){
+ .repro-stage-tabs{display:none!important}
+ .repro-board-compact .repro-pregnant-duplicate{display:none!important}
+ .repro-board-compact .repro-card{grid-template-columns:minmax(0,1fr) 128px!important;overflow:hidden}
+ .repro-board-compact .repro-card-action{width:128px!important;max-width:128px!important;min-width:0!important;overflow:hidden}
+ .repro-board-compact .repro-card-action form{width:100%!important;min-width:0!important;margin:0!important}
+ .repro-board-compact .repro-card-action .btn{display:flex!important;align-items:center;justify-content:center;width:100%!important;min-width:0!important;max-width:100%!important;min-height:38px!important;padding:7px 6px!important;box-sizing:border-box!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis;font-size:9.5px!important;line-height:1!important}
+}
+@media(max-width:390px){
+ .repro-board-compact .repro-card{grid-template-columns:minmax(0,1fr) 116px!important}
+ .repro-board-compact .repro-card-action{width:116px!important;max-width:116px!important}
+ .repro-board-compact .repro-card-action .btn{font-size:8.5px!important;padding-inline:4px!important}
+}
+</style>
+"""
+_page_before_hotfix122ap=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ap(title,body,path,user,flash)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122AP_REPRO+'</head>',1)
+    return html
+
+# Hotfix1.22aq: Seçili hayvan üreme kartını mobilde kompakt ve taşmasız gösterir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22aq'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AQ_REPRO_DETAIL=r"""
+<style id="hotfix122aq-reproduction-detail">
+.repro-link-mobile{display:none}
+@media(max-width:650px){
+ .repro-detail{margin-top:10px!important;padding:0!important;border-radius:14px!important;overflow:hidden!important;box-shadow:0 4px 14px #173b280b!important}
+ .repro-detail-grid{display:block!important;min-width:0!important}
+ .repro-selected{padding:11px 12px!important;border:0!important;border-bottom:1px solid #e1ebe4!important;min-width:0!important}
+ .repro-selected .filter-title{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important;align-items:center!important;min-width:0!important}
+ .repro-selected .filter-title>div{min-width:0!important}
+ .repro-selected h2{margin:0 0 3px!important;font-size:15px!important;line-height:1.2!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ .repro-selected p{margin:0!important;font-size:10px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ .repro-animal-link{display:flex!important;align-items:center!important;justify-content:center!important;width:auto!important;min-width:72px!important;max-width:82px!important;min-height:34px!important;padding:6px 8px!important;box-sizing:border-box!important;font-size:9.5px!important;line-height:1!important;white-space:nowrap!important}
+ .repro-link-desktop{display:none!important}.repro-link-mobile{display:inline!important}
+ .repro-selected .quick-metrics.repro-selected-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;margin:8px 0 0!important}
+ .repro-selected-metrics .repro-tag-metric{display:none!important}
+ .repro-selected-metrics .pill{display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;min-width:0!important;min-height:35px!important;margin:0!important;padding:6px 8px!important;border-radius:9px!important;font-size:9px!important;line-height:1!important;white-space:nowrap!important;overflow:hidden!important}
+ .repro-selected-metrics .pill br{display:none!important}.repro-selected-metrics .pill b{font-size:11px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ .repro-flow-wrap{display:block!important;min-width:0!important;padding:0!important;overflow:hidden!important}
+ .repro-flow{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:3px!important;justify-content:stretch!important;width:100%!important;max-width:100%!important;padding:9px 7px 7px!important;box-sizing:border-box!important;overflow:hidden!important}
+ .repro-step{display:grid!important;place-items:center!important;min-width:0!important;width:auto!important;font-size:7.5px!important;line-height:1!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ .repro-step i{width:27px!important;height:27px!important;margin:0 0 4px!important;font-size:13px!important}
+ .repro-arrow{display:none!important}
+ .repro-next-action{display:grid!important;grid-template-columns:minmax(0,1fr) 104px!important;gap:7px!important;align-items:center!important;margin:0 9px 9px!important;padding:7px 8px!important;min-width:0!important;border-radius:9px!important;font-size:9px!important;line-height:1.25!important;box-sizing:border-box!important}
+ .repro-next-action>span{display:-webkit-box!important;min-width:0!important;overflow:hidden!important;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+ .repro-next-action .btn{display:flex!important;align-items:center!important;justify-content:center!important;width:104px!important;min-width:0!important;max-width:104px!important;min-height:34px!important;padding:6px 7px!important;box-sizing:border-box!important;font-size:9px!important;line-height:1!important;white-space:nowrap!important}
+}
+@media(max-width:390px){
+ .repro-selected h2{font-size:13.5px!important}
+ .repro-animal-link{min-width:66px!important;max-width:70px!important;font-size:8.5px!important}
+ .repro-step{font-size:6.8px!important}.repro-step i{width:25px!important;height:25px!important;font-size:12px!important}
+ .repro-next-action{grid-template-columns:minmax(0,1fr) 92px!important}.repro-next-action .btn{width:92px!important;max-width:92px!important;font-size:8.5px!important}
+}
+</style>
+"""
+_page_before_hotfix122aq=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122aq(title,body,path,user,flash)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122AQ_REPRO_DETAIL+'</head>',1)
+    return html
