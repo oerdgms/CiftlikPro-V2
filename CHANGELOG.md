@@ -1,3 +1,9 @@
+# Hotfix1.22ar - Tek Sürü Merkezi yönlendirmesi
+
+- Sol menü, Dashboard özetleri ve eski kategori adresleri Dişi, Erkek ve Buzağı filtreleriyle Sürü Merkezi'ne bağlandı.
+- Buzağı detayından dönüş ile kayıt ekleme, düzenleme ve silme sonrasındaki dönüş adresleri yeni listeye geçirildi.
+- Eski bağlantılardan gelen arama ve filtre bilgileri korunur; aynı kategori için iki farklı arayüz açılması önlendi.
+
 # Hotfix1.22aq - Kompakt seçili hayvan kartı
 
 - Mobil Üreme Merkezi seçili hayvan detayı yeniden boyutlandırıldı; yatay taşma ve gereksiz dikey alan azaltıldı.

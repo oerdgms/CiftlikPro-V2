@@ -6,6 +6,34 @@ from test_reports_import import server
 
 
 class HerdToolbarTests(unittest.TestCase):
+    def test_legacy_category_routes_open_the_filtered_herd_center(self):
+        server.init_db()
+        server.SESSIONS['herd-routes']={'username':'admin','role':'admin'}
+        http=server.QuietThreadingHTTPServer(('127.0.0.1',0),server.App)
+        threading.Thread(target=http.serve_forever,daemon=True).start()
+        try:
+            with patch.object(server,'license_status',return_value=(True,{},'')):
+                for old_path,kind in (('/animals','female'),('/males','male'),('/calves','calf')):
+                    with self.subTest(old_path=old_path):
+                        req=urllib.request.Request(
+                            f'http://127.0.0.1:{http.server_port}{old_path}?q=ROUTE-CHECK',
+                            headers={'Cookie':'sid=herd-routes'}
+                        )
+                        with urllib.request.urlopen(req,timeout=20) as response:
+                            html=response.read().decode()
+                            final_url=response.geturl()
+                        self.assertIn('/all-animals?',final_url)
+                        self.assertIn(f'kind={kind}',final_url)
+                        self.assertIn('q=ROUTE-CHECK',final_url)
+                        self.assertIn('🐄 Sürü Merkezi',html)
+                        self.assertIn(f'name="kind" value="{kind}"',html)
+            nav_html=server.page('Test','İçerik','/all-animals','admin')
+            self.assertIn('href="/all-animals?kind=female"',nav_html)
+            self.assertIn('href="/all-animals?kind=male"',nav_html)
+            self.assertIn('href="/all-animals?kind=calf"',nav_html)
+        finally:
+            http.shutdown();http.server_close();server.SESSIONS.pop('herd-routes',None)
+
     def test_filter_form_keeps_category_and_paddock(self):
         server.init_db()
         with server.db() as c:

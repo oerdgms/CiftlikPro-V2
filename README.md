@@ -1,4 +1,11 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22aq
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ar
+
+## Hotfix1.22ar – Tek Sürü Merkezi Yönlendirmesi
+
+- Sol menüdeki Dişi, Erkek ve Buzağı bağlantıları yeni Sürü Merkezi'nin ilgili filtresini açar.
+- Eski `/animals`, `/males` ve `/calves` adresleri güvenli biçimde aynı filtreli Sürü Merkezi'ne yönlendirilir; eski tablo görünümü geri gelmez.
+- Buzağı kartındaki listeye dönüş ile hayvan ekleme, düzenleme ve silme sonrası dönüşler doğru kategori filtresini korur.
+- Arama ve desteklenen filtre parametreleri eski bağlantılardan yeni görünüme aktarılır.
 
 ## Hotfix1.22aq – Kompakt Seçili Hayvan Kartı
 

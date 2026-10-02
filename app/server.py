@@ -4865,7 +4865,7 @@ def promote_mature_calves():
             c.execute('update calves set promoted_animal_id=?,promoted_at=? where id=?',(aid,datetime.now().isoformat(timespec='seconds'),calf['id']))
 
 
-NAV=[('Dashboard','/'),('📈 Besi Performansı','/performance'),('➕ Hayvan Ekle','/animal-add'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Satılan Hayvanlar','/archive/sold'),('Kesilen Hayvanlar','/archive/slaughtered'),('Buzağılar','/calves'),('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('Finans','/finance'),('Raporlar','/reports'),('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('🔐 Şifremi Değiştir','/password-change')]
+NAV=[('Dashboard','/'),('📈 Besi Performansı','/performance'),('➕ Hayvan Ekle','/animal-add'),('Dişi Hayvanlar','/all-animals?kind=female'),('Erkek Hayvanlar','/all-animals?kind=male'),('Satılan Hayvanlar','/archive/sold'),('Kesilen Hayvanlar','/archive/slaughtered'),('Buzağılar','/all-animals?kind=calf'),('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('Finans','/finance'),('Raporlar','/reports'),('Veri Aktarımı','/data'),('💾 Yedekleme Merkezi','/backups'),('🔐 Şifremi Değiştir','/password-change')]
 ADMIN_NAV=[('👥 Kullanıcı Yönetimi','/users'),('📜 İşlem Günlüğü','/audit-log')]
 
 
@@ -5251,7 +5251,7 @@ def page(title,body,path='/',user='admin',flash=''):
     def nav_link(name,url):
         return f'<a class="{"on" if path==url else ""}" href="{url}">{name}</a>'
     groups=[
-        ('🐄 Hayvanlar',[('Sürü Merkezi','/all-animals'),('Dişi Hayvanlar','/animals'),('Erkek Hayvanlar','/males'),('Buzağılar','/calves'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
+        ('🐄 Hayvanlar',[('Sürü Merkezi','/all-animals'),('Dişi Hayvanlar','/all-animals?kind=female'),('Erkek Hayvanlar','/all-animals?kind=male'),('Buzağılar','/all-animals?kind=calf'),('Kesilen Hayvanlar','/archive/slaughtered'),('Satılan Hayvanlar','/archive/sold'),('Ölen / Kayıp Hayvanlar','/archive/lost'),('➕ Hayvan Ekle','/animal-add')]),
         ('🐂 Besi',[('🏠 Padok Yönetimi','/paddocks'),('🌾 Yem Kataloğu','/feeds'),('🥣 Rasyon Yönetimi','/rations'),('Besi Performansı','/performance')]),
         ('🥛 Süt Yönetimi',[('Süt & Laktasyon Merkezi','/milk-center')]),
         ('🩺 Üreme & Sağlık',[('Üreme Merkezi','/reproduction-center'),('Kızgınlık Takibi','/estrus'),('Tohumlama','/inseminations'),('Sağlık','/health'),('İlaç & Veteriner','/medicines')]),
@@ -6445,6 +6445,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             sid=self.parse_cookie(); SESSIONS.pop(sid,None); self.send_response(303);self.send_header('Set-Cookie','sid=; Max-Age=0; Path=/');self.send_header('Location','/login');self.end_headers();return
         if not self.require():return
         u=self.user()['username']
+        # Hotfix1.22ar: Eski kategori adresleri artık ikinci bir liste ekranı
+        # üretmez. Sol menü, eski yer imleri ve detaydan dönüş bağlantıları aynı
+        # Sürü Merkezi bileşenine yönlenir.
+        legacy_herd_kind={'/animals':'female','/males':'male','/calves':'calf'}
+        if path in legacy_herd_kind:
+            params={'kind':legacy_herd_kind[path]}
+            for key in ('q','paddock','per_page','sort','dir','page','msg'):
+                value=(q.get(key,[''])[0] or '').strip()
+                if value:params[key]=value
+            return self.redirect('/all-animals?'+urllib.parse.urlencode(params))
         if path in ('/health/tasks.pdf','/health/tasks/print'):
             task_filter=q.get('filter',['all'])[0]
             if task_filter not in TASK_FILTERS: task_filter='all'
@@ -6710,10 +6720,10 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             pregnancy_vaccine_html=''.join(vaccine_task_html(t) for t in pregnancy_vaccines) or '<p class="mut">7 gün içinde 7./8. ay gebelik aşısı görevi yok.</p>'
             dash_cards={
                 'active_total':f'<a class="card stat metric green summary-link" href="/all-animals"><span class="metric-icon">🐄</span><span class="metric-title">Toplam Aktif Hayvan</span><b>{active_total}</b><small>Tüm hayvanları aç →</small></a>',
-                'female':f'<a class="card stat metric green summary-link" href="/animals"><span class="metric-icon">🐮</span><span class="metric-title">Dişi Hayvan</span><b>{animals}</b><small>Listeyi aç →</small></a>',
-                'male':f'<a class="card stat metric blue summary-link" href="/males"><span class="metric-icon">🐂</span><span class="metric-title">Erkek Hayvan</span><b>{males}</b><small>Listeyi aç →</small></a>',
+                'female':f'<a class="card stat metric green summary-link" href="/all-animals?kind=female"><span class="metric-icon">🐮</span><span class="metric-title">Dişi Hayvan</span><b>{animals}</b><small>Listeyi aç →</small></a>',
+                'male':f'<a class="card stat metric blue summary-link" href="/all-animals?kind=male"><span class="metric-icon">🐂</span><span class="metric-title">Erkek Hayvan</span><b>{males}</b><small>Listeyi aç →</small></a>',
                 'pregnant':f'<a class="card stat metric orange summary-link" href="/inseminations"><span class="metric-icon">🤰</span><span class="metric-title">Gebe Hayvan</span><b>{pregnant}</b><small>Gebelikleri aç →</small></a>',
-                'calves':f'<a class="card stat metric teal summary-link" href="/calves"><span class="metric-icon">🐮</span><span class="metric-title">Buzağı</span><b>{calves}</b><small>Listeyi aç →</small></a>',
+                'calves':f'<a class="card stat metric teal summary-link" href="/all-animals?kind=calf"><span class="metric-icon">🐮</span><span class="metric-title">Buzağı</span><b>{calves}</b><small>Listeyi aç →</small></a>',
                 'due':f'<a class="card stat metric purple summary-link" href="#approaching-births"><span class="metric-icon">📅</span><span class="metric-title">Yaklaşan Doğum</span><b>{len(due_rows)}</b><small>Detaya git ↓</small></a>',
                 'estrus':f'<a class="card stat metric green summary-link" href="#approaching-estrus"><span class="metric-icon">🌸</span><span class="metric-title">Yaklaşan Kızgınlık</span><b>{len(estrus_upcoming)}</b><small>Detaya git ↓</small></a>',
                 'health_due':f'<a class="card stat metric teal summary-link" href="/health"><span class="metric-icon">💉</span><span class="metric-title">Yaklaşan Sağlık</span><b>{len(health_rows)}</b><small>Sağlığı aç →</small></a>',
@@ -7287,7 +7297,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             with db() as c:
                 rec=c.execute('select * from animals where id=?',(aid,)).fetchone()
             if not rec:return self.send_html('Hayvan bulunamadı',404)
-            cancel='/animals' if rec['gender']=='Dişi' else '/males'
+            cancel='/all-animals?kind=female' if rec['gender']=='Dişi' else '/all-animals?kind=male'
             body=f'''<h1>Hayvan Düzenle</h1><div class="card"><form method="post" action="/animal-edit" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="id" value="{rec["id"]}"><label>Küpe No<input name="tag" required value="{h(rec["tag"])}"></label><label>Takma Ad<input name="nickname" value="{h(rec["nickname"])}"></label><label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label><label>Irk<input name="breed" value="{h(rec["breed"])}"></label><label>Doğum Tarihi<input type="date" name="birth_date" value="{h(rec["birth_date"])}"></label><label>Padok / Ahır<input name="paddock" value="{h(rec["paddock"])}"></label><label>Fotoğrafı Değiştir<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><input type="hidden" name="photo_url" value="{h(rec["photo_url"])}"><label>Durum<select name="status"><option value="Aktif" {'selected' if rec["status"]=='Aktif' else ''}>Aktif</option><option value="Satıldı" {'selected' if rec["status"]=='Satıldı' else ''}>Satıldı</option><option value="Kesildi" {'selected' if rec["status"]=='Kesildi' else ''}>Kesildi</option></select></label><label>Satış Fiyatı<input type="number" step="0.01" name="sold_price" value="{h(rec["sold_price"])}"></label><label>Alış Tarihi<input type="date" name="purchase_date" value="{h(rec["purchase_date"])}"></label><label>Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price" value="{h(rec["purchase_price"])}"></label><label>Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" value="{h(rec["purchase_weight"])}"></label><label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{h(rec["daily_feed_cost"])}"></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{h(rec["daily_care_cost"])}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{h(rec["target_sale_price"])}"></label><label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="{cancel}">İptal</a></div></form></div>'''
             body=body.replace('<label class="full">Not<textarea', '<label class="full"><input type="checkbox" name="sync_purchase_finance" value="yes" checked> Alış fiyatını Finans &gt; Hayvan Alımı kaydıyla oluştur/güncelle</label><label class="full">Not<textarea')
             body=body.replace('</label><label>Günlük Bakım (TL)', '<span class="mut">Padokta aktif rasyon varsa otomatik rasyon maliyeti kullanılır.</span></label><label>Günlük Bakım (TL)',1)
@@ -7722,7 +7732,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
             health_html=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{h(r["notes"])}</td></tr>' for r in health_rows) or '<tr><td colspan="5">Henüz sağlık/tedavi kaydı yok.</td></tr>'
             weight_html=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td><b>{float(r["weight"]):.1f} kg</b></td><td>{h(r["notes"])}</td></tr>' for r in weight_rows) or '<tr><td colspan="3">Henüz tartım kaydı yok.</td></tr>'
-            body=f'''<div class="actions"><a class="btn alt" href="/calves">← Buzağılara Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}
+            body=f'''<div class="actions"><a class="btn alt" href="/all-animals?kind=calf">← Buzağı Listesine Dön</a><a class="btn" href="/calf-edit?id={cid}">Düzenle</a></div>{promoted}
             <div class="card profile"><div class="photo">{photo}</div><div><h1>{h(calf["tag"])}</h1><span class="pill">{h(calf["gender"])}</span><span class="pill">Yaş: {age_text(calf["birth_date"])}</span>
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
             <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: {mother_html}</p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
@@ -9488,7 +9498,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         try:fp.unlink()
                         except Exception:pass
                 audit(username,'Hayvan sildi',rec['tag'],self.client_ip())
-                return self.redirect('/males' if rec['gender']=='Erkek' else '/animals','Hayvan ve bağlı kayıtları silindi.')
+                return self.redirect('/all-animals?kind='+('male' if rec['gender']=='Erkek' else 'female'),'Hayvan ve bağlı kayıtları silindi.')
             except Exception as exc:return self.redirect('/','Silme hatası: '+str(exc))
         if path=='/calf-delete':
             if not self.require_admin():return
@@ -9496,14 +9506,14 @@ setTimeout(()=>setFinanceDrawer(false),0);
             try:
                 with db() as c:
                     rec=c.execute('select tag from calves where id=?',(cid,)).fetchone()
-                    if not rec:return self.redirect('/calves','Buzağı kaydı bulunamadı.')
+                    if not rec:return self.redirect('/all-animals?kind=calf','Buzağı kaydı bulunamadı.')
                     c.execute('delete from health where calf_id=?',(cid,))
                     c.execute('delete from calf_weights where calf_id=?',(cid,))
                     c.execute('delete from calf_photos where calf_id=?',(cid,))
                     c.execute('delete from calves where id=?',(cid,))
                 audit(username,'Buzağı sildi',rec['tag'],self.client_ip())
-                return self.redirect('/calves','Buzağı kaydı silindi.')
-            except Exception as exc:return self.redirect('/calves','Silme hatası: '+str(exc))
+                return self.redirect('/all-animals?kind=calf','Buzağı kaydı silindi.')
+            except Exception as exc:return self.redirect('/all-animals?kind=calf','Silme hatası: '+str(exc))
 
         if path=='/animal-edit':
             aid=(f.get('id') or '').strip()
@@ -9534,7 +9544,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         elif purchase_price>0:
                             c.execute("insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,'Gider','Hayvan Alımı',?,?,?,?,?,'')",(purchase_date,purchase_price,f'Otomatik hayvan alımı · {tag}','Nakit',aid,datetime.now().isoformat()))
                 audit(username,'Hayvan düzenledi',tag,self.client_ip())
-                return self.redirect('/animals' if gender=='Dişi' else '/males','Hayvan başarıyla güncellendi.')
+                return self.redirect('/all-animals?kind='+('female' if gender=='Dişi' else 'male'),'Hayvan başarıyla güncellendi.')
             except sqlite3.IntegrityError:
                 return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası zaten kullanılıyor.')
             except Exception as exc:
@@ -9701,7 +9711,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             audit(username,'Hayvan alımı finansa otomatik işlendi',f'{tag} · {money(purchase_price)} · {payment}',self.client_ip())
 
                         finance_posted=purchase_price>0 and (f.get('post_purchase_finance') or '')=='yes'
-                        return self.redirect('/animals' if kind=='Dişi' else '/males',kind+' hayvan başarıyla kaydedildi.'+(' Alış bedeli Finans > Hayvan Alımı giderine işlendi.' if finance_posted else ''))
+                        return self.redirect('/all-animals?kind='+('female' if kind=='Dişi' else 'male'),kind+' hayvan başarıyla kaydedildi.'+(' Alış bedeli Finans > Hayvan Alımı giderine işlendi.' if finance_posted else ''))
                     if kind=='Buzağı':
                         mt=(f.get('mother_tag') or '').strip();bd=(f.get('birth_date') or '').strip()
                         if not mt:return self.redirect('/animal-add','Buzağı kaydı için anne küpesi zorunludur.')
@@ -9709,7 +9719,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         mother=c.execute("select id from animals where tag=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mt,)).fetchone()
                         if not mother:return self.redirect('/animal-add','Anne küpesi aktif dişi hayvanlarda bulunamadı.')
                         c.execute('insert into calves(tag,mother_id,father_tag,birth_date,gender,notes) values(?,?,?,?,?,?)',(tag,mother['id'],f.get('father_tag',''),bd,f.get('calf_gender','Dişi'),f.get('notes','')))
-                        return self.redirect('/calves','Buzağı başarıyla kaydedildi.')
+                        return self.redirect('/all-animals?kind=calf','Buzağı başarıyla kaydedildi.')
                 return self.redirect('/animal-add','Geçersiz kayıt türü.')
             except sqlite3.IntegrityError:return self.redirect('/animal-add','Bu küpe numarası zaten kayıtlı.')
             except Exception as exc:return self.redirect('/animal-add','Kayıt hatası: '+str(exc))
@@ -13210,3 +13220,7 @@ def page(title,body,path='/',user='admin',flash=''):
     html=_page_before_hotfix122aq(title,body,path,user,flash)
     if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122AQ_REPRO_DETAIL+'</head>',1)
     return html
+
+# Hotfix1.22ar: Hayvan kategori girişlerini tek Sürü Merkezi görünümünde birleştirir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ar'
+APP_LABEL='v'+APP_VERSION
