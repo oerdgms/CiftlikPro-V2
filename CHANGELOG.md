@@ -3,6 +3,8 @@
 - Hayvan profil, fotoğraf galerisi ve buzağı profil görsellerine erişilebilir büyütme eklendi.
 - Tam ekran katmanı mobil güvenli alanlara uyar; arka plan, kapatma düğmesi ve Escape ile kapanır.
 - Özellik yalnız büyütülebilir olarak işaretlenen detay fotoğraflarında çalışır.
+- Windows kurulum workflow'unda kalan eski `1.22au` EXE yolları `1.22ax` ile eşitlendi.
+- Inno Setup yedekleme kodu `FileCopy` yerine güncel `CopyFile` işlevine geçirildi.
 
 # Hotfix1.22aw - Hayvan fotoğrafı ve bağlı küpe düzeltmesi
 

@@ -136,7 +136,8 @@ class ReportImportTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
         self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22ax'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22au_Setup.exe",workflow)
+        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22ax_Setup.exe",workflow)
+        self.assertNotIn("Hotfix1_22au_Setup.exe",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)
 
     def test_3923_hotfix116_workspace_and_security_guards_are_packaged(self):

@@ -6,6 +6,8 @@
 - Buzağı kartındaki kayıtlı profil fotoğrafı aynı görüntüleyiciyi kullanır.
 - Görüntüleyici arka plana, kapatma düğmesine veya Escape tuşuna basılarak kapanır.
 - Mobil güvenli alanlar, klavye erişimi ve sayfa kaydırma kilidi desteklenir; sürü listesindeki küçük görseller değiştirilmez.
+- GitHub Actions kurulum kontrolü, SHA-256 üretimi ve artifact yolu Inno Setup'ın `1.22ax` çıktı adıyla eşitlendi.
+- Inno Setup 6'nın yeni işlev adı kullanılarak eski `FileCopy` uyarısı kaldırıldı.
 
 ## Hotfix1.22aw – Hayvan Fotoğrafı ve Bağlı Küpe Düzeltmesi
 

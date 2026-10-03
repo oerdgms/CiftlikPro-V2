@@ -66,7 +66,7 @@ begin
     BackupDir := ExpandConstant('{localappdata}\CiftlikPro\backups');
     ForceDirectories(BackupDir);
     BackupFile := BackupDir + '\preinstall_' + GetDateTimeString('yyyymmdd_hhnnss', '-', ':') + '.db';
-    if not FileCopy(DbFile, BackupFile, False) then
+    if not CopyFile(DbFile, BackupFile, False) then
       Result := 'Kurulum öncesi veritabanı yedeği oluşturulamadı. Kurulum güvenlik amacıyla durduruldu.';
   end;
 end;
