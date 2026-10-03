@@ -1895,6 +1895,19 @@ def dashboard_view(username):
         pass
     return 'modern'
 
+def herd_view(username):
+    """Kullanıcının Sürü Merkezi görünüm tercihini döndürür."""
+    key='herd_view_'+str(username)
+    try:
+        with db() as c:
+            r=c.execute("select setting_value from settings where setting_key=?",(key,)).fetchone()
+        value=str(r['setting_value'] or '').strip().lower() if r else ''
+        if value in ('details','cards','compact'):
+            return value
+    except Exception:
+        pass
+    return 'details'
+
 def h(s):
     return str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('"','&quot;')
 
@@ -5978,6 +5991,46 @@ def normalize_tr_tag(value):
     if len(digits)<8 or len(digits)>14:raise ValueError('Küpe numarası TR sonrası 8-14 rakam olmalıdır.')
     return 'TR'+digits
 
+def animal_edit_tag_conflict(c,tag,animal_id):
+    """Yetişkin hayvan düzenlenirken yalnız gerçekten başka kayda ait küpeyi yakala.
+
+    On ayını doldurup yetişkin karta aktarılan hayvanın eski buzağı satırı geçmiş
+    için korunur ve aynı küpeyi taşır. Bu bağlı satır mükerrer sayılmamalıdır.
+    """
+    aid=int(animal_id)
+    normalized=str(tag or '').strip()
+    other_animal=c.execute(
+        'select 1 from animals where upper(trim(tag))=upper(trim(?)) and id<>? limit 1',
+        (normalized,aid)
+    ).fetchone()
+    other_calf=c.execute(
+        '''select 1 from calves
+           where upper(trim(tag))=upper(trim(?))
+             and (promoted_animal_id is null or promoted_animal_id<>?) limit 1''',
+        (normalized,aid)
+    ).fetchone()
+    return bool(other_animal or other_calf)
+
+def calf_edit_tag_conflict(c,tag,calf_id,promoted_animal_id=None):
+    """Buzağı düzenlemede kendi satırını ve bağlı yetişkin kartını hariç tut."""
+    cid=int(calf_id);linked=int(promoted_animal_id) if promoted_animal_id else None
+    normalized=str(tag or '').strip()
+    other_calf=c.execute(
+        'select 1 from calves where upper(trim(tag))=upper(trim(?)) and id<>? limit 1',
+        (normalized,cid)
+    ).fetchone()
+    if linked:
+        other_animal=c.execute(
+            'select 1 from animals where upper(trim(tag))=upper(trim(?)) and id<>? limit 1',
+            (normalized,linked)
+        ).fetchone()
+    else:
+        other_animal=c.execute(
+            'select 1 from animals where upper(trim(tag))=upper(trim(?)) limit 1',
+            (normalized,)
+        ).fetchone()
+    return bool(other_calf or other_animal)
+
 def dairy_lactation_summary(c, animal_id, as_of=None):
     """Son doğumdan itibaren süt/laktasyon özetini döndürür."""
     as_of=as_of or date.today()
@@ -6825,7 +6878,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
               <a class="card v117-kpi v122j-month-net" href="/finance"><span class="ico">₺</span><div><span>Aylık Net</span><b class="v122j-money">{money(month_net)}</b></div><em class="v117-chip {'danger' if month_net<0 else ''}">{'Zarar' if month_net<0 else 'Net'}</em></a>
             </section>
             <section class="v117-dashboard">
-<div class="card v117-panel"><div class="v117-panel-head" style="flex-wrap:wrap;gap:8px"><h2>📋 Bugünün İşleri</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="/health">Tümünü Gör →</a></div></div><div class="v118-task-tabs"><button class="v118-task-tab active" data-task-filter="all">Tümü ({len(today_tasks)})</button><button class="v118-task-tab" data-task-filter="overdue">🔴 Geciken ({overdue_task_count})</button><button class="v118-task-tab" data-task-filter="today">🕒 Bugün</button><button class="v118-task-tab" data-task-filter="upcoming">🗓 Yaklaşan</button></div><div class="v117-panel-body" style="max-height:360px;overflow:auto">{dashboard_v117_tasks}<p id="dashboard-task-empty" class="mut" hidden>Seçili filtrede bekleyen iş bulunmuyor.</p></div></div>
+<div class="card v117-panel v122au-task-panel"><div class="v117-panel-head" style="flex-wrap:wrap;gap:8px"><h2>📋 Bugünün İşleri</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><a href="/health">Tümünü Gör →</a></div></div><div class="v118-task-tabs"><button class="v118-task-tab active" data-task-filter="all">Tümü ({len(today_tasks)})</button><button class="v118-task-tab" data-task-filter="overdue">🔴 Geciken ({overdue_task_count})</button><button class="v118-task-tab" data-task-filter="today">🕒 Bugün</button><button class="v118-task-tab" data-task-filter="upcoming">🗓 Yaklaşan</button></div><div class="v117-panel-body" style="max-height:360px;overflow:auto">{dashboard_v117_tasks}<p id="dashboard-task-empty" class="mut" hidden>Seçili filtrede bekleyen iş bulunmuyor.</p></div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🐄 Sürü Dağılımı</h2><a href="/all-animals">Tümünü Gör →</a></div><div class="v117-panel-body v117-donut-wrap"><div class="v117-donut" style="--p1:{p1:.1f}%;--p2:{p2:.1f}%;--p3:{p3:.1f}%"><b>{active_total}<small>hayvan</small></b></div><div class="v117-legend"><div><span>● Dişi</span><b>{animals}</b></div><div><span>● Erkek</span><b>{males}</b></div><div><span>● Buzağı</span><b>{calves}</b></div><div><span>● Gebe</span><b>{pregnant}</b></div></div></div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🐮 Yaklaşan Doğumlar</h2><a href="/reproduction-center">Tümünü Gör →</a></div><div class="v117-panel-body">{birth_rows}</div></div>
               <div class="card v117-panel"><div class="v117-panel-head"><h2>🌾 Kritik Stoklar</h2><a href="/feeds">Tümünü Gör →</a></div><div class="v117-panel-body">{feed_rows_html}</div></div>
@@ -7346,6 +7399,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
 
         if path=='/all-animals':
             search=(q.get('q',[''])[0] or '').strip()
+            selected_herd_view=herd_view(u)
             kind=(q.get('kind',['all'])[0] or 'all').lower()
             paddock=(q.get('paddock',[''])[0] or '').strip()
             sort_key=(q.get('sort',['animal'])[0] or 'animal').lower()
@@ -7405,7 +7459,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 edit_url=('/calf-edit?id=' if r['calf'] else '/animal-edit?id=')+str(r['id'])
                 delete_url='/calf-delete' if r['calf'] else '/animal-delete'
                 delete_text='Bu buzağı kaydı kalıcı olarak silinsin mi?' if r['calf'] else 'Bu hayvan ve bağlı kayıtları kalıcı olarak silinsin mi?'
-                actions=f'''<div class="row-actions"><a class="btn alt compact-btn" href="{card_url}">Görüntüle</a><a class="btn alt compact-btn" href="{edit_url}">Düzenle</a><form method="post" action="{delete_url}" onsubmit="return confirm('{delete_text}')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil</button></form></div>'''
+                actions=f'''<div class="row-actions"><a class="btn alt compact-btn" href="{card_url}" title="Görüntüle" aria-label="{h(r['tag'])} kaydını görüntüle">Görüntüle</a><a class="btn alt compact-btn" href="{edit_url}" title="Düzenle" aria-label="{h(r['tag'])} kaydını düzenle">Düzenle</a><form method="post" action="{delete_url}" onsubmit="return confirm('{delete_text}')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn" title="Sil" aria-label="{h(r['tag'])} kaydını sil">Sil</button></form></div>'''
                 icon='🐮' if r['calf'] else ('🐄' if r['gender']=='Dişi' else '🐂')
                 photo=(f'<img src="{h(r["photo_url"])}" alt="{h(r["tag"])} fotoğrafı" loading="lazy">' if str(r.get('photo_url') or '').strip() else f'<span aria-hidden="true">{icon}</span>')
                 animal_summary=' · '.join(x for x in [str(r['label'] or ''),str(r['breed'] or 'Irk yok'),str(r['paddock'] or 'Padoksuz'),age_text(r['birth_date'])] if x)
@@ -7430,7 +7484,8 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             kind_options=''.join(f'<option value="{key}" {"selected" if kind==key else ""}>{label}</option>' for key,label in [('all','Tüm Türler'),('female','Dişi'),('male','Erkek'),('calf','Buzağı')])
             per_options=''.join(f'<option value="{n}" {"selected" if per_page==n else ""}>{n} kayıt</option>' for n in (10,15,30))
             headers=''.join(f'<th>{herd_sort_link(key,label)}</th>' for key,label in [('animal','Hayvan'),('kind','Tür'),('breed','Irk'),('paddock','Padok'),('age','Yaş'),('status','Durum')])+'<th>İşlemler</th>'
-            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs">{tabs}</nav><form class="card herd-filter" method="get" action="/all-animals"><label class="herd-search"><span>Hayvan ara</span><input type="search" name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok ara…" aria-label="Hayvan ara"></label><input type="hidden" name="kind" value="{h(kind)}"><input type="hidden" name="page" value="1"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"><details class="herd-filter-details" open><summary>⚲ Filtreler{' <b class="herd-filter-badge">1</b>' if paddock else ''}<span class="herd-filter-chevron">⌄</span></summary><div class="herd-filter-controls"><label><span>Padok</span><select name="paddock"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label><span>Göster</span><select name="per_page">{per_options}</select></label><div class="herd-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></div></details></form><div class="herd-result-summary" role="status">{total_count} hayvan · {h(paddock) if paddock else 'Tüm padoklar'}{(' · '+h(search)) if search else ''}</div><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card herd-list-card"><div class="workspace-table-wrap"><table class="workspace-table herd-table"><thead><tr>{headers}</tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
+            view_buttons=''.join(f'''<button type="button" class="herd-view-button" data-herd-view-button="{key}" aria-pressed="{'true' if selected_herd_view==key else 'false'}" title="{title}"><span aria-hidden="true">{icon}</span><b>{label}</b></button>''' for key,icon,label,title in [('details','▤','Ayrıntı','Ayrıntılı tablo görünümü'),('cards','▦','Kart','Fotoğraflı kart görünümü'),('compact','☷','Kompakt','Daha fazla hayvan gösteren kompakt görünüm')])
+            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs">{tabs}</nav><form class="card herd-filter" method="get" action="/all-animals"><label class="herd-search"><span>Hayvan ara</span><input type="search" name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok ara…" aria-label="Hayvan ara"></label><input type="hidden" name="kind" value="{h(kind)}"><input type="hidden" name="page" value="1"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"><details class="herd-filter-details" open><summary>⚲ Filtreler{' <b class="herd-filter-badge">1</b>' if paddock else ''}<span class="herd-filter-chevron">⌄</span></summary><div class="herd-filter-controls"><label><span>Padok</span><select name="paddock"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label><span>Göster</span><select name="per_page">{per_options}</select></label><div class="herd-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></div></details></form><div class="herd-list-toolbar"><div class="herd-result-summary" role="status">{total_count} hayvan · {h(paddock) if paddock else 'Tüm padoklar'}{(' · '+h(search)) if search else ''}</div><div class="herd-view-switch" role="group" aria-label="Sürü görünümü">{view_buttons}</div></div><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card herd-list-card"><div class="workspace-table-wrap"><table class="workspace-table herd-table"><thead><tr>{headers}</tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
             return self.send_html(page('Tüm Aktif Hayvanlar',body,'/all-animals',u,msg))
 
         if path=='/animals':
@@ -7595,8 +7650,8 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             purchase_summary=f'<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış Fiyatı<br><b>{money(a["purchase_price"])}</b></span><span class="pill">Bizde Kaldığı Süre<br><b>{stay_days} gün</b></span><span class="pill">Birikmiş Rasyon + Bakım<br><b>{money(accumulated_cost)}</b></span><span class="pill">Anlık Toplam Maliyet<br><b>{money(current_cost)}</b></span><span class="pill">Hedef Satış<br><b>{money(a["target_sale_price"]) if float(a["target_sale_price"] or 0)>0 else "-"}</b></span><span class="pill">Hedef Kâr<br><b>{money(target_profit) if target_profit is not None else "-"}</b></span></div><p class="mut">Günlük yem/rasyon: {money(feed_ctx["feed_cost"])} · Günlük bakım: {money(a["daily_care_cost"])} · Günlük toplam: {money(daily_cost)}</p><p class="mut">{("🌾 Padok rasyonu: "+h(feed_ctx["ration_name"])+" · tarihsel atamalar ve fiyatlar kullanılıyor") if feed_ctx["source"]=="ration" else "Padokta aktif rasyon yok; manuel günlük yem maliyeti kullanılıyor."}</p></div>'
             sale_box=(f'<div class="card" id="animalSale" style="margin-top:14px"><h2>{h(a["gender"])} Hayvan Satışı</h2><p class="mut">Onayınızdan sonra satış geliri ilgili küpeye Finans &gt; Hayvan Satışı olarak kaydedilir. Maliyet çıkış tarihinde donar ve net kâr Satılan Hayvanlar ekranında görünür.</p><form method="post" action="/animal/sale" class="form" onsubmit="return confirm(\'{h(a["tag"])} küpeli hayvan satılsın ve gelir Finansa kaydedilsin mi?\')"><input type="hidden" name="animal_id" value="{aid}"><label>Satış Tarihi<input type="date" name="sale_date" required value="{date.today().isoformat()}"></label><label>Satış Fiyatı (TL)<input type="number" name="sale_price" min="0.01" step="0.01" required value="{h(a["target_sale_price"])}"></label><label>Satış Kilosu (kg)<input type="number" name="sale_weight" min="0" step="0.1" value="{h(latest_weight)}"></label><label>Ödeme Yöntemi<select name="payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label class="full">Alıcı / Açıklama<input name="description"></label><div class="full"><button class="btn orange">Satışı Onayla ve Finansa Kaydet</button></div></form></div>') if a['status']=='Aktif' else ''
             loss_box=(f'''<details class="card" id="animalLoss" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><p class="mut">Maliyet olay tarihinde donar. Küpeye daha önce yazılmış alış/tedavi giderleri tekrarlanmaz; yalnız eksik işletme maliyeti finansa gider olarak aktarılır.</p><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(a['tag'])} küpeli hayvan için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="animal"><input type="hidden" name="subject_id" value="{aid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if a['status']=='Aktif' else ''
-            photo=f'<img class="photo" src="{h(a["photo_url"])}">' if a['photo_url'] else '<div class="photo">🐄</div>'
-            gallery=''.join(f'<figure><img src="/uploads/{h(r["filename"])}"><figcaption>{h(r["caption"])}<br>{fmt_datetime(r["created_at"])}</figcaption></figure>' for r in photos) or '<p class="mut">Henüz fotoğraf yüklenmedi.</p>'
+            photo=f'<img class="photo" src="{h(a["photo_url"])}" alt="{h(a["tag"])} fotoğrafı" data-photo-zoom>' if a['photo_url'] else '<div class="photo">🐄</div>'
+            gallery=''.join(f'<figure><img src="/uploads/{h(r["filename"])}" alt="{h(a["tag"])} fotoğrafı" data-photo-zoom data-photo-caption="{h(r["caption"] or a["tag"])}"><figcaption>{h(r["caption"])}<br>{fmt_datetime(r["created_at"])}</figcaption></figure>' for r in photos) or '<p class="mut">Henüz fotoğraf yüklenmedi.</p>'
             itr=''.join(f'<tr><td>{r["attempt"]}</td><td>{fmt_date(r["insemination_date"])}</td><td>{h(r["pregnancy_result"])}</td><td>{fmt_date(r["due_date"])}</td></tr>' for r in ins) or '<tr><td colspan=4>Kayıt yok</td></tr>'
             htr=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{money(r["cost"])}</td></tr>' for r in health) or '<tr><td colspan=4>Kayıt yok</td></tr>'
             weight_chron=list(reversed(weights)); wrows=[]
@@ -7719,7 +7774,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             promoted=''
             if calf['promoted_animal_id']:promoted=f'<p class="flash">Bu kayıt 10 ayını doldurduğu için yetişkin karta aktarıldı. <a class="taglink" href="/animal?id={calf["promoted_animal_id"]}">Yeni hayvan kartını aç</a></p>'
             icon='🐮' if calf['gender']=='Dişi' else '🐂'
-            photo=f'<img src="{h(calf["photo_url"])}" alt="Buzağı">' if calf['photo_url'] else icon
+            photo=f'<img src="{h(calf["photo_url"])}" alt="{h(calf["tag"])} fotoğrafı" data-photo-zoom>' if calf['photo_url'] else icon
             last_weight=float(weight_rows[0]['weight']) if weight_rows else None
             calf_days,calf_daily,calf_operating,calf_total=calf_cost_values(calf)
             calf_feed=animal_current_feed_context(calf)
@@ -8810,6 +8865,16 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",('dashboard_view_'+username,view))
             audit(username,'Dashboard görünümünü değiştirdi','Modern' if view=='modern' else 'Klasik',self.client_ip())
             return self.redirect('/','Dashboard görünümü kaydedildi.')
+        # Sürü Merkezi görünümü kayıt oluşturmayan, güvenli ve idempotent bir
+        # kullanıcı tercihidir. JS isteğine yönlendirme yerine 204 döndürülür.
+        if path=='/herd-view':
+            view=(f.get('view') or '').strip().lower()
+            if view not in ('details','cards','compact'):
+                self.send_response(400);self.send_header('Content-Length','0');self.end_headers();return
+            with db() as c:
+                c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",('herd_view_'+username,view))
+            audit(username,'Sürü Merkezi görünümünü değiştirdi',{'details':'Ayrıntılı','cards':'Kart','compact':'Kompakt'}[view],self.client_ip())
+            self.send_response(204);self.send_header('Cache-Control','no-store');self.end_headers();return
         # DEV4: Arayüz kilidine ek olarak tüm kimlik doğrulanmış yazma isteklerini
         # sunucuda da atomik biçimde koru. Böylece çift dokunma/ağ tekrarı yeni
         # hayvan, finans, stok, sağlık veya padok kaydını iki kez oluşturamaz.
@@ -9522,9 +9587,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     rec=c.execute('select * from animals where id=?',(aid,)).fetchone()
                     if not rec:return self.redirect('/','Hayvan kaydı bulunamadı.')
                     tag=(f.get('tag') or '').strip()
-                    duplicate=c.execute('select id from animals where tag=? and id<>?',(tag,aid)).fetchone()
-                    calf_duplicate=c.execute('select id from calves where tag=?',(tag,)).fetchone()
-                    if duplicate or calf_duplicate:return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
+                    if animal_edit_tag_conflict(c,tag,aid):return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
                     photo_url=f.get('photo_url','')
                     upload=f.get('photo_file')
                     if upload and isinstance(upload,dict) and upload.get('content'):
@@ -9536,6 +9599,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     gender=f.get('gender') if f.get('gender') in ('Dişi','Erkek') else rec['gender']
                     c.execute('update animals set tag=?,nickname=?,gender=?,breed=?,birth_date=?,notes=?,paddock=?,photo_url=?,sold_price=?,status=?,purchase_date=?,purchase_price=?,purchase_weight=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=? where id=?',
                               (tag,f.get('nickname',''),gender,f.get('breed',''),f.get('birth_date',''),f.get('notes',''),f.get('paddock',''),photo_url,float(f.get('sold_price') or 0),f.get('status') or 'Aktif',f.get('purchase_date',''),float(f.get('purchase_price') or 0),float(f.get('purchase_weight') or 0),float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),aid))
+                    c.execute('update calves set tag=? where promoted_animal_id=?',(tag,aid))
                     if (f.get('sync_purchase_finance') or '')=='yes':
                         purchase_price=max(0,float(f.get('purchase_price') or 0));purchase_date=(f.get('purchase_date') or date.today().isoformat()).strip()
                         linked=c.execute("select id from finance where category='Hayvan Alımı' and animal_id=? order by id limit 1",(aid,)).fetchone()
@@ -9561,7 +9625,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         mother=c.execute("select id from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mother_id,)).fetchone()
                         if not mother:return self.redirect('/calf-edit?id='+cid,'Seçilen anne kaydı bulunamadı veya aktif değil.')
                     tag=(f.get('tag') or '').strip()
-                    if c.execute('select id from calves where tag=? and id<>?',(tag,cid)).fetchone() or c.execute('select id from animals where tag=?',(tag,)).fetchone():return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
+                    if calf_edit_tag_conflict(c,tag,cid,rec['promoted_animal_id']):return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
                     photo_url=f.get('photo_url') or rec['photo_url'] or '';upload=f.get('photo_file')
                     if upload and isinstance(upload,dict) and upload.get('content'):
                         ext=Path(upload['filename']).suffix.lower()
@@ -9571,6 +9635,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(cid,name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'Profil fotoğrafı'))
                     c.execute('update calves set tag=?,nickname=?,mother_id=?,father_tag=?,birth_date=?,gender=?,breed=?,paddock=?,photo_url=?,purchase_date=?,purchase_price=?,purchase_payment_method=?,daily_feed_cost=?,daily_care_cost=?,target_sale_price=?,notes=? where id=?',
                         (tag,f.get('nickname',''),mother_id,f.get('father_tag',''),f.get('birth_date',''),f.get('gender','Dişi'),f.get('breed',''),f.get('paddock',''),photo_url,f.get('purchase_date',''),float(f.get('purchase_price') or 0),f.get('purchase_payment_method') or 'Nakit',float(f.get('daily_feed_cost') or 0),float(f.get('daily_care_cost') or 0),float(f.get('target_sale_price') or 0),f.get('notes',''),cid))
+                    if rec['promoted_animal_id']:c.execute('update animals set tag=? where id=?',(tag,rec['promoted_animal_id']))
                 audit(username,'Buzağı düzenledi',tag,self.client_ip());return self.redirect('/calf?id='+cid,'Buzağı başarıyla güncellendi.')
             except sqlite3.IntegrityError:return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası zaten kullanılıyor.')
             except Exception as exc:return self.redirect('/calf-edit?id='+cid,'Güncelleme hatası: '+str(exc))
@@ -12481,6 +12546,106 @@ def _remove_obsolete_science_layers(html):
         html=re.sub(r'<script\s+id=["\']'+escaped+r'["\'][^>]*>.*?</script>','',html,flags=re.I|re.S)
     return html
 
+# Hotfix1.22at mobil görünüm katmanı son sayfa sarmalayıcısında yüklenir.
+HOTFIX122AT_MOBILE_HERD_VIEWS=r"""
+<style id="hotfix122at-mobile-herd-views">
+@media(max-width:650px){
+ /* Ayrıntı: kimlik başlığı tam genişlikte, diğer değerler sıkı iki sütun. */
+ body.hf122am-herd[data-herd-view="details"] .herd-table,
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody{display:block!important;width:100%!important;min-width:0!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr{
+  display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  gap:2px 12px!important;padding:14px!important;margin:0 0 12px!important;
+  border:1px solid #d9e6dd!important;border-radius:15px!important;background:#fff!important;
+  box-shadow:0 4px 14px #173b280b!important;overflow:hidden!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td{
+  display:grid!important;grid-template-columns:48px minmax(0,1fr)!important;align-items:center!important;
+  gap:6px!important;width:auto!important;min-width:0!important;min-height:34px!important;
+  padding:5px 0!important;border:0!important;font-size:12px!important;overflow:visible!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:before{
+  content:attr(data-label)!important;display:block!important;margin:0!important;color:#728178!important;
+  font-size:10px!important;font-weight:750!important;line-height:1.2!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child,
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td[data-label="İşlemler"]{
+  display:block!important;grid-column:1/-1!important;width:100%!important;min-height:0!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child:before,
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td[data-label="İşlemler"]:before{display:none!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child{
+  padding:0 0 11px!important;margin:0 0 5px!important;border-bottom:1px solid #e7eee9!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-animal-cardhead{
+  display:grid!important;grid-template-columns:58px minmax(0,1fr)!important;gap:10px!important;align-items:center!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-identity{min-width:0!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-identity .animal-tag-btn{
+  display:block!important;max-width:100%!important;white-space:normal!important;overflow-wrap:anywhere!important;
+  line-height:1.15!important;font-size:16px!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-animal-summary{display:block!important;white-space:normal!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-mobile-status{
+  grid-column:2!important;justify-self:start!important;margin-top:1px!important;width:auto!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table td>.pill{
+  display:inline-flex!important;justify-self:start!important;align-items:center!important;width:auto!important;
+  max-width:100%!important;min-width:0!important;min-height:0!important;height:auto!important;
+  padding:5px 8px!important;border-radius:999px!important;white-space:normal!important
+ }
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td[data-label="İşlemler"]{
+  padding:11px 0 0!important;margin-top:6px!important;border-top:1px solid #e7eee9!important
+ }
+
+ /* Kompakt: kimlik ve üç ikon işlem aynı satırda, taşma ve çift ikon yok. */
+ body.hf122am-herd[data-herd-view="compact"] .herd-table,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody{display:block!important;width:100%!important;min-width:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr{
+  display:grid!important;grid-template-columns:minmax(0,1fr) 116px!important;gap:8px!important;
+  align-items:center!important;padding:10px!important;margin:0 0 8px!important;overflow:hidden!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr>td:first-child,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr>td[data-label="İşlemler"]{
+  display:block!important;width:auto!important;min-width:0!important;padding:0!important;margin:0!important;border:0!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-animal-cardhead{
+  display:grid!important;grid-template-columns:42px minmax(0,1fr)!important;gap:8px!important;min-width:0!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-identity,
+ body.hf122am-herd[data-herd-view="compact"] .herd-identity .animal-tag-btn{min-width:0!important;max-width:100%!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-identity .animal-tag-btn{
+  display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:14px!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-animal-name,
+ body.hf122am-herd[data-herd-view="compact"] .herd-animal-summary{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions{
+  display:grid!important;grid-template-columns:36px 36px 36px!important;gap:4px!important;
+  justify-content:end!important;width:116px!important;max-width:116px!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a.btn,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn{
+  display:flex!important;align-items:center!important;justify-content:center!important;width:36px!important;
+  min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;
+  padding:0!important;margin:0!important;overflow:hidden!important;box-sizing:border-box!important
+ }
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a.btn{font-size:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a:first-child:after{content:'👁'!important;font-size:15px!important;line-height:1!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a:nth-child(2):after{content:'✎'!important;font-size:18px!important;line-height:1!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn{font-size:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn:before{content:'🗑'!important;font-size:16px!important;line-height:1!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn:after{content:none!important;display:none!important}
+}
+@media(max-width:350px){
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr{grid-template-columns:minmax(0,1fr) 104px!important;gap:5px!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions{grid-template-columns:32px 32px 32px!important;gap:4px!important;width:104px!important;max-width:104px!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a.btn,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form,
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn{width:32px!important;min-width:32px!important;max-width:32px!important;height:36px!important}
+}
+</style>
+"""
 HOTFIX122AB_SCIENCE_UI=r"""<style id="hotfix122ab-science-controller">
 @media (min-width:901px){
  body:has(.workbench-shell).wb2-desktop .target-workspace{
@@ -13224,3 +13389,264 @@ def page(title,body,path='/',user='admin',flash=''):
 # Hotfix1.22ar: Hayvan kategori girişlerini tek Sürü Merkezi görünümünde birleştirir.
 APP_VERSION='3.9.23 DEV4 Hotfix1.22ar'
 APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22as: Sürü Merkezi için kullanıcıya özel Ayrıntı / Kart / Kompakt görünümü.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22as'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AS_HERD_VIEW=r"""
+<style id="hotfix122as-herd-view">
+.herd-list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:10px 2px 12px}
+.herd-list-toolbar .herd-result-summary{margin:0!important;min-width:0}
+.herd-view-switch{display:inline-grid;grid-template-columns:repeat(3,auto);gap:5px;padding:4px;border:1px solid #d5e3d9;border-radius:11px;background:#f4f8f5;flex:0 0 auto}
+.herd-view-button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:35px;padding:6px 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:#486454;font:inherit;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}
+.herd-view-button span{font-size:15px;line-height:1}.herd-view-button:hover{background:#fff;border-color:#d2e1d7}.herd-view-button[aria-pressed="true"]{background:#176f3d;border-color:#176f3d;color:#fff;box-shadow:0 2px 6px #174b2d20}
+
+/* Kart görünümü: aynı kayıtlar, fotoğraflı ve dokunması kolay kartlar. */
+body.hf122am-herd[data-herd-view="cards"] .herd-list-card{background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-list-card .workspace-table-wrap{overflow:visible!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table{display:block!important;width:100%!important;min-width:0!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table thead{display:none!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;width:100%!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr{display:grid!important;grid-template-columns:1fr 1fr;align-content:start;gap:0 12px;margin:0!important;padding:15px!important;border:1px solid #d9e6dd!important;border-radius:15px!important;background:#fff!important;box-shadow:0 4px 14px #173b280b!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr:hover{box-shadow:0 7px 20px #173b2816!important;border-color:#a9cbb5!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td{display:grid!important;grid-template-columns:58px minmax(0,1fr);gap:6px;align-items:center;width:auto!important;min-width:0!important;padding:5px 0!important;border:0!important;font-size:12px!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td:before{content:attr(data-label);display:block!important;color:#728178;font-size:10px;font-weight:700}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td:first-child{display:block!important;grid-column:1/-1;padding:0 0 12px!important;margin-bottom:5px;border-bottom:1px solid #e7eee9!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td:first-child:before,body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td[data-label="İşlemler"]:before{display:none!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-animal-cardhead{grid-template-columns:62px minmax(0,1fr) auto}
+body.hf122am-herd[data-herd-view="cards"] .herd-photo{width:62px;height:62px;border-radius:15px}
+body.hf122am-herd[data-herd-view="cards"] .herd-animal-summary{display:block;margin-top:5px;color:#61756a;font-size:11px;line-height:1.35;white-space:normal}
+body.hf122am-herd[data-herd-view="cards"] .herd-mobile-status{display:inline-flex;align-items:center;gap:5px;padding:6px 8px;border-radius:999px;background:#e9f6ed;color:#176b3a;font-size:10px;font-weight:800;white-space:nowrap}
+body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td[data-label="İşlemler"]{display:block!important;grid-column:1/-1;padding:12px 0 0!important;margin-top:7px;border-top:1px solid #e7eee9!important}
+body.hf122am-herd[data-herd-view="cards"] .herd-table .row-actions{max-width:none!important}
+
+/* Kompakt görünüm: daha fazla kayıt, temel bilgi ve işlemler tek satırda. */
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(3),body.hf122am-herd[data-herd-view="compact"] .herd-table td:nth-child(3),body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(5),body.hf122am-herd[data-herd-view="compact"] .herd-table td:nth-child(5){display:none!important}
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(1){width:36%}
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(2){width:15%}
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(4){width:15%}
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(6){width:13%}
+body.hf122am-herd[data-herd-view="compact"] .herd-table th:nth-child(7){width:21%}
+body.hf122am-herd[data-herd-view="compact"] .herd-table td{padding-top:7px!important;padding-bottom:7px!important}
+body.hf122am-herd[data-herd-view="compact"] .herd-animal-cardhead{grid-template-columns:38px minmax(0,1fr);gap:8px}
+body.hf122am-herd[data-herd-view="compact"] .herd-photo{width:38px;height:38px;border-radius:9px;font-size:20px}
+body.hf122am-herd[data-herd-view="compact"] .herd-animal-name{margin-top:1px;font-size:10px}
+body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions{gap:4px!important}
+body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions .btn{min-height:32px!important;padding:6px 7px!important;font-size:10px!important}
+
+@media(max-width:650px){
+ .herd-list-toolbar{align-items:flex-start;flex-direction:column;margin:10px 0 12px}.herd-view-switch{width:100%;grid-template-columns:repeat(3,minmax(0,1fr));box-sizing:border-box}.herd-view-button{padding:7px 4px}.herd-view-button b{font-size:10px}
+ /* Ayrıntı mobilde bütün alanları iki sütunlu, okunaklı kartta gösterir. */
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr{display:grid!important;grid-template-columns:1fr 1fr;gap:0 12px!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td{display:grid!important;grid-template-columns:50px minmax(0,1fr)!important;gap:6px!important;width:auto!important;padding:5px 0!important;border:0!important;font-size:12px!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:before{content:attr(data-label);display:block!important;color:#728178;font-size:10px;font-weight:700}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child,body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td[data-label="İşlemler"]{display:block!important;grid-column:1/-1;width:100%!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child:before,body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td[data-label="İşlemler"]:before{display:none!important}
+ body.hf122am-herd[data-herd-view="details"] .herd-table tbody>tr>td:first-child{padding-bottom:11px!important;margin-bottom:4px;border-bottom:1px solid #e7eee9!important}
+ /* Kart görünümü mobilde mevcut fotoğraflı sade kart düzenini korur. */
+ body.hf122am-herd[data-herd-view="cards"] .herd-table tbody{grid-template-columns:1fr!important}
+ body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr{display:block!important;padding:14px!important}
+ body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td{display:none!important}
+ body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td:first-child,body.hf122am-herd[data-herd-view="cards"] .herd-table tbody>tr>td[data-label="İşlemler"]{display:block!important}
+ /* Kompakt mobilde fotoğraf, özet ve üç işlem tek sıkı satırdır. */
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr{display:grid!important;grid-template-columns:minmax(0,1fr) 144px;gap:8px!important;align-items:center;padding:9px!important;margin-bottom:8px!important;border-radius:12px!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr>td{display:none!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr>td:first-child,body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr>td[data-label="İşlemler"]{display:block!important;width:auto!important;padding:0!important;border:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-animal-cardhead{grid-template-columns:42px minmax(0,1fr)!important;gap:8px!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-photo{width:42px;height:42px;border-radius:10px}
+ body.hf122am-herd[data-herd-view="compact"] .herd-mobile-status{display:none!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-animal-summary{display:block;font-size:9px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions{display:grid!important;grid-template-columns:1fr 1fr 36px!important;gap:4px!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a{height:36px!important;padding:4px!important;font-size:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a:first-child:after{content:'Gör';font-size:9px}body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>a:nth-child(2):after{content:'Düzenle';font-size:8px}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form,body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn{width:36px!important;min-width:36px!important;height:36px!important;padding:0!important;font-size:0!important}
+ body.hf122am-herd[data-herd-view="compact"] .herd-table .row-actions>form .btn:after{content:'🗑';font-size:15px}
+}
+@media(max-width:390px){body.hf122am-herd[data-herd-view="compact"] .herd-table tbody>tr{grid-template-columns:minmax(0,1fr) 126px}.herd-view-button span{display:none}}
+</style>
+<script id="hotfix122as-herd-view-script">
+document.addEventListener('DOMContentLoaded',function(){
+ const body=document.body,buttons=[...document.querySelectorAll('[data-herd-view-button]')];
+ if(!body.classList.contains('hf122am-herd')||!buttons.length)return;
+ function paint(view){body.dataset.herdView=view;buttons.forEach(btn=>btn.setAttribute('aria-pressed',String(btn.dataset.herdViewButton===view)));}
+ buttons.forEach(btn=>btn.addEventListener('click',async function(){
+   const next=btn.dataset.herdViewButton,previous=body.dataset.herdView||'details';if(next===previous)return;
+   paint(next);buttons.forEach(item=>item.disabled=true);
+   try{const response=await fetch('/herd-view',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:'view='+encodeURIComponent(next)});if(!response.ok)throw new Error('save');}
+   catch(error){paint(previous);alert('Görünüm tercihi kaydedilemedi. Lütfen yeniden deneyin.');}
+   finally{buttons.forEach(item=>item.disabled=false);}
+ }));
+});
+</script>
+"""
+_page_before_hotfix122as=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122as(title,body,path,user,flash)
+    if path=='/all-animals':
+        selected=herd_view(user)
+        html=html.replace('data-herd-view="compact"',f'data-herd-view="{selected}"',1)
+        html=html.replace('</head>',HOTFIX122AS_HERD_VIEW+'</head>',1)
+    return html
+
+# Hotfix1.22at: mobil Sürü Merkezi Ayrıntı ve Kompakt görünüm düzeltmesi.
+# Kart görünümünün doğrulanmış yerleşimi ve bütün masaüstü düzenleri korunur.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22at'
+APP_LABEL='v'+APP_VERSION
+_page_before_hotfix122at=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122at(title,body,path,user,flash)
+    if path=='/all-animals':html=html.replace('</head>',HOTFIX122AT_MOBILE_HERD_VIEWS+'</head>',1)
+    return html
+
+# Hotfix1.22au: Dashboard Bugünün İşleri mobil taşma ve kaydırma düzeltmesi.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22au'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AU_DASHBOARD_TASKS=r"""
+<style id="hotfix122au-dashboard-tasks">
+@media(max-width:650px){
+ /* Dört filtre telefon genişliğinde sabit kalır; yatay sekme kaydırması oluşmaz. */
+ .v122au-task-panel .v118-task-tabs{
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:4px!important;width:100%!important;max-width:100%!important;padding:9px 10px 0!important;
+  overflow:hidden!important;box-sizing:border-box!important;touch-action:pan-y!important
+ }
+ .v122au-task-panel .v118-task-tab{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  min-width:0!important;width:100%!important;padding:7px 2px!important;
+  font-size:9.5px!important;line-height:1.1!important;letter-spacing:-.15px!important;
+  white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important
+ }
+
+ /* Liste yalnız dikey kayar; iOS'ta parmak hareketi kartı sağa-sola sürüklemez. */
+ .v122au-task-panel>.v117-panel-body{
+  width:100%!important;max-width:100%!important;min-width:0!important;
+  overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;
+  overscroll-behavior-x:none!important;touch-action:pan-y!important;box-sizing:border-box!important
+ }
+ .v122au-task-panel .v117-task{
+  display:grid!important;grid-template-columns:84px minmax(0,1fr) auto!important;
+  gap:8px!important;align-items:center!important;width:100%!important;max-width:100%!important;
+  min-width:0!important;padding:10px 1px!important;overflow:hidden!important;box-sizing:border-box!important
+ }
+ .v122au-task-panel .v117-task>b{
+  min-width:0!important;max-width:84px!important;white-space:nowrap!important;
+  font-size:12px!important;line-height:1.2!important;font-variant-numeric:tabular-nums!important
+ }
+ .v122au-task-panel .v117-task>div{min-width:0!important;max-width:100%!important;overflow:hidden!important}
+ .v122au-task-panel .v117-task>div strong{display:block!important;min-width:0!important;max-width:100%!important;overflow:hidden!important}
+ .v122au-task-panel .v117-task>div strong>a{
+  display:-webkit-box!important;min-width:0!important;max-width:100%!important;
+  overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;
+  overflow-wrap:anywhere!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;
+  font-size:12px!important;line-height:1.25!important
+ }
+ .v122au-task-panel .v117-task>div small{
+  display:-webkit-box!important;min-width:0!important;max-width:100%!important;margin-top:3px!important;
+  overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;
+  overflow-wrap:anywhere!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;
+  font-size:10.5px!important;line-height:1.25!important
+ }
+ .v122au-task-panel .v117-task>.v117-chip{
+  align-self:center!important;justify-self:end!important;max-width:82px!important;min-width:0!important;
+  padding:6px 8px!important;font-size:10px!important;line-height:1.1!important;text-align:center!important;
+  white-space:nowrap!important;box-sizing:border-box!important
+ }
+}
+@media(max-width:360px){
+ .v122au-task-panel .v117-task{grid-template-columns:78px minmax(0,1fr) auto!important;gap:6px!important}
+ .v122au-task-panel .v117-task>b{max-width:78px!important;font-size:11px!important}
+ .v122au-task-panel .v117-task>.v117-chip{max-width:72px!important;padding-inline:6px!important;font-size:9px!important}
+ .v122au-task-panel .v118-task-tab{font-size:8.7px!important}
+}
+</style>
+"""
+_page_before_hotfix122au=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122au(title,body,path,user,flash)
+    if path=='/':html=html.replace('</head>',HOTFIX122AU_DASHBOARD_TASKS+'</head>',1)
+    return html
+
+# Hotfix1.22av: Sürü Merkezi masaüstü arama ve filtre hizalama düzeltmesi.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22av'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AV_HERD_FILTER_ALIGNMENT=r"""
+<style id="hotfix122av-herd-filter-alignment">
+@media(min-width:651px){
+ body.hf122am-herd .herd-filter{
+  grid-template-columns:minmax(260px,1.25fr) minmax(0,1.55fr)!important;
+  align-items:start!important;column-gap:12px!important
+ }
+ body.hf122am-herd .herd-filter .herd-search,
+ body.hf122am-herd .herd-filter-details>.herd-filter-controls>label{
+  display:grid!important;grid-template-rows:16px 44px!important;
+  align-content:start!important;gap:5px!important;margin:0!important;min-width:0!important
+ }
+ body.hf122am-herd .herd-filter label>span{
+  display:block!important;min-height:16px!important;line-height:16px!important;
+  margin:0!important;white-space:nowrap!important
+ }
+ body.hf122am-herd .herd-filter-details{
+  display:block!important;min-width:0!important;margin:0!important;padding:0!important
+ }
+ body.hf122am-herd .herd-filter-details>.herd-filter-controls{
+  display:grid!important;grid-template-columns:minmax(140px,1fr) 112px auto!important;
+  align-items:start!important;gap:10px!important;height:65px!important;min-width:0!important
+ }
+ body.hf122am-herd .herd-filter-actions{
+  align-self:start!important;margin:21px 0 0!important;height:44px!important;min-width:0!important
+ }
+ body.hf122am-herd .herd-filter input,
+ body.hf122am-herd .herd-filter select,
+ body.hf122am-herd .herd-filter-actions .btn{
+  height:44px!important;min-height:44px!important;margin:0!important;box-sizing:border-box!important
+ }
+}
+@media(min-width:651px) and (max-width:1180px){
+ body.hf122am-herd .herd-filter{grid-template-columns:1fr!important}
+}
+</style>
+"""
+_page_before_hotfix122av=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122av(title,body,path,user,flash)
+    if path=='/all-animals':html=html.replace('</head>',HOTFIX122AV_HERD_FILTER_ALIGNMENT+'</head>',1)
+    return html
+
+# Hotfix1.22aw: Aktarılmış buzağı geçmişi nedeniyle hayvan düzenlemede oluşan
+# hatalı mükerrer küpe engelini kaldırır; gerçek başka kayıtlar yine engellenir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22aw'
+APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22ax: Hayvan ve buzağı detayındaki kayıtlı fotoğraflar için büyütme.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ax'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122AX_PHOTO_LIGHTBOX=r"""
+<style id="hotfix122ax-photo-lightbox">
+[data-photo-zoom]{cursor:zoom-in!important;touch-action:manipulation;outline-offset:3px}
+[data-photo-zoom]:focus-visible{outline:3px solid #39a56c}
+.photo-lightbox{position:fixed;inset:0;z-index:5000;display:none;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));background:rgba(5,18,11,.91);box-sizing:border-box;overscroll-behavior:contain}
+.photo-lightbox.open{display:flex}
+.photo-lightbox-panel{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(1100px,100%);height:min(88dvh,850px);min-height:0}
+.photo-lightbox-image{display:block;max-width:100%;max-height:calc(100% - 44px);width:auto;height:auto;object-fit:contain;border-radius:14px;background:#102018;box-shadow:0 24px 70px #0009}
+.photo-lightbox-caption{min-height:24px;margin-top:10px;color:#fff;font-size:14px;font-weight:700;text-align:center;overflow-wrap:anywhere}
+.photo-lightbox-close{position:absolute;right:0;top:0;z-index:2;display:grid;place-items:center;width:46px;height:46px;border:1px solid #ffffff40;border-radius:50%;background:#132b20e8;color:#fff;font:700 30px/1 Arial;cursor:pointer;box-shadow:0 5px 20px #0005}
+@media(max-width:650px){.photo-lightbox{padding:12px}.photo-lightbox-panel{height:86dvh}.photo-lightbox-image{border-radius:10px}.photo-lightbox-close{position:fixed;right:max(14px,env(safe-area-inset-right));top:max(14px,env(safe-area-inset-top));width:44px;height:44px}}
+</style>
+<script id="hotfix122ax-photo-lightbox-script">
+document.addEventListener('DOMContentLoaded',function(){
+ const photos=[...document.querySelectorAll('[data-photo-zoom]')];if(!photos.length)return;
+ const box=document.createElement('div');box.className='photo-lightbox';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','Büyütülmüş hayvan fotoğrafı');
+ box.innerHTML='<div class="photo-lightbox-panel"><button type="button" class="photo-lightbox-close" aria-label="Fotoğrafı kapat">×</button><img class="photo-lightbox-image" alt=""><div class="photo-lightbox-caption"></div></div>';
+ document.body.appendChild(box);const image=box.querySelector('.photo-lightbox-image'),caption=box.querySelector('.photo-lightbox-caption'),closeButton=box.querySelector('.photo-lightbox-close');let previous=null;
+ function openPhoto(photo){previous=photo;image.src=photo.currentSrc||photo.src;image.alt=photo.alt||'Hayvan fotoğrafı';caption.textContent=photo.dataset.photoCaption||photo.alt||'';box.classList.add('open');document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';closeButton.focus({preventScroll:true});}
+ function closePhoto(){if(!box.classList.contains('open'))return;box.classList.remove('open');image.removeAttribute('src');document.documentElement.style.overflow='';document.body.style.overflow='';if(previous)previous.focus({preventScroll:true});}
+ photos.forEach(function(photo){photo.tabIndex=0;photo.setAttribute('role','button');photo.setAttribute('aria-label',(photo.alt||'Hayvan fotoğrafı')+' büyüt');photo.addEventListener('click',function(){openPhoto(photo)});photo.addEventListener('keydown',function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();openPhoto(photo)}})});
+ closeButton.addEventListener('click',closePhoto);box.addEventListener('click',function(event){if(event.target===box)closePhoto()});document.addEventListener('keydown',function(event){if(event.key==='Escape')closePhoto()});
+});
+</script>
+"""
+_page_before_hotfix122ax=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122ax(title,body,path,user,flash)
+    if 'data-photo-zoom' in html:html=html.replace('</head>',HOTFIX122AX_PHOTO_LIGHTBOX+'</head>',1)
+    return html

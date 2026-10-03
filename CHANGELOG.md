@@ -1,3 +1,43 @@
+# Hotfix1.22ax - Fotoğraf büyütme görüntüleyicisi
+
+- Hayvan profil, fotoğraf galerisi ve buzağı profil görsellerine erişilebilir büyütme eklendi.
+- Tam ekran katmanı mobil güvenli alanlara uyar; arka plan, kapatma düğmesi ve Escape ile kapanır.
+- Özellik yalnız büyütülebilir olarak işaretlenen detay fotoğraflarında çalışır.
+
+# Hotfix1.22aw - Hayvan fotoğrafı ve bağlı küpe düzeltmesi
+
+- Yetişkin karta aktarılmış buzağının tarihsel satırı düzenleme sırasında yabancı mükerrer kayıt sayılmaz.
+- Fotoğraf yüklemeli hayvan düzenleme akışı bağlı küpe geçmişiyle birlikte doğrulandı.
+- Yalnız bağlı yetişkin/buzağı çifti hariç tutulur; diğer tüm mükerrer küpeler engellenir.
+
+# Hotfix1.22av - Sürü Merkezi filtre hizalaması
+
+- Masaüstü arama ve filtre kontrolleri ortak 16 px etiket ve 44 px kontrol satırlarına sabitlendi.
+- Orta çözünürlükte kalan içerik alanına göre küçülen akışkan sütunlar kullanıldı.
+- Dar masaüstünde güvenli tek sütun geçişi korunurken mobil akordeon kuralları değiştirilmedi.
+
+# Hotfix1.22au - Mobil Bugünün İşleri düzeltmesi
+
+- Mobil Dashboard görev listesinde yatay kaydırma kapatıldı; liste yalnız dikey kayar.
+- Uzun görev adı ve açıklamalar iki satıra kadar sarılır, tarih ve kalan-gün rozeti kart içinde kalır.
+- Dört görev filtresi telefon genişliğinde tek sabit sıraya dönüştürüldü.
+- Düzeltme yalnız `Bugünün İşleri` paneline sınırlandı; Sürü Merkezi ve masaüstü görünümü değiştirilmedi.
+
+# Hotfix1.22at - Mobil Sürü görünümü düzeltmesi
+
+- Ayrıntı görünümünde mobil kart başlığı ve veri alanları yeniden ölçülendirildi; taşan/kesilen hayvan adı ile gereksiz büyük Tür/Durum kutuları düzeltildi.
+- Kompakt görünümün işlemleri tek satırda üç sabit ikon düğmesine dönüştürüldü; yazı çakışması ve çift çöp kutusu kaldırıldı.
+- İşlem bağlantılarına erişilebilir başlıklar eklendi; kayıt silme onayı ve sunucu işlemleri değiştirilmedi.
+- Kart görünümü ve masaüstü Sürü Merkezi düzenleri korunmuştur.
+
+# Hotfix1.22as - Sürü Merkezi görünüm sistemi
+
+- Ayrıntı, Kart ve Kompakt görünüm seçenekleri eklendi.
+- Görünüm tercihi kullanıcı hesabına kaydedilerek kategori ve sayfa geçişlerinde kalıcı hale getirildi.
+- Kart düzeni masaüstünde akışkan ızgara, mobilde tek sütun fotoğraflı kart olarak düzenlendi.
+- Kompakt düzen masaüstü ve mobilde daha fazla kaydı gösterirken temel işlemleri erişilebilir tuttu.
+- Dişi, Erkek ve Buzağı aynı görünüm bileşenini kullanır; arşivlerin finans ve geri alma sütunları değiştirilmedi.
+
 # Hotfix1.22ar - Tek Sürü Merkezi yönlendirmesi
 
 - Sol menü, Dashboard özetleri ve eski kategori adresleri Dişi, Erkek ve Buzağı filtreleriyle Sürü Merkezi'ne bağlandı.

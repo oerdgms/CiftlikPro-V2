@@ -1,4 +1,47 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ar
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ax
+
+## Hotfix1.22ax – Fotoğraf Büyütme Görüntüleyicisi
+
+- Hayvan kartındaki profil ve galeri fotoğrafları dokunarak/tıklayarak büyütülebilir.
+- Buzağı kartındaki kayıtlı profil fotoğrafı aynı görüntüleyiciyi kullanır.
+- Görüntüleyici arka plana, kapatma düğmesine veya Escape tuşuna basılarak kapanır.
+- Mobil güvenli alanlar, klavye erişimi ve sayfa kaydırma kilidi desteklenir; sürü listesindeki küçük görseller değiştirilmez.
+
+## Hotfix1.22aw – Hayvan Fotoğrafı ve Bağlı Küpe Düzeltmesi
+
+- Buzağı kartından yetişkin karta aktarılmış hayvanlar fotoğraf eklenerek yeniden düzenlenebilir.
+- Aynı hayvana bağlı geçmiş buzağı satırı artık yanlışlıkla mükerrer küpe sayılmaz.
+- Küpe değişirse yetişkin kartı ile bağlı geçmiş kaydın küpesi birlikte güncellenir.
+- Gerçek başka bir hayvan veya buzağı aynı küpeyi kullanıyorsa güvenlik kontrolü işlemi engellemeye devam eder.
+
+## Hotfix1.22av – Sürü Merkezi Filtre Hizalaması
+
+- Masaüstü ve orta çözünürlükte Hayvan ara, Padok, Göster, Filtrele ve Temizle kontrolleri aynı taban çizgisine alındı.
+- Sol menüden sonra kalan içerik genişliğine uyum sağlaması için sabit alt genişlikler akışkan hale getirildi.
+- 1180 px ve altında güvenli iki satır düzenine geçilir; kontrol taşması ve üst üste binme önlenir.
+- Mobil açılır filtre, sürü görünüm seçenekleri ve liste kartları değiştirilmedi.
+
+## Hotfix1.22au – Mobil Bugünün İşleri Düzeltmesi
+
+- Dashboard `Bugünün İşleri` listesi yalnız dikey kaydırılır; iOS'ta aşağı-yukarı kaydırırken oluşan sağa-sola hareket kaldırıldı.
+- Tarih sütunu 84 px olarak korunurken uzun görev başlıkları ve açıklamalar iki satıra kadar güvenli biçimde sarılır.
+- Kalan gün rozeti kart sınırları içinde sabitlenir; görev metninin veya rozetin satır dışına taşması engellenir.
+- Tümü, Geciken, Bugün ve Yaklaşan filtreleri mobilde yatay kaydırmasız tek sabit sıraya sığdırıldı.
+- Değişiklik yalnız modern Dashboard görev kartına uygulanır; masaüstü ve diğer paneller korunur.
+
+## Hotfix1.22at – Mobil Sürü Görünümü Düzeltmesi
+
+- Ayrıntı görünümündeki masaüstü hücre ölçülerinin mobil karta taşınması engellendi; kimlik başlığı, rozetler ve bilgi alanları ekran genişliğine sığdırıldı.
+- Kompakt görünümde Görüntüle, Düzenle ve Sil işlemleri yalnız simgeli, sabit ölçülü tek satırda düzenlendi; üst üste binen yazılar kaldırıldı.
+- Sil düğmesindeki çift çöp kutusu simgesine yol açan eski ve yeni CSS üreticisi çakışması giderildi.
+- Doğrulanmış Kart görünümü ile masaüstü Ayrıntı/Kart/Kompakt yerleşimleri korunmuştur.
+
+## Hotfix1.22as – Sürü Merkezi Görünüm Sistemi
+
+- Ayrıntı, Kart ve Kompakt görünüm seçenekleri eklendi; değişim sayfa yenilemeden uygulanır.
+- Tercih kullanıcı hesabına kaydedilir ve Dişi, Erkek, Buzağı ile sayfalama geçişlerinde korunur.
+- Ayrıntı görünümü tüm bilimsel/kimlik alanlarını, Kart görünümü fotoğraflı özeti, Kompakt görünüm daha fazla hayvanı ekranda gösterir.
+- Mobilde üç görünüm de ekran genişliğine göre ayrı düzenlenir; görüntüle, düzenle ve sil işlemleri korunur.
 
 ## Hotfix1.22ar – Tek Sürü Merkezi Yönlendirmesi
 
