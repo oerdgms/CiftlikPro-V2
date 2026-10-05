@@ -1,5 +1,5 @@
 #define MyAppName "ÇiftlikPro Enterprise"
-#define MyAppVersion "3.9.23 DEV4 Hotfix1.22bc"
+#define MyAppVersion "3.9.23 DEV4 Hotfix1.22bd"
 #define MyAppPublisher "ÇiftlikPro"
 #define MyAppExeName "CiftlikPro.exe"
 

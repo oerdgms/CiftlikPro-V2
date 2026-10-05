@@ -1243,7 +1243,7 @@ def init_db():
             }
             for old_name in ('SUNAR KARDELEN SÜT YEMİ,19,2700','SIĞIR SÜT YEMİ'):
                 _patch_feed(old_name,sunar_dairy_1927,'starch_pct>55 OR category like ?',('Sulu Kaba%',))
-            # Hotfix1.22bc: 1.22bb temiz kurulumunda ilk katalog INSERT'i etiket
+            # Hotfix1.22bd: 1.22bb temiz kurulumunda ilk katalog INSERT'i etiket
             # alanlarını taşımadığı için Sunar 21.28 satırı 0 kalabiliyordu. Hem bu
             # yarım kaydı hem de daha önce 1.22bb açılmış mevcut DB'leri gerçek etiket
             # değerleriyle onar. Yalnız bu ürünün kendi kaynak notu/boş etiket satırı
@@ -1269,7 +1269,7 @@ def init_db():
                             c.execute('update feed_catalog set '+','.join(k+'=?' for k in cols2128)+' where id=?',
                                       tuple(vals2128)+(row2128['id'],))
             except Exception as exc:
-                print('Hotfix1.22bc Sunar 21.28 etiket onarımı uygulanamadı:',exc)
+                print('Hotfix1.22bd Sunar 21.28 etiket onarımı uygulanamadı:',exc)
 
             # DEV4.14: Katalogdaki bütün jenerik ticari yemlerin mevcut kurulumlara
             # temel besin profilini eksiksiz taşı. Bunlar marka/parti analizi değildir;
@@ -6910,12 +6910,12 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             dashboard_entries=list(dashboard_health)
             for r in payment_due_rows:
                 days=(date.fromisoformat(r['due_date'])-date.today()).days
-                dashboard_entries.append({'date':r['due_date'],'subject':r['supplier'] or r['category'] or 'Vadeli ödeme','task':'Vadeli ödeme','detail':money(r['amount']),'state':'overdue' if days<0 else 'today' if days==0 else 'upcoming','status':f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı','source':'finance'})
+                dashboard_entries.append({'date':r['due_date'],'subject':r['supplier'] or r['category'] or 'Vadeli ödeme','task':'Vadeli ödeme','detail':money(r['amount']),'state':'overdue' if days<0 else 'today' if days==0 else 'upcoming','status':f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı','source':'finance','finance_id':int(r['id'])})
             dashboard_entries.sort(key=lambda r:(r['date'],str(r['subject'])))
             overdue_task_count=sum(r['state']=='overdue' for r in dashboard_entries)
             today_tasks=[]
             for r in dashboard_entries:
-                link='/finance' if r['source']=='finance' else '/health?'+urllib.parse.urlencode({'filter':r['state'],'search':r['subject']})
+                link=(f"/finance/edit?id={int(r['finance_id'])}" if r.get('finance_id') else '/finance') if r['source']=='finance' else '/health?'+urllib.parse.urlencode({'filter':r['state'],'search':r['subject']})
                 icon='₺' if r['source']=='finance' else '💉'
                 today_tasks.append(f'''<div class="v117-task" data-task-state="{r['state']}"><b>{fmt_date(r['date'])}</b><div><strong><a href="{h(link)}">{icon} {h(r['task'])} · {h(r['subject'])}</a></strong><small>{h(r['detail'])}</small></div><span class="v117-chip {'danger' if r['state']=='overdue' else 'warn' if r['state']=='today' else ''}">{h(r['status'])}</span></div>''')
             dashboard_v117_tasks=''.join(today_tasks) or '<div class="workspace-empty">Bugün için bekleyen görev bulunmuyor.</div>'
@@ -13722,5 +13722,5 @@ APP_LABEL='v'+APP_VERSION
 
 
 # Hotfix1.22bb: Sunar 21.28 tamamlayıcı süt yemi katalog + mevcut DB migrasyonu.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bc'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bd'
 APP_LABEL='v'+APP_VERSION

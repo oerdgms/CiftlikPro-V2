@@ -1,4 +1,11 @@
-# Hotfix1.22bc - Sunar 21.28 Tamamlayıcı Süt Yemi
+# Hotfix1.22bd - Dashboard Vadeli Ödeme Doğrudan İşlem
+
+- Dashboard > Bugünün İşleri içindeki vadeli ödeme satırı artık Finans Raporu yerine ilgili finans kaydının /finance/edit ekranını açar.
+- Tümünü Gör bağlantıları genel ekranlarda kalır.
+- Ödeme ekranında Ödendi/Ödenmedi durumu ve Ödendi Yap işlemi mevcut akışla korunur.
+- Solver/rasyon mantığına dokunulmadı.
+
+# Hotfix1.22bd - Sunar 21.28 Tamamlayıcı Süt Yemi
 
 - SUNAR 21.28 tamamlayıcı süt yemi katalog ve mevcut DB migrasyonuna eklendi.
 - Üretici etiketi alanları ürün bazında saklandı: HP %21, ME 2800 kcal/kg, ham selüloz %8,64, yağ %3,10, kül %6,60, sodyum %0,32.
@@ -1035,7 +1042,7 @@ Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon
 - Arama ve filtreler boş gün gruplarını gizler; mevcut aşı/tedavi işlemleri korunur.
 - Mobilde satırlar alt alta; ikincil işlemler üç nokta menüsündedir.
 
-## Hotfix1.22bc
+## Hotfix1.22bd
 - Temiz DB ilk katalog yüklemesi artık üretici etiket (`label_*`) alanlarını da taşır.
 - 1.22bb ile oluşmuş Sunar 21.28 sıfır etiket alanları güvenli migrasyonla onarılır.
-- GitHub regresyon testi için sürüm/Setup beklentileri 1.22bc ile eşitlendi.
+- GitHub regresyon testi için sürüm/Setup beklentileri 1.22bd ile eşitlendi.
