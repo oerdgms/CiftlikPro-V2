@@ -425,6 +425,35 @@ def is_pregnant_value(value):
     }
 
 
+def reconcile_birth_closed_pregnancies(con):
+    """Eski doğum kayıtlarının açık bıraktığı pozitif gebelikleri güvenle kapatır."""
+    changed=0
+    rows=con.execute(
+        "select id,animal_id,insemination_date,pregnancy_result from inseminations "
+        "where animal_id is not null and coalesce(insemination_date,'')<>''"
+    ).fetchall()
+    for row in rows:
+        if not is_pregnant_value(row['pregnancy_result']):
+            continue
+        born=con.execute(
+            "select 1 from calves where mother_id=? and birth_date>=? order by birth_date desc,id desc limit 1",
+            (row['animal_id'],row['insemination_date'])
+        ).fetchone()
+        if born:
+            con.execute("update inseminations set pregnancy_result='Doğum' where id=?",(row['id'],))
+            changed+=1
+    return changed
+
+
+def pregnancy_display_status(latest_record, active_record):
+    """Hayvan kartında kapanmış gebeliğin eski Pozitif sonucuna geri düşmesini önler."""
+    if active_record:
+        return active_record['pregnancy_result']
+    if latest_record and is_pregnant_value(latest_record['pregnancy_result']):
+        return 'Doğum'
+    return latest_record['pregnancy_result'] if latest_record else 'Kayıt yok'
+
+
 def recalculate_animal_exit_status(con, animal_id):
     if not animal_id:
         return
@@ -1469,6 +1498,9 @@ def init_db():
 
         # V3.9.22 DEV1 — Tarım & Ziraat ayrı işletme kolu şeması.
         agri.init_schema(c)
+        # Hotfix1.22bg — Daha önce kaydedilmiş doğumlar, eski pozitif gebelik
+        # satırlarını kurulum/başlangıç sırasında bir kez ve idempotent kapatır.
+        reconcile_birth_closed_pregnancies(c)
         finance_cols={r[1] for r in c.execute('pragma table_info(finance)').fetchall()}
         if 'animal_status_action' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
         if 'calf_id' not in finance_cols:c.execute("ALTER TABLE finance ADD COLUMN calf_id INTEGER")
@@ -2001,6 +2033,24 @@ def current_pregnancy_record(c, animal_id):
 def is_currently_pregnant(c, animal_id):
     return current_pregnancy_record(c,animal_id) is not None
 
+def active_pregnancy_records(c):
+    """Tüm ekranların kullanacağı tek aktif gebelik kaynağı.
+
+    Yalnız aktif/kayıp olmayan dişilerin, doğumla kapanmamış en son pozitif
+    kaydını döndürür. Böylece Dashboard, Üreme Merkezi ve listeler farklı
+    sayılar göstermez.
+    """
+    rows=c.execute("""select id from animals where gender='Dişi'
+        and coalesce(status,'Aktif')='Aktif'
+        and not exists(select 1 from animal_losses l where l.animal_id=animals.id)
+        order by id""").fetchall()
+    result={}
+    for row in rows:
+        aid=int(row['id'])
+        rec=current_pregnancy_record(c,aid)
+        if rec is not None:result[aid]=rec
+    return result
+
 def close_pregnancy_after_birth(c, animal_id, birth_date):
     """Doğum kaydı oluşunca yalnız ilgili son gebe kaydını kapatır."""
     if not animal_id or not birth_date:return None
@@ -2012,6 +2062,38 @@ def close_pregnancy_after_birth(c, animal_id, birth_date):
         pass
     c.execute("update inseminations set pregnancy_result='Doğum' where id=?",(rec['id'],))
     return rec['id']
+
+def dashboard_herd_counts(c):
+    """Dashboard sayaçlarını yalnız gerçekten aktif sürü kayıtlarından üretir."""
+    active_adult="""coalesce(status,'Aktif')='Aktif'
+        and not exists(select 1 from animal_losses l where l.animal_id=animals.id)"""
+    females=c.execute(f"select count(*) from animals where gender='Dişi' and {active_adult}").fetchone()[0]
+    males=c.execute(f"select count(*) from animals where gender='Erkek' and {active_adult}").fetchone()[0]
+    calves=c.execute("""select count(*) from calves
+        where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif'
+        and not exists(select 1 from animal_losses l where l.calf_id=calves.id)""").fetchone()[0]
+    return {'female':int(females or 0),'male':int(males or 0),'calf':int(calves or 0),
+            'total':int(females or 0)+int(males or 0)+int(calves or 0)}
+
+def resolve_entry_paddock(c, requested_paddock_id=None, mother=None, inherit_mother=False):
+    """Yeni kaydın padokunu doğrular; çiftlikte doğan yavru boşsa anne padokunu devralır."""
+    try:paddock_id=int(requested_paddock_id or 0) or None
+    except Exception:raise ValueError('Padok seçimi geçersiz.')
+    if inherit_mother and not paddock_id and mother is not None:
+        try:paddock_id=int(mother['paddock_id'] or 0) or None
+        except (KeyError,IndexError,TypeError,ValueError):paddock_id=None
+    if paddock_id:
+        paddock=c.execute('select id,name from paddocks where id=? and active=1',(paddock_id,)).fetchone()
+        if not paddock:raise ValueError('Seçilen padok bulunamadı.')
+        return int(paddock['id']),str(paddock['name'] or '').strip()
+    if inherit_mother and mother is not None:
+        try:legacy_name=str(mother['paddock'] or '').strip()
+        except (KeyError,IndexError,TypeError):legacy_name=''
+        if legacy_name:
+            paddock=c.execute("select id,name from paddocks where active=1 and lower(trim(name))=lower(trim(?))",(legacy_name,)).fetchone()
+            if paddock:return int(paddock['id']),str(paddock['name'] or '').strip()
+            return None,legacy_name
+    return None,''
 
 def age_text(d):
     if not d:return '-'
@@ -2314,7 +2396,8 @@ def pregnancy_vaccine_tasks(con, animal_id=None, horizon_days=7):
     today=date.today(); horizon=today+timedelta(days=horizon_days)
     tasks=[]
     for r in latest_by_animal.values():
-        if not is_pregnant_value(r['pregnancy_result']):
+        current=current_pregnancy_record(con,r['animal_id'])
+        if current is None or int(current['id'])!=int(r['id']):
             continue
         try:
             insemination_day=date.fromisoformat(r['insemination_date'])
@@ -6191,7 +6274,7 @@ def render_smart_animal_add(mothers,breeds,paddocks):
         value=str(value or '').strip()
         if value and value.casefold() not in [x.casefold() for x in breed_values]:breed_values.append(value)
     breed_buttons=''.join(f'<button type="button" class="breed-choice" data-breed="{h(x)}">○ {h(x)}</button>' for x in breed_values)
-    mother_options='<option value="">Anne seçin</option>'+''.join(f'<option value="{h(r["id"])}" data-tag="{h(r["tag"])}">{h(r["tag"])} · {h(r["nickname"] or "Adsız")}</option>' for r in mothers)
+    mother_options='<option value="">Anne seçin</option>'+''.join(f'<option value="{h(r["id"])}" data-tag="{h(r["tag"])}" data-paddock="{h(r["paddock_id"] or "")}">{h(r["tag"])} · {h(r["nickname"] or "Adsız")}</option>' for r in mothers)
     paddock_options='<option value="">Padoksuz</option>'+''.join(f'<option value="{h(r["id"])}">{h(r["name"])}{(" · "+h(r["code"])) if r["code"] else ""}</option>' for r in paddocks)
     photo_slots='''<label class="photo-add-tile" id="photoAddTile"><input type="file" id="photoPicker" accept="image/*" multiple><span class="photo-slot-icon">＋</span><b>Fotoğraf Ekle</b><small>Kamera / galeri</small></label>'''
     return f'''<style>
@@ -6202,7 +6285,7 @@ def render_smart_animal_add(mothers,breeds,paddocks):
 <form id="smartAnimalForm" method="post" action="/animal-add" enctype="multipart/form-data" data-smart-photo-form="1"><input type="hidden" id="recordType" name="record_type" value="Dişi"><input type="hidden" id="genderValue" name="gender" value="Dişi"><input type="hidden" id="purposeValue" name="purpose" value="Süt"><input type="hidden" id="arrivalValue" name="arrival_source" value="Satın Alındı">
 <section class="smart-card"><h2>📷 Fotoğraflar <span id="photoCount" class="photo-count">0 / 8</span></h2><div class="photo-grid">{photo_slots}</div><span class="field-help">En fazla 8 fotoğraf. İlk fotoğraf profil fotoğrafı olur; büyük görseller otomatik küçültülür.</span></section>
 <section class="smart-card"><h2>Kimlik</h2><div class="smart-grid"><label class="smart-field smart-full">Küpe Numarası *<div class="tag-wrap"><span class="tag-prefix">TR</span><input id="tagDigits" name="tag_digits" inputmode="numeric" pattern="[0-9]{{8,14}}" minlength="8" maxlength="14" placeholder="583001234" required autocomplete="off"><button class="tag-scan" id="openScanner" type="button" title="Karekod veya barkod tara">⌗</button></div><span class="field-help">TR ön eki sabittir ve otomatik kaydedilir.</span><span id="tagState" class="tag-state"></span></label><label class="smart-field">Lakap / Takma Ad<input name="nickname" placeholder="Karabaş, Boncuk…"></label><label class="smart-field">Tür<select name="animal_type"><option>Sığır</option><option>Manda</option></select></label><label class="smart-field">Irk *<input id="openBreed" class="breed-open" name="breed" placeholder="Irk seçin ▾" readonly required><input id="breedValue" type="hidden"></label><div class="smart-field"><span>Cinsiyet *</span><div class="choice-row" data-choice-group="gender"><button type="button" class="choice-card" data-value="Erkek"><b>♂ Erkek</b></button><button type="button" class="choice-card active" data-value="Dişi"><b>♀ Dişi</b></button></div></div><div class="smart-field smart-full"><span>Amaç *</span><div id="purposeChoices" class="choice-row three" data-choice-group="purpose"></div></div></div></section>
-<section class="smart-card"><h2>Geliş ve Temel Bilgiler</h2><div class="smart-grid"><div class="smart-field smart-full"><span>Geliş Kaynağı *</span><div class="choice-row three" data-choice-group="arrival"><button type="button" class="choice-card active" data-value="Satın Alındı"><b>🛒 Satın Alındı</b><small>Alış ve finans bilgileri</small></button><button type="button" class="choice-card" data-value="Çiftlikte Doğdu"><b>🐮 Çiftlikte Doğdu</b><small>Anne kaydı zorunlu</small></button><button type="button" class="choice-card" data-value="Dış Transfer"><b>⇄ Dış Transfer</b><small>Başka işletmeden geldi</small></button></div></div><label class="smart-field">Doğum Tarihi<input id="birthDate" type="date" name="birth_date"><span id="ageHint" class="field-help">Girildiğinde yaş ve buzağı durumu hesaplanır.</span></label><label class="smart-field">Giriş Tarihi<input id="entryDate" type="date" name="entry_date" value="{date.today().isoformat()}" required></label><label class="smart-field">Giriş Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" placeholder="Örn. 250"></label><label class="smart-field">Padok<select name="paddock_id">{paddock_options}</select></label><label class="smart-field conditional purchase-field">Satıcı / Firma<input name="seller"></label><label class="smart-field conditional transfer-field" hidden>Geldiği İşletme<input name="transfer_from"></label><label class="smart-field conditional purchase-field">Alış Fiyatı (₺)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="smart-field conditional purchase-field">Ödeme Yöntemi<select id="purchasePaymentMethod" name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label id="purchaseDueDateLabel" class="smart-field conditional purchase-field" hidden>Vade Tarihi *<input id="purchaseDueDate" type="date" name="due_date"><span class="field-help">Vade günü Dashboard ve Finans ekranında hatırlatılır.</span></label><label class="smart-field smart-full conditional purchase-field"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="post_purchase_finance" value="yes" checked style="width:auto;min-height:auto;margin:0"> Alış bedelini Finansa gider olarak kaydet</span></label><label class="smart-field conditional born-field" hidden>Anne Küpesi *<select id="motherId" name="mother_id">{mother_options}</select></label><label class="smart-field conditional born-field" hidden>Baba / Boğa Küpesi<input name="father_tag" placeholder="TR…"></label></div></section>
+<section class="smart-card"><h2>Geliş ve Temel Bilgiler</h2><div class="smart-grid"><div class="smart-field smart-full"><span>Geliş Kaynağı *</span><div class="choice-row three" data-choice-group="arrival"><button type="button" class="choice-card active" data-value="Satın Alındı"><b>🛒 Satın Alındı</b><small>Alış ve finans bilgileri</small></button><button type="button" class="choice-card" data-value="Çiftlikte Doğdu"><b>🐮 Çiftlikte Doğdu</b><small>Anne kaydı zorunlu</small></button><button type="button" class="choice-card" data-value="Dış Transfer"><b>⇄ Dış Transfer</b><small>Başka işletmeden geldi</small></button></div></div><label class="smart-field">Doğum Tarihi<input id="birthDate" type="date" name="birth_date"><span id="ageHint" class="field-help">Girildiğinde yaş ve buzağı durumu hesaplanır.</span></label><label class="smart-field">Giriş Tarihi<input id="entryDate" type="date" name="entry_date" value="{date.today().isoformat()}" required></label><label class="smart-field">Giriş Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" placeholder="Örn. 250"></label><label class="smart-field">Padok<select id="paddockId" name="paddock_id">{paddock_options}</select><span class="field-help">Çiftlikte doğan yavru boş bırakılırsa anne padokunu devralır.</span></label><label class="smart-field conditional purchase-field">Satıcı / Firma<input name="seller"></label><label class="smart-field conditional transfer-field" hidden>Geldiği İşletme<input name="transfer_from"></label><label class="smart-field conditional purchase-field">Alış Fiyatı (₺)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="smart-field conditional purchase-field">Ödeme Yöntemi<select id="purchasePaymentMethod" name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label id="purchaseDueDateLabel" class="smart-field conditional purchase-field" hidden>Vade Tarihi *<input id="purchaseDueDate" type="date" name="due_date"><span class="field-help">Vade günü Dashboard ve Finans ekranında hatırlatılır.</span></label><label class="smart-field smart-full conditional purchase-field"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="post_purchase_finance" value="yes" checked style="width:auto;min-height:auto;margin:0"> Alış bedelini Finansa gider olarak kaydet</span></label><label class="smart-field conditional born-field" hidden>Anne Küpesi *<select id="motherId" name="mother_id">{mother_options}</select></label><label class="smart-field conditional born-field" hidden>Baba / Boğa Küpesi<input name="father_tag" placeholder="TR…"></label></div></section>
 <section class="smart-card"><h2>Sağlık ve Yönetim</h2><div class="smart-grid"><label class="smart-field">Karantina Durumu<select name="quarantine_status"><option>Hayır</option><option>Karantinada</option><option>Karantina Tamamlandı</option></select></label><label class="smart-field">Genel Sağlık Durumu<select name="health_status"><option>Normal</option><option>Takip Edilecek</option><option>Veteriner Kontrolü Gerekli</option><option>Tedavi Altında</option></select></label><label class="smart-field">Günlük Yem / Rasyon (₺)<input type="number" min="0" step="0.01" name="daily_feed_cost"><span class="field-help">Padokta aktif rasyon varsa maliyet otomatik hesaplanır.</span></label><label class="smart-field">Günlük Bakım (₺)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="smart-field">Hedef Satış Fiyatı (₺)<input type="number" min="0" step="0.01" name="target_sale_price"></label><label class="smart-field smart-full">Notlar<textarea name="notes" rows="4" placeholder="Sağlık durumu, özel notlar…"></textarea></label></div></section>
 <section id="femalePregnancyBox" class="smart-card conditional female-pregnancy"><h2>🤰 Üreme Durumu</h2><div class="smart-grid"><label class="smart-field">Hayvanın Durumu<select id="entryPregnancyStatus" name="entry_pregnancy_status" onchange="toggleEntryPregnancy()"><option value="Bos">Boş / Gebe Değil</option><option value="Gebe">Gebe</option><option value="Bilinmiyor">Bilinmiyor</option></select></label><label id="pregnancyInfoModeLabel" class="smart-field" style="display:none">Gebelik Bilgisi<select id="pregnancyInfoMode" name="pregnancy_info_mode" onchange="toggleEntryPregnancy()"><option value="date">Son Tohumlama Tarihi Biliniyor</option><option value="age">Sadece Gebelik Yaşı Biliniyor</option></select></label><label id="knownInseminationLabel" class="smart-field" style="display:none">Son Tohumlama Tarihi<input type="date" name="known_insemination_date"></label><label id="pregnancyAgeLabel" class="smart-field" style="display:none">Gebelik Yaşı (Ay)<input type="number" name="pregnancy_age_months" min="1" max="9" step="0.5"></label><label id="pregnancyEntryDateLabel" class="smart-field" style="display:none">Bilgi Tarihi<input type="date" name="pregnancy_entry_date" value="{date.today().isoformat()}"></label><div id="pregnancyEntryHint" class="smart-full mut" style="display:none">Gebelik kaydı üreme takvimine hazırlanır.</div></div></section>
 <div class="photo-upload-status" data-upload-status><span data-upload-text>Kayıt hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div><div class="smart-savebar"><span id="recordHint" class="record-hint">Dişi · Süt · Yetişkin</span><button class="btn" type="submit">✓ Sürüye Ekle</button></div></form></div>
@@ -6210,13 +6293,14 @@ def render_smart_animal_add(mothers,breeds,paddocks):
 <div id="scanSheet" class="scan-sheet"><div class="sheet-panel"><div class="sheet-head"><h2>Küpe Barkod / Karekod Oku</h2><button type="button" class="sheet-close" data-close-scan>×</button></div><video id="scanVideo" class="scan-video" playsinline muted></video><div id="scanStatus" class="scan-status">Kamera hazırlanıyor…</div><label class="scan-capture">📷 Etiketi kamerayla çek<input id="scanImage" type="file" accept="image/*" capture="environment"></label><p class="field-help">Okuma desteklenmiyorsa fotoğraf açılır; küpe rakamlarını elle doğrulayabilirsiniz.</p></div></div>
 <script>
 (function(){{
- const form=document.getElementById('smartAnimalForm'),gender=document.getElementById('genderValue'),purpose=document.getElementById('purposeValue'),arrival=document.getElementById('arrivalValue'),birth=document.getElementById('birthDate'),badge=document.getElementById('recordTypeBadge'),hint=document.getElementById('recordHint');
+ const form=document.getElementById('smartAnimalForm'),gender=document.getElementById('genderValue'),purpose=document.getElementById('purposeValue'),arrival=document.getElementById('arrivalValue'),birth=document.getElementById('birthDate'),badge=document.getElementById('recordTypeBadge'),hint=document.getElementById('recordHint'),motherSelect=document.getElementById('motherId'),paddockSelect=document.getElementById('paddockId'),entryDate=document.getElementById('entryDate');
  const purposeMap={{'Erkek':[['Besi','🥩 Besi','Et için besleme'],['Damızlık','🐂 Damızlık','Üreme amaçlı'],['Diğer','📋 Diğer','Diğer amaç']],'Dişi':[['Süt','🥛 Süt','Süt üretimi'],['Damızlık','🐄 Damızlık','Üreme amaçlı'],['Besi','🥩 Besi','Et için besleme'],['Diğer','📋 Diğer','Diğer amaç']]}};
  function setChoice(group,value){{document.querySelectorAll('[data-choice-group="'+group+'"] .choice-card').forEach(function(b){{b.classList.toggle('active',b.dataset.value===value)}});}}
  function renderPurposes(){{const box=document.getElementById('purposeChoices'),items=purposeMap[gender.value];if(!items.some(x=>x[0]===purpose.value))purpose.value=items[0][0];box.innerHTML=items.map(x=>'<button type="button" class="choice-card '+(x[0]===purpose.value?'active':'')+'" data-value="'+x[0]+'"><b>'+x[1]+'</b><small>'+x[2]+'</small></button>').join('');}}
  function ageMonths(){{if(!birth.value)return null;const d=new Date(birth.value+'T12:00:00'),n=new Date();return Math.max(0,(n.getFullYear()-d.getFullYear())*12+n.getMonth()-d.getMonth()-(n.getDate()<d.getDate()?1:0));}}
- function update(){{renderPurposes();const age=ageMonths(),calf=age!==null&&age<10;document.getElementById('recordType').value=calf?'Buzağı':gender.value;badge.textContent=calf?'Buzağı kaydı':'Yetişkin kaydı';document.getElementById('ageHint').textContent=age===null?'Girildiğinde yaş ve buzağı durumu hesaplanır.':age+' aylık · '+(calf?'Buzağı bölümüne kaydedilecek':'Yetişkin bölümüne kaydedilecek');hint.textContent=gender.value+' · '+purpose.value+' · '+(calf?'Buzağı':'Yetişkin');document.querySelectorAll('.purchase-field').forEach(e=>e.hidden=arrival.value!=='Satın Alındı');document.querySelectorAll('.born-field').forEach(e=>e.hidden=arrival.value!=='Çiftlikte Doğdu');document.querySelectorAll('.transfer-field').forEach(e=>e.hidden=arrival.value!=='Dış Transfer');document.getElementById('motherId').required=arrival.value==='Çiftlikte Doğdu';document.querySelectorAll('.female-pregnancy').forEach(e=>e.hidden=gender.value!=='Dişi'||calf);toggleEntryPregnancy();if(typeof syncPurchaseDue==='function')syncPurchaseDue();}}
- form.addEventListener('click',function(e){{const b=e.target.closest('.choice-card');if(!b)return;const group=b.closest('[data-choice-group]').dataset.choiceGroup;if(group==='gender')gender.value=b.dataset.value;if(group==='purpose')purpose.value=b.dataset.value;if(group==='arrival')arrival.value=b.dataset.value;setChoice(group,b.dataset.value);update();}});birth.addEventListener('change',update);
+ function syncBornPaddock(){{if(arrival.value!=='Çiftlikte Doğdu'||paddockSelect.value)return;const option=motherSelect.options[motherSelect.selectedIndex];if(option&&option.dataset.paddock)paddockSelect.value=option.dataset.paddock;}}
+ function update(){{renderPurposes();const age=ageMonths(),calf=age!==null&&age<10;document.getElementById('recordType').value=calf?'Buzağı':gender.value;badge.textContent=calf?'Buzağı kaydı':'Yetişkin kaydı';document.getElementById('ageHint').textContent=age===null?'Girildiğinde yaş ve buzağı durumu hesaplanır.':age+' aylık · '+(calf?'Buzağı bölümüne kaydedilecek':'Yetişkin bölümüne kaydedilecek');hint.textContent=gender.value+' · '+purpose.value+' · '+(calf?'Buzağı':'Yetişkin');document.querySelectorAll('.purchase-field').forEach(e=>e.hidden=arrival.value!=='Satın Alındı');document.querySelectorAll('.born-field').forEach(e=>e.hidden=arrival.value!=='Çiftlikte Doğdu');document.querySelectorAll('.transfer-field').forEach(e=>e.hidden=arrival.value!=='Dış Transfer');motherSelect.required=arrival.value==='Çiftlikte Doğdu';if(arrival.value==='Çiftlikte Doğdu'&&birth.value)entryDate.value=birth.value;syncBornPaddock();document.querySelectorAll('.female-pregnancy').forEach(e=>e.hidden=gender.value!=='Dişi'||calf);toggleEntryPregnancy();if(typeof syncPurchaseDue==='function')syncPurchaseDue();}}
+ form.addEventListener('click',function(e){{const b=e.target.closest('.choice-card');if(!b)return;const group=b.closest('[data-choice-group]').dataset.choiceGroup;if(group==='gender')gender.value=b.dataset.value;if(group==='purpose')purpose.value=b.dataset.value;if(group==='arrival')arrival.value=b.dataset.value;setChoice(group,b.dataset.value);update();}});birth.addEventListener('change',update);motherSelect.addEventListener('change',syncBornPaddock);
  const digits=document.getElementById('tagDigits'),state=document.getElementById('tagState');let checkTimer;digits.addEventListener('input',function(){{digits.value=digits.value.replace(/\\D/g,'').slice(0,14);digits.setCustomValidity('');state.textContent='';clearTimeout(checkTimer);if(digits.value.length<8)return;checkTimer=setTimeout(async function(){{try{{const r=await fetch('/api/animal-tag-check?tag='+encodeURIComponent('TR'+digits.value)),j=await r.json();digits.setCustomValidity(j.exists?'Bu küpe zaten kayıtlı.':'');state.textContent=j.exists?'⚠ Bu küpe zaten kayıtlı.':'✓ Küpe kullanılabilir.';state.style.color=j.exists?'#b33128':'#176b3a';}}catch(e){{state.textContent='Küpe kayıtta yeniden doğrulanacak.'}}}},350)}});
  const breedSheet=document.getElementById('breedSheet'),breedValue=document.getElementById('breedValue'),breedOpen=document.getElementById('openBreed');breedOpen.onclick=()=>breedSheet.classList.add('open');document.querySelector('[data-close-sheet]').onclick=()=>breedSheet.classList.remove('open');breedSheet.addEventListener('click',function(e){{const b=e.target.closest('.breed-choice');if(b){{breedValue.value=b.dataset.breed;breedOpen.value=b.dataset.breed;breedSheet.classList.remove('open')}}}});document.getElementById('breedSearch').addEventListener('input',function(){{const q=this.value.toLocaleLowerCase('tr-TR');document.querySelectorAll('.breed-choice').forEach(b=>b.hidden=!b.textContent.toLocaleLowerCase('tr-TR').includes(q))}});
  const photoGrid=document.querySelector('.photo-grid'),photoPicker=document.getElementById('photoPicker');let selectedPhotos=[];
@@ -6718,16 +6802,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             dashboard_view_mode='classic' if edit_dashboard else dashboard_view(u)
             dash_layout=dashboard_layout(u)
             with db() as c:
-                animals=c.execute("select count(*) from animals where gender='Dişi' and status='Aktif'").fetchone()[0]
-                males=c.execute("select count(*) from animals where gender='Erkek' and status='Aktif'").fetchone()[0]
-                calves=c.execute('select count(*) from calves where promoted_animal_id is null').fetchone()[0]
+                # Hotfix1.22bh: Dashboard her açılışta eski doğumları uzlaştırır
+                # ve bütün gebelik göstergelerini tek aktif kayıt kümesinden alır.
+                reconcile_birth_closed_pregnancies(c)
+                herd_counts=dashboard_herd_counts(c)
+                animals=herd_counts['female'];males=herd_counts['male'];calves=herd_counts['calf']
                 total_inc=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gelir'").fetchone()[0]
                 total_exp=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gider'").fetchone()[0]
-                active_female_ids=[r[0] for r in c.execute("select id from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif'").fetchall()]
-                active_pregnancy_by_animal={aid:current_pregnancy_record(c,aid) for aid in active_female_ids}
-                active_pregnancy_by_animal={aid:rec for aid,rec in active_pregnancy_by_animal.items() if rec is not None}
+                active_pregnancy_by_animal=active_pregnancy_records(c)
                 pregnant=len(active_pregnancy_by_animal)
-                active_total=animals+males+calves
+                active_total=herd_counts['total']
                 # HOTFIX 6.10: Dashboard ilk açılışında kullanılmayan erkek maliyet/performans
                 # N+1 hesaplarını çalıştırma. Bu veriler Besi Performansı ekranında hesaplanır.
                 due_start=date.today().isoformat();due_end=(date.today()+timedelta(days=45)).isoformat()
@@ -6743,7 +6827,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 health_rows=c.execute("select h.id,h.next_date,h.kind,h.product,h.notes,h.animal_id,h.calf_id,a.id as adult_id,a.tag as animal_tag,ca.tag as calf_tag from health h left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id where coalesce(h.next_date,'')<>'' and h.next_date<=? order by h.next_date limit 10",((date.today()+timedelta(days=30)).isoformat(),)).fetchall()
                 pregnancy_vaccines=pregnancy_vaccine_tasks(c,horizon_days=7)
                 estrus_dash_all=c.execute("select e.*,a.tag,a.nickname from estrus_records e join animals a on a.id=e.animal_id where a.gender='Dişi' and coalesce(a.status,'Aktif')='Aktif' order by e.estrus_date desc,e.id desc").fetchall()
-                pregnant_ids={r[0] for r in c.execute("select distinct animal_id from inseminations where pregnancy_result='Pozitif' and animal_id is not null").fetchall()}
+                pregnant_ids=set(active_pregnancy_by_animal)
                 estrus_dash_rows=[r for r in estrus_dash_all if r['animal_id'] not in pregnant_ids]
                 month_defs=[]
                 for n in range(5,-1,-1):
@@ -7437,7 +7521,10 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             return self.send_html(page('Buzağı Düzenle',body,'/calves',u,msg))
         if path=='/animal-add':
             with db() as c:
-                smart_mothers=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
+                smart_mothers=c.execute("""select id,tag,nickname,paddock_id,paddock from animals
+                    where gender='Dişi' and coalesce(status,'Aktif')='Aktif'
+                    and not exists(select 1 from animal_losses l where l.animal_id=animals.id)
+                    order by tag""").fetchall()
                 smart_breeds=[r[0] for r in c.execute("select distinct breed from animals where trim(coalesce(breed,''))<>'' order by breed").fetchall()]
                 smart_paddocks=c.execute("select id,name,code from paddocks where active=1 order by name").fetchall()
             return self.send_html(page('Yeni Hayvan',render_smart_animal_add(smart_mothers,smart_breeds,smart_paddocks),'/animal-add',u,msg))
@@ -7668,7 +7755,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             latest=ins[-1] if ins else None
             with db() as pc:
                 active_preg=current_pregnancy_record(pc,aid) if a['gender']=='Dişi' else None
-            preg=(active_preg['pregnancy_result'] if active_preg else (latest['pregnancy_result'] if latest else 'Kayıt yok'))
+            preg=pregnancy_display_status(latest,active_preg)
             due=(active_preg['due_date'] if active_preg else '')
             cls='pos' if active_preg else 'neg' if str(preg).strip().lower()=='negatif' else ''
             pregnancy_panel=''
@@ -7839,7 +7926,14 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             calf_feed=animal_current_feed_context(calf)
             internal_total=sum(float(x['amount'] or 0) for x in internal_rows)
             mother_html=(f'<a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a>' if calf['mother_id'] and calf['mother_tag'] else '<span class="mut">Girilmemiş</span>')
-            calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">Alış / Başlangıç<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">İç Üretim<br><b>{money(internal_total)}</b></span><span class="pill">Rasyon + Bakım + İç Üretim<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}. İç üretim maliyeti nakit gideri ikinci kez yazmaz; buzağının maliyetine dağıtılır.</p></div>'''
+            arrival_source=str(calf['arrival_source'] or 'Satın Alındı').strip()
+            if arrival_source=='Çiftlikte Doğdu':
+                initial_cost_label='Başlangıç Maliyeti';origin_line=f'<p>İşletmede doğdu: <b>{fmt_date(calf["birth_date"]) or "-"}</b></p>'
+            elif arrival_source=='Dış Transfer':
+                initial_cost_label='Başlangıç Maliyeti';origin_line=f'<p>İşletmeye giriş: <b>{fmt_date(calf["entry_date"] or calf["purchase_date"]) or "-"}</b></p>'
+            else:
+                initial_cost_label='Alış / Başlangıç';origin_line=f'<p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>'
+            calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">{h(initial_cost_label)}<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">İç Üretim<br><b>{money(internal_total)}</b></span><span class="pill">Rasyon + Bakım + İç Üretim<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}. İç üretim maliyeti nakit gideri ikinci kez yazmaz; buzağının maliyetine dağıtılır.</p></div>'''
             feed_opts_internal=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in calf_feeds)
             internal_table=''.join(f'''<tr><td>{fmt_date(x['cost_date'])}</td><td>{h(x['cost_type'])}</td><td>{h(x['feed_name'] or x['notes'] or '-')}</td><td>{float(x['quantity'] or 0):g} {h(x['unit'] or '')}</td><td>{money(x['unit_cost'])}</td><td><b>{money(x['amount'])}</b></td><td><form method="post" action="/calf-internal-cost/delete" onsubmit="return confirm('Bu iç üretim maliyeti silinsin mi?')"><input type="hidden" name="id" value="{x['id']}"><input type="hidden" name="calf_id" value="{cid}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in internal_rows) or '<tr><td colspan="7">Henüz iç üretim maliyeti kaydı yok.</td></tr>'
             internal_cost_box=f'''<div class="card" style="margin-top:14px"><div class="filter-title"><div><h2>🍼 İç Üretim Maliyeti</h2><p class="mut">Süt, buzağı başlangıç/büyütme yemi, ot, yonca ve diğer büyütme maliyetlerini küpeye dağıtır. Nakit gideri ikinci kez oluşturmaz.</p></div><span class="pill">Toplam {money(internal_total)}</span></div><form method="post" action="/calf-internal-cost/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="cost_date" value="{date.today().isoformat()}" required></label><label>Tür<select name="cost_type" id="calfInternalCostType"><option>Süt</option><option>Yem</option><option>Bakım</option><option>Diğer</option></select></label><label id="calfInternalFeedLabel">Yem<select name="feed_id" id="calfInternalFeed"><option value="">Yem seçin…</option>{feed_opts_internal}</select></label><label>Miktar<input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label><label>Birim<select name="unit"><option value="L">Litre</option><option value="kg">kg</option><option value="adet">adet</option></select></label><label>Birim Maliyet (₺)<input type="number" name="unit_cost" min="0" step="0.01" value="0"><small class="mut">Yem seçilirse 0 bırakınca stok ortalama maliyeti kullanılır.</small></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah sütü / yonca / buzağı başlangıç yemi"></label><label class="full"><input type="checkbox" name="deduct_stock" value="1" checked> Yem türünde stoktan düş</label><div class="full"><button class="btn">Maliyete Ekle</button></div></form><div class="tablewrap" style="margin-top:12px"><table><tr><th>Tarih</th><th>Tür</th><th>Yem / Açıklama</th><th>Miktar</th><th>Birim Maliyet</th><th>Toplam</th><th></th></tr>{internal_table}</table></div><script>(function(){{const t=document.getElementById('calfInternalCostType'),l=document.getElementById('calfInternalFeedLabel'),f=document.getElementById('calfInternalFeed');if(!t)return;function s(){{const y=t.value==='Yem';l.style.display=y?'block':'none';f.required=y}}t.addEventListener('change',s);s()}})();</script></div>'''
@@ -7850,7 +7944,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <div class="card profile"><div class="photo">{photo}</div><div><h1>{h(calf["tag"])}</h1><span class="pill">{h(calf["gender"])}</span><span class="pill">Yaş: {age_text(calf["birth_date"])}</span>
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
             <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: {mother_html}</p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
-            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p><p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
+            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p>{origin_line}{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
             <div class="grid calf-entry-grid" style="margin-top:14px"><div class="card calf-photo-card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form calf-photo-form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
             <div class="card calf-weight-card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form calf-weight-form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
             {internal_cost_box}<div class="card" style="margin-top:14px"><h2>💉 Sağlık / Tedavi Geçmişi</h2><p><a class="btn" href="/health">Sağlık Kaydı Ekle</a></p><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Not</th></tr>{health_html}</table></div></div>
@@ -7867,6 +7961,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             selected_id=(q.get('animal',[''])[0] or '').strip()
             today=date.today()
             with db() as c:
+                reconcile_birth_closed_pregnancies(c)
                 females=c.execute("""select id,tag,nickname,breed,paddock,birth_date,
                     coalesce(nullif(photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=animals.id order by ap.id limit 1),'') photo_url
                     from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag""").fetchall()
@@ -8019,14 +8114,16 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             aid=q.get('animal',[''])[0]
             estrus_id=q.get('estrus',[''])[0]
             with db() as c:
+                reconcile_birth_closed_pregnancies(c)
                 female_rows=c.execute("select id,tag,nickname from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag").fetchall()
                 females=[a for a in female_rows if not is_currently_pregnant(c,a['id'])]
                 all_rows=c.execute('''select i.*,a.tag,a.nickname,a.pregnancy_source from inseminations i join animals a on a.id=i.animal_id order by a.tag,i.attempt,i.insemination_date''').fetchall()
                 estrus_context=c.execute('select * from estrus_records where id=? and animal_id=?',(estrus_id,aid)).fetchone() if estrus_id and aid else None
+                active_pregnancy_ids=set(active_pregnancy_records(c))
             grouped={}
             for r in all_rows:grouped.setdefault(r['animal_id'],[]).append(r)
             waiting=sum(1 for records in grouped.values() if str(records[-1]['pregnancy_result'] or '').strip().lower() in ('bekleniyor',''))
-            pregnant=sum(1 for records in grouped.values() if is_pregnant_value(records[-1]['pregnancy_result']))
+            pregnant=len(active_pregnancy_ids)
             third_attempt=sum(1 for records in grouped.values() if int(records[-1]['attempt'] or 0)>=3)
             month_prefix=date.today().strftime('%Y-%m')
             this_month=sum(1 for r in all_rows if str(r['insemination_date'] or '').startswith(month_prefix))
@@ -9712,7 +9809,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if arrival not in ('Satın Alındı','Çiftlikte Doğdu','Dış Transfer'):raise ValueError('Geliş kaynağı geçersiz.')
                 if arrival=='Çiftlikte Doğdu' and not birth_date:raise ValueError('Çiftlikte doğan hayvan için doğum tarihi zorunludur.')
                 uploads=animal_add_uploads(f)
-                entry_date=(f.get('entry_date') or (birth_date if arrival=='Çiftlikte Doğdu' else date.today().isoformat())).strip()
+                entry_date=(birth_date if arrival=='Çiftlikte Doğdu' else (f.get('entry_date') or date.today().isoformat())).strip()
                 try:date.fromisoformat(entry_date)
                 except Exception:raise ValueError('Geçerli giriş tarihi seçin.')
                 purpose=(f.get('purpose') or '').strip()
@@ -9733,15 +9830,13 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 father_tag=(f.get('father_tag') or '').strip().upper()
                 with db() as c:
                     if c.execute('select 1 from animals where upper(tag)=upper(?)',(tag,)).fetchone() or c.execute('select 1 from calves where upper(tag)=upper(?)',(tag,)).fetchone():raise ValueError('Bu küpe numarası zaten kayıtlı.')
-                    paddock_name=''
-                    if paddock_id:
-                        paddock=c.execute('select id,name from paddocks where id=? and active=1',(paddock_id,)).fetchone()
-                        if not paddock:raise ValueError('Seçilen padok bulunamadı.')
-                        paddock_name=paddock['name']
                     mother=None
                     if mother_id:
-                        mother=c.execute("select id,tag from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mother_id,)).fetchone()
+                        mother=c.execute("""select id,tag,paddock_id,paddock from animals where id=? and gender='Dişi'
+                            and coalesce(status,'Aktif')='Aktif'
+                            and not exists(select 1 from animal_losses l where l.animal_id=animals.id)""",(mother_id,)).fetchone()
                     if arrival=='Çiftlikte Doğdu' and not mother:raise ValueError('Çiftlikte doğan hayvan için aktif anne kaydı seçin.')
+                    paddock_id,paddock_name=resolve_entry_paddock(c,paddock_id,mother,arrival=='Çiftlikte Doğdu')
                     photo_names=[]
                     if kind=='Buzağı':
                         cur=c.execute('''insert into calves(tag,mother_id,father_tag,birth_date,gender,notes,nickname,breed,paddock,paddock_id,photo_url,purchase_date,purchase_price,purchase_payment_method,status,daily_feed_cost,daily_care_cost,target_sale_price,animal_type,purpose,arrival_source,entry_date,seller,purchase_weight,quarantine_status,health_status)
@@ -13723,4 +13818,51 @@ APP_LABEL='v'+APP_VERSION
 
 # Hotfix1.22bb: Sunar 21.28 tamamlayıcı süt yemi katalog + mevcut DB migrasyonu.
 APP_VERSION='3.9.23 DEV4 Hotfix1.22bd'
+APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22be: doğum sonrası sürü tutarlılığı, anne padoku devri ve kalan görünüm düzeltmeleri.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22be'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BE_COMPLETION=r"""
+<style id="hotfix122be-completion">
+@media(max-width:650px){
+ html{scroll-padding-top:144px}
+ .repro-board-compact .repro-column,.repro-detail{scroll-margin-top:144px}
+}
+</style>
+<script id="hotfix122be-reproduction-scroll-guard">
+document.addEventListener('DOMContentLoaded',function(){
+ if(location.pathname!=='/reproduction-center')return;
+ document.querySelectorAll('.repro-board-compact .repro-toggle').forEach(function(toggle){
+  toggle.addEventListener('click',function(){setTimeout(function(){
+   const section=toggle.closest('.repro-column');if(!section||section.classList.contains('is-collapsed'))return;
+   const top=document.querySelector('.top'),bar=document.querySelector('.erp-commandbar');
+   const offset=(top?top.getBoundingClientRect().height:60)+(bar?bar.getBoundingClientRect().height:72)+8;
+   const y=section.getBoundingClientRect().top;if(y<offset)window.scrollBy({top:y-offset,behavior:'smooth'});
+  },0)});
+ });
+});
+</script>
+"""
+_page_before_hotfix122be=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122be(title,body,path,user,flash)
+    if path in ('/','/reproduction-center'):
+        html=html.replace('</head>',HOTFIX122BE_COMPLETION+'</head>',1)
+    return html
+
+# Hotfix1.22bf: masaüstü Modern Dashboard kart akışı eski dengeli 3 sütun düzenine döndürüldü.
+# Bugünün İşleri ilk sütunda iki satırı kaplar; Kritik Stoklar ve Son Hareketler
+# ikinci satırdaki boşlukları doldurur. 1.22be'nin doğum/padok/sayaç düzeltmeleri korunur.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bf'
+APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22bg: eski doğum kayıtlarının açık bıraktığı Pozitif gebelikler
+# otomatik kapatılır; hayvan kartı pasif gebeliği tekrar Pozitif göstermez.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bg'
+APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22bh: Dashboard, Üreme Merkezi, Tohumlama listesi ve gebelik aşıları
+# aynı aktif gebelik kaynağını kullanır; doğumla kapanan kayıt sayaçtan anında düşer.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bh'
 APP_LABEL='v'+APP_VERSION

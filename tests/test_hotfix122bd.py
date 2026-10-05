@@ -11,7 +11,7 @@ class Hotfix122BDTests(unittest.TestCase):
         src=(ROOT/'app'/'server.py').read_text(encoding='utf-8')
         self.assertIn("'source':'finance','finance_id':int(r['id'])",src)
         self.assertIn('/finance/edit?id=',src)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bd')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bh')
 
 if __name__=='__main__':
     unittest.main()

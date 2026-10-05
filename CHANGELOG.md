@@ -1,3 +1,37 @@
+# Hotfix1.22bh - Gebelik Sayacı Senkronizasyonu
+
+- Dashboard, Üreme Merkezi, Tohumlama listesi ve gebelik aşıları tek aktif gebelik kaynağına bağlandı.
+- Dashboard her açılışta doğumla kapanması gereken eski pozitif kayıtları güvenle uzlaştırır.
+- Doğum kaydı bulunan hayvan gebe sayacından, gebelik aşılarından ve gebe engelli kızgınlık listesinden çıkar.
+- 1.22bg hayvan kartı ve geçmiş veri uzlaştırma düzeltmeleri korunmuştur.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22bh` ile eşitlendi.
+
+# Hotfix1.22bg - Gebelik/Doğum Uzlaştırma
+
+- Eski verilerde doğumdan sonra açık kalmış pozitif tohumlama kayıtları başlangıçta otomatik `Doğum` durumuna geçirilir.
+- Hayvan kartı üst Gebelik KPI'sının, aktif gebelik bulunmadığı halde eski `Pozitif` sonucunu göstermesi engellendi.
+- Uzlaştırma tekrar çalıştırılabilir ve yalnız doğum tarihi tohumlama tarihinden sonra olan kayıtları etkiler.
+- 1.22bf masaüstü Dashboard yerleşimi ve önceki doğum/padok/sayaç düzeltmeleri korunmuştur.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22bg` ile eşitlendi.
+
+# Hotfix1.22bf - Modern Dashboard Masaüstü Yerleşim Düzeltmesi
+
+- `Bugünün İşleri` kartını tek satıra zorlayan 1.22be masaüstü geçersiz kılma kuralı kaldırıldı.
+- Geniş ekranda görev paneli yeniden ilk sütunda iki satırı kaplar; Kritik Stoklar ve Son Hareketler ikinci satırı doldurur.
+- Sağdaki kısa kartların altında oluşan büyük boşluklar giderildi; mobil Dashboard davranışı değiştirilmedi.
+- 1.22be doğum sonrası gebelik kapatma, anne padoku devri ve tutarlı sürü sayaçları korunmuştur.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22bf` ile eşitlendi.
+
+# Hotfix1.22be - Doğum ve Görünüm Tamamlama
+
+- Dashboard sürü sayaçları pasif/zayiat kayıtlarını ve yetişkine aktarılmış buzağıları dışlayacak şekilde ortak sorguda birleştirildi.
+- Yeni doğumla aktif buzağı ve toplam sayaçları artarken annenin son aktif gebeliği `Doğum` durumuyla kapanır.
+- Çiftlikte doğan yavru, kullanıcı farklı bir padok seçmediyse annenin padok kimliği ve adını otomatik devralır.
+- Akıllı kayıt formunda anne seçimi padoku önden doldurur; sunucu tarafı aynı kuralı zorunlu güvence olarak uygular.
+- İşletmede doğan buzağı kartındaki `Alış` anlatımı kaldırıldı; köken ve başlangıç maliyeti doğru terimlerle gösterilir.
+- Mobil Üreme Merkezi kaydırma hedefleri sabit menünün altında görünür kalır.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22be` ile eşitlendi.
+
 # Hotfix1.22bd - Dashboard Vadeli Ödeme Doğrudan İşlem
 
 - Dashboard > Bugünün İşleri içindeki vadeli ödeme satırı artık Finans Raporu yerine ilgili finans kaydının /finance/edit ekranını açar.

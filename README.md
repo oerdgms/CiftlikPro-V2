@@ -1,4 +1,35 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bd
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bh
+
+## Hotfix1.22bh – Gebelik Sayacı Senkronizasyonu
+
+- Dashboard, Üreme Merkezi, Tohumlama listesi ve gebelik aşıları tek aktif gebelik kaynağına bağlandı.
+- Doğumla kapanan gebelik, Dashboard açıldığında yeniden uzlaştırılır ve gebe sayısından düşer.
+- Eski `Pozitif` kayıtların kızgınlık ve aşı listelerini yanlışlıkla engellemesi önlendi.
+- 1.22bg hayvan kartı ve geçmiş veri uzlaştırma düzeltmeleri korunur.
+- Windows kurulum sürümü, çıktı dosyası ve GitHub Actions artifact yolu `1.22bh` adıyla eşitlendi.
+
+## Hotfix1.22bg – Gebelik/Doğum Uzlaştırma
+
+- Daha önce doğumu kaydedilmiş fakat tohumlama sonucu `Pozitif` kalmış eski kayıtlar başlangıçta otomatik `Doğum` durumuna alınır.
+- Hayvan kartının üst Gebelik özeti, aktif gebelik yokken eski `Pozitif` sonucuna geri dönmez.
+- Üreme Durumu paneli, Dashboard gebelik sayısı ve hayvan kartı aynı aktif gebelik kuralını kullanır.
+- İşlem idempotenttir; kapatılmış doğum kayıtları sonraki açılışlarda yeniden değiştirilmez.
+- 1.22bf Dashboard yerleşimi ile 1.22be doğum/padok/sayaç düzeltmeleri korunur.
+- Windows kurulum sürümü, çıktı dosyası ve GitHub Actions artifact yolu `1.22bg` adıyla eşitlendi.
+
+## Hotfix1.22bf – Modern Dashboard Masaüstü Yerleşim Düzeltmesi
+
+- Masaüstünde `Bugünün İşleri`, `Sürü Dağılımı`, `Yaklaşan Doğumlar`, `Kritik Stoklar` ve `Son Hareketler` yeniden dengeli üç sütun akışına alındı.
+- `Bugünün İşleri` ilk sütunda iki satırı kaplar; kısa sağ panellerin altında oluşan büyük boşluklar kaldırıldı.
+- Mobil Dashboard kuralları ile 1.22be doğum, gebelik, padok devri ve sürü sayacı düzeltmeleri aynen korundu.
+- Windows kurulum sürümü, çıktı dosyası ve GitHub Actions artifact yolu `1.22bf` adıyla eşitlendi.
+
+## Hotfix1.22be – Doğum ve Görünüm Tamamlama
+
+- Dashboard toplamları artık yalnız aktif, zayiatta olmayan ve yetişkine aktarılmamış kayıtları sayar.
+- Çiftlikte doğan yavru için padok seçilmezse annenin aktif padoku otomatik devralınır; giriş tarihi doğum tarihi olur.
+- İşletmede doğan buzağının kartında yanıltıcı `Alış` satırı yerine `İşletmede doğdu`, maliyet kutusunda `Başlangıç Maliyeti` gösterilir.
+- Mobil Üreme Merkezi akordeon başlıklarında sabit üst menü için güvenli kaydırma payı eklendi.
 
 ## Hotfix1.22bd – Sunar 21.28 Süt Yemi
 
