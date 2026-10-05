@@ -1153,8 +1153,17 @@ def init_db():
             if catalog_file.exists():
                 try:
                     for x in json.loads(catalog_file.read_text(encoding='utf-8')):
-                        c.execute('''insert or ignore into feed_catalog(name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,tdn_pct,me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,source,active) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
-                                  (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),x.get('source','')))
+                        c.execute('''insert or ignore into feed_catalog(
+                            name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,tdn_pct,
+                            me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,
+                            ca_pct,p_pct,mg_pct,k_pct,na_pct,s_pct,processing_method,
+                            label_cp_pct_as_fed,label_me_kcal_kg_as_fed,
+                            label_crude_fiber_pct_as_fed,label_fat_pct_as_fed,
+                            label_ash_pct_as_fed,label_sodium_pct_as_fed,
+                            solver_min_kg_day,solver_max_kg_day,constraint_source,source,active
+                        ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
+                                  (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),
+                                   x.get('processing_method') or '',x.get('label_cp_pct_as_fed',0),x.get('label_me_kcal_kg_as_fed',0),x.get('label_crude_fiber_pct_as_fed',0),x.get('label_fat_pct_as_fed',0),x.get('label_ash_pct_as_fed',0),x.get('label_sodium_pct_as_fed',0),x.get('solver_min_kg_day',0),x.get('solver_max_kg_day',0),x.get('constraint_source') or '',x.get('source','')))
                 except Exception as exc:
                     print('Yem kataloğu yüklenemedi:',exc)
         # V3.9.16: NASEM ile birebir eşleştirilebilen temel yemleri mevcut kurulumlarda da güncelle.
@@ -1234,6 +1243,34 @@ def init_db():
             }
             for old_name in ('SUNAR KARDELEN SÜT YEMİ,19,2700','SIĞIR SÜT YEMİ'):
                 _patch_feed(old_name,sunar_dairy_1927,'starch_pct>55 OR category like ?',('Sulu Kaba%',))
+            # Hotfix1.22bc: 1.22bb temiz kurulumunda ilk katalog INSERT'i etiket
+            # alanlarını taşımadığı için Sunar 21.28 satırı 0 kalabiliyordu. Hem bu
+            # yarım kaydı hem de daha önce 1.22bb açılmış mevcut DB'leri gerçek etiket
+            # değerleriyle onar. Yalnız bu ürünün kendi kaynak notu/boş etiket satırı
+            # hedeflenir; kullanıcının farklı laboratuvar analizi ezilmez.
+            try:
+                sunar2128=next((x for x in json.loads(catalog_file.read_text(encoding='utf-8'))
+                               if x.get('name')=='SUNAR 21.28 TAMAMLAYICI SÜT YEMİ'),None)
+                if sunar2128:
+                    row2128=c.execute("select id,source,label_cp_pct_as_fed from feed_catalog where upper(name)=upper(?)",
+                                      ('SUNAR 21.28 TAMAMLAYICI SÜT YEMİ',)).fetchone()
+                    if row2128:
+                        src2128=str(row2128['source'] or '')
+                        repairable=(float(row2128['label_cp_pct_as_fed'] or 0)==0 and
+                                    (not src2128 or 'Sunar 21.28' in src2128 or src2128.startswith('ÇiftlikPro')))
+                        if repairable:
+                            cols2128=('category','dm_pct','ndf_pct','effective_ndf_pct','cp_pct','tdn_pct',
+                                      'me_mcal_kg','nem_mcal_kg','neg_mcal_kg','starch_pct','fat_pct','ash_pct',
+                                      'ca_pct','p_pct','mg_pct','k_pct','na_pct','s_pct','processing_method',
+                                      'label_cp_pct_as_fed','label_me_kcal_kg_as_fed','label_crude_fiber_pct_as_fed',
+                                      'label_fat_pct_as_fed','label_ash_pct_as_fed','label_sodium_pct_as_fed',
+                                      'solver_min_kg_day','solver_max_kg_day','constraint_source','source')
+                            vals2128=[sunar2128.get(k,0) for k in cols2128]
+                            c.execute('update feed_catalog set '+','.join(k+'=?' for k in cols2128)+' where id=?',
+                                      tuple(vals2128)+(row2128['id'],))
+            except Exception as exc:
+                print('Hotfix1.22bc Sunar 21.28 etiket onarımı uygulanamadı:',exc)
+
             # DEV4.14: Katalogdaki bütün jenerik ticari yemlerin mevcut kurulumlara
             # temel besin profilini eksiksiz taşı. Bunlar marka/parti analizi değildir;
             # ileri rumen/INRA ve etiket doz alanları bilinmiyorsa sıfır bırakılır.
@@ -13685,5 +13722,5 @@ APP_LABEL='v'+APP_VERSION
 
 
 # Hotfix1.22bb: Sunar 21.28 tamamlayıcı süt yemi katalog + mevcut DB migrasyonu.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bb'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bc'
 APP_LABEL='v'+APP_VERSION

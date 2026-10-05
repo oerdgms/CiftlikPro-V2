@@ -1,6 +1,6 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bb
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bc
 
-## Hotfix1.22bb – Sunar 21.28 Süt Yemi
+## Hotfix1.22bc – Sunar 21.28 Süt Yemi
 
 - `SUNAR 21.28 TAMAMLAYICI SÜT YEMİ` katalog ve mevcut DB migrasyonuna eklendi.
 - Etiket değerleri: HP %21, ME 2800 kcal/kg, ham yağ %3,10, ham selüloz %8,64, ham kül %6,60, sodyum %0,32.
