@@ -1,3 +1,11 @@
+# Hotfix1.22bb Solver Koruma Notu
+
+Sunar 21.28 katalog ve mevcut DB migrasyonu eklenmiştir. Solver matematiği değiştirilmemiştir; isim bazlı taranan 36 solver/rasyon/hedef fonksiyonunun AST yapısı Hotfix1.22ba ile birebir aynıdır.
+
+# Hotfix1.22ba Solver Koruma Notu
+
+1.22az ile karşılaştırılan solver/rasyon ilişkili 28 fonksiyonun AST yapısı birebir aynıdır. Bu hotfix yalnız Dashboard stok görünümü ve doğum sonrası gebelik kapanışını değiştirir.
+
 # Hotfix1.22ab Solver Koruma Notu
 
 Hotfix1.22ab yalnızca bilimsel panel sunumundaki eski denetleyicileri temizler ve ileri tarihli ek yem dönemini güvenli saklar. Solver/rasyon hesap fonksiyonları Hotfix1.22aa tabanıyla değiştirilmemiştir.

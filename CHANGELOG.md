@@ -1,3 +1,23 @@
+# Hotfix1.22bb - Sunar 21.28 Tamamlayıcı Süt Yemi
+
+- SUNAR 21.28 tamamlayıcı süt yemi katalog ve mevcut DB migrasyonuna eklendi.
+- Üretici etiketi alanları ürün bazında saklandı: HP %21, ME 2800 kcal/kg, ham selüloz %8,64, yağ %3,10, kül %6,60, sodyum %0,32.
+- Etikette bulunmayan alanların referans tahmin olduğu kaynak notunda açıkça belirtildi.
+
+# Hotfix1.22ba - Dashboard stok ve doğum/gebelik düzeltmesi
+
+- Dashboard Kritik Stoklar yalnız pozitif kalan stokları gösterir; 0 kg stoklar listeden çıkar.
+- Buzağı doğum kaydında annenin ilgili aktif gebeliği otomatik olarak `Doğum` durumuna alınır.
+- Üreme Merkezi ve Dashboard aktif gebelik/doğuma yaklaşan listeleri doğmuş gebeliği tekrar göstermez.
+- Solver/rasyon matematiğine dokunulmadı.
+
+# Hotfix1.22az - Sağlık ajandası üç nokta menüsü
+
+- Sağlık ajandası işlem menüsü yerel `details` öğesi yerine dokunmatik uyumlu düğme kontrollü yapıya geçirildi.
+- Açık/kapalı durum, dışarı dokunma ve Escape davranışı tek noktadan yönetildi.
+- Mobil açılır menü yukarı yönlendirilerek alt durum çubuğu ve sonraki kartla çakışması önlendi.
+- Mevcut sağlık planı, tamamlama, düzenleme, silme ve erteleme uçları korunmuştur.
+
 # Hotfix1.22ax - Fotoğraf büyütme görüntüleyicisi
 
 - Hayvan profil, fotoğraf galerisi ve buzağı profil görsellerine erişilebilir büyütme eklendi.

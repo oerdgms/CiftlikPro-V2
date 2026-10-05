@@ -1240,7 +1240,7 @@ def init_db():
             # Kullanıcı veya laboratuvar kaynaklı bir satır kesinlikle ezilmez.
             commercial_names={
                 'BUZAĞI BAŞLANGIÇ YEMİ','SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
-                'SUNAR KARDELEN 19.27 SÜT YEMİ',
+                'SUNAR KARDELEN 19.27 SÜT YEMİ','SUNAR 21.28 TAMAMLAYICI SÜT YEMİ',
                 'SIĞIR BESİ YEMİ,13,2700','SIĞIR BESİ YEMİ,14,2800',
                 'SUNAR 15.26 GELİŞTİRME BESİ YEMİ','SIĞIR BESİ YEMİ,14,2600'}
             catalog_rows={x.get('name'):x for x in json.loads(catalog_file.read_text(encoding='utf-8')) if x.get('name') in commercial_names}
@@ -1963,6 +1963,18 @@ def current_pregnancy_record(c, animal_id):
 
 def is_currently_pregnant(c, animal_id):
     return current_pregnancy_record(c,animal_id) is not None
+
+def close_pregnancy_after_birth(c, animal_id, birth_date):
+    """Doğum kaydı oluşunca yalnız ilgili son gebe kaydını kapatır."""
+    if not animal_id or not birth_date:return None
+    rec=c.execute("select * from inseminations where animal_id=? order by insemination_date desc,id desc limit 1",(animal_id,)).fetchone()
+    if not rec or not is_pregnant_value(rec['pregnancy_result']):return None
+    try:
+        if rec['insemination_date'] and str(birth_date)[:10] < str(rec['insemination_date'])[:10]:return None
+    except Exception:
+        pass
+    c.execute("update inseminations set pregnancy_result='Doğum' where id=?",(rec['id'],))
+    return rec['id']
 
 def age_text(d):
     if not d:return '-'
@@ -6674,11 +6686,20 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 calves=c.execute('select count(*) from calves where promoted_animal_id is null').fetchone()[0]
                 total_inc=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gelir'").fetchone()[0]
                 total_exp=c.execute("select coalesce(sum(amount),0) from finance where tx_type='Gider'").fetchone()[0]
-                pregnant=c.execute("select count(distinct animal_id) from inseminations where pregnancy_result='Pozitif'").fetchone()[0]
+                active_female_ids=[r[0] for r in c.execute("select id from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif'").fetchall()]
+                active_pregnancy_by_animal={aid:current_pregnancy_record(c,aid) for aid in active_female_ids}
+                active_pregnancy_by_animal={aid:rec for aid,rec in active_pregnancy_by_animal.items() if rec is not None}
+                pregnant=len(active_pregnancy_by_animal)
                 active_total=animals+males+calves
                 # HOTFIX 6.10: Dashboard ilk açılışında kullanılmayan erkek maliyet/performans
                 # N+1 hesaplarını çalıştırma. Bu veriler Besi Performansı ekranında hesaplanır.
-                due_rows=c.execute("select i.due_date,a.id,a.tag,a.nickname from inseminations i join animals a on a.id=i.animal_id where i.pregnancy_result='Pozitif' and i.due_date between ? and ? order by i.due_date limit 8",(date.today().isoformat(),(date.today()+timedelta(days=45)).isoformat())).fetchall()
+                due_start=date.today().isoformat();due_end=(date.today()+timedelta(days=45)).isoformat()
+                due_rows=[]
+                for aid,rec in active_pregnancy_by_animal.items():
+                    if rec['due_date'] and due_start<=rec['due_date']<=due_end:
+                        a=c.execute("select id,tag,nickname from animals where id=?",(aid,)).fetchone()
+                        if a:due_rows.append({'due_date':rec['due_date'],'id':a['id'],'tag':a['tag'],'nickname':a['nickname']})
+                due_rows=sorted(due_rows,key=lambda r:r['due_date'])[:8]
                 payment_due_rows=c.execute("""select id,due_date,category,amount,description,supplier from finance
                     where payment_method='Vadeli' and coalesce(payment_status,'Bekliyor')<>'Ödendi'
                     and coalesce(due_date,'')<>'' and due_date<=? order by due_date,id limit 12""",((date.today()+timedelta(days=7)).isoformat(),)).fetchall()
@@ -6844,7 +6865,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             </section>'''
             # Hotfix1.17 Dashboard 2.0: Padok paneli ile aynı yoğunlukta, gerçek verili yönetim kokpiti.
             with db() as c:
-                low_feed_rows=c.execute("""select f.name,coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 and exists(select 1 from feed_stock_transactions entered where entered.feed_id=f.id and entered.tx_type in ('Giriş','Sayım +')) order by stock asc,f.name limit 5""").fetchall()
+                low_feed_candidates=c.execute("""select f.name,coalesce((select sum(case when st.tx_type in ('Giriş','Sayım +') then st.quantity_kg when st.tx_type in ('Çıkış','Tüketim','Sayım -') then -st.quantity_kg else 0 end) from feed_stock_transactions st where st.feed_id=f.id),0) stock from feed_catalog f where f.active=1 and exists(select 1 from feed_stock_transactions entered where entered.feed_id=f.id and entered.tx_type in ('Giriş','Sayım +')) order by stock asc,f.name""").fetchall()
+                low_feed_rows=[r for r in low_feed_candidates if float(r['stock'] or 0)>0][:5]
                 recent_actions=c.execute("select created_at,username,action,detail from audit_log order by id desc limit 5").fetchall()
             month_net=(months[-1][1]-months[-1][2]) if months else 0
             with db() as c: dashboard_health=health_plan_entries(c,horizon_days=30)
@@ -7822,7 +7844,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if r['animal_id'] not in latest_estrus:latest_estrus[r['animal_id']]=r
             for r in insem_all:
                 if r['animal_id'] not in latest_insem:latest_insem[r['animal_id']]=r
-            positive_ids={aid for aid,r in latest_insem.items() if is_pregnant_value(r['pregnancy_result'])}
+            with db() as c:
+                positive_ids={aid for aid,r in latest_insem.items() if is_pregnant_value(r['pregnancy_result']) and current_pregnancy_record(c,aid) is not None}
             estrus_stage=[]
             with db() as c:
                 for aid,r in latest_estrus.items():
@@ -7835,7 +7858,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 result=str(r['pregnancy_result'] or '').strip().lower()
                 try:days_since=(today-date.fromisoformat(r['insemination_date'])).days
                 except Exception:days_since=0
-                if is_pregnant_value(r['pregnancy_result']):
+                if aid in positive_ids:
                     try:days_left=(date.fromisoformat(r['due_date'])-today).days
                     except Exception:days_left=999
                     pregnant_stage.append((days_left,r))
@@ -9687,6 +9710,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         cur=c.execute('''insert into calves(tag,mother_id,father_tag,birth_date,gender,notes,nickname,breed,paddock,paddock_id,photo_url,purchase_date,purchase_price,purchase_payment_method,status,daily_feed_cost,daily_care_cost,target_sale_price,animal_type,purpose,arrival_source,entry_date,seller,purchase_weight,quarantine_status,health_status)
                             values(?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?)''',(tag,mother['id'] if mother else 0,father_tag,birth_date,gender,notes,f.get('nickname',''),breed,paddock_name,paddock_id,'',entry_date,purchase_price,payment,'Aktif',daily_feed,daily_care,target_sale,animal_type,purpose,arrival,entry_date,seller,purchase_weight,quarantine,health_status))
                         subject_id=cur.lastrowid;source='calf'
+                        if mother and birth_date:close_pregnancy_after_birth(c,mother['id'],birth_date)
                         for upload in uploads:
                             name=save_optimized_upload(f'calf_{subject_id}',upload);photo_names.append(name)
                             c.execute('insert into calf_photos(calf_id,filename,created_at,caption) values(?,?,?,?)',(subject_id,name,datetime.now().isoformat(timespec='seconds'),'Profil fotoğrafı' if len(photo_names)==1 else f'Kayıt fotoğrafı {len(photo_names)}'))
@@ -9784,6 +9808,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         mother=c.execute("select id from animals where tag=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mt,)).fetchone()
                         if not mother:return self.redirect('/animal-add','Anne küpesi aktif dişi hayvanlarda bulunamadı.')
                         c.execute('insert into calves(tag,mother_id,father_tag,birth_date,gender,notes) values(?,?,?,?,?,?)',(tag,mother['id'],f.get('father_tag',''),bd,f.get('calf_gender','Dişi'),f.get('notes','')))
+                        close_pregnancy_after_birth(c,mother['id'],bd)
                         return self.redirect('/all-animals?kind=calf','Buzağı başarıyla kaydedildi.')
                 return self.redirect('/animal-add','Geçersiz kayıt türü.')
             except sqlite3.IntegrityError:return self.redirect('/animal-add','Bu küpe numarası zaten kayıtlı.')
@@ -12966,7 +12991,7 @@ def page(title,body,path='/',user='admin',flash=''):
 
 APP_VERSION='3.9.23 DEV4 Hotfix1.22aj'
 HOTFIX122AJ_AGENDA=r"""
-<style>
+<style id="hotfix122az-health-action-menu">
 .health-view-switch{display:flex;gap:6px;margin:0 0 16px}.health-view-switch button{padding:10px 24px;border:1px solid #cbded1;border-radius:9px;background:white;color:#315d40;cursor:pointer;font:inherit}.health-view-switch button[aria-pressed=true]{background:#176b3a;color:white}
 .health-day[hidden]{display:none!important}.health-day-title{display:flex;gap:12px;align-items:center;margin:20px 0 10px;font-size:18px;color:#284936}.health-day-title small{font-size:12px;font-weight:500;background:#e8f3ec;padding:5px 9px;border-radius:20px}
 body.hf122ai-health .health-plan-list.health-agenda{display:block}
@@ -12977,25 +13002,28 @@ body.hf122ai-health .health-agenda .health-plan-main{grid-template-columns:minma
 body.hf122ai-health .health-agenda .health-date-box{display:none}
 body.hf122ai-health .health-agenda .health-due{grid-column:1}
 body.hf122ai-health .health-agenda .health-plan-action{border:0;padding:0;margin:0;justify-content:flex-end}
-.health-more{position:relative}.health-more>summary{cursor:pointer;list-style:none;background:#f0f6f2;border:1px solid #d8e6dd;border-radius:8px;padding:9px 13px;font-size:18px;line-height:1}
-body.hf122ai-health .health-more[open] .health-plan-controls{position:absolute;right:0;top:40px;z-index:15;min-width:170px;background:white;padding:10px;border:1px solid #d6e4da;border-radius:10px;box-shadow:0 8px 24px #12382122;flex-direction:column}
+.health-more{position:relative;flex:0 0 auto}.health-more-toggle{display:grid;place-items:center;width:50px;min-width:50px;height:44px;border:1px solid #d8e6dd;border-radius:9px;background:#f0f6f2;color:#214532;font:800 20px/1 Arial;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}.health-more-toggle:focus-visible{outline:3px solid #69b486;outline-offset:2px}.health-more.open .health-more-toggle{background:#e1f1e6;border-color:#8fbea0}.health-more .health-plan-controls[hidden]{display:none!important}
+body.hf122ai-health .health-plan-card.menu-open{position:relative;z-index:40;overflow:visible!important}
+body.hf122ai-health .health-more.open .health-plan-controls{display:flex!important;position:absolute;right:0;top:calc(100% + 7px);z-index:60;min-width:190px;background:white;padding:10px;border:1px solid #d6e4da;border-radius:10px;box-shadow:0 12px 30px #12382132;flex-direction:column}
 body.hf122ai-health .health-more .health-plan-controls .btn{width:100%!important;display:block;text-align:left}
-@media(max-width:700px){body.hf122ai-health .health-agenda .health-plan-card{grid-template-columns:1fr;gap:10px}body.hf122ai-health .health-agenda .health-plan-action{justify-content:flex-start}body.hf122ai-health .health-agenda .health-plan-action>form{flex:1}body.hf122ai-health .health-agenda .health-plan-action>form .btn{width:100%!important;min-height:42px}.health-day-title{font-size:16px}.health-view-switch button{flex:1}}
+@media(max-width:700px){body.hf122ai-health .health-agenda .health-plan-card{grid-template-columns:1fr;gap:10px;overflow:visible!important}body.hf122ai-health .health-agenda .health-plan-action{justify-content:flex-start;overflow:visible!important}body.hf122ai-health .health-agenda .health-plan-action>form{flex:1}body.hf122ai-health .health-agenda .health-plan-action>form .btn{width:100%!important;min-height:44px}.health-more-toggle{height:44px}.health-day-title{font-size:16px}.health-view-switch button{flex:1}body.hf122ai-health .health-more.open .health-plan-controls{top:auto;bottom:calc(100% + 7px);right:0;min-width:min(230px,72vw);max-width:calc(100vw - 36px)}}
 </style>
-<script>
+<script id="hotfix122az-health-action-menu-script">
 (function(){function init(){
  const list=document.querySelector('.health-plan-list');if(!list)return;
  const cards=Array.from(list.querySelectorAll('.health-plan-card'));
  const switcher=document.createElement('div');switcher.className='health-view-switch';switcher.setAttribute('role','group');switcher.setAttribute('aria-label','Sağlık görünümü');
  const agenda=document.createElement('button'),tiles=document.createElement('button');agenda.type=tiles.type='button';agenda.textContent='Ajanda';tiles.textContent='Kartlar';switcher.append(agenda,tiles);list.before(switcher);
  let mode='agenda';const key='ciftlikpro.health.view.'+(document.body.dataset.healthUser||'current');try{if(localStorage.getItem(key)==='cards')mode='cards'}catch(e){}
+ function setMenu(more,open){const toggle=more.querySelector('.health-more-toggle'),controls=more.querySelector('.health-plan-controls'),card=more.closest('.health-plan-card');more.classList.toggle('open',!!open);if(toggle)toggle.setAttribute('aria-expanded',String(!!open));if(controls)controls.hidden=!open;if(card)card.classList.toggle('menu-open',!!open);}
+ function closeMenus(except){document.querySelectorAll('.health-more.open').forEach(more=>{if(more!==except)setMenu(more,false)})}
  const groups=new Map();cards.forEach(card=>{
   const date=card.dataset.healthDate;if(!groups.has(date)){
    const section=document.createElement('section'),title=document.createElement('h3'),rows=document.createElement('div');section.className='health-day';title.className='health-day-title';rows.className='health-day-rows';
    const parts=date.split('-'),d=new Date(Number(parts[0]),Number(parts[1])-1,Number(parts[2]));title.textContent=d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'long',year:'numeric'});
    const count=document.createElement('small');title.append(count);section.append(title,rows);groups.set(date,{section,rows,count});
   }
-  const controls=card.querySelector('.health-plan-controls');if(controls){const more=document.createElement('details'),summary=document.createElement('summary');more.className='health-more';summary.textContent='⋯';summary.setAttribute('aria-label','Diğer işlemler');more.append(summary);controls.before(more);more.append(controls);}
+  const controls=card.querySelector('.health-plan-controls');if(controls){const more=document.createElement('div'),toggle=document.createElement('button');more.className='health-more';toggle.type='button';toggle.className='health-more-toggle';toggle.textContent='⋯';toggle.setAttribute('aria-label','Diğer işlemleri aç');toggle.setAttribute('aria-haspopup','menu');toggle.setAttribute('aria-expanded','false');controls.hidden=true;controls.setAttribute('role','menu');more.append(toggle);controls.before(more);more.append(controls);toggle.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();const open=!more.classList.contains('open');closeMenus(open?more:null);setMenu(more,open)});}
  });
  function sync(){groups.forEach(g=>{const n=Array.from(g.rows.children).filter(c=>c.style.display!=='none'&&!c.hidden).length;g.section.hidden=n===0;g.count.textContent=n+' iş';});}
  function render(){list.replaceChildren();list.classList.toggle('health-agenda',mode==='agenda');agenda.setAttribute('aria-pressed',String(mode==='agenda'));tiles.setAttribute('aria-pressed',String(mode==='cards'));
@@ -13003,7 +13031,7 @@ body.hf122ai-health .health-more .health-plan-controls .btn{width:100%!important
  }
  agenda.addEventListener('click',()=>{mode='agenda';try{localStorage.setItem(key,mode)}catch(e){}render()});tiles.addEventListener('click',()=>{mode='cards';try{localStorage.setItem(key,mode)}catch(e){}render()});
  const observer=new MutationObserver(sync);cards.forEach(c=>observer.observe(c,{attributes:true,attributeFilter:['style','hidden']}));render();
- document.addEventListener('click',e=>{document.querySelectorAll('.health-more[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.health-more[open]').forEach(d=>d.open=false)});
+ document.addEventListener('click',e=>{document.querySelectorAll('.health-more.open').forEach(more=>{if(!more.contains(e.target))setMenu(more,false)})});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenus(null)});
 }if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
 </script>
 """
@@ -13650,3 +13678,12 @@ def page(title,body,path='/',user='admin',flash=''):
     html=_page_before_hotfix122ax(title,body,path,user,flash)
     if 'data-photo-zoom' in html:html=html.replace('</head>',HOTFIX122AX_PHOTO_LIGHTBOX+'</head>',1)
     return html
+
+# Hotfix1.22ba: Dashboard 0 stokları gizler; doğum kaydında aktif gebelik otomatik kapanır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ba'
+APP_LABEL='v'+APP_VERSION
+
+
+# Hotfix1.22bb: Sunar 21.28 tamamlayıcı süt yemi katalog + mevcut DB migrasyonu.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bb'
+APP_LABEL='v'+APP_VERSION

@@ -1,4 +1,24 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22ax
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bb
+
+## Hotfix1.22bb – Sunar 21.28 Süt Yemi
+
+- `SUNAR 21.28 TAMAMLAYICI SÜT YEMİ` katalog ve mevcut DB migrasyonuna eklendi.
+- Etiket değerleri: HP %21, ME 2800 kcal/kg, ham yağ %3,10, ham selüloz %8,64, ham kül %6,60, sodyum %0,32.
+- Etikette yer almayan NDF, nişasta, Ca/P ve ileri solver alanları aynı sınıftaki Sunar süt yemi referans profili olarak işaretlenmiştir; laboratuvar analiziyle doğrulanmalıdır.
+
+
+## Hotfix1.22ba – 0 Stok + Doğumda Gebelik Kapatma
+
+Dashboard 0 kg yemleri Kritik Stoklar listesinde göstermez. Çiftlikte doğan buzağı kaydedildiğinde annenin ilgili aktif gebeliği otomatik kapanır.
+
+
+## Hotfix1.22ba – Sağlık Ajandası İşlem Menüsü
+
+- Ajanda kartlarındaki üç nokta düğmesi iPhone/Safari ve diğer dokunmatik ekranlarda güvenilir biçimde açılıp kapanır.
+- Menü artık tarayıcının değişken `details` davranışına bağlı değildir; gerçek bir düğme, `aria-expanded` durumu ve kontrollü görünürlük kullanır.
+- Mobilde menü düğmenin üstüne, masaüstünde altına açılır; kart ve sabit durum çubuğu tarafından kesilmez.
+- Dışarı dokunma ve Escape menüyü kapatır; aynı anda yalnız bir kartın işlem menüsü açık kalır.
+- Düzenle, Sil, Hayvanı Aç ve 1 Gün Ertele işlemlerinin sunucu akışı değiştirilmemiştir.
 
 ## Hotfix1.22ax – Fotoğraf Büyütme Görüntüleyicisi
 
