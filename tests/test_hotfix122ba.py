@@ -29,6 +29,6 @@ class Hotfix122BATests(unittest.TestCase):
     def test_dashboard_critical_stock_excludes_zero(self):
         source=Path(server.__file__).read_text(encoding='utf-8')
         self.assertIn("low_feed_rows=[r for r in low_feed_candidates if float(r['stock'] or 0)>0][:5]",source)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bq')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22br')
 
 if __name__=='__main__':unittest.main()

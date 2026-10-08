@@ -6,7 +6,7 @@ SERVER=(ROOT/"app"/"server.py").read_text(encoding="utf-8")
 
 class Hotfix122BPTests(unittest.TestCase):
     def test_version_and_css_hook(self):
-        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22bq'", SERVER)
+        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22br'", SERVER)
         self.assertIn('id="hotfix122bp-reproduction-card-ui"', SERVER)
     def test_mobile_actions_are_bottom_grid(self):
         self.assertIn('grid-template-areas:\n      "identity"\n      "meta"\n      "smart"\n      "action"', SERVER)

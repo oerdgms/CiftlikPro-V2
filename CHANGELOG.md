@@ -1,11 +1,18 @@
-# Hotfix1.22bq — Üreme Kartları Responsive UI
+# Hotfix1.22br — Runtime DB / ERR_EMPTY_RESPONSE Fix
+
+- 1.22bq'da CI dosya kilidi için eklenen global AutoClosingConnection kaldırıldı.
+- Çalışan uygulamada standart sqlite3.Connection davranışı geri getirildi.
+- Hızlı gebelik sonucu / kuru durum mükerrer işlem istisnaları korunuyor.
+- Üreme Responsive UI ve Akıllı Üreme Yaşam Döngüsü korunuyor.
+
+# Hotfix1.22br — Üreme Kartları Responsive UI
 
 - Üreme Merkezi hayvan kartları masaüstünde 3 bölgeli, mobilde dikey ve kompakt düzene alındı.
 - Sonucu Güncelle / Kuruya Çıkar gibi aksiyonlar kartın ayrı işlem alanında hizalandı.
 - Akıllı durum satırı kart içine kompakt yerleştirildi; gereksiz boşluk ve kart yüksekliği azaltıldı.
 - 1.22bo Akıllı Üreme Yaşam Döngüsü mantığı, filtreler, PDF çıktıları ve solver/rasyon kodu korunur.
 
-## 3.9.23 DEV4 Hotfix1.22bq
+## 3.9.23 DEV4 Hotfix1.22br
 - Akıllı Üreme Yaşam Döngüsü: Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru, Yakın Doğum ve doğum alarmı.
 - Kuruya çıkar / geri al işlemi, doğumda otomatik kuru durum temizliği.
 - Hayvanın geçmiş kızgınlık aralıklarından bireysel sonraki kızgınlık penceresi tahmini.

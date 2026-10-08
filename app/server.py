@@ -410,22 +410,13 @@ tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td
 
 '''
 
-class AutoClosingConnection(sqlite3.Connection):
-    """sqlite context manager: commit/rollback sonrasında bağlantıyı da kapatır.
-
-    Standart sqlite3.Connection ``with`` bloğundan çıkınca bağlantıyı açık
-    bırakır. Linux bunu çoğu testte tolere ederken Windows geçici DB dosyasını
-    silerken PermissionError üretebilir. ÇiftlikPro'nun ``with db()`` kullanımını
-    gerçek kaynak yönetimine dönüştürür.
-    """
-    def __exit__(self, exc_type, exc_value, traceback):
-        try:
-            return super().__exit__(exc_type, exc_value, traceback)
-        finally:
-            self.close()
-
 def db():
-    c=sqlite3.connect(DB,factory=AutoClosingConnection)
+    # Runtime uyumluluğu: sqlite3'in standart Connection davranışını koru.
+    # Bazı ÇiftlikPro akışları ``with db()`` bloğundan sonra cursor/row yaşam
+    # döngüsünün standart sqlite davranışına dayanıyor. CI dosya kilitlerini
+    # çözmek için global Connection sınıfını değiştirmek uygulamada
+    # ERR_EMPTY_RESPONSE/crash üretebildiği için burada özel subclass yok.
+    c=sqlite3.connect(DB)
     c.row_factory=sqlite3.Row
     return c
 
@@ -14504,8 +14495,8 @@ def page(title,body,path='/',user='admin',flash=''):
         html=html.replace('</head>',HOTFIX122BN_OUTPUT+'</head>',1)
     return html
 
-# Hotfix1.22bq: Akıllı Üreme Yaşam Döngüsü
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bq'
+# Hotfix1.22br: Akıllı Üreme Yaşam Döngüsü
+APP_VERSION='3.9.23 DEV4 Hotfix1.22br'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BO_REPRO=r"""
 <style id="hotfix122bo-smart-reproduction">
@@ -14525,9 +14516,9 @@ def page(title,body,path='/',user='admin',flash=''):
     return html
 
 
-# Hotfix1.22bq: Üreme Merkezi kartlarını mobil ve masaüstünde yeniden dengeler.
+# Hotfix1.22br: Üreme Merkezi kartlarını mobil ve masaüstünde yeniden dengeler.
 # Akıllı yaşam döngüsü, filtreler ve işlem akışları değiştirilmez; sadece kart hiyerarşisi ve aksiyon yerleşimi iyileştirilir.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bq'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22br'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BP_REPRO=r"""
 <style id="hotfix122bp-reproduction-card-ui">

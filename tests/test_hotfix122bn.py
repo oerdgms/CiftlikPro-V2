@@ -37,6 +37,6 @@ class Hotfix122BNTests(unittest.TestCase):
     def test_buttons_present(self):
         repro=self.get('/reproduction-center'); self.assertIn('bnReproPdf',repro); self.assertIn('bnReproPrint',repro)
         health=self.get('/health'); self.assertIn('bnHealthPlanPdf',health); self.assertIn('bnHealthPlanPrint',health)
-    def test_version(self): self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bq')
+    def test_version(self): self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22br')
 
 if __name__=='__main__': unittest.main()
