@@ -410,8 +410,22 @@ tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td
 
 '''
 
+class AutoClosingConnection(sqlite3.Connection):
+    """sqlite context manager: commit/rollback sonrasında bağlantıyı da kapatır.
+
+    Standart sqlite3.Connection ``with`` bloğundan çıkınca bağlantıyı açık
+    bırakır. Linux bunu çoğu testte tolere ederken Windows geçici DB dosyasını
+    silerken PermissionError üretebilir. ÇiftlikPro'nun ``with db()`` kullanımını
+    gerçek kaynak yönetimine dönüştürür.
+    """
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
 def db():
-    c=sqlite3.connect(DB)
+    c=sqlite3.connect(DB,factory=AutoClosingConnection)
     c.row_factory=sqlite3.Row
     return c
 
@@ -9464,9 +9478,14 @@ setTimeout(()=>setFinanceDrawer(false),0);
         # DEV4: Arayüz kilidine ek olarak tüm kimlik doğrulanmış yazma isteklerini
         # sunucuda da atomik biçimde koru. Böylece çift dokunma/ağ tekrarı yeni
         # hayvan, finans, stok, sağlık veya padok kaydını iki kez oluşturamaz.
-        with db() as dedupe_db:
-            if not claim_request_once(dedupe_db,general_request_fingerprint(username,path,f),20):
-                return self.redirect(duplicate_redirect_target(path),'⚠️ İşlem ikinci kez gönderildi; mükerrer kayıt engellendi.')
+        # Kayıt oluşturmayan/idempotent güncellemeler genel mükerrer POST kapısına girmez.
+        # Özellikle hızlı gebelik sonucu ve kuru durum güncellemeleri aynı kaydı UPDATE eder;
+        # ağ tekrarı yeni bir kayıt üretmediği için güvenle yeniden uygulanabilir.
+        dedupe_exempt_paths={'/reproduction-status','/reproduction/dry','/reproduction/dry-cancel'}
+        if path not in dedupe_exempt_paths:
+            with db() as dedupe_db:
+                if not claim_request_once(dedupe_db,general_request_fingerprint(username,path,f),20):
+                    return self.redirect(duplicate_redirect_target(path),'⚠️ İşlem ikinci kez gönderildi; mükerrer kayıt engellendi.')
         if path.startswith('/agriculture/'):
             try:
                 with db() as c:
@@ -14485,8 +14504,8 @@ def page(title,body,path='/',user='admin',flash=''):
         html=html.replace('</head>',HOTFIX122BN_OUTPUT+'</head>',1)
     return html
 
-# Hotfix1.22bp: Akıllı Üreme Yaşam Döngüsü
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bp'
+# Hotfix1.22bq: Akıllı Üreme Yaşam Döngüsü
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bq'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BO_REPRO=r"""
 <style id="hotfix122bo-smart-reproduction">
@@ -14506,9 +14525,9 @@ def page(title,body,path='/',user='admin',flash=''):
     return html
 
 
-# Hotfix1.22bp: Üreme Merkezi kartlarını mobil ve masaüstünde yeniden dengeler.
+# Hotfix1.22bq: Üreme Merkezi kartlarını mobil ve masaüstünde yeniden dengeler.
 # Akıllı yaşam döngüsü, filtreler ve işlem akışları değiştirilmez; sadece kart hiyerarşisi ve aksiyon yerleşimi iyileştirilir.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bp'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bq'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BP_REPRO=r"""
 <style id="hotfix122bp-reproduction-card-ui">

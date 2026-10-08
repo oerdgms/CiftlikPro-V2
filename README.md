@@ -1,4 +1,4 @@
-Hotfix1.22bp: Akıllı Üreme Yaşam Döngüsü eklendi. Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru ve Yakın Doğum durumları dinamik hesaplanır; bireysel kızgınlık geçmişinden tahmin, kuruya çıkarma işlemi ve işletmeye özel üreme eşikleri desteklenir.
+Hotfix1.22bq: Akıllı Üreme Yaşam Döngüsü eklendi. Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru ve Yakın Doğum durumları dinamik hesaplanır; bireysel kızgınlık geçmişinden tahmin, kuruya çıkarma işlemi ve işletmeye özel üreme eşikleri desteklenir.
 Hotfix1.22bn: Ayrı “İşlem Yapılmamış” kartı ve filtresi kaldırıldı. Boş / İşlem Bekleyen tek grup olarak gösterilir; özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir, kart rozetleri ayrımı korur.
 Hotfix1.22bn: Üreme Merkezi tüm aktif dişileri kapsar. Ayrı İşlem Yapılmamış filtresi kaldırıldı; tüm boş/işlem bekleyen dişiler tek Boş / İşlem Bekleyen grubunda gösterilir. Özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir; kart rozetleri ayrımı korur.
 
