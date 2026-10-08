@@ -551,6 +551,130 @@ def setting_set(key,value):
         c.execute("""insert into settings(setting_key,setting_value) values(?,?)
                      on conflict(setting_key) do update set setting_value=excluded.setting_value""",(key,str(value or '')))
 
+
+def reproduction_settings():
+    """İşletmeye göre ayarlanabilen akıllı üreme eşikleri."""
+    defaults={
+        'fresh_days':30,
+        'postpartum_control_day':40,
+        'vwp_day':60,
+        'dry_days_before_due':60,
+        'closeup_days_before_due':21,
+        'birth_alert_days_before_due':7,
+    }
+    out={}
+    for key,default in defaults.items():
+        try:out[key]=max(0,int(float(setting_get('repro_'+key,str(default)) or default)))
+        except Exception:out[key]=default
+    if out['postpartum_control_day']<out['fresh_days']:
+        out['postpartum_control_day']=out['fresh_days']
+    if out['vwp_day']<out['postpartum_control_day']:
+        out['vwp_day']=out['postpartum_control_day']
+    if out['closeup_days_before_due']>out['dry_days_before_due']:
+        out['closeup_days_before_due']=out['dry_days_before_due']
+    if out['birth_alert_days_before_due']>out['closeup_days_before_due']:
+        out['birth_alert_days_before_due']=out['closeup_days_before_due']
+    return out
+
+
+def last_birth_date(con,animal_id):
+    rows=[]
+    try:
+        r=con.execute('select max(birth_date) d from calves where mother_id=?',(animal_id,)).fetchone()
+        if r and r['d']:rows.append(str(r['d'])[:10])
+    except Exception:pass
+    try:
+        r=con.execute('select max(birth_date) d from animals where mother_id=?',(animal_id,)).fetchone()
+        if r and r['d']:rows.append(str(r['d'])[:10])
+    except Exception:pass
+    return max(rows) if rows else ''
+
+
+def estrus_cycle_profile(con,animal_id,today=None):
+    """Hayvanın kendi geçmişinden dayanıklı bir kızgınlık döngüsü tahmini üretir."""
+    today=today or date.today()
+    rows=con.execute('select estrus_date from estrus_records where animal_id=? order by estrus_date desc,id desc limit 8',(animal_id,)).fetchall()
+    dates=[]
+    for r in rows:
+        try:dates.append(date.fromisoformat(str(r['estrus_date'])[:10]))
+        except Exception:pass
+    dates=sorted(set(dates))
+    intervals=[]
+    for a,b in zip(dates,dates[1:]):
+        d=(b-a).days
+        if 17<=d<=25:intervals.append(d)
+    if intervals:
+        recent=intervals[-5:]
+        avg=sum(recent)/len(recent)
+        cycle=max(18,min(24,round(avg)))
+        source='bireysel'
+    else:
+        cycle=21;avg=21.0;source='standart'
+    if not dates:
+        return {'cycle_days':cycle,'average':avg,'source':source,'last':'','next_center':'','window_start':'','window_end':''}
+    center=dates[-1]+timedelta(days=cycle)
+    while center < today-timedelta(days=3):
+        center += timedelta(days=cycle)
+    return {
+        'cycle_days':cycle,'average':avg,'source':source,'last':dates[-1].isoformat(),
+        'next_center':center.isoformat(),
+        'window_start':(center-timedelta(days=3)).isoformat(),
+        'window_end':(center+timedelta(days=3)).isoformat(),
+    }
+
+
+def smart_reproduction_state(con,animal_id,today=None,active_pregnancy=None):
+    """Tek bir dişi için güncel yaşam-döngüsü sınıfı ve sonraki önerilen işi hesaplar."""
+    today=today or date.today();cfg=reproduction_settings()
+    animal=con.execute("select id,tag,nickname,coalesce(dry_since,'') dry_since from animals where id=?",(animal_id,)).fetchone()
+    if not animal:return {'code':'unknown','label':'Bilinmiyor','next_action':'Kayıt bulunamadı'}
+    preg=active_pregnancy if active_pregnancy is not None else current_pregnancy_record(con,animal_id)
+    if preg:
+        try:ins=date.fromisoformat(str(preg['insemination_date'])[:10]);gest=max(0,(today-ins).days)
+        except Exception:gest=0
+        try:due=date.fromisoformat(str(preg['due_date'])[:10]) if preg['due_date'] else (ins+timedelta(days=280));left=(due-today).days
+        except Exception:due=today+timedelta(days=max(0,280-gest));left=(due-today).days
+        dry_since=str(animal['dry_since'] or '')[:10]
+        if dry_since:
+            if left<=cfg['birth_alert_days_before_due']:
+                return {'code':'birth_alert','label':'Doğum Çok Yakın','badge':'🚨','days_left':left,'gestation_days':gest,'next_action':f'Doğuma {max(0,left)} gün · Doğum hazırlığını tamamla','due_date':due.isoformat()}
+            if left<=cfg['closeup_days_before_due']:
+                return {'code':'closeup','label':'Kuru · Yakın Doğum','badge':'🐮','days_left':left,'gestation_days':gest,'next_action':f'Doğuma {max(0,left)} gün · Yakın doğum grubunu kontrol et','due_date':due.isoformat()}
+            return {'code':'dry','label':'Kuru','badge':'🌾','days_left':left,'gestation_days':gest,'next_action':f'Kuru dönem · Doğuma {max(0,left)} gün','due_date':due.isoformat()}
+        if left<=cfg['dry_days_before_due']:
+            return {'code':'dry_due','label':'Kuruya Çıkarılacak','badge':'🌾','days_left':left,'gestation_days':gest,'next_action':f'Gebelik {gest}. gün · Kuruya çıkar','due_date':due.isoformat()}
+        if gest<60:
+            return {'code':'pregnant','label':'Gebe','badge':'🐄','days_left':left,'gestation_days':gest,'next_action':f'Gebelik {gest}. gün · 60. gün gebelik teyidi yaklaşımı','due_date':due.isoformat()}
+        dry_in=max(0,left-cfg['dry_days_before_due'])
+        return {'code':'pregnant','label':'Gebe','badge':'🐄','days_left':left,'gestation_days':gest,'next_action':f'Gebelik {gest}. gün · Kuruya çıkarmaya {dry_in} gün','due_date':due.isoformat()}
+    latest=con.execute('select * from inseminations where animal_id=? order by insemination_date desc,id desc limit 1',(animal_id,)).fetchone()
+    if latest:
+        result=str(latest['pregnancy_result'] or '').strip().lower()
+        if result in ('','bekleniyor','belirsiz'):
+            try:days_since=max(0,(today-date.fromisoformat(str(latest['insemination_date'])[:10])).days)
+            except Exception:days_since=0
+            if result=='belirsiz':
+                return {'code':'tracking','label':'Şüpheli / Kontrol','badge':'❔','next_action':f'Tohumlamadan {days_since} gün · Gebelik kontrolü tekrarı'}
+            if days_since>=18:
+                return {'code':'tracking','label':'Gebelik Kontrolü','badge':'⌁','next_action':f'Tohumlamadan {days_since} gün · Gebelik kontrolü'}
+            return {'code':'tracking','label':'Tohumlandı','badge':'💉','next_action':f'Tohumlamadan {days_since} gün · Kontrol gününü bekliyor'}
+    birth=last_birth_date(con,animal_id)
+    profile=estrus_cycle_profile(con,animal_id,today)
+    if birth:
+        try:pp=max(0,(today-date.fromisoformat(birth)).days)
+        except Exception:pp=0
+        if pp<=cfg['fresh_days']:
+            return {'code':'fresh','label':'Taze','badge':'🥛','postpartum_days':pp,'next_action':f'Doğumdan {pp} gün · Üreme kontrolüne {max(0,cfg["postpartum_control_day"]-pp)} gün','birth_date':birth,'estrus':profile}
+        if pp<cfg['vwp_day']:
+            return {'code':'postpartum_control','label':'Üreme Kontrolü','badge':'🩺','postpartum_days':pp,'next_action':f'Doğumdan {pp} gün · Üreme kontrolü / toparlanma değerlendirmesi','birth_date':birth,'estrus':profile}
+        estrus_text=''
+        if profile.get('next_center'):
+            estrus_text=f" · Beklenen kızgınlık {fmt_date(profile['window_start'])}–{fmt_date(profile['window_end'])}"
+        return {'code':'ready','label':'Tohumlamaya Hazır','badge':'🌱','postpartum_days':pp,'next_action':f'Doğumdan {pp} gün · Tohumlamaya hazır{estrus_text}','birth_date':birth,'estrus':profile}
+    if profile.get('next_center'):
+        return {'code':'ready','label':'Tohumlamaya Hazır','badge':'🌱','next_action':f"Sonraki kızgınlık tahmini {fmt_date(profile['window_start'])}–{fmt_date(profile['window_end'])}",'estrus':profile}
+    return {'code':'open','label':'Boş / İşlem Bekleyen','badge':'○','next_action':'Üreme kaydı / kızgınlık takibi bekliyor','estrus':profile}
+
 def smtp_config():
     return {
         'host':setting_get('smtp_host','smtp.gmail.com'),
@@ -672,7 +796,7 @@ def duplicate_redirect_target(path):
 
 def health_request_fingerprint(username,form):
     """Aynı sağlık planının çift dokunma/yeniden gönderimle iki kez açılmasını engeller."""
-    keys=('scope_type','subject_key','paddock_id','kind','product','applied_date',
+    keys=('scope_type','subject_key','subject_keys_json','paddock_id','kind','product','applied_date',
           'dose_count','dose_interval_days','treatment_days','times_per_day','cost','notes')
     payload='|'.join(str(form.get(k,'')).strip() for k in keys)
     return hashlib.sha256(('health-plan|'+str(username)+'|'+payload).encode('utf-8')).hexdigest()
@@ -1064,6 +1188,10 @@ def init_db():
                 print('eNDF migrasyonu uygulanamadı:',exc)
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_min_daily_gain','1.0')")
         c.execute("insert or ignore into settings(setting_key,setting_value) values('male_warning_ratio','0.90')")
+        for _k,_v in (
+            ('repro_fresh_days','30'),('repro_postpartum_control_day','40'),('repro_vwp_day','60'),
+            ('repro_dry_days_before_due','60'),('repro_closeup_days_before_due','21'),('repro_birth_alert_days_before_due','7')):
+            c.execute('insert or ignore into settings(setting_key,setting_value) values(?,?)',(_k,_v))
         ration_cols={r[1] for r in c.execute('pragma table_info(rations)').fetchall()}
         # Hotfix1.22ac Süt & Laktasyon Yönetimi V1: eski milk tablosunu geriye uyumlu genişlet.
         milk_cols={r[1] for r in c.execute('pragma table_info(milk)').fetchall()}
@@ -1153,7 +1281,7 @@ def init_db():
         c.execute("CREATE TABLE IF NOT EXISTS calf_weights(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,measure_date TEXT NOT NULL,weight REAL NOT NULL,notes TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS calf_photos(id INTEGER PRIMARY KEY,calf_id INTEGER NOT NULL,filename TEXT NOT NULL,created_at TEXT NOT NULL,caption TEXT)")
         cols={r[1] for r in c.execute('pragma table_info(animals)').fetchall()}
-        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\''),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT'),('mother_id','INTEGER'),('father_tag','TEXT'),('internal_production_cost','REAL DEFAULT 0')]:
+        for col,typ in [('paddock','TEXT'),('photo_url','TEXT'),('sold_price','REAL DEFAULT 0'),('status',"TEXT DEFAULT 'Aktif'"),('exit_date','TEXT'),('exit_reason','TEXT'),('purchase_date','TEXT'),('purchase_price','REAL DEFAULT 0'),('purchase_weight','REAL DEFAULT 0'),('daily_feed_cost','REAL DEFAULT 0'),('daily_care_cost','REAL DEFAULT 0'),('target_sale_price','REAL DEFAULT 0'),('pregnancy_source','TEXT DEFAULT \'\''),('pregnancy_age_months_at_entry','REAL DEFAULT 0'),('pregnancy_entry_date','TEXT DEFAULT \'\''),('animal_type',"TEXT DEFAULT 'Sığır'"),('purpose','TEXT'),('arrival_source',"TEXT DEFAULT 'Satın Alındı'"),('entry_date','TEXT'),('seller','TEXT'),('purchase_payment_method',"TEXT DEFAULT 'Nakit'"),('quarantine_status',"TEXT DEFAULT 'Hayır'"),('health_status','TEXT'),('mother_id','INTEGER'),('father_tag','TEXT'),('internal_production_cost','REAL DEFAULT 0'),('dry_since','TEXT')]:
             if col not in cols:c.execute(f'ALTER TABLE animals ADD COLUMN {col} {typ}')
         # V3.9.0 Padok + Yem/Rasyon veri modeli
         calf_cols={r[1] for r in c.execute('pragma table_info(calves)').fetchall()}
@@ -1777,7 +1905,7 @@ def health_plan_entries(con, horizon_days=None):
         where t.status='Bekliyor' and coalesce(hc.active,1)=1 order by t.planned_date,t.course_id,t.dose_no,t.day_no,t.application_no,t.id""").fetchall()
     groups={}
     for r in tasks:
-        key=('P',r['course_id'],r['planned_date'],r['dose_no'],r['day_no'],r['application_no']) if r['scope_type']=='paddock' else ('S',r['id'])
+        key=('G',r['course_id'],r['planned_date'],r['dose_no'],r['day_no'],r['application_no']) if r['scope_type'] in ('paddock','multi') else ('S',r['id'])
         groups.setdefault(key,[]).append(r)
     for key,items in groups.items():
         r=items[0]
@@ -2051,6 +2179,29 @@ def active_pregnancy_records(c):
         if rec is not None:result[aid]=rec
     return result
 
+def set_latest_pregnancy_result(c, insemination_id, requested_result):
+    """Son tohumlama kaydının gebelik sonucunu hızlı ve tutarlı biçimde günceller."""
+    allowed={'Bekleniyor','Pozitif','Negatif','Belirsiz'}
+    if requested_result not in allowed:
+        raise ValueError('Geçersiz gebelik sonucu.')
+    rec=c.execute('''select i.*,a.tag,a.pregnancy_source
+        from inseminations i join animals a on a.id=i.animal_id where i.id=?''',(insemination_id,)).fetchone()
+    if not rec:
+        raise ValueError('Tohumlama kaydı bulunamadı.')
+    latest=c.execute('''select id from inseminations where animal_id=?
+        order by insemination_date desc,id desc limit 1''',(rec['animal_id'],)).fetchone()
+    if not latest or int(latest['id'])!=int(rec['id']):
+        raise ValueError('Yalnız hayvanın en güncel tohumlama sonucu hızlıca değiştirilebilir.')
+    stored=requested_result
+    if requested_result=='Pozitif' and str(rec['pregnancy_source'] or '').startswith('Satın Alındığında Gebe'):
+        stored='Gebe (Satın Alındığında · Tohumlama Tarihi Biliniyor)'
+    due=''
+    if is_pregnant_value(stored):
+        try:due=(date.fromisoformat(str(rec['insemination_date'])[:10])+timedelta(days=280)).isoformat()
+        except Exception:raise ValueError('Tohumlama tarihi geçersiz; önce ayrıntılı kaydı düzenleyin.')
+    c.execute('update inseminations set pregnancy_result=?,due_date=? where id=?',(stored,due,rec['id']))
+    return rec,stored,due
+
 def close_pregnancy_after_birth(c, animal_id, birth_date):
     """Doğum kaydı oluşunca yalnız ilgili son gebe kaydını kapatır."""
     if not animal_id or not birth_date:return None
@@ -2061,6 +2212,8 @@ def close_pregnancy_after_birth(c, animal_id, birth_date):
     except Exception:
         pass
     c.execute("update inseminations set pregnancy_result='Doğum' where id=?",(rec['id'],))
+    try:c.execute("update animals set dry_since='' where id=?",(animal_id,))
+    except Exception:pass
     return rec['id']
 
 def dashboard_herd_counts(c):
@@ -6455,6 +6608,153 @@ class QuietThreadingHTTPServer(ThreadingHTTPServer):
             return
         return super().handle_error(request,client_address)
 
+
+
+# Hotfix1.22bn: Üreme Merkezi ve sağlık/aşı planı çıktı raporları.
+REPRO_EXPORT_LABELS={
+    'all':'Tüm Üreme Kategorileri','estrus':'Kızgınlık Bekleyen','inseminated':'Tohumlanan',
+    'control':'Kontrol Bekleyen','pregnant':'Gebe','negative':'Gebe Değil',
+    'uncertain':'Şüpheli / Belirsiz','empty':'Boş / İşlem Bekleyen','birth':'Doğuma Yaklaşan',
+    'fresh':'Taze','postpartum_control':'Üreme Kontrolü','ready':'Tohumlamaya Hazır',
+    'dry_due':'Kuruya Çıkarılacak','dry':'Kuru','closeup':'Kuru · Yakın Doğum','birth_alert':'Doğum Çok Yakın',
+}
+
+def reproduction_export_rows(stage='all', search='', paddock=''):
+    if stage=='unprocessed': stage='empty'
+    if stage not in REPRO_EXPORT_LABELS: stage='all'
+    today=date.today()
+    with db() as c:
+        reconcile_birth_closed_pregnancies(c)
+        females=c.execute("""select id,tag,nickname,breed,paddock,birth_date from animals
+            where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag""").fetchall()
+        estrus_all=c.execute("""select e.*,a.tag,a.nickname,a.breed,a.paddock from estrus_records e
+            join animals a on a.id=e.animal_id where coalesce(a.status,'Aktif')='Aktif'
+            order by e.estrus_date desc,e.id desc""").fetchall()
+        insem_all=c.execute("""select i.*,a.tag,a.nickname,a.breed,a.paddock from inseminations i
+            join animals a on a.id=i.animal_id where coalesce(a.status,'Aktif')='Aktif'
+            order by i.insemination_date desc,i.id desc""").fetchall()
+        female_ids={int(r['id']) for r in females}
+        estrus_all=[r for r in estrus_all if int(r['animal_id']) in female_ids]
+        insem_all=[r for r in insem_all if int(r['animal_id']) in female_ids]
+        latest_estrus={}; latest_insem={}
+        for r in estrus_all:
+            if r['animal_id'] not in latest_estrus: latest_estrus[r['animal_id']]=r
+        for r in insem_all:
+            if r['animal_id'] not in latest_insem: latest_insem[r['animal_id']]=r
+        positive_ids={aid for aid,r in latest_insem.items() if is_pregnant_value(r['pregnancy_result']) and current_pregnancy_record(c,aid) is not None}
+        categorized={k:[] for k in REPRO_EXPORT_LABELS if k!='all'}
+        for aid,r in latest_estrus.items():
+            if aid in positive_ids: continue
+            cycle=next_estrus_cycle(c,r,today)
+            if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):
+                categorized['estrus'].append({'animal_id':aid,'tag':r['tag'],'nickname':r['nickname'],'breed':r['breed'],'paddock':r['paddock'],'detail':'En olası kızgınlık '+fmt_date(cycle['center'].isoformat()),'date':cycle['center'].isoformat()})
+        for aid,r in latest_insem.items():
+            result=str(r['pregnancy_result'] or '').strip().lower()
+            try: days_since=(today-date.fromisoformat(r['insemination_date'])).days
+            except Exception: days_since=0
+            base={'animal_id':aid,'tag':r['tag'],'nickname':r['nickname'],'breed':r['breed'],'paddock':r['paddock']}
+            if aid in positive_ids:
+                try: days_left=(date.fromisoformat(r['due_date'])-today).days
+                except Exception: days_left=999
+                row={**base,'detail':'Tahmini doğum '+fmt_date(r['due_date'])+f' · {max(0,days_left)} gün kaldı','date':r['due_date']}
+                categorized['pregnant'].append(row)
+                if days_left<=60: categorized['birth'].append(dict(row))
+            elif result=='belirsiz':
+                categorized['uncertain'].append({**base,'detail':f'Tohumlamadan sonra {days_since} gün · tekrar kontrol bekliyor','date':r['insemination_date']})
+            elif result in ('','bekleniyor'):
+                key='control' if days_since>=18 else 'inseminated'
+                detail=(f'Tohumlamadan sonra {days_since} gün · kontrol zamanı' if key=='control' else f'{fmt_date(r["insemination_date"])} · {days_since} gün · {r["attempt"]}. deneme')
+                categorized[key].append({**base,'detail':detail,'date':r['insemination_date']})
+            elif result=='negatif':
+                categorized['negative'].append({**base,'detail':'Son kontrol negatif · '+fmt_date(r['insemination_date']),'date':r['insemination_date']})
+        lifecycle_keys={'fresh','postpartum_control','ready','dry_due','dry','closeup','birth_alert'}
+        for f in females:
+            state=smart_reproduction_state(c,int(f['id']),today,current_pregnancy_record(c,int(f['id'])))
+            code=state.get('code')
+            if code not in lifecycle_keys:continue
+            categorized[code].append({'animal_id':int(f['id']),'tag':f['tag'],'nickname':f['nickname'],'breed':f['breed'],'paddock':f['paddock'],'detail':state.get('next_action') or state.get('label') or '-','date':state.get('due_date') or state.get('birth_date') or ''})
+        occupied={int(x['animal_id']) for k in ('estrus','inseminated','control','pregnant','negative','uncertain') for x in categorized.get(k,[])}
+        for f in females:
+            aid=int(f['id'])
+            if aid in occupied: continue
+            never=aid not in latest_estrus and aid not in latest_insem
+            categorized['empty'].append({'animal_id':aid,'tag':f['tag'],'nickname':f['nickname'],'breed':f['breed'],'paddock':f['paddock'],'detail':'İşlem yapılmamış' if never else 'Yeniden işlem bekleyen','date':''})
+    rows=[]
+    stages=[stage] if stage!='all' else ['estrus','inseminated','control','pregnant','negative','uncertain','empty']
+    # Akıllı yaşam-döngüsü grupları ana kategorilerin dinamik kesitidir; 'Tümü' çıktısında mükerrer satır üretmez.
+    term=(search or '').replace('I','ı').replace('İ','i').casefold().strip()
+    for key in stages:
+        for r in categorized.get(key,[]):
+            hay=' '.join(str(r.get(x) or '') for x in ('tag','nickname','breed','paddock','detail')).replace('I','ı').replace('İ','i').casefold()
+            if term and term not in hay: continue
+            if paddock and str(r.get('paddock') or '')!=paddock: continue
+            rows.append({'category':REPRO_EXPORT_LABELS[key],'tag':r.get('tag') or '-', 'name':r.get('nickname') or '-', 'paddock':r.get('paddock') or '-', 'breed':r.get('breed') or '-', 'detail':r.get('detail') or '-', 'date':r.get('date') or ''})
+    return rows
+
+def health_course_export_rows(task_filter='all', search=''):
+    if task_filter not in TASK_FILTERS: task_filter='all'
+    with db() as c:
+        courses=c.execute("""select hc.*,p.name paddock_name from health_courses hc
+            left join paddocks p on p.id=hc.paddock_id where coalesce(hc.active,1)=1 order by hc.start_date desc,hc.id desc""").fetchall()
+        out=[]; today=date.today()
+        for course in courses:
+            tasks=c.execute("""select ht.*,a.tag animal_tag,ca.tag calf_tag from health_tasks ht
+                left join animals a on a.id=ht.animal_id left join calves ca on ca.id=ht.calf_id
+                where ht.course_id=? order by ht.planned_date,ht.dose_no,ht.day_no,ht.application_no,ht.id""",(course['id'],)).fetchall()
+            if not tasks: continue
+            pending=[t for t in tasks if str(t['status'] or '')!='Tamamlandı']
+            next_date=pending[0]['planned_date'] if pending else ''
+            if next_date:
+                try: days=(date.fromisoformat(next_date)-today).days
+                except Exception: days=999
+                state='overdue' if days<0 else 'today' if days==0 else 'upcoming'
+                state_text=f'{abs(days)} gün gecikti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı'
+            else: state='completed'; state_text='Tamamlandı'
+            if task_filter!='all' and state!=task_filter: continue
+            tags=[]
+            for t in tasks:
+                tag=t['animal_tag'] or t['calf_tag'] or ''
+                if tag and tag not in tags: tags.append(tag)
+            if course['scope_type']=='paddock': scope='Padok · '+str(course['paddock_name'] or '-')
+            elif course['scope_type']=='multi': scope=f'Çoklu Hayvan · {len(tags)} hayvan'
+            else: scope='Tek Hayvan / Buzağı'
+            if course['kind']=='Aşı': schedule=f"{int(course['dose_count'] or 1)} doz · {int(course['interval_days'] or 0)} gün arayla"
+            elif course['kind']=='İlaç': schedule=f"{int(course['treatment_days'] or 1)} gün · günde {int(course['times_per_day'] or 1)} uygulama"
+            else: schedule='Tek uygulama'
+            target=', '.join(tags[:8])+(' …' if len(tags)>8 else '')
+            row={'plan':f"#{course['id']} · {course['kind']} · {course['product']}",'scope':scope,'targets':target or '-', 'start':fmt_date(course['start_date']), 'schedule':schedule, 'progress':f"{sum(1 for t in tasks if str(t['status'] or '')=='Tamamlandı')}/{len(tasks)} tamamlandı", 'next':(fmt_date(next_date)+' · '+state_text) if next_date else 'Tamamlandı', 'notes':course['notes'] or ''}
+            hay=' '.join(str(v or '') for v in row.values()).replace('I','ı').replace('İ','i').casefold()
+            term=(search or '').replace('I','ı').replace('İ','i').casefold().strip()
+            if term and term not in hay: continue
+            out.append(row)
+    return out
+
+def simple_table_print(title, subtitle, columns, rows, pdf_href):
+    th=''.join('<th>'+h(c[0])+'</th>' for c in columns)
+    trs=''.join('<tr>'+''.join('<td>'+h(str(r.get(c[1],'')))+'</td>' for c in columns)+'</tr>' for r in rows) or '<tr><td colspan="'+str(len(columns))+'">Kayıt bulunamadı.</td></tr>'
+    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>body{{font:13px Arial,sans-serif;color:#203b2c;max-width:1120px;margin:24px auto;padding:12px}}h1{{color:#176b3a;margin-bottom:4px}}.mut{{color:#627569}}table{{width:100%;border-collapse:collapse;margin-top:16px}}th,td{{border:1px solid #ccdacf;padding:8px;vertical-align:top;overflow-wrap:anywhere}}th{{background:#edf5ef;text-align:left}}thead{{display:table-header-group}}tr{{break-inside:avoid}}.actions{{display:flex;gap:8px;flex-wrap:wrap}}button,a{{padding:10px 13px;border:1px solid #bdd1c2;border-radius:8px;background:#fff;color:#176b3a;text-decoration:none;font-weight:700}}@page{{size:A4 landscape;margin:10mm}}@media print{{.actions{{display:none}}body{{max-width:none;margin:0;padding:0;font-size:9pt}}}}</style></head><body><div class="actions"><button onclick="window.print()">🖨 Yazdır / PDF olarak kaydet</button><a href="{h(pdf_href)}">📄 PDF indir</a></div><h1>{h(farm_display_name(farm_profile()))}</h1><h2>{h(title)}</h2><p class="mut">{h(subtitle)}</p><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></body></html>"""
+
+def simple_table_pdf(title, subtitle, columns, rows):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4,landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Table,TableStyle
+    import reportlab
+    fonts=Path(reportlab.__file__).resolve().parent/'fonts'
+    if 'CPReportVera' not in pdfmetrics.getRegisteredFontNames(): pdfmetrics.registerFont(TTFont('CPReportVera',str(fonts/'Vera.ttf')))
+    style=ParagraphStyle('cp',fontName='CPReportVera',fontSize=7.2,leading=9)
+    title_style=ParagraphStyle('cpt',parent=style,fontSize=16,leading=20,textColor=colors.HexColor('#176b3a'))
+    cell=lambda value:Paragraph(h(str(value or '').replace('₺','TL ')),style)
+    data=[[cell(c[0]) for c in columns]]+[[cell(r.get(c[1],'')) for c in columns] for r in rows]
+    if len(data)==1:data.append([cell('Kayıt bulunamadı.')]+[cell('') for _ in columns[1:]])
+    out=io.BytesIO();doc=SimpleDocTemplate(out,pagesize=landscape(A4),leftMargin=24,rightMargin=24,topMargin=26,bottomMargin=26,title=title)
+    table=Table(data,repeatRows=1,colWidths=[(landscape(A4)[0]-48)/len(columns)]*len(columns))
+    table.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),'CPReportVera'),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#edf5ef')),('TEXTCOLOR',(0,0),(-1,0),colors.HexColor('#176b3a')),('GRID',(0,0),(-1,-1),0.4,colors.HexColor('#c9d8cd')),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),5),('RIGHTPADDING',(0,0),(-1,-1),5),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
+    story=[Paragraph(h(farm_display_name(farm_profile())),title_style),Paragraph(h(title),title_style),Paragraph(h(subtitle),style),Spacer(1,10),table]
+    doc.build(story);return out.getvalue()
+
 class App(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def parse_cookie(self):
@@ -6634,6 +6934,34 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
         # Hotfix1.22ar: Eski kategori adresleri artık ikinci bir liste ekranı
         # üretmez. Sol menü, eski yer imleri ve detaydan dönüş bağlantıları aynı
         # Sürü Merkezi bileşenine yönlenir.
+        if path in ('/reproduction-center/print','/reproduction-center.pdf'):
+            stage=(q.get('stage',['all'])[0] or 'all').strip()
+            if stage=='unprocessed': stage='empty'
+            if stage not in REPRO_EXPORT_LABELS: stage='all'
+            search=(q.get('search',[''])[0] or '').strip(); paddock=(q.get('paddock',[''])[0] or '').strip()
+            rows=reproduction_export_rows(stage,search,paddock)
+            label=REPRO_EXPORT_LABELS.get(stage,REPRO_EXPORT_LABELS['all'])
+            subtitle=f"Rapor tarihi: {date.today().strftime('%d/%m/%Y')} · Kategori: {label} · {len(rows)} hayvan"
+            if paddock: subtitle+=f' · Padok: {paddock}'
+            if search: subtitle+=f' · Arama: {search}'
+            cols=[('Kategori','category'),('Küpe','tag'),('İsim','name'),('Padok','paddock'),('Irk','breed'),('Durum / Tarih','detail')]
+            query=urllib.parse.urlencode({'stage':stage,'search':search,'paddock':paddock})
+            if path.endswith('/print'):
+                return self.send_html(simple_table_print('Üreme Sağlık Durum Raporu',subtitle,cols,rows,'/reproduction-center.pdf?'+query))
+            raw=simple_table_pdf('Üreme Sağlık Durum Raporu',subtitle,cols,rows)
+            self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition',f'attachment; filename="ureme_saglik_{stage}_{date.today().strftime("%Y%m%d")}.pdf"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
+        if path in ('/health/plans/print','/health/plans.pdf'):
+            task_filter=(q.get('filter',['all'])[0] or 'all').strip(); search=(q.get('search',[''])[0] or '').strip()
+            if task_filter not in TASK_FILTERS: task_filter='all'
+            rows=health_course_export_rows(task_filter,search)
+            subtitle=f"Rapor tarihi: {date.today().strftime('%d/%m/%Y')} · Filtre: {TASK_FILTERS.get(task_filter,'Tümü')} · {len(rows)} plan"
+            if search: subtitle+=f' · Arama: {search}'
+            cols=[('Plan / Ürün','plan'),('Kapsam','scope'),('Hedef Hayvanlar','targets'),('Başlangıç','start'),('Program','schedule'),('İlerleme','progress'),('Sonraki / Durum','next')]
+            query=urllib.parse.urlencode({'filter':task_filter,'search':search})
+            if path.endswith('/print'):
+                return self.send_html(simple_table_print('İlaç & Aşı Planları',subtitle,cols,rows,'/health/plans.pdf?'+query))
+            raw=simple_table_pdf('İlaç & Aşı Planları',subtitle,cols,rows)
+            self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition',f'attachment; filename="ilac_asi_planlari_{date.today().strftime("%Y%m%d")}_{task_filter}.pdf"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
         legacy_herd_kind={'/animals':'female','/males':'male','/calves':'calf'}
         if path in legacy_herd_kind:
             params={'kind':legacy_herd_kind[path]}
@@ -6723,6 +7051,19 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
         if path=='/password-change':
             body='''<h1>Şifremi Değiştir</h1><div class="card"><form method="post" action="/password-change" class="form"><label>Mevcut Şifre<input type="password" name="current_password" required></label><label>Yeni Şifre<input type="password" name="new_password" minlength="8" required></label><label>Yeni Şifre Tekrar<input type="password" name="new_password_confirm" minlength="8" required></label><div class="full"><button class="btn">Şifreyi Değiştir</button></div></form></div>'''
             return self.send_html(page('Şifremi Değiştir',body,'/password-change',u,msg))
+        if path=='/reproduction-settings':
+            if not self.require_admin():return
+            cfg=reproduction_settings()
+            body=f'''<div class="settings-page-head"><h1>🧬 Akıllı Üreme Ayarları</h1><p class="mut">Yaşam döngüsü sınıfları ve otomatik öneriler işletmenizin protokolüne göre ayarlanır.</p></div>
+            <div class="card"><form method="post" action="/reproduction-settings" class="form">
+            <label>Taze dönem sonu (doğum sonrası gün)<input type="number" min="0" max="90" name="fresh_days" value="{cfg['fresh_days']}" required><span class="camera-note">Varsayılan 30 gün.</span></label>
+            <label>Üreme kontrol günü<input type="number" min="1" max="120" name="postpartum_control_day" value="{cfg['postpartum_control_day']}" required><span class="camera-note">Varsayılan 40 gün.</span></label>
+            <label>Tohumlamaya hazır başlangıcı (VWP)<input type="number" min="1" max="180" name="vwp_day" value="{cfg['vwp_day']}" required><span class="camera-note">Varsayılan 60 gün; işletme protokolüne göre değiştirilebilir.</span></label>
+            <label>Kuruya çıkarma (doğuma kalan gün)<input type="number" min="30" max="90" name="dry_days_before_due" value="{cfg['dry_days_before_due']}" required><span class="camera-note">Varsayılan 60 gün.</span></label>
+            <label>Yakın doğum grubu (doğuma kalan gün)<input type="number" min="7" max="45" name="closeup_days_before_due" value="{cfg['closeup_days_before_due']}" required><span class="camera-note">Varsayılan 21 gün.</span></label>
+            <label>Doğum alarmı (doğuma kalan gün)<input type="number" min="1" max="21" name="birth_alert_days_before_due" value="{cfg['birth_alert_days_before_due']}" required><span class="camera-note">Varsayılan 7 gün.</span></label>
+            <div class="full"><div class="flash">ℹ️ Bu değerler otomatik sınıflandırma ve öneri üretir. Veterinerinizin/işletmenizin protokolü önceliklidir.</div><button class="btn">💾 Üreme Ayarlarını Kaydet</button> <a class="btn alt" href="/reproduction-center">Üreme Merkezine Dön</a></div></form></div>'''
+            return self.send_html(page('Akıllı Üreme Ayarları',body,'/farm-profile',u,msg))
         if path=='/farm-profile':
             if not self.require_admin():return
             p=farm_profile()
@@ -6730,7 +7071,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             logo_html=(f'<img class="farm-logo-preview" src="{h(logo)}" alt="Çiftlik logosu">' if logo else '<div class="farm-logo-placeholder">🏡</div>')
             body=f'''<div class="settings-page-head"><h1>⚙️ ÇiftlikPro Ayarlar Merkezi</h1><p class="mut">Program, işletme, güvenlik, veri ve kullanıcı ayarlarını tek merkezden yönetin.</p></div>
             <div class="settings-groups">
-              <section class="settings-group"><h3>⚙ Genel & İşletme</h3><a href="#farm-settings"><b>🏡 İşletme Bilgileri</b><span>Çiftlik adı, iletişim, adres ve logo</span></a><a href="/?edit=1"><b>▦ Dashboard Düzeni</b><span>Ana ekran kartlarını düzenle</span></a><a href="/performance-settings"><b>🐂 Besi Ayarları</b><span>Performans ve hedef profilleri</span></a></section>
+              <section class="settings-group"><h3>⚙ Genel & İşletme</h3><a href="#farm-settings"><b>🏡 İşletme Bilgileri</b><span>Çiftlik adı, iletişim, adres ve logo</span></a><a href="/?edit=1"><b>▦ Dashboard Düzeni</b><span>Ana ekran kartlarını düzenle</span></a><a href="/performance-settings"><b>🐂 Besi Ayarları</b><span>Performans ve hedef profilleri</span></a><a href="/reproduction-settings"><b>🧬 Üreme Ayarları</b><span>Taze dönem, kontrol, tohumlama ve kuru dönem eşikleri</span></a></section>
               <section class="settings-group"><h3>🔐 Güvenlik & Kullanıcı</h3><a href="/users"><b>👥 Kullanıcı Yönetimi</b><span>Yetki, kullanıcı ve personel hesapları</span></a><a href="/password-change"><b>🔑 Şifre Değiştir</b><span>Aktif kullanıcı şifresi</span></a><a href="/audit-log"><b>📜 İşlem Günlüğü</b><span>Program içi işlem geçmişi</span></a></section>
               <section class="settings-group"><h3>🗄 Veri & İletişim</h3><a href="/backups"><b>💾 Yedekleme Merkezi</b><span>SQLite yedekleri ve veri güvenliği</span></a><a href="/data"><b>⇄ Veri Aktarımı</b><span>JSON içe/dışa aktarım</span></a><a href="/smtp-settings"><b>📧 E-posta / SMTP</b><span>Şifre kurtarma ve posta ayarları</span></a></section>
               <section class="settings-group"><h3>ℹ Sistem</h3><a href="/license-info"><b>🔐 Lisans Bilgileri</b><span>Lisans ve cihaz bilgileri</span></a><a href="/version-notes"><b>📝 Sürüm Notları</b><span>ÇiftlikPro değişiklik geçmişi</span></a><a href="/reports"><b>▥ Raporlar</b><span>Raporlama merkezine git</span></a></section>
@@ -6999,9 +7340,17 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             overdue_task_count=sum(r['state']=='overdue' for r in dashboard_entries)
             today_tasks=[]
             for r in dashboard_entries:
-                link=(f"/finance/edit?id={int(r['finance_id'])}" if r.get('finance_id') else '/finance') if r['source']=='finance' else '/health?'+urllib.parse.urlencode({'filter':r['state'],'search':r['subject']})
+                is_finance=r['source']=='finance'
+                link=(f"/finance/edit?id={int(r['finance_id'])}#payment-status" if r.get('finance_id') else '/finance') if is_finance else '/health?'+urllib.parse.urlencode({'filter':r['state'],'search':r['subject']})
                 icon='₺' if r['source']=='finance' else '💉'
-                today_tasks.append(f'''<div class="v117-task" data-task-state="{r['state']}"><b>{fmt_date(r['date'])}</b><div><strong><a href="{h(link)}">{icon} {h(r['task'])} · {h(r['subject'])}</a></strong><small>{h(r['detail'])}</small></div><span class="v117-chip {'danger' if r['state']=='overdue' else 'warn' if r['state']=='today' else ''}">{h(r['status'])}</span></div>''')
+                status_chip=f'''<span class="v117-chip {'danger' if r['state']=='overdue' else 'warn' if r['state']=='today' else ''}">{h(r['status'])}</span>'''
+                if is_finance and r.get('finance_id'):
+                    side=f'''<div class="v122bj-task-side">{status_chip}<form method="post" action="/finance/mark-paid" data-submit-lock="1" data-submit-text="⏳" onsubmit="return confirm('Bu vadeli ödeme bugün ödendi olarak kapatılsın mı?')"><input type="hidden" name="id" value="{int(r['finance_id'])}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><input type="hidden" name="return_to" value="/"><button type="submit" class="v122bj-pay-btn" title="Bugün ödendi olarak işaretle">✓ Öde</button></form></div>'''
+                    task_class='v117-task v122bj-payment-task'
+                else:
+                    side=status_chip
+                    task_class='v117-task'
+                today_tasks.append(f'''<div class="{task_class}" data-task-state="{r['state']}"><b>{fmt_date(r['date'])}</b><div class="v117-task-copy"><strong><a href="{h(link)}">{icon} {h(r['task'])} · {h(r['subject'])}</a></strong><small>{h(r['detail'])}</small></div>{side}</div>''')
             dashboard_v117_tasks=''.join(today_tasks) or '<div class="workspace-empty">Bugün için bekleyen görev bulunmuyor.</div>'
             birth_rows=''.join(f'''<div class="v117-list-row"><div><b>♀ {h(r['tag'])} {h(r['nickname'])}</b><small>Tahmini doğum: {fmt_date(r['due_date'])}</small></div><span class="v117-chip {'danger' if (date.fromisoformat(r['due_date'])-date.today()).days<=7 else ''}">{max(0,(date.fromisoformat(r['due_date'])-date.today()).days)} gün</span></div>''' for r in due_rows[:5]) or '<div class="workspace-empty">45 gün içinde doğum beklenmiyor.</div>'
             feed_rows_html=''.join(f'''<div class="v117-list-row"><div><b>🌾 {h(r['name'])}</b><small>Kalan takipli yem stoku</small></div><span class="v117-chip {'danger' if float(r['stock'] or 0)<=0 else 'warn' if float(r['stock'] or 0)<500 else ''}">{float(r['stock'] or 0):,.0f} kg</span></div>''' for r in low_feed_rows) or '<div class="workspace-empty">Henüz stok girişi yapılmış yem bulunmuyor.</div>'
@@ -7962,7 +8311,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             today=date.today()
             with db() as c:
                 reconcile_birth_closed_pregnancies(c)
-                females=c.execute("""select id,tag,nickname,breed,paddock,birth_date,
+                females=c.execute("""select id,tag,nickname,breed,paddock,birth_date,coalesce(dry_since,'') dry_since,
                     coalesce(nullif(photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=animals.id order by ap.id limit 1),'') photo_url
                     from animals where gender='Dişi' and coalesce(status,'Aktif')='Aktif' order by tag""").fetchall()
                 estrus_all=c.execute("""select e.*,a.tag,a.nickname,a.breed,a.paddock,
@@ -7971,6 +8320,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 insem_all=c.execute("""select i.*,a.tag,a.nickname,a.breed,a.paddock,
                     coalesce(nullif(a.photo_url,''),(select '/uploads/'||ap.filename from animal_photos ap where ap.animal_id=a.id order by ap.id limit 1),'') photo_url
                     from inseminations i join animals a on a.id=i.animal_id where coalesce(a.status,'Aktif')='Aktif' order by i.insemination_date desc,i.id desc""").fetchall()
+            female_ids={int(r['id']) for r in females}
+            estrus_all=[r for r in estrus_all if int(r['animal_id']) in female_ids]
+            insem_all=[r for r in insem_all if int(r['animal_id']) in female_ids]
             latest_estrus={};latest_insem={}
             for r in estrus_all:
                 if r['animal_id'] not in latest_estrus:latest_estrus[r['animal_id']]=r
@@ -7978,6 +8330,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 if r['animal_id'] not in latest_insem:latest_insem[r['animal_id']]=r
             with db() as c:
                 positive_ids={aid for aid,r in latest_insem.items() if is_pregnant_value(r['pregnancy_result']) and current_pregnancy_record(c,aid) is not None}
+                smart_states={int(r['id']):smart_reproduction_state(c,int(r['id']),today,current_pregnancy_record(c,int(r['id']))) for r in females}
+            smart_counts={code:sum(1 for state in smart_states.values() if state.get('code')==code) for code in ('fresh','postpartum_control','ready','dry_due','dry','closeup','birth_alert')}
             estrus_stage=[]
             with db() as c:
                 for aid,r in latest_estrus.items():
@@ -7985,7 +8339,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     cycle=next_estrus_cycle(c,r,today)
                     if cycle and cycle['end']>=today and cycle['start']<=today+timedelta(days=30):estrus_stage.append((cycle['center'],r,cycle))
             estrus_stage.sort(key=lambda x:x[0])
-            inseminated_stage=[];control_stage=[];pregnant_stage=[];birth_stage=[]
+            inseminated_stage=[];control_stage=[];pregnant_stage=[];negative_stage=[];birth_stage=[];uncertain_stage=[]
             for aid,r in latest_insem.items():
                 result=str(r['pregnancy_result'] or '').strip().lower()
                 try:days_since=(today-date.fromisoformat(r['insemination_date'])).days
@@ -7995,23 +8349,65 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                     except Exception:days_left=999
                     pregnant_stage.append((days_left,r))
                     if days_left<=60:birth_stage.append((days_left,r))
-                elif result in ('','bekleniyor','belirsiz'):
+                elif result=='belirsiz':
+                    uncertain_stage.append((days_since,r))
+                elif result in ('','bekleniyor'):
                     (control_stage if days_since>=18 else inseminated_stage).append((days_since,r))
-            inseminated_stage.sort(key=lambda x:x[0],reverse=True);control_stage.sort(key=lambda x:x[0],reverse=True);pregnant_stage.sort(key=lambda x:x[0]);birth_stage.sort(key=lambda x:x[0])
-            def repro_card(r,meta,badge,action,selected=False):
+                elif result=='negatif':
+                    negative_stage.append((days_since,r))
+            inseminated_stage.sort(key=lambda x:x[0],reverse=True);control_stage.sort(key=lambda x:x[0],reverse=True);pregnant_stage.sort(key=lambda x:x[0]);negative_stage.sort(key=lambda x:x[0]);birth_stage.sort(key=lambda x:x[0])
+            uncertain_stage.sort(key=lambda x:x[0],reverse=True)
+            all_stage_ids={int(x[1]['animal_id']) for group in (estrus_stage,inseminated_stage,control_stage,pregnant_stage,negative_stage,uncertain_stage) for x in group}
+            empty_stage=[]
+            for female in females:
+                aid=int(female['id'])
+                if aid in all_stage_ids:continue
+                record=dict(female);record['animal_id']=aid
+                empty_stage.append(record)
+            unprocessed_count=sum(r['animal_id'] not in latest_estrus and r['animal_id'] not in latest_insem for r in empty_stage)
+            reprocess_count=max(0,len(empty_stage)-unprocessed_count)
+            all_stage_ids.update(r['animal_id'] for r in empty_stage)
+            all_stage_count=len(all_stage_ids)
+            def repro_card(r,meta,badge,action,selected=False,unprocessed=False):
                 photo=(f'''<img src="{h(r['photo_url'])}" alt="{h(r['tag'])} fotoğrafı" loading="lazy">''' if str(r['photo_url'] or '').strip() else '<span aria-hidden="true">🐄</span>')
-                return f'''<article class="repro-card {'selected' if selected else ''}" data-repro-search="{h((str(r['tag'] or '')+' '+str(r['nickname'] or '')+' '+str(r['paddock'] or '')).lower())}" data-repro-paddock="{h(str(r['paddock'] or ''))}"><div class="repro-card-top"><a class="repro-photo" href="/reproduction-center?animal={r['animal_id']}">{photo}</a><div class="repro-card-identity"><a href="/reproduction-center?animal={r['animal_id']}"><strong>♀ {h(r['tag'])}<br>{h(r['nickname']) or 'İsimsiz'}</strong></a><small>{h(r['paddock']) or 'Padok yok'} · {h(r['breed']) or 'Irk yok'}</small></div><span class="v117-chip">{h(badge)}</span></div><div class="repro-card-meta"><span class="mut">{h(meta)}</span><a class="btn alt repro-select" href="/reproduction-center?animal={r['animal_id']}">Seç</a></div><div class="actions repro-card-action">{action}</div></article>'''
+                life=smart_states.get(int(r['animal_id']),{})
+                life_code=life.get('code','open'); life_label=life.get('label',''); next_action=life.get('next_action','')
+                life_line=(f'''<div class="repro-smart-line"><span class="repro-smart-badge">{h(life.get('badge','◎'))} {h(life_label)}</span><span>{h(next_action)}</span></div>''' if life_label and next_action else '')
+                search_blob=(str(r['tag'] or '')+' '+str(r['nickname'] or '')+' '+str(r['paddock'] or '')+' '+str(life_label)+' '+str(next_action)).lower()
+                return f'''<article class="repro-card {'selected' if selected else ''}" data-repro-unprocessed="{1 if unprocessed else 0}" data-repro-life="{h(life_code)}" data-repro-search="{h(search_blob)}" data-repro-paddock="{h(str(r['paddock'] or ''))}"><div class="repro-card-top"><a class="repro-photo" href="/reproduction-center?animal={r['animal_id']}">{photo}</a><div class="repro-card-identity"><a href="/reproduction-center?animal={r['animal_id']}"><strong>♀ {h(r['tag'])}<br>{h(r['nickname']) or 'İsimsiz'}</strong></a><small>{h(r['paddock']) or 'Padok yok'} · {h(r['breed']) or 'Irk yok'}</small></div><span class="v117-chip">{h(badge)}</span></div><div class="repro-card-meta"><span class="mut">{h(meta)}</span><a class="btn alt repro-select" href="/reproduction-center?animal={r['animal_id']}">Seç</a></div>{life_line}<div class="actions repro-card-action">{action}</div></article>'''
             estrus_cards=[]
             for center,r,cycle in estrus_stage:
                 active=cycle['start']<=today<=cycle['end'];meta=f"En olası {fmt_date(center.isoformat())}"
                 action=(f'''<form method="post" action="/estrus-inseminate"><input type="hidden" name="estrus_id" value="{r['id']}"><button class="btn">Tohumlandı</button></form>''' if active else f'''<form method="post" action="/estrus-send"><input type="hidden" name="estrus_id" value="{r['id']}"><input type="hidden" name="cycle_no" value="{cycle['cycle_no']}"><button class="btn">Tohumlamaya Gönder</button></form>''')
                 estrus_cards.append(repro_card(r,meta,'Aktif' if active else 'Yaklaşıyor',action,str(r['animal_id'])==selected_id))
-            insem_cards=[repro_card(r,f"{fmt_date(r['insemination_date'])} · {days} gün",f"{r['attempt']}. deneme",f'''<a class="btn" href="/insemination-edit?id={r['id']}">Sonuç Gir</a>''',str(r['animal_id'])==selected_id) for days,r in inseminated_stage]
-            control_cards=[repro_card(r,f"Tohumlamadan sonra {days} gün",'Kontrol zamanı',f'''<a class="btn" href="/insemination-edit?id={r['id']}">Kontrol Kaydet</a>''',str(r['animal_id'])==selected_id) for days,r in control_stage]
-            pregnant_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün kaldı",f'''<a class="btn" href="/animal?id={r['animal_id']}">Takibi Aç</a>''',str(r['animal_id'])==selected_id) for days,r in pregnant_stage]
+            def quick_result_button(r,label='Sonucu Güncelle'):
+                current='Pozitif' if is_pregnant_value(r['pregnancy_result']) else ('Negatif' if str(r['pregnancy_result'] or '').strip().lower()=='negatif' else 'Belirsiz' if str(r['pregnancy_result'] or '').strip().lower()=='belirsiz' else 'Bekleniyor')
+                return f'''<button type="button" class="btn repro-status-open" data-insemination-id="{r['id']}" data-animal-id="{r['animal_id']}" data-tag="{h(r['tag'])}" data-name="{h(r['nickname'])}" data-current="{current}">{h(label)}</button>'''
+            insem_cards=[repro_card(r,f"{fmt_date(r['insemination_date'])} · {days} gün",f"{r['attempt']}. deneme",quick_result_button(r,'Sonuç Gir'),str(r['animal_id'])==selected_id) for days,r in inseminated_stage]
+            control_cards=[repro_card(r,f"Tohumlamadan sonra {days} gün",'Kontrol zamanı',quick_result_button(r,'Kontrol Sonucu'),str(r['animal_id'])==selected_id) for days,r in control_stage]
+            pregnant_cards=[]
+            for days,r in pregnant_stage:
+                life=smart_states.get(int(r['animal_id']),{})
+                return_to=f"/reproduction-center?stage=pregnant&animal={r['animal_id']}"
+                extra=''
+                if life.get('code')=='dry_due':
+                    extra=f'''<form method="post" action="/reproduction/dry" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="animal_id" value="{r['animal_id']}"><input type="hidden" name="dry_date" value="{today.isoformat()}"><input type="hidden" name="return_to" value="{h(return_to)}"><button class="btn">🌾 Kuruya Çıkar</button></form>'''
+                elif life.get('code') in ('dry','closeup','birth_alert'):
+                    extra=f'''<form method="post" action="/reproduction/dry-cancel" onsubmit="return confirm('Kuru durumu geri alınsın mı?')"><input type="hidden" name="animal_id" value="{r['animal_id']}"><input type="hidden" name="return_to" value="{h(return_to)}"><button class="btn alt">↩ Kuru Durumunu Geri Al</button></form>'''
+                pregnant_cards.append(repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün kaldı",quick_result_button(r)+extra,str(r['animal_id'])==selected_id))
+            negative_cards=[repro_card(r,f"Son kontrol {fmt_date(r['insemination_date'])}",'Gebe Değil',quick_result_button(r),str(r['animal_id'])==selected_id) for days,r in negative_stage]
+            uncertain_cards=[repro_card(r,f"Tohumlamadan sonra {days} gün",'Şüpheli / Belirsiz',quick_result_button(r,'Kontrol Sonucu'),str(r['animal_id'])==selected_id) for days,r in uncertain_stage]
+            empty_cards=[]
+            for r in empty_stage:
+                aid=r['animal_id'];never=aid not in latest_estrus and aid not in latest_insem
+                label='İşlem Yapılmamış' if never else 'İşlem Bekleyen'
+                meta='Kızgınlık veya tohumlama kaydı yok; gebelik durumu doğrulanmadı.' if never else 'Aktif gebelik / tohumlama takibi yok; yeni işlem bekliyor.'
+                action=f'''<a class="btn" href="/animal?id={aid}">Kayıt Aç</a>'''
+                empty_cards.append(repro_card(r,meta,label,action,str(aid)==selected_id,never))
             birth_cards=[repro_card(r,f"Tahmini doğum {fmt_date(r['due_date'])}",f"{max(0,days)} gün",f'''<a class="btn" href="/animal-add">Doğum Kaydet</a>''',str(r['animal_id'])==selected_id) for days,r in birth_stage]
             if not selected_id:
-                candidates=[x[1]['animal_id'] for x in estrus_stage]+[x[1]['animal_id'] for x in inseminated_stage]+[x[1]['animal_id'] for x in control_stage]+[x[1]['animal_id'] for x in pregnant_stage]+[x[1]['animal_id'] for x in birth_stage]
+                candidates=[x[1]['animal_id'] for x in estrus_stage]+[x[1]['animal_id'] for x in inseminated_stage]+[x[1]['animal_id'] for x in control_stage]+[x[1]['animal_id'] for x in pregnant_stage]+[x[1]['animal_id'] for x in negative_stage]+[x[1]['animal_id'] for x in birth_stage]
+                candidates += [x[1]['animal_id'] for x in uncertain_stage]+[r['animal_id'] for r in empty_stage]
                 selected_id=str(candidates[0]) if candidates else ''
             selected=next((r for r in females if str(r['id'])==selected_id),None)
             sel_insem=latest_insem.get(int(selected_id)) if selected_id.isdigit() else None
@@ -8022,30 +8418,53 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             if sel_insem and str(sel_insem['pregnancy_result'] or '').strip().lower() in ('','bekleniyor','belirsiz'):stage_index=3
             if sel_insem and is_pregnant_value(sel_insem['pregnancy_result']):stage_index=4
             steps=[('🔥','Kızgınlık'),('💉','Tohumlama'),('⌁','Kontrol'),('🐄','Gebelik'),('🐮','Doğum')]
+            selected_stage_label=('Gebe Değil' if sel_insem and str(sel_insem['pregnancy_result'] or '').strip().lower()=='negatif' else 'Şüpheli / Belirsiz' if sel_insem and str(sel_insem['pregnancy_result'] or '').strip().lower()=='belirsiz' else 'İşlem Yapılmamış' if not sel_insem and not sel_estrus else 'İşlem Bekleyen' if selected_id.isdigit() and any(r['animal_id']==int(selected_id) for r in empty_stage) else steps[stage_index][1])
             flow=''.join((f'<div class="repro-step {"done" if i<stage_index else "active" if i==stage_index else ""}"><i>{icon}</i>{label}</div>'+('<span class="repro-arrow">→</span>' if i<len(steps)-1 else '')) for i,(icon,label) in enumerate(steps))
-            detail=(f'''<section class="card repro-detail"><div class="repro-detail-grid"><div class="repro-selected"><div class="filter-title"><div><h2>🐄 ♀ {h(selected['tag'])} · {h(selected['nickname']) or 'İsimsiz'}</h2><p class="mut">{h(selected['breed']) or '-'} · {h(selected['paddock']) or '-'} · {age_text(selected['birth_date'])}</p></div><a class="btn alt repro-animal-link" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Hayvan Kartını Gör</span><span class="repro-link-mobile">Kartı Aç</span></a></div><div class="quick-metrics repro-selected-metrics"><span class="pill repro-tag-metric">Küpe<br><b>{h(selected['tag'])}</b></span><span class="pill">Padok<br><b>{h(selected['paddock']) or '-'}</b></span><span class="pill">Aşama<br><b>{steps[stage_index][1]}</b></span></div></div><div class="repro-flow-wrap"><div class="repro-flow">{flow}</div><div class="repro-next-action"><span>ℹ️ Seçili hayvanın üreme süreci gerçek kayıtlarına göre gösteriliyor.</span><a class="btn" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Tüm Kayıtları Aç</span><span class="repro-link-mobile">Tüm Kayıtlar</span></a></div></div></div></section>''' if selected else '')
+            detail=(f'''<section class="card repro-detail"><div class="repro-detail-grid"><div class="repro-selected"><div class="filter-title"><div><h2>🐄 ♀ {h(selected['tag'])} · {h(selected['nickname']) or 'İsimsiz'}</h2><p class="mut">{h(selected['breed']) or '-'} · {h(selected['paddock']) or '-'} · {age_text(selected['birth_date'])}</p></div><a class="btn alt repro-animal-link" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Hayvan Kartını Gör</span><span class="repro-link-mobile">Kartı Aç</span></a></div><div class="quick-metrics repro-selected-metrics"><span class="pill repro-tag-metric">Küpe<br><b>{h(selected['tag'])}</b></span><span class="pill">Padok<br><b>{h(selected['paddock']) or '-'}</b></span><span class="pill">Aşama<br><b>{h(selected_stage_label)}</b></span></div></div><div class="repro-flow-wrap"><div class="repro-flow">{flow}</div><div class="repro-next-action"><span>ℹ️ Seçili hayvanın üreme süreci gerçek kayıtlarına göre gösteriliyor.</span><a class="btn" href="/animal?id={selected['id']}"><span class="repro-link-desktop">Tüm Kayıtları Aç</span><span class="repro-link-mobile">Tüm Kayıtlar</span></a></div></div></div></section>''' if selected else '')
             search_value=h(q.get('q',[''])[0] or '')
             paddock_options='<option value="">Tüm Padoklar</option>'+''.join(f'<option value="{h(x)}">{h(x)}</option>' for x in sorted({str(r['paddock'] or '') for r in females if str(r['paddock'] or '')}))
-            mobile_open='control' if control_stage else 'birth' if birth_stage else 'estrus' if estrus_stage else 'inseminated'
-            body=f'''<div class="v117-head"><div><h1>🧬 Üreme Merkezi</h1><p>Kızgınlıktan doğuma tüm süreci yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/estrus">＋ Kızgınlık Kaydı</a><a class="btn alt" href="/inseminations">＋ Tohumlama</a></div></div><div class="card v118-toolbar"><input id="reproSearch" type="search" value="{search_value}" placeholder="Hayvan ara: küpe no, isim veya padok…"><label>🐄 <select id="reproPaddock">{paddock_options}</select></label></div>
-            <section class="v117-kpis"><div class="card v117-kpi"><span class="ico">🔥</span><div><span>Kızgınlık Bekleyen</span><b>{len(estrus_stage)}</b></div><em class="v117-chip">Takip</em></div><div class="card v117-kpi"><span class="ico">💉</span><div><span>Tohumlanan</span><b>{len(inseminated_stage)}</b></div><em class="v117-chip">Yeni</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebe</span><b>{len(positive_ids)}</b></div><em class="v117-chip">Pozitif</em></div><div class="card v117-kpi"><span class="ico">🐮</span><div><span>Doğuma Yaklaşan</span><b>{len(birth_stage)}</b></div><em class="v117-chip warn">60 gün</em></div></section>
-            <nav class="repro-stage-tabs" aria-label="Üreme aşaması filtresi"><button type="button" class="active" data-repro-filter="all">Tümü <b>{len(estrus_stage)+len(inseminated_stage)+len(control_stage)+len(birth_stage)}</b></button><button type="button" data-repro-filter="estrus">🔥 Kızgınlık <b>{len(estrus_stage)}</b></button><button type="button" data-repro-filter="inseminated">💉 Tohumlandı <b>{len(inseminated_stage)}</b></button><button type="button" data-repro-filter="control">⌁ Kontrol <b>{len(control_stage)}</b></button><button type="button" data-repro-filter="pregnant">🐄 Gebe <b>{len(pregnant_stage)}</b></button><button type="button" data-repro-filter="birth">🐮 Doğuma Yaklaşan <b>{len(birth_stage)}</b></button></nav>
+            mobile_open='control' if control_stage else 'negative' if negative_stage else 'pregnant' if pregnant_stage else 'estrus' if estrus_stage else 'inseminated'
+            body=f'''<div class="v117-head"><div><h1>🧬 Üreme Merkezi</h1><p>Kızgınlıktan doğuma tüm süreci yönetin; sistem sonraki işi otomatik önerir.</p></div><div class="workspace-actions"><a class="btn" href="/estrus">＋ Kızgınlık Kaydı</a><a class="btn alt" href="/inseminations">＋ Tohumlama</a><a class="btn alt" href="/reproduction-settings">⚙️ Üreme Ayarları</a></div></div><div class="card v118-toolbar"><input id="reproSearch" type="search" value="{search_value}" placeholder="Hayvan ara: küpe no, isim veya padok…"><label>🐄 <select id="reproPaddock">{paddock_options}</select></label></div>
+            <section class="repro-smart-kpis" aria-label="Akıllı üreme yaşam döngüsü">
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="fresh"><span>🥛</span><div><small>Taze</small><b>{smart_counts['fresh']}</b></div></button>
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="postpartum_control"><span>🩺</span><div><small>Üreme Kontrolü</small><b>{smart_counts['postpartum_control']}</b></div></button>
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="ready"><span>🌱</span><div><small>Tohumlamaya Hazır</small><b>{smart_counts['ready']}</b></div></button>
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="dry_due"><span>🌾</span><div><small>Kuruya Çıkar</small><b>{smart_counts['dry_due']}</b></div></button>
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="dry"><span>🌾</span><div><small>Kuru</small><b>{smart_counts['dry']}</b></div></button>
+              <button type="button" class="card repro-smart-kpi" data-repro-filter="closeup"><span>🐮</span><div><small>Yakın Doğum</small><b>{smart_counts['closeup']+smart_counts['birth_alert']}</b></div></button>
+            </section>
+            <section class="v117-kpis"><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="estrus"><span class="ico">🔥</span><div><span>Kızgınlık Bekleyen</span><b>{len(estrus_stage)}</b></div><em class="v117-chip">Takip</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="inseminated"><span class="ico">💉</span><div><span>Tohumlanan</span><b>{len(inseminated_stage)}</b></div><em class="v117-chip">Yeni</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="pregnant"><span class="ico">🐄</span><div><span>Gebe</span><b>{len(positive_ids)}</b></div><em class="v117-chip">Pozitif</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="birth"><span class="ico">🐮</span><div><span>Doğuma Yaklaşan</span><b>{len(birth_stage)}</b></div><em class="v117-chip warn">60 gün</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="control"><span class="ico">⌁</span><div><span>Kontrol Bekleyen</span><b>{len(control_stage)}</b></div><em class="v117-chip">Takip</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="uncertain"><span class="ico">❔</span><div><span>Şüpheli / Belirsiz</span><b>{len(uncertain_stage)}</b></div><em class="v117-chip">Kontrol</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="negative"><span class="ico">❌</span><div><span>Gebe Değil</span><b>{len(negative_stage)}</b></div><em class="v117-chip">Negatif</em></div><div class="card v117-kpi" role="button" tabindex="0" data-repro-filter="empty"><span class="ico">○</span><div><span>Boş / İşlem Bekleyen</span><b>{len(empty_stage)}</b></div><em class="v117-chip">Kayıt</em></div></section>
+            <nav class="repro-stage-tabs" aria-label="Üreme aşaması filtresi"><button type="button" class="active" data-repro-filter="all">Tümü <b>{all_stage_count}</b></button><button type="button" data-repro-filter="estrus">🔥 Kızgınlık <b>{len(estrus_stage)}</b></button><button type="button" data-repro-filter="inseminated">💉 Tohumlandı <b>{len(inseminated_stage)}</b></button><button type="button" data-repro-filter="control">⌁ Gebelik Kontrolü <b>{len(control_stage)}</b></button><button type="button" data-repro-filter="pregnant">🐄 Gebe <b>{len(pregnant_stage)}</b></button><button type="button" data-repro-filter="negative">❌ Gebe Değil <b>{len(negative_stage)}</b></button><button type="button" data-repro-filter="uncertain">❔ Şüpheli <b>{len(uncertain_stage)}</b></button><button type="button" data-repro-filter="empty">○ Boş / İşlem Bekleyen <b>{len(empty_stage)}</b></button><button type="button" data-repro-filter="birth">🐮 Doğuma Yaklaşan <b>{len(birth_stage)}</b></button></nav>
+            <p class="mut repro-population-note">{all_stage_count} aktif dişi · Boş / İşlem Bekleyen {len(empty_stage)} hayvan: {unprocessed_count} işlem yapılmamış, {reprocess_count} yeniden işlem bekleyen. Doğuma yaklaşanlar gebe sayısına dahildir; boş grubu kesin negatif sonuç anlamına gelmez.</p>
             <section class="v117-board repro-board-compact">
               <div class="repro-column {'is-collapsed' if mobile_open!='estrus' else ''}" data-repro-section="estrus" data-mobile-open="{'1' if mobile_open=='estrus' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='estrus' else 'false'}"><h2>🔥 Kızgınlık</h2><span><b>{len(estrus_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Tohumlama için uygun hayvanlar</div><div class="repro-cards">{''.join(estrus_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(estrus_stage)})</button></div></div>
               <div class="repro-column {'is-collapsed' if mobile_open!='inseminated' else ''}" data-repro-section="inseminated" data-mobile-open="{'1' if mobile_open=='inseminated' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='inseminated' else 'false'}"><h2>💉 Tohumlama</h2><span><b>{len(inseminated_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son tohumlanan hayvanlar</div><div class="repro-cards">{''.join(insem_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(inseminated_stage)})</button></div></div>
               <div class="repro-column {'is-collapsed' if mobile_open!='control' else ''}" data-repro-section="control" data-mobile-open="{'1' if mobile_open=='control' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='control' else 'false'}"><h2>⌁ Gebelik Kontrolü</h2><span><b>{len(control_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Kontrol zamanı gelen hayvanlar</div><div class="repro-cards">{''.join(control_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(control_stage)})</button></div></div>
-              <div class="repro-column is-collapsed repro-pregnant-duplicate" data-repro-section="pregnant" data-mobile-open="0"><button type="button" class="repro-column-head repro-toggle" aria-expanded="false"><h2>🐄 Gebe</h2><span><b>{len(pregnant_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Pozitif gebelik kaydı bulunan hayvanlar</div><div class="repro-cards">{''.join(pregnant_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(pregnant_stage)})</button></div></div>
+              <div class="repro-column {'is-collapsed' if mobile_open!='pregnant' else ''}" data-repro-section="pregnant" data-mobile-open="{'1' if mobile_open=='pregnant' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='pregnant' else 'false'}"><h2>🐄 Gebe</h2><span><b>{len(pregnant_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Pozitif gebelik kaydı bulunan hayvanlar</div><div class="repro-cards">{''.join(pregnant_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(pregnant_stage)})</button></div></div>
+              <div class="repro-column {'is-collapsed' if mobile_open!='negative' else ''}" data-repro-section="negative" data-mobile-open="{'1' if mobile_open=='negative' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='negative' else 'false'}"><h2>❌ Gebe Değil</h2><span><b>{len(negative_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son gebelik kontrolü negatif olan hayvanlar</div><div class="repro-cards">{''.join(negative_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(negative_stage)})</button></div></div>
               <div class="repro-column {'is-collapsed' if mobile_open!='birth' else ''}" data-repro-section="birth" data-mobile-open="{'1' if mobile_open=='birth' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='birth' else 'false'}"><h2>🐮 Doğuma Yaklaşan</h2><span><b>{len(birth_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son 60 günde doğum beklenenler</div><div class="repro-cards">{''.join(birth_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(birth_stage)})</button></div></div>
+<div class="repro-column {'is-collapsed' if mobile_open!='uncertain' else ''}" data-repro-section="uncertain" data-mobile-open="{'1' if mobile_open=='uncertain' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='uncertain' else 'false'}"><h2>❔ Şüpheli / Belirsiz</h2><span><b>{len(uncertain_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Son kontrol sonucu belirsiz; tekrar kontrol bekliyor</div><div class="repro-cards">{''.join(uncertain_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(uncertain_stage)})</button></div></div>
+<div class="repro-column {'is-collapsed' if mobile_open!='empty' else ''}" data-repro-section="empty" data-mobile-open="{'1' if mobile_open=='empty' else '0'}"><button type="button" class="repro-column-head repro-toggle" aria-expanded="{'true' if mobile_open=='empty' else 'false'}"><h2>○ Boş / İşlem Bekleyen</h2><span><b>{len(empty_stage)}</b><i aria-hidden="true">⌄</i></span></button><div class="repro-column-body"><div class="repro-column-sub">Tek grupta gösterilir: işlem yapılmamış ve yeniden işlem bekleyen dişiler; kart rozetleri durumu belirtir</div><div class="repro-cards">{''.join(empty_cards) or '<div class="workspace-empty">Kayıt yok</div>'}</div><button type="button" class="repro-show-all">Tümünü Gör ({len(empty_stage)})</button></div></div>
             </section>{detail}
+            <dialog id="reproStatusDialog" class="repro-status-dialog" aria-labelledby="reproStatusTitle"><form method="post" action="/reproduction-status" class="repro-status-form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="id" id="reproStatusId"><input type="hidden" name="pregnancy_result" id="reproStatusResult"><input type="hidden" name="return_to" id="reproStatusReturn"><div class="repro-status-head"><div><span class="repro-status-kicker">Hızlı düzeltme</span><h2 id="reproStatusTitle">Gebelik Sonucu</h2><p id="reproStatusAnimal" class="mut"></p></div><button type="button" class="repro-status-close" aria-label="Pencereyi kapat">×</button></div><p class="repro-status-help">Tohumlama ayrıntılarına girmeden son kaydın sonucunu seçin.</p><div class="repro-status-options"><button type="submit" value="Bekleniyor" class="repro-status-choice waiting"><span>⏳</span><b>Kontrol Bekliyor</b></button><button type="submit" value="Belirsiz" class="repro-status-choice waiting"><span>❔</span><b>Şüpheli</b></button><button type="submit" value="Pozitif" class="repro-status-choice positive"><span>✅</span><b>Gebe</b></button><button type="submit" value="Negatif" class="repro-status-choice negative"><span>❌</span><b>Gebe Değil</b></button></div><div class="repro-status-foot"><a id="reproStatusDetail" class="btn alt" href="/inseminations">Tohumlama Ayrıntısı</a><button type="button" class="btn alt repro-status-cancel">Vazgeç</button></div></form></dialog>
             <script>(function(){{
               const search=document.getElementById('reproSearch'),paddock=document.getElementById('reproPaddock'),sections=[...document.querySelectorAll('.repro-column')],stageButtons=[...document.querySelectorAll('[data-repro-filter]')];
               if(!search)return;
               const mobile=()=>window.matchMedia('(max-width:650px)').matches;
-              let wasMobile=mobile(),selectedStage='all';
-              function applyAccordion(reset){{if(!mobile()){{sections.forEach(s=>s.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true'));return}}if(!reset)return;let opened=sections.some(s=>s.dataset.mobileOpen==='1');sections.forEach((s,index)=>{{if(s.classList.contains('repro-pregnant-duplicate'))return;const open=s.dataset.mobileOpen==='1'||(!opened&&index===0);s.classList.toggle('is-collapsed',!open);s.querySelector('.repro-toggle')?.setAttribute('aria-expanded',open?'true':'false')}})}}
-              function run(){{const isMobile=mobile(),q=search.value.toLocaleLowerCase('tr-TR').trim(),pad=paddock?paddock.value:'';sections.forEach(section=>{{const sectionStage=section.dataset.reproSection,cards=[...section.querySelectorAll('.repro-card')],matches=cards.filter(c=>(!q||c.dataset.reproSearch.includes(q))&&(!pad||c.dataset.reproPaddock===pad)),showAll=section.dataset.showAll==='1';if(isMobile)section.hidden=section.classList.contains('repro-pregnant-duplicate');else section.hidden=selectedStage==='all'?section.classList.contains('repro-pregnant-duplicate'):sectionStage!==selectedStage;cards.forEach(c=>c.hidden=true);matches.forEach((c,index)=>c.hidden=isMobile&&!showAll&&index>=3);const more=section.querySelector('.repro-show-all');if(more){{more.hidden=!isMobile||matches.length<=3;more.textContent=showAll?'Daha Az Göster':`Tümünü Gör (${{matches.length}})`}}if(isMobile&&(q||pad)&&matches.length&&!section.hidden){{section.classList.remove('is-collapsed');section.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true')}}}})}}
+              const lifeStages=new Set(['fresh','postpartum_control','ready','dry_due','dry','closeup','birth_alert']);
+              const validStages=new Set(['all','estrus','inseminated','control','pregnant','negative','birth','uncertain','empty',...lifeStages]),rawRequestedStage=new URLSearchParams(location.search).get('stage'),requestedStage=rawRequestedStage==='unprocessed'?'empty':rawRequestedStage;
+              let wasMobile=mobile(),selectedStage=validStages.has(requestedStage)?requestedStage:'all';
+              stageButtons.forEach(button=>button.classList.toggle('active',button.dataset.reproFilter===selectedStage));
+              function applyAccordion(reset){{if(!mobile()){{sections.forEach(s=>s.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true'));return}}if(!reset)return;if(selectedStage!=='all'){{sections.forEach(s=>{{const open=lifeStages.has(selectedStage)?[...s.querySelectorAll('.repro-card')].some(c=>c.dataset.reproLife===selectedStage||(selectedStage==='closeup'&&c.dataset.reproLife==='birth_alert')):s.dataset.reproSection===selectedStage;s.classList.toggle('is-collapsed',!open);s.querySelector('.repro-toggle')?.setAttribute('aria-expanded',open?'true':'false')}});return}}let opened=sections.some(s=>s.dataset.mobileOpen==='1');sections.forEach((s,index)=>{{const open=s.dataset.mobileOpen==='1'||(!opened&&index===0);s.classList.toggle('is-collapsed',!open);s.querySelector('.repro-toggle')?.setAttribute('aria-expanded',open?'true':'false')}})}}
+              function run(){{const isMobile=mobile(),q=search.value.toLocaleLowerCase('tr-TR').trim(),pad=paddock?paddock.value:'',lifeMode=lifeStages.has(selectedStage);sections.forEach(section=>{{const sectionStage=section.dataset.reproSection,cards=[...section.querySelectorAll('.repro-card')],matches=cards.filter(c=>(!q||c.dataset.reproSearch.includes(q))&&(!pad||c.dataset.reproPaddock===pad)&&(!lifeMode||c.dataset.reproLife===selectedStage||(selectedStage==='closeup'&&c.dataset.reproLife==='birth_alert'))),showAll=section.dataset.showAll==='1';section.hidden=lifeMode?(sectionStage==='birth'||matches.length===0):(selectedStage==='all'?sectionStage==='birth':sectionStage!==selectedStage);cards.forEach(c=>c.hidden=true);matches.forEach((c,index)=>c.hidden=isMobile&&!showAll&&index>=3);const more=section.querySelector('.repro-show-all');if(more){{more.hidden=!isMobile||matches.length<=3;more.textContent=showAll?'Daha Az Göster':`Tümünü Gör (${{matches.length}})`}}if(isMobile&&(q||pad||lifeMode)&&matches.length&&!section.hidden){{section.classList.remove('is-collapsed');section.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true')}}}})}}
               sections.forEach(section=>{{section.querySelector('.repro-toggle')?.addEventListener('click',()=>{{if(!mobile())return;section.classList.toggle('is-collapsed');section.querySelector('.repro-toggle').setAttribute('aria-expanded',section.classList.contains('is-collapsed')?'false':'true')}});section.querySelector('.repro-show-all')?.addEventListener('click',()=>{{section.dataset.showAll=section.dataset.showAll==='1'?'0':'1';run()}})}});
-              stageButtons.forEach(button=>button.addEventListener('click',()=>{{selectedStage=button.dataset.reproFilter||'all';stageButtons.forEach(x=>x.classList.toggle('active',x===button));run()}}));
+              stageButtons.forEach(button=>button.addEventListener('click',()=>{{selectedStage=button.dataset.reproFilter||'all';stageButtons.forEach(x=>x.classList.toggle('active',x.dataset.reproFilter===selectedStage));const url=new URL(location.href);if(selectedStage==='all')url.searchParams.delete('stage');else url.searchParams.set('stage',selectedStage);history.replaceState(null,'',url);if(mobile()&&selectedStage!=='all'){{if(lifeStages.has(selectedStage)){{sections.forEach(activeSection=>{{const has=[...activeSection.querySelectorAll('.repro-card')].some(c=>c.dataset.reproLife===selectedStage||(selectedStage==='closeup'&&c.dataset.reproLife==='birth_alert'));activeSection.classList.toggle('is-collapsed',!has);activeSection.querySelector('.repro-toggle')?.setAttribute('aria-expanded',has?'true':'false')}})}}else{{const activeSection=sections.find(x=>x.dataset.reproSection===selectedStage);if(activeSection){{activeSection.classList.remove('is-collapsed');activeSection.querySelector('.repro-toggle')?.setAttribute('aria-expanded','true')}}}}}}run()}}));
+              stageButtons.forEach(button=>{{if(button.tagName!=='BUTTON')button.addEventListener('keydown',event=>{{if(event.key==='Enter'||event.key===' '){{event.preventDefault();button.click()}}}})}});
+              const statusDialog=document.getElementById('reproStatusDialog'),statusId=document.getElementById('reproStatusId'),statusResult=document.getElementById('reproStatusResult'),statusReturn=document.getElementById('reproStatusReturn'),statusAnimal=document.getElementById('reproStatusAnimal'),statusDetail=document.getElementById('reproStatusDetail');
+              function closeStatus(){{if(!statusDialog)return;if(statusDialog.close)statusDialog.close();else statusDialog.removeAttribute('open')}}
+              document.querySelectorAll('.repro-status-open').forEach(button=>button.addEventListener('click',()=>{{if(!statusDialog)return;statusId.value=button.dataset.inseminationId||'';statusAnimal.textContent=(button.dataset.tag||'')+((button.dataset.name||'')?' · '+button.dataset.name:'');statusDetail.href='/inseminations?animal='+encodeURIComponent(button.dataset.animalId||'');const back=new URL('/reproduction-center',location.origin);if(selectedStage!=='all')back.searchParams.set('stage',selectedStage);if(button.dataset.animalId)back.searchParams.set('animal',button.dataset.animalId);statusReturn.value=back.pathname+back.search;statusDialog.querySelectorAll('.repro-status-choice').forEach(choice=>choice.classList.toggle('current',choice.value===button.dataset.current));if(statusDialog.showModal)statusDialog.showModal();else statusDialog.setAttribute('open','')}}));
+              statusDialog?.querySelectorAll('.repro-status-choice').forEach(choice=>choice.addEventListener('click',()=>{{statusResult.value=choice.value}}));
+              statusDialog?.querySelector('.repro-status-close')?.addEventListener('click',closeStatus);statusDialog?.querySelector('.repro-status-cancel')?.addEventListener('click',closeStatus);statusDialog?.addEventListener('click',event=>{{if(event.target===statusDialog)closeStatus()}});
               search.addEventListener('input',run);if(paddock)paddock.addEventListener('change',run);window.addEventListener('resize',()=>{{const nowMobile=mobile();if(nowMobile!==wasMobile){{wasMobile=nowMobile;applyAccordion(true)}}run()}});applyAccordion(true);run();document.querySelector('.repro-board-compact')?.classList.add('repro-ready');
             }})();</script>'''
             return self.send_html(page('Üreme Merkezi',body,'/reproduction-center',u,msg))
@@ -8328,7 +8747,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 schedule_fields=f'''<label>Kaç Doz?<input type="number" name="dose_count" min="1" max="10" value="{int(course['dose_count'] or 1)}" required></label><label>Dozlar Arası Gün<input type="number" name="dose_interval_days" min="1" max="365" value="{int(course['interval_days'] or 15)}" required></label>'''
             else:
                 schedule_fields=f'''<label>Tedavi Kaç Gün?<input type="number" name="treatment_days" min="1" max="60" value="{int(course['treatment_days'] or 1)}" required></label><label>Günde Kaç Uygulama?<input type="number" name="times_per_day" min="1" max="6" value="{int(course['times_per_day'] or 1)}" required></label>'''
-            body=f'''<div class="actions"><a class="btn alt" href="/health">← Sağlığa Dön</a></div><h1>💉 Sağlık Planını Düzenle</h1><div class="card"><div class="flash">{h(subject_label)} · {len(target_rows)} hayvan · {completed}/{total} uygulama tamamlandı</div><form method="post" action="/health-plan-edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="course_id" value="{course_id}"><label>Tür<input value="{h(course['kind'])}" disabled></label><label>Kapsam<input value="{'Padok bazında' if course['scope_type']=='paddock' else 'Tek hayvan'}" disabled></label><label class="full">Ürün / İşlem<input name="product" value="{h(course['product'])}" required></label><label>Başlangıç Tarihi<input type="date" name="start_date" value="{h(course['start_date'])}" required></label>{schedule_fields}<label>Uygulama Başı / Hayvan Başı Maliyet<input type="number" step="0.01" min="0" name="cost" value="{float(course['cost_per_application'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(course['notes'])}</textarea></label><div class="full"><p class="mut">Tamamlanmış uygulamalar değişmeden korunur; yalnız bekleyen tarihler ve bilgiler yeniden oluşturulur.</p><button class="btn">Değişiklikleri Kaydet</button></div></form></div>'''
+            body=f'''<div class="actions"><a class="btn alt" href="/health">← Sağlığa Dön</a></div><h1>💉 Sağlık Planını Düzenle</h1><div class="card"><div class="flash">{h(subject_label)} · {len(target_rows)} hayvan · {completed}/{total} uygulama tamamlandı</div><form method="post" action="/health-plan-edit" class="form" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="course_id" value="{course_id}"><label>Tür<input value="{h(course['kind'])}" disabled></label><label>Kapsam<input value="{'Padok bazında' if course['scope_type']=='paddock' else 'Birden fazla hayvan' if course['scope_type']=='multi' else 'Tek hayvan'}" disabled></label><label class="full">Ürün / İşlem<input name="product" value="{h(course['product'])}" required></label><label>Başlangıç Tarihi<input type="date" name="start_date" value="{h(course['start_date'])}" required></label>{schedule_fields}<label>Uygulama Başı / Hayvan Başı Maliyet<input type="number" step="0.01" min="0" name="cost" value="{float(course['cost_per_application'] or 0)}"></label><label class="full">Not<textarea name="notes">{h(course['notes'])}</textarea></label><div class="full"><p class="mut">Tamamlanmış uygulamalar değişmeden korunur; yalnız bekleyen tarihler ve bilgiler yeniden oluşturulur.</p><button class="btn">Değişiklikleri Kaydet</button></div></form></div>'''
             return self.send_html(page('Sağlık Planı Düzenle',body,'/health',u,msg))
         if path=='/health-edit':
             hid=q.get('id',[''])[0]
@@ -8398,14 +8817,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 return 'overdue' if days<0 else 'today' if days==0 else 'upcoming'
             task_groups={}
             for r in task_rows:
-                key=('P',r['course_id'],r['planned_date'],r['dose_no'],r['day_no'],r['application_no']) if r['scope_type']=='paddock' else ('S',r['id'])
+                key=('G',r['course_id'],r['planned_date'],r['dose_no'],r['day_no'],r['application_no']) if r['scope_type'] in ('paddock','multi') else ('S',r['id'])
                 task_groups.setdefault(key,[]).append(r)
             task_cards=[]
             for key,items in task_groups.items():
                 r=items[0];badge=due_badge(r['planned_date'])
                 detail=(f'{int(r["dose_no"] or 1)} / {int(r["dose_total"] or 1)}. doz' if r['kind']=='Aşı' else f'{int(r["day_no"] or 1)} / {int(r["day_total"] or 1)}. gün · {int(r["application_no"] or 1)} / {int(r["applications_per_day"] or 1)} uygulama')
-                if r['scope_type']=='paddock':
-                    title='🏠 '+str(r['paddock_name'] or 'Padok');meta=f'{len(items)} hayvan · {detail}'
+                if r['scope_type'] in ('paddock','multi'):
+                    title=('🏠 '+str(r['paddock_name'] or 'Padok')) if r['scope_type']=='paddock' else '👥 Çoklu Hayvan Planı'
+                    meta=f'{len(items)} hayvan · {detail}'
                     action=f'''<form method="post" action="/health/task-batch-done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="course_id" value="{r['course_id']}"><input type="hidden" name="planned_date" value="{h(r['planned_date'])}"><input type="hidden" name="dose_no" value="{int(r['dose_no'] or 1)}"><input type="hidden" name="day_no" value="{int(r['day_no'] or 1)}"><input type="hidden" name="application_no" value="{int(r['application_no'] or 1)}"><button class="btn">✅ {len(items)} Hayvan Yapıldı</button></form>'''
                 else:
                     title='🐄 '+str(r['animal_tag'] or r['calf_tag'] or '-');meta=detail
@@ -8422,19 +8842,20 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 pregnancy_cards.append(f'''<div class="health-plan-card" data-health-date="{h(t['task_date'])}" data-health-status="{due_scope(t['task_date'])}" data-health-search="{h((str(t['tag'])+' '+str(t['month'])+'. Ay Gebelik Aşısı Gebelik planından otomatik'))}" style="border-left:5px solid #c8392b"><div class="health-plan-main"><div><b>💉 🐄 {h(t['tag'])}</b><div class="health-plan-product">{t['month']}. Ay Gebelik Aşısı</div><div class="mut">Gebelik planından otomatik · {fmt_date(t['task_date'])}</div></div><span class="health-due">{badge}</span></div><div class="health-plan-action"><form method="post" action="/pregnancy-vaccine/done" data-submit-lock="1" data-submit-text="⏳ Yapılıyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn">💉 Aşıyı Yap</button></form><div class="health-plan-controls"><a class="btn alt" href="/animal?id={t['animal_id']}">Hayvanı Aç</a><form method="post" action="/pregnancy-vaccine/postpone" data-submit-lock="1" data-submit-text="⏳ Erteleniyor…"><input type="hidden" name="animal_id" value="{t['animal_id']}"><input type="hidden" name="insemination_id" value="{t['insemination_id']}"><input type="hidden" name="month" value="{t['month']}"><input type="hidden" name="return_to" value="/health"><button class="btn alt">⏰ 1 Gün Ertele</button></form></div></div></div>''')
             all_plan_cards=sorted(pregnancy_cards+task_cards,key=lambda card:re.search(r'data-health-date="([^"]+)"',card).group(1))
             planned_html=''.join(all_plan_cards) or '<p class="mut">Planlanmış sağlık işlemi yok.</p>'
-            body=f'''<style>.health-mode-box{{background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px}}.health-plan-list{{display:grid;gap:10px}}.health-plan-card{{border:1px solid #dfe9e2;border-radius:15px;padding:14px;background:#fff}}.health-plan-main{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.health-plan-product{{font-weight:800;margin:5px 0}}.health-due{{white-space:nowrap;font-weight:800}}.health-plan-action{{margin-top:12px}}.health-plan-action>form{{margin:0}}.health-plan-controls{{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}}.health-plan-controls form{{margin:0}}.health-plan-controls .btn{{padding:8px 11px}}@media(max-width:700px){{.health-plan-main{{display:block}}.health-due{{display:inline-block;margin-top:8px}}.health-plan-action>form>.btn{{width:100%}}.health-plan-controls{{display:grid;grid-template-columns:1fr 1fr}}.health-plan-controls .btn{{width:100%;text-align:center}}.health-group summary{{align-items:flex-start;flex-direction:column}}}}</style><h1>Sağlık</h1>
-            <div class="card"><form method="post" class="form" id="healthForm" data-submit-lock="1" data-submit-text="⏳ Oluşturuluyor…"><label>Uygulama Kapsamı<select name="scope_type" id="healthScope"><option value="single">Tek Hayvan / Buzağı</option><option value="paddock">Padok Bazında Aşılama</option></select></label><label>Tür<select name="kind" id="healthKind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label>
+            body=f'''<style>.health-mode-box{{background:#f7fbf8;border:1px solid #d7eadc;border-radius:16px;padding:14px 16px}}.health-plan-list{{display:grid;gap:10px}}.health-plan-card{{border:1px solid #dfe9e2;border-radius:15px;padding:14px;background:#fff}}.health-plan-main{{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}}.health-plan-product{{font-weight:800;margin:5px 0}}.health-due{{white-space:nowrap;font-weight:800}}.health-plan-action{{margin-top:12px}}.health-plan-action>form{{margin:0}}.health-plan-controls{{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}}.health-plan-controls form{{margin:0}}.health-plan-controls .btn{{padding:8px 11px}}.health-multi-box{{border:1px solid #d7e4da;border-radius:14px;padding:12px;background:#f8fbf9}}.health-multi-search-row{{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}}.health-multi-results{{position:absolute;left:0;right:0;top:100%;z-index:35;background:#fff;border:1px solid #d7e4da;border-radius:12px;max-height:240px;overflow:auto;box-shadow:0 12px 28px #173b2822}}.health-multi-selected{{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}}.health-multi-chip{{display:inline-flex;align-items:center;gap:7px;padding:7px 9px;border-radius:999px;background:#eaf5ed;border:1px solid #cfe4d5;font-weight:700}}.health-multi-chip button{{border:0;background:transparent;color:#a52d27;font-size:18px;line-height:1;cursor:pointer}}@media(max-width:700px){{.health-plan-main{{display:block}}.health-due{{display:inline-block;margin-top:8px}}.health-plan-action>form>.btn{{width:100%}}.health-plan-controls{{display:grid;grid-template-columns:1fr 1fr}}.health-plan-controls .btn{{width:100%;text-align:center}}.health-group summary{{align-items:flex-start;flex-direction:column}}}}</style><h1>Sağlık</h1>
+            <div class="card"><form method="post" class="form" id="healthForm" data-submit-lock="1" data-submit-text="⏳ Oluşturuluyor…"><label>Uygulama Kapsamı<select name="scope_type" id="healthScope"><option value="single">Tek Hayvan / Buzağı</option><option value="multi">Birden Fazla Hayvan</option><option value="paddock">Padok Bazında Aşılama</option></select></label><label>Tür<select name="kind" id="healthKind"><option>Aşı</option><option>İlaç</option><option>Muayene</option></select></label>
             <div class="full" id="singleSubjectBox"><label>Hayvan / Buzağı</label><div style="position:relative"><input type="search" id="healthSubjectSearch" placeholder="Küpe veya takma ad yazın…" autocomplete="off"><input type="hidden" name="subject_key" id="healthSubjectKey"><div id="healthSubjectResults" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid #d7e4da;border-radius:12px;max-height:280px;overflow:auto;box-shadow:0 12px 28px #173b2822"></div></div><div class="mut">Aktif hayvanlar ve buzağılar listelenir.</div></div>
+            <div class="full health-multi-box" id="multiSubjectBox" style="display:none"><label>Birden Fazla Hayvan</label><input type="hidden" name="subject_keys_json" id="healthMultiKeys" value="[]"><div class="health-multi-search-row"><div style="position:relative"><input type="search" id="healthMultiSearch" placeholder="Küpe veya takma ad yazın…" autocomplete="off"><div id="healthMultiResults" class="health-multi-results" style="display:none"></div></div><button type="button" class="btn alt" id="healthMultiAdd" disabled>＋ Ekle</button></div><div class="mut" id="healthMultiCounter">Seçilen: 0 hayvan</div><div class="health-multi-selected" id="healthMultiSelected"></div><div class="mut">Hayvanı arayıp seçin ve + Ekle ile listeye ekleyin. Aynı hayvan ikinci kez eklenmez.</div></div>
             <div class="full" id="paddockSubjectBox" style="display:none"><label>Padok<select name="paddock_id" id="healthPaddock"><option value="">Padok seçin…</option>{paddock_options}</select></label><div class="mut">Plan oluşturulduğu anda padoktaki aktif hayvan listesi sabitlenir. Sonradan padoka giren hayvanlar bu plana eklenmez.</div></div>
             <label>Ürün/İşlem<input name="product" required placeholder="Örn. Şap aşısı / antibiyotik"></label><label>Başlangıç / Uygulama Tarihi<input type="date" name="applied_date" id="healthAppliedDate" required value="{date.today().isoformat()}"></label>
             <div class="full health-mode-box" id="vaccinePlanBox"><div class="form"><label>Kaç Doz?<input type="number" name="dose_count" id="doseCount" min="1" max="10" value="1"></label><label>Dozlar Arası Gün<input type="number" name="dose_interval_days" id="doseInterval" min="1" max="365" value="15"></label></div><div class="mut">Örn. 3 doz / 15 gün arayla. Tüm doz tarihleri otomatik planlanır.</div></div>
             <div class="full health-mode-box" id="medicinePlanBox" style="display:none"><div class="form"><label>Tedavi Kaç Gün?<input type="number" name="treatment_days" min="1" max="60" value="5"></label><label>Günde Kaç Uygulama?<input type="number" name="times_per_day" min="1" max="6" value="1"></label></div><div class="mut">Her uygulama ayrı ayrı “Yapıldı” işaretlenir; geciken uygulamalar otomatik görünür.</div></div>
             <label id="nextDateLabel" style="display:none">Sonraki Tarih<input type="date" name="next_date" id="healthNextDate"></label><label>Uygulama Başı / Hayvan Başı Maliyet<input type="number" step="0.01" min="0" name="cost" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn" id="healthSubmit">💾 Planı Oluştur</button></div></form></div>
             <div class="card" style="margin-top:14px"><h2>💉 Planlanan Aşı / Tedavi İşlemleri</h2><div class="health-plan-list">{planned_html}</div></div><div class="card" style="margin-top:14px"><h2>🩺 Hayvan Bazlı Sağlık Dosyaları</h2><p class="mut">Tamamlanan tedavi, aşı ve muayeneler hayvanın gerçek sağlık geçmişine işlenir.</p>{grouped_health_html}</div>
-            <script>const healthSubjects={subject_json};const hs=document.getElementById('healthSubjectSearch'),hk=document.getElementById('healthSubjectKey'),hr=document.getElementById('healthSubjectResults');function renderHealthSubjects(){{const q=(hs.value||'').toLocaleLowerCase('tr-TR').trim();const found=healthSubjects.filter(x=>!q||x.label.toLocaleLowerCase('tr-TR').includes(q)).slice(0,40);hr.innerHTML=found.map((x,i)=>'<button type="button" data-index="'+i+'" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eef3ef;background:#fff;padding:12px 14px;font:inherit;cursor:pointer">'+x.label+'</button>').join('');hr.style.display=found.length?'block':'none';hr.querySelectorAll('button').forEach(b=>b.onclick=function(){{const x=found[parseInt(this.dataset.index)];hk.value=x.key;hs.value=x.label;hr.style.display='none';}});}}hs.addEventListener('input',function(){{hk.value='';renderHealthSubjects();}});hs.addEventListener('focus',renderHealthSubjects);document.addEventListener('click',e=>{{if(!hr.contains(e.target)&&e.target!==hs)hr.style.display='none';}});const scope=document.getElementById('healthScope'),kind=document.getElementById('healthKind'),single=document.getElementById('singleSubjectBox'),paddock=document.getElementById('paddockSubjectBox'),vbox=document.getElementById('vaccinePlanBox'),mbox=document.getElementById('medicinePlanBox'),nlabel=document.getElementById('nextDateLabel'),submit=document.getElementById('healthSubmit'),doseCount=document.getElementById('doseCount'),doseInterval=document.getElementById('doseInterval');function syncHealthForm(){{if(scope.value==='paddock'&&kind.value!=='Aşı')kind.value='Aşı';single.style.display=scope.value==='single'?'block':'none';paddock.style.display=scope.value==='paddock'?'block':'none';vbox.style.display=kind.value==='Aşı'?'block':'none';mbox.style.display=kind.value==='İlaç'?'block':'none';nlabel.style.display=kind.value==='Muayene'?'block':'none';doseInterval.closest('label').style.display=(parseInt(doseCount.value||1)>1)?'block':'none';submit.textContent=(kind.value==='Muayene')?'💾 Sağlık Kaydını Kaydet':'💾 Planı Oluştur';}}scope.addEventListener('change',syncHealthForm);kind.addEventListener('change',syncHealthForm);doseCount.addEventListener('input',syncHealthForm);syncHealthForm();document.getElementById('healthForm').addEventListener('submit',function(e){{if(scope.value==='single'&&!hk.value){{e.preventDefault();alert('Lütfen listeden bir hayvan veya buzağı seçin.');hs.focus();return;}}if(scope.value==='paddock'&&!document.getElementById('healthPaddock').value){{e.preventDefault();alert('Lütfen bir padok seçin.');}}}});</script>'''
+            <script>const healthSubjects={subject_json};const hs=document.getElementById('healthSubjectSearch'),hk=document.getElementById('healthSubjectKey'),hr=document.getElementById('healthSubjectResults');function renderHealthSubjects(){{const q=(hs.value||'').toLocaleLowerCase('tr-TR').trim();const found=healthSubjects.filter(x=>!q||x.label.toLocaleLowerCase('tr-TR').includes(q)).slice(0,40);hr.innerHTML=found.map((x,i)=>'<button type="button" data-index="'+i+'" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eef3ef;background:#fff;padding:12px 14px;font:inherit;cursor:pointer">'+x.label+'</button>').join('');hr.style.display=found.length?'block':'none';hr.querySelectorAll('button').forEach(b=>b.onclick=function(){{const x=found[parseInt(this.dataset.index)];hk.value=x.key;hs.value=x.label;hr.style.display='none';}});}}hs.addEventListener('input',function(){{hk.value='';renderHealthSubjects();}});hs.addEventListener('focus',renderHealthSubjects);const ms=document.getElementById('healthMultiSearch'),mr=document.getElementById('healthMultiResults'),ma=document.getElementById('healthMultiAdd'),mk=document.getElementById('healthMultiKeys'),ml=document.getElementById('healthMultiSelected'),mc=document.getElementById('healthMultiCounter');let multiSelected=[],multiCandidate=null;function renderMultiSearch(){{const q=(ms.value||'').toLocaleLowerCase('tr-TR').trim();const chosen=new Set(multiSelected.map(x=>x.key));const found=healthSubjects.filter(x=>(!q||x.label.toLocaleLowerCase('tr-TR').includes(q))&&!chosen.has(x.key)).slice(0,40);mr.innerHTML=found.map((x,i)=>'<button type="button" data-index="'+i+'" style="display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eef3ef;background:#fff;padding:12px 14px;font:inherit;cursor:pointer">'+x.label+'</button>').join('');mr.style.display=found.length?'block':'none';mr.querySelectorAll('button').forEach(b=>b.onclick=function(){{multiCandidate=found[parseInt(this.dataset.index)];ms.value=multiCandidate.label;ma.disabled=false;mr.style.display='none';}});}}function paintMulti(){{mk.value=JSON.stringify(multiSelected.map(x=>x.key));mc.textContent='Seçilen: '+multiSelected.length+' hayvan';ml.innerHTML=multiSelected.map((x,i)=>'<span class="health-multi-chip"><span>'+x.label+'</span><button type="button" data-remove="'+i+'" aria-label="Çıkar">×</button></span>').join('');ml.querySelectorAll('[data-remove]').forEach(b=>b.onclick=function(){{multiSelected.splice(parseInt(this.dataset.remove),1);paintMulti();}});}}ms.addEventListener('input',function(){{multiCandidate=null;ma.disabled=true;renderMultiSearch();}});ms.addEventListener('focus',renderMultiSearch);ma.addEventListener('click',function(){{if(!multiCandidate)return;if(!multiSelected.some(x=>x.key===multiCandidate.key))multiSelected.push(multiCandidate);multiCandidate=null;ms.value='';ma.disabled=true;mr.style.display='none';paintMulti();ms.focus();}});document.addEventListener('click',e=>{{if(!hr.contains(e.target)&&e.target!==hs)hr.style.display='none';if(!mr.contains(e.target)&&e.target!==ms)mr.style.display='none';}});const scope=document.getElementById('healthScope'),kind=document.getElementById('healthKind'),single=document.getElementById('singleSubjectBox'),multi=document.getElementById('multiSubjectBox'),paddock=document.getElementById('paddockSubjectBox'),vbox=document.getElementById('vaccinePlanBox'),mbox=document.getElementById('medicinePlanBox'),nlabel=document.getElementById('nextDateLabel'),submit=document.getElementById('healthSubmit'),doseCount=document.getElementById('doseCount'),doseInterval=document.getElementById('doseInterval');function syncHealthForm(){{if(scope.value==='paddock'&&kind.value!=='Aşı')kind.value='Aşı';if(scope.value==='multi'&&kind.value==='Muayene')kind.value='Aşı';single.style.display=scope.value==='single'?'block':'none';multi.style.display=scope.value==='multi'?'block':'none';paddock.style.display=scope.value==='paddock'?'block':'none';vbox.style.display=kind.value==='Aşı'?'block':'none';mbox.style.display=kind.value==='İlaç'?'block':'none';nlabel.style.display=kind.value==='Muayene'?'block':'none';doseInterval.closest('label').style.display=(parseInt(doseCount.value||1)>1)?'block':'none';submit.textContent=(kind.value==='Muayene')?'💾 Sağlık Kaydını Kaydet':'💾 Planı Oluştur';}}scope.addEventListener('change',syncHealthForm);kind.addEventListener('change',syncHealthForm);doseCount.addEventListener('input',syncHealthForm);syncHealthForm();paintMulti();document.getElementById('healthForm').addEventListener('submit',function(e){{if(scope.value==='single'&&!hk.value){{e.preventDefault();alert('Lütfen listeden bir hayvan veya buzağı seçin.');hs.focus();return;}}if(scope.value==='multi'&&multiSelected.length<2){{e.preventDefault();alert('Birden Fazla Hayvan kapsamı için en az 2 hayvan ekleyin.');ms.focus();return;}}if(scope.value==='paddock'&&!document.getElementById('healthPaddock').value){{e.preventDefault();alert('Lütfen bir padok seçin.');}}}});</script>'''
             health_head='''<header class="workspace-hero"><div><h1>🩺 Sağlık Merkezi</h1><p>Geciken ve yaklaşan işlemleri öncelik sırasıyla yönetin.</p></div><div class="workspace-actions"><button type="button" class="btn" onclick="toggleSectionDrawer('healthPlanDrawer',true)">＋ Yeni Sağlık Planı</button><a class="btn alt" href="/medicines">İlaç & Veteriner</a></div></header><div class="card compact-filter"><label>Hayvan / Ürün Ara<input id="healthWorkspaceSearch" type="search" placeholder="Küpe, ürün veya işlem"></label></div><nav class="module-tabs" id="healthStatusTabs"><button class="module-tab active" data-health-filter="all">Tüm Planlar <b data-health-count="all"></b></button><button class="module-tab" data-health-filter="overdue">Geciken <b data-health-count="overdue"></b></button><button class="module-tab" data-health-filter="today">Bugün <b data-health-count="today"></b></button><button class="module-tab" data-health-filter="upcoming">Yaklaşan <b data-health-count="upcoming"></b></button><button class="module-tab" data-health-filter="history">Hayvan Dosyaları</button></nav>'''
             body=body.replace('</style><h1>Sağlık</h1>', '</style>'+health_head,1)
-            body=body.replace('<div class="card"><form method="post" class="form" id="healthForm"', '<div class="section-drawer-backdrop" id="healthPlanDrawerBackdrop" onclick="if(event.target===this)toggleSectionDrawer(\'healthPlanDrawer\',false)"></div><aside class="section-drawer" id="healthPlanDrawer"><div class="section-drawer-head"><div><h2>Yeni Sağlık Planı</h2><div class="mut">Tek hayvan veya padok için plan oluşturun.</div></div><button type="button" class="section-drawer-close" onclick="toggleSectionDrawer(\'healthPlanDrawer\',false)">×</button></div><div class="section-drawer-body"><div class="card"><form method="post" class="form" id="healthForm"',1)
+            body=body.replace('<div class="card"><form method="post" class="form" id="healthForm"', '<div class="section-drawer-backdrop" id="healthPlanDrawerBackdrop" onclick="if(event.target===this)toggleSectionDrawer(\'healthPlanDrawer\',false)"></div><aside class="section-drawer" id="healthPlanDrawer"><div class="section-drawer-head"><div><h2>Yeni Sağlık Planı</h2><div class="mut">Tek, çoklu hayvan veya padok için plan oluşturun.</div></div><button type="button" class="section-drawer-close" onclick="toggleSectionDrawer(\'healthPlanDrawer\',false)">×</button></div><div class="section-drawer-body"><div class="card"><form method="post" class="form" id="healthForm"',1)
             body=body.replace('</form></div>\n            <div class="card" style="margin-top:14px"><h2>💉 Planlanan Aşı / Tedavi İşlemleri</h2>', '</form></div></div></aside><div class="card module-panel active" data-health-panel="plans"><h2>💉 Planlanan Aşı / Tedavi İşlemleri</h2>',1)
             body=body.replace('<div class="card" style="margin-top:14px"><h2>🩺 Hayvan Bazlı Sağlık Dosyaları</h2>', '<div class="card module-panel" data-health-panel="history"><h2>🩺 Hayvan Bazlı Sağlık Dosyaları</h2>',1)
             body+='''<script>(function(){const cards=[...document.querySelectorAll('.health-plan-card')],groups=[...document.querySelectorAll('.health-group')],tabs=[...document.querySelectorAll('[data-health-filter]')],plans=document.querySelector('[data-health-panel="plans"]'),history=document.querySelector('[data-health-panel="history"]'),search=document.getElementById('healthWorkspaceSearch');window.toggleSectionDrawer=function(id,on){const d=document.getElementById(id),b=document.getElementById(id+'Backdrop');if(d)d.classList.toggle('open',!!on);if(b)b.classList.toggle('open',!!on);document.body.style.overflow=on?'hidden':''};const query=new URLSearchParams(location.search);let active=['all','overdue','today','upcoming','history'].includes(query.get('filter'))?query.get('filter'):'all';if(search)search.value=query.get('search')||'';tabs.forEach(x=>x.classList.toggle('active',x.dataset.healthFilter===active));function norm(v){return (v||'').toLocaleLowerCase('tr-TR').trim()}function paint(){const term=norm(search&&search.value);if(active==='history'){plans.classList.remove('active');history.classList.add('active');groups.forEach(x=>x.style.display=(!term||norm(x.dataset.healthSearch).includes(term))?'':'none');return}history.classList.remove('active');plans.classList.add('active');cards.forEach(x=>{const okStatus=active==='all'||x.dataset.healthStatus===active;const okSearch=!term||norm(x.dataset.healthSearch||x.textContent).includes(term);x.style.display=okStatus&&okSearch?'':'none'})}tabs.forEach(t=>t.addEventListener('click',()=>{active=t.dataset.healthFilter;tabs.forEach(x=>x.classList.toggle('active',x===t));paint()}));if(search)search.addEventListener('input',paint);['all','overdue','today','upcoming'].forEach(k=>{const el=document.querySelector('[data-health-count="'+k+'"]');if(el)el.textContent=k==='all'?cards.length:cards.filter(x=>x.dataset.healthStatus===k).length});document.addEventListener('keydown',e=>{if(e.key==='Escape')toggleSectionDrawer('healthPlanDrawer',false)});paint()})();</script>'''
@@ -8462,17 +8883,25 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 initial_items=json.dumps([{'feed_id':int(x['feed_id']),'quantity':float(x['quantity'] or 0),'unit':str(x['unit'] or 'kg'),'package_kg':float(x['package_kg'] or 1),'unit_price':float(x['purchase_unit_price'] or 0)} for x in invoice_items],ensure_ascii=False)
                 if str(r['payment_method'] or '')=='Vadeli':
                     if str(r['payment_status'] or '')=='Ödendi':
-                        payment_state_html=f'''<div class="invoice-payment-state paid"><div><b>✅ Ödendi</b><span>Ödeme tarihi: {fmt_date(r['paid_date'])}</span></div><form method="post" action="/finance/unmark-paid" data-submit-lock="1" data-submit-text="⏳ Geri alınıyor…" onsubmit="return confirm('Bu faturayı tekrar Ödenmedi/Bekliyor durumuna almak istiyor musunuz?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}"><button class="btn alt">↩ Ödenmedi Yap</button></form></div>'''
+                        payment_state_html=f'''<div class="invoice-payment-state paid"><div><b>✅ Ödendi</b><span>Ödeme tarihi: {fmt_date(r['paid_date'])}</span></div><form method="post" action="/finance/unmark-paid" data-submit-lock="1" data-submit-text="⏳ Geri alınıyor…" onsubmit="return confirm('Bu faturayı tekrar Ödenmedi/Bekliyor durumuna almak istiyor musunuz?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}#payment-status"><button class="btn alt">↩ Ödenmedi Yap</button></form></div>'''
                     else:
-                        payment_state_html=f'''<div class="invoice-payment-state pending"><div><b>🕒 Ödenmedi / Bekliyor</b><span>Vade: {fmt_date(r['due_date'])}</span></div><form method="post" action="/finance/mark-paid" data-submit-lock="1" data-submit-text="⏳ İşleniyor…" onsubmit="return confirm('Bu faturayı Ödendi olarak işaretlemek istiyor musunuz?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}"><button class="btn">✅ Ödendi Yap</button></form></div>'''
+                        payment_state_html=f'''<div class="invoice-payment-state pending"><div><b>🕒 Ödenmedi / Bekliyor</b><span>Vade: {fmt_date(r['due_date'])}</span></div><form method="post" action="/finance/mark-paid" data-submit-lock="1" data-submit-text="⏳ İşleniyor…" onsubmit="return confirm('Bu faturayı Ödendi olarak işaretlemek istiyor musunuz?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="paid_date" value="{date.today().isoformat()}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}#payment-status"><button class="btn">✅ Ödendi Yap</button></form></div>'''
                 else:
                     payment_state_html='''<div class="invoice-payment-state cash"><div><b>💳 Peşin ödeme</b><span>Bu fatura vadeli değil; ayrıca Ödendi/Ödenmedi takibi yapılmaz.</span></div></div>'''
-                body=fr'''<h1>🧾 Yem Faturasını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form" id="invoiceEditForm" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="invoice_edit" value="yes"><input type="hidden" name="feed_items_json" id="editFeedItemsJson"><label>Fatura Tarihi<input type="date" name="tx_date" value="{h(r['tx_date'])}" required></label><label>Tedarikçi / Firma<input name="supplier" value="{h(r['supplier'])}"></label><label>Fatura No<input name="invoice_no" value="{h(r['invoice_no'])}"></label><label>Ödeme Yöntemi<select name="payment_method" id="editInvoicePayment"><option {'selected' if r['payment_method']=='Nakit' else ''}>Nakit</option><option {'selected' if r['payment_method']=='Banka' else ''}>Banka</option><option {'selected' if r['payment_method']=='Kredi Kartı' else ''}>Kredi Kartı</option><option {'selected' if r['payment_method']=='Vadeli' else ''}>Vadeli</option></select></label><label id="editInvoiceDueLabel">Vade Tarihi<input type="date" name="due_date" id="editInvoiceDue" value="{h(r['due_date'])}"></label><label class="full">Açıklama<input name="description" value="{h(r['description'])}"></label><div class="full"><h3>🌾 Fatura Kalemleri</h3><div id="editFeedRows"></div><button type="button" class="btn alt" id="editAddFeed">＋ Yem Ekle</button><div style="margin-top:12px;text-align:right;font-size:18px">Fatura Toplamı: <b id="editInvoiceTotal">₺0,00</b></div></div><div class="full"><button class="btn">💾 Faturayı Güncelle</button> <a class="btn alt" href="/finance">İptal</a></div></form><div class="invoice-payment-wrap"><h3>💳 Ödeme Durumu</h3>{payment_state_html}</div></div><style>.invoice-edit-row{{display:grid;grid-template-columns:2fr .7fr .75fr .8fr 1fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px}}.invoice-edit-row output{{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9}}.invoice-payment-wrap{{margin-top:18px;padding-top:16px;border-top:1px solid #dce8df}}.invoice-payment-state{{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 16px;border:1px solid #dce8df;border-radius:12px;background:#f8fbf9}}.invoice-payment-state>div{{display:grid;gap:4px}}.invoice-payment-state span{{color:#65736b;font-size:13px}}.invoice-payment-state form{{margin:0}}.invoice-payment-state.paid{{background:#eef8f1;border-color:#cfe7d6}}.invoice-payment-state.pending{{background:#fff9e8;border-color:#eadcae}}@media(max-width:700px){{.invoice-edit-row{{grid-template-columns:1fr 1fr}}.invoice-edit-row label:first-child,.invoice-edit-row .line-total,.invoice-edit-row button{{grid-column:1/-1}}.invoice-payment-state{{display:grid}}.invoice-payment-state .btn{{width:100%}}}}</style><script>const feedOptions=`<option value="">Yem seçin…</option>{feed_options}`;const initialItems={initial_items};function moneyNum(v){{v=String(v||'').trim().replace(/\s/g,'').replace(/₺/g,'');if(!v)return 0;if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');else{{const a=v.split('.');if(a.length>1&&a.slice(1).every(x=>x.length===3))v=a.join('');}}const n=Number(v);return Number.isFinite(n)?n:0}}function fmt(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0)}}function addRow(item={{}}){{const row=document.createElement('div');row.className='invoice-edit-row';row.innerHTML='<label>Yem<select class="feed">'+feedOptions+'</select></label><label>Miktar<input class="qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="unit"><option value="torba">Torba</option><option value="kg">kg</option><option value="ton">Ton</option></select></label><label class="pkg-label">Torba kg<input class="pkg" type="number" min="0.01" step="0.01" value="50"></label><label><span class="price-cap">Birim Fiyat</span><input class="price" type="number" min="0.01" step="0.01"></label><label class="line-total">Kalem Toplamı<output>₺0,00</output></label><button type="button" class="btn danger">Sil</button>';row.querySelector('.feed').value=String(item.feed_id||'');row.querySelector('.qty').value=item.quantity||'';row.querySelector('.unit').value=item.unit||'kg';row.querySelector('.pkg').value=item.package_kg||50;row.querySelector('.price').value=item.unit_price||'';row.querySelector('button').onclick=()=>{{row.remove();syncRows()}};row.querySelectorAll('input,select').forEach(x=>{{x.oninput=syncRows;x.onchange=syncRows}});document.getElementById('editFeedRows').appendChild(row);syncRows()}}function syncRows(){{let total=0,items=[];document.querySelectorAll('.invoice-edit-row').forEach(row=>{{const unit=row.querySelector('.unit').value,qty=Number(row.querySelector('.qty').value||0),price=moneyNum(row.querySelector('.price').value),pkg=row.querySelector('.pkg');row.querySelector('.pkg-label').style.display=unit==='torba'?'block':'none';row.querySelector('.price-cap').textContent='Birim Fiyat (₺/'+unit+')';const line=Math.round(qty*price*100)/100;row.querySelector('output').textContent=fmt(line);total+=line;items.push({{feed_id:row.querySelector('.feed').value,quantity:qty,unit:unit,package_kg:Number(pkg.value||0),unit_price:price}})}});document.getElementById('editFeedItemsJson').value=JSON.stringify(items);document.getElementById('editInvoiceTotal').textContent=fmt(total)}}initialItems.forEach(addRow);document.getElementById('editAddFeed').onclick=()=>addRow();const pm=document.getElementById('editInvoicePayment'),dl=document.getElementById('editInvoiceDueLabel'),dd=document.getElementById('editInvoiceDue');function syncDue(){{const on=pm.value==='Vadeli';dl.style.display=on?'block':'none';dd.required=on;if(!on)dd.value=''}}pm.onchange=syncDue;syncDue();</script>'''
+                body=fr'''<h1>🧾 Yem Faturasını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form" id="invoiceEditForm" data-submit-lock="1" data-submit-text="⏳ Güncelleniyor…"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="invoice_edit" value="yes"><input type="hidden" name="feed_items_json" id="editFeedItemsJson"><label>Fatura Tarihi<input type="date" name="tx_date" value="{h(r['tx_date'])}" required></label><label>Tedarikçi / Firma<input name="supplier" value="{h(r['supplier'])}"></label><label>Fatura No<input name="invoice_no" value="{h(r['invoice_no'])}"></label><label>Ödeme Yöntemi<select name="payment_method" id="editInvoicePayment"><option {'selected' if r['payment_method']=='Nakit' else ''}>Nakit</option><option {'selected' if r['payment_method']=='Banka' else ''}>Banka</option><option {'selected' if r['payment_method']=='Kredi Kartı' else ''}>Kredi Kartı</option><option {'selected' if r['payment_method']=='Vadeli' else ''}>Vadeli</option></select></label><label id="editInvoiceDueLabel">Vade Tarihi<input type="date" name="due_date" id="editInvoiceDue" value="{h(r['due_date'])}"></label><label class="full">Açıklama<input name="description" value="{h(r['description'])}"></label><div class="full"><h3>🌾 Fatura Kalemleri</h3><div id="editFeedRows"></div><button type="button" class="btn alt" id="editAddFeed">＋ Yem Ekle</button><div style="margin-top:12px;text-align:right;font-size:18px">Fatura Toplamı: <b id="editInvoiceTotal">₺0,00</b></div></div><div class="full"><button class="btn">💾 Faturayı Güncelle</button> <a class="btn alt" href="/finance">İptal</a></div></form><div class="invoice-payment-wrap" id="payment-status"><h3>💳 Ödeme Durumu</h3>{payment_state_html}</div></div><style>.invoice-edit-row{{display:grid;grid-template-columns:2fr .7fr .75fr .8fr 1fr 1fr auto;gap:7px;align-items:end;margin:10px 0;padding:10px;background:#fff;border:1px solid #dce8df;border-radius:10px}}.invoice-edit-row output{{display:block;padding:11px 8px;border:1px solid #d9e4dc;border-radius:8px;background:#f8faf9}}.invoice-payment-wrap{{margin-top:18px;padding-top:16px;border-top:1px solid #dce8df;scroll-margin-top:130px}}.invoice-payment-state{{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 16px;border:1px solid #dce8df;border-radius:12px;background:#f8fbf9}}.invoice-payment-state>div{{display:grid;gap:4px}}.invoice-payment-state span{{color:#65736b;font-size:13px}}.invoice-payment-state form{{margin:0}}.invoice-payment-state.paid{{background:#eef8f1;border-color:#cfe7d6}}.invoice-payment-state.pending{{background:#fff9e8;border-color:#eadcae}}@media(max-width:700px){{.invoice-edit-row{{grid-template-columns:1fr 1fr}}.invoice-edit-row label:first-child,.invoice-edit-row .line-total,.invoice-edit-row button{{grid-column:1/-1}}.invoice-payment-state{{display:grid}}.invoice-payment-state .btn{{width:100%}}}}</style><script>const feedOptions=`<option value="">Yem seçin…</option>{feed_options}`;const initialItems={initial_items};function moneyNum(v){{v=String(v||'').trim().replace(/\s/g,'').replace(/₺/g,'');if(!v)return 0;if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');else{{const a=v.split('.');if(a.length>1&&a.slice(1).every(x=>x.length===3))v=a.join('');}}const n=Number(v);return Number.isFinite(n)?n:0}}function fmt(v){{return new Intl.NumberFormat('tr-TR',{{style:'currency',currency:'TRY'}}).format(v||0)}}function addRow(item={{}}){{const row=document.createElement('div');row.className='invoice-edit-row';row.innerHTML='<label>Yem<select class="feed">'+feedOptions+'</select></label><label>Miktar<input class="qty" type="number" min="0.01" step="0.01"></label><label>Birim<select class="unit"><option value="torba">Torba</option><option value="kg">kg</option><option value="ton">Ton</option></select></label><label class="pkg-label">Torba kg<input class="pkg" type="number" min="0.01" step="0.01" value="50"></label><label><span class="price-cap">Birim Fiyat</span><input class="price" type="number" min="0.01" step="0.01"></label><label class="line-total">Kalem Toplamı<output>₺0,00</output></label><button type="button" class="btn danger">Sil</button>';row.querySelector('.feed').value=String(item.feed_id||'');row.querySelector('.qty').value=item.quantity||'';row.querySelector('.unit').value=item.unit||'kg';row.querySelector('.pkg').value=item.package_kg||50;row.querySelector('.price').value=item.unit_price||'';row.querySelector('button').onclick=()=>{{row.remove();syncRows()}};row.querySelectorAll('input,select').forEach(x=>{{x.oninput=syncRows;x.onchange=syncRows}});document.getElementById('editFeedRows').appendChild(row);syncRows()}}function syncRows(){{let total=0,items=[];document.querySelectorAll('.invoice-edit-row').forEach(row=>{{const unit=row.querySelector('.unit').value,qty=Number(row.querySelector('.qty').value||0),price=moneyNum(row.querySelector('.price').value),pkg=row.querySelector('.pkg');row.querySelector('.pkg-label').style.display=unit==='torba'?'block':'none';row.querySelector('.price-cap').textContent='Birim Fiyat (₺/'+unit+')';const line=Math.round(qty*price*100)/100;row.querySelector('output').textContent=fmt(line);total+=line;items.push({{feed_id:row.querySelector('.feed').value,quantity:qty,unit:unit,package_kg:Number(pkg.value||0),unit_price:price}})}});document.getElementById('editFeedItemsJson').value=JSON.stringify(items);document.getElementById('editInvoiceTotal').textContent=fmt(total)}}initialItems.forEach(addRow);document.getElementById('editAddFeed').onclick=()=>addRow();const pm=document.getElementById('editInvoicePayment'),dl=document.getElementById('editInvoiceDueLabel'),dd=document.getElementById('editInvoiceDue');function syncDue(){{const on=pm.value==='Vadeli';dl.style.display=on?'block':'none';dd.required=on;if(!on)dd.value=''}}pm.onchange=syncDue;syncDue();</script>'''
                 return self.send_html(page('Yem Faturasını Düzenle',body,path,u,msg))
             linked_html=''
             if linked:
                 linked_html=f'''<div class="linked-feed-box"><h3>🔗 Bağlı Yem Stok Hareketi</h3><div class="mut">Bu finans kaydı <b>{h(linked['feed_name'])}</b> stok girişiyle bağlıdır. Miktar veya birim fiyatı burada değiştirirseniz stok kaydı da birlikte güncellenir.</div><div class="linked-feed-grid"><label>Yem<input value="{h(linked['feed_name'])}" disabled></label><label>Miktar (kg)<input type="number" step="0.01" min="0.01" name="linked_feed_qty" id="linkedFeedQty" value="{linked['quantity_kg']}" required></label><label>Birim Fiyat (₺/kg)<input type="number" step="0.0001" min="0.0001" name="linked_feed_unit" id="linkedFeedUnit" value="{linked['unit_price']}" required></label></div><div class="linked-total"><span>Finansa kaydedilecek yeni toplam</span><b id="linkedFeedTotal">{money(float(linked['quantity_kg'])*float(linked['unit_price']))}</b></div><input type="hidden" name="linked_feed" value="yes"></div>'''
-            body=f'''<h1>Finans Kaydını Düzenle</h1><div class="card"><form method="post" action="/finance/edit" class="form">
+            payment_panel=''
+            if str(r['payment_method'] or '')=='Vadeli':
+                payment_subject=r['supplier'] or r['description'] or r['category'] or 'Vadeli kayıt'
+                if str(r['payment_status'] or '')=='Ödendi':
+                    payment_panel=f'''<section class="finance-payment-panel paid" id="payment-status"><div class="finance-payment-copy"><span class="finance-payment-kicker">💳 ÖDEME DURUMU</span><h2>✅ Ödendi</h2><p>{h(payment_subject)} · <b>{money(r['amount'])}</b></p><small>Ödeme tarihi: {fmt_date(r['paid_date'])}</small></div><form method="post" action="/finance/unmark-paid" data-submit-lock="1" data-submit-text="⏳ Geri alınıyor…" onsubmit="return confirm('Bu kaydı tekrar Ödenmedi / Bekliyor durumuna almak istiyor musunuz?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}#payment-status"><button class="btn alt">↩ Ödenmedi Yap</button></form></section>'''
+                else:
+                    action_label='Tahsil Edildi Olarak İşaretle' if str(r['tx_type'] or '')=='Gelir' else 'Ödendi Olarak İşaretle'
+                    payment_panel=f'''<section class="finance-payment-panel pending" id="payment-status"><div class="finance-payment-copy"><span class="finance-payment-kicker">💳 ÖDEME DURUMU</span><h2>🕒 Ödeme bekliyor</h2><p>{h(payment_subject)} · <b>{money(r['amount'])}</b></p><small>Vade: {fmt_date(r['due_date'])}</small></div><form method="post" action="/finance/mark-paid" class="finance-payment-action" data-submit-lock="1" data-submit-text="⏳ İşleniyor…" onsubmit="return confirm('Bu vadeli kayıt ödendi olarak kapatılsın mı?')"><input type="hidden" name="id" value="{r['id']}"><input type="hidden" name="return_to" value="/finance/edit?id={r['id']}#payment-status"><label>Ödeme tarihi<input type="date" name="paid_date" value="{date.today().isoformat()}" required></label><button class="btn">✅ {h(action_label)}</button></form><p class="finance-payment-note">Bu işlem yalnız ödeme durumunu kapatır; kayıt tutarı ve bağlı hayvan bilgisi değişmez.</p></section>'''
+            body=f'''<h1>Finans Kaydını Düzenle</h1>{payment_panel}<div class="card"><form method="post" action="/finance/edit" class="form">
             <input type="hidden" name="id" value="{r["id"]}">
             <label>Tarih<input type="date" name="tx_date" value="{h(r["tx_date"])}" required></label>
             <label>Tür<select name="tx_type"><option {"selected" if r["tx_type"]=="Gelir" else ""}>Gelir</option><option {"selected" if r["tx_type"]=="Gider" else ""}>Gider</option><option {"selected" if r["tx_type"]=="Zarar" else ""}>Zarar</option></select></label>
@@ -8485,7 +8914,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             {linked_html}
             <div class="full" id="statusWarning" style="display:none;padding:12px;border-radius:10px;background:#fff3cd;color:#664d03"><b>Uyarı:</b> Satış veya kesim seçilirse hayvan aktif sürüden çıkarılır. Kategori değiştirilirse durum yeniden hesaplanır.</div>
             <div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="/finance">İptal</a></div>
-            </form></div><script>(function(){{const p=document.getElementById('editPaymentMethod'),l=document.getElementById('editDueLabel'),d=document.getElementById('editDueDate');function sync(){{const on=p.value==='Vadeli';l.style.display=on?'block':'none';d.required=on;if(!on)d.value='';}}p.addEventListener('change',sync);sync();}})();</script>'''
+            </form></div><style>.finance-payment-panel{{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;margin:0 0 14px;padding:16px 18px;border:1px solid #d8e5dc;border-radius:14px;scroll-margin-top:130px;box-shadow:0 4px 14px #173b2810}}.finance-payment-panel.pending{{background:#fff9e8;border-color:#eadcae}}.finance-payment-panel.paid{{background:#eef8f1;border-color:#c9e5d2}}.finance-payment-copy{{display:grid;gap:3px;min-width:0}}.finance-payment-kicker{{color:#7b6740;font-size:10px;font-weight:900;letter-spacing:.08em}}.finance-payment-panel h2{{margin:0;font-size:22px}}.finance-payment-panel p{{margin:2px 0;color:#42594c;overflow-wrap:anywhere}}.finance-payment-panel small{{color:#677a6f}}.finance-payment-action{{display:grid;grid-template-columns:150px auto;align-items:end;gap:8px;margin:0}}.finance-payment-action label{{font-size:11px;font-weight:800;color:#40594a}}.finance-payment-action input{{display:block;width:100%;min-height:39px;margin-top:4px;padding:7px 9px;border:1px solid #c8d8cd;border-radius:8px;background:#fff;box-sizing:border-box}}.finance-payment-note{{grid-column:1/-1;margin:0!important;font-size:11px;color:#697b71!important}}@media(max-width:700px){{.finance-payment-panel{{grid-template-columns:1fr;padding:14px}}.finance-payment-action{{grid-template-columns:1fr 1.3fr;width:100%}}.finance-payment-action .btn{{min-height:43px;padding:8px!important;font-size:11px!important}}}}@media(max-width:390px){{.finance-payment-action{{grid-template-columns:1fr}}.finance-payment-action .btn{{width:100%}}}}</style><script>(function(){{const p=document.getElementById('editPaymentMethod'),l=document.getElementById('editDueLabel'),d=document.getElementById('editDueDate');function sync(){{const on=p.value==='Vadeli';l.style.display=on?'block':'none';d.required=on;if(!on)d.value='';}}p.addEventListener('change',sync);sync();}})();</script>'''
             return self.send_html(page('Finans Düzenle',body,path,u,msg))
         if path=='/finance':
             start=q.get('start',[date.today().replace(day=1).isoformat()])[0]; end=q.get('end',[date.today().isoformat()])[0]; typ=q.get('type',[''])[0]; category=q.get('category',[''])[0]
@@ -9595,6 +10024,31 @@ setTimeout(()=>setFinanceDrawer(false),0);
             try:return_pid=int(f.get('return_paddock_id') or pid)
             except Exception:return_pid=pid
             audit(username,'Padoka rasyon atadı',f'Padok {pid} / Rasyon {rid}',self.client_ip());return self.redirect('/paddocks?selected='+str(return_pid),'Rasyon padoka atandı.')
+        if path=='/reproduction-settings':
+            if not self.require_admin():return
+            fields={
+                'fresh_days':(0,90),'postpartum_control_day':(1,120),'vwp_day':(1,180),
+                'dry_days_before_due':(30,90),'closeup_days_before_due':(7,45),'birth_alert_days_before_due':(1,21),
+            }
+            vals={}
+            try:
+                for key,(lo,hi) in fields.items():
+                    value=int(float(f.get(key) or 0))
+                    if value<lo or value>hi:raise ValueError(key)
+                    vals[key]=value
+            except Exception:
+                return self.redirect('/reproduction-settings','Üreme ayarlarında geçersiz bir değer var.')
+            if vals['postpartum_control_day']<vals['fresh_days']:
+                return self.redirect('/reproduction-settings','Üreme kontrol günü taze dönem sonundan önce olamaz.')
+            if vals['vwp_day']<vals['postpartum_control_day']:
+                return self.redirect('/reproduction-settings','Tohumlamaya hazır başlangıcı üreme kontrol gününden önce olamaz.')
+            if vals['closeup_days_before_due']>vals['dry_days_before_due']:
+                return self.redirect('/reproduction-settings','Yakın doğum eşiği kuruya çıkarma eşiğinden büyük olamaz.')
+            if vals['birth_alert_days_before_due']>vals['closeup_days_before_due']:
+                return self.redirect('/reproduction-settings','Doğum alarmı yakın doğum eşiğinden büyük olamaz.')
+            for key,value in vals.items():setting_set('repro_'+key,value)
+            audit(username,'Akıllı üreme ayarlarını güncelledi',', '.join(f'{k}={v}' for k,v in vals.items()),self.client_ip())
+            return self.redirect('/reproduction-settings','Akıllı üreme ayarları kaydedildi.')
         if path=='/smtp-settings':
             if not self.require_admin():return
             action=(f.get('action') or 'save').strip()
@@ -10505,6 +10959,40 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     c.execute('update animals set pregnancy_source=?,pregnancy_age_months_at_entry=?,pregnancy_entry_date=? where id=?',(source,age_months,ref,aid))
                     audit(username,'Dışarıdan gebe hayvan bilgisini güncelledi',f'{a["tag"]} · Tahmini doğum {due}',self.client_ip())
                     return self.redirect('/animal?id='+str(aid),'Gebelik bilgisi güncellendi; hayvan kartı ve Tohumlama kaydı senkronlandı.')
+                if path in ('/reproduction/dry','/reproduction/dry-cancel'):
+                    return_to=(f.get('return_to') or '/reproduction-center').strip()
+                    if not return_to.startswith('/reproduction-center') or return_to.startswith('//'):return_to='/reproduction-center'
+                    try:aid=int(f.get('animal_id') or 0)
+                    except Exception:return self.redirect(return_to,'Hayvan kaydı geçersiz.')
+                    a=c.execute("select * from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(aid,)).fetchone()
+                    if not a:return self.redirect(return_to,'Aktif dişi hayvan bulunamadı.')
+                    if path.endswith('dry-cancel'):
+                        c.execute("update animals set dry_since='' where id=?",(aid,))
+                        audit(username,'Kuru durumunu geri aldı',str(a['tag']),self.client_ip())
+                        return self.redirect(return_to,f'{a["tag"]} için Kuru durumu geri alındı.')
+                    preg=current_pregnancy_record(c,aid)
+                    if not preg:return self.redirect(return_to,'Hayvan için aktif gebelik kaydı bulunamadı; Kuru durumu işlenmedi.')
+                    dry_date=(f.get('dry_date') or date.today().isoformat()).strip()
+                    try:dry_day=date.fromisoformat(dry_date)
+                    except Exception:return self.redirect(return_to,'Kuruya çıkarma tarihi geçersiz.')
+                    if dry_day>date.today():return self.redirect(return_to,'Kuruya çıkarma tarihi gelecekte olamaz.')
+                    c.execute('update animals set dry_since=? where id=?',(dry_date,aid))
+                    audit(username,'Hayvanı kuruya çıkardı',f'{a["tag"]} · {dry_date}',self.client_ip())
+                    return self.redirect(return_to,f'{a["tag"]} Kuru olarak işaretlendi.')
+                if path=='/reproduction-status':
+                    return_to=(f.get('return_to') or '/reproduction-center').strip()
+                    if not return_to.startswith('/reproduction-center') or return_to.startswith('//'):
+                        return_to='/reproduction-center'
+                    try:iid=int(f.get('id') or 0)
+                    except Exception:return self.redirect(return_to,'Gebelik sonucu kaydı geçersiz.')
+                    try:
+                        rec,stored,due=set_latest_pregnancy_result(c,iid,(f.get('pregnancy_result') or '').strip())
+                    except ValueError as exc:
+                        return self.redirect(return_to,str(exc))
+                    label='Gebe' if is_pregnant_value(stored) else 'Gebe Değil' if stored=='Negatif' else 'Kontrol Bekliyor' if stored=='Bekleniyor' else stored
+                    audit(username,'Gebelik sonucu hızlı güncellendi',f'{rec["tag"]} · {rec["attempt"]}. deneme · {label}',self.client_ip())
+                    due_message=f' · Tahmini doğum {fmt_date(due)}' if due else ''
+                    return self.redirect(return_to,f'{rec["tag"]} gebelik sonucu: {label}{due_message}.')
                 if path=='/insemination-edit':
                     iid=f.get('id','')
                     rec=c.execute('select i.*,a.tag from inseminations i join animals a on a.id=i.animal_id where i.id=?',(iid,)).fetchone()
@@ -10709,7 +11197,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         product=str(t['product'] or '')
                         if t['kind']=='Aşı':product+=f' · {int(t["dose_no"] or 1)}. Doz'
                         else:product+=f' · Gün {int(t["day_no"] or 1)}/{int(t["day_total"] or 1)} · Uygulama {int(t["application_no"] or 1)}/{int(t["applications_per_day"] or 1)}'
-                        notes=f'Padok bazlı plan tamamlandı | Plan #{course_id} | Planlanan {planned}'
+                        notes=f'Toplu plan tamamlandı | Plan #{course_id} | Planlanan {planned}'
                         finance_id=None
                         if float(t['cost'] or 0)>0:
                             c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,calf_id,created_at) values(?,?,?,?,?,?,?,?,?)',(actual,'Gider',t['kind'],float(t['cost'] or 0),product,'Nakit',t['animal_id'],t['calf_id'],datetime.now().isoformat()))
@@ -10717,7 +11205,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('insert into health(animal_id,calf_id,kind,product,applied_date,next_date,cost,notes,finance_id,course_id,task_id) values(?,?,?,?,?,?,?,?,?,?,?)',(t['animal_id'],t['calf_id'],t['kind'],product,actual,'',float(t['cost'] or 0),notes,finance_id,course_id,t['id']))
                         c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=? and status='İşleniyor'",(actual,t['id']))
                         count+=1
-                    audit(username,'Padok sağlık uygulaması tamamlandı',f'Plan #{course_id} · {count} hayvan',self.client_ip())
+                    audit(username,'Toplu sağlık uygulaması tamamlandı',f'Plan #{course_id} · {count} hayvan',self.client_ip())
                     return self.redirect('/health',f'{count} hayvan için uygulama Yapıldı olarak sağlık geçmişine işlendi.')
                 if path=='/health':
                     scope=(f.get('scope_type') or 'single').strip();kind=(f.get('kind') or '').strip();product=(f.get('product') or '').strip();applied=(f.get('applied_date') or '').strip();notes=(f.get('notes') or '').strip()
@@ -10736,6 +11224,25 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         for r in c.execute("select id,tag from animals where paddock_id=? and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)",(paddock_id,)).fetchall():targets.append((r['id'],None,r['tag']))
                         for r in c.execute("select id,tag from calves where paddock_id=? and promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id)",(paddock_id,)).fetchall():targets.append((None,r['id'],r['tag']))
                         if not targets:return self.redirect('/health','Seçilen padokta aktif hayvan bulunamadı.')
+                    elif scope=='multi':
+                        if kind=='Muayene':return self.redirect('/health','Birden fazla hayvan kapsamı aşı veya ilaç planı için kullanılabilir.')
+                        try:subject_keys=json.loads(f.get('subject_keys_json') or '[]')
+                        except Exception:subject_keys=[]
+                        if not isinstance(subject_keys,list):subject_keys=[]
+                        seen=set()
+                        for subject in subject_keys:
+                            subject=str(subject or '').strip()
+                            if subject in seen or ':' not in subject:continue
+                            seen.add(subject);stype,sid=subject.split(':',1)
+                            try:sid=int(sid)
+                            except:continue
+                            if stype=='A':
+                                rec=c.execute("select id,tag from animals where id=? and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)",(sid,)).fetchone()
+                                if rec:targets.append((sid,None,rec['tag']))
+                            elif stype=='C':
+                                rec=c.execute("select id,tag from calves where id=? and promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id)",(sid,)).fetchone()
+                                if rec:targets.append((None,sid,rec['tag']))
+                        if len(targets)<2:return self.redirect('/health','Birden fazla hayvan planı için en az 2 aktif hayvan veya buzağı seçin.')
                     else:
                         subject=(f.get('subject_key') or '').strip()
                         if ':' not in subject:return self.redirect('/health','Lütfen geçerli bir hayvan veya buzağı seçin.')
@@ -10775,6 +11282,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         )
                         audit(username,'Sağlık planı oluşturdu',f'{kind} · {product} · {len(targets)} hayvan · {task_count} uygulama',self.client_ip())
                         if scope=='paddock':return self.redirect('/health',f'{len(targets)} hayvan için {dose_count} dozluk padok aşı planı oluşturuldu.')
+                        if scope=='multi' and kind=='Aşı':return self.redirect('/health',f'{len(targets)} hayvan için {dose_count} dozluk çoklu aşı planı oluşturuldu.')
+                        if scope=='multi' and kind=='İlaç':return self.redirect('/health',f'{len(targets)} hayvan için {treatment_days} gün × günde {times_per_day} uygulamalık çoklu tedavi planı oluşturuldu.')
                         if kind=='Aşı':return self.redirect('/health',f'{dose_count} dozluk aşı planı oluşturuldu. Her doz Yapıldı olarak işaretlenebilir.')
                         return self.redirect('/health',f'{treatment_days} gün × günde {times_per_day} uygulamalık tedavi planı oluşturuldu.')
                     if scope!='single':return self.redirect('/health','Muayene kaydı tek hayvan üzerinden oluşturulmalıdır.')
@@ -10877,17 +11386,18 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if str(row['payment_method'] or '')!='Vadeli':return self.redirect('/finance','Yalnız vadeli ödemelerin ödeme durumu geri alınabilir.')
                     if str(row['payment_status'] or '')!='Ödendi':return self.redirect('/finance','Bu vadeli kayıt zaten Bekliyor durumunda.')
                     c.execute("update finance set payment_status='Bekliyor',paid_date='',paid_amount=0 where id=?",(record_id,))
-                    audit(username,'Vadeli ödeme geri alındı',f"Finans #{record_id} · {row['category']} · {money(row['amount'])}",self.client_ip())
+                    c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username,'Vadeli ödeme geri alındı',f"Finans #{record_id} · {row['category']} · {money(row['amount'])}",datetime.now().strftime('%Y-%m-%d %H:%M:%S'),self.client_ip()))
                     return self.redirect(return_to,'Ödendi işlemi geri alındı. Kayıt tekrar Bekliyor durumunda; finans gideri ve yem stokları değişmedi.')
                 if path=='/finance/mark-paid':
                     record_id=int(f.get('id') or 0);paid_date=(f.get('paid_date') or date.today().isoformat()).strip();return_to=(f.get('return_to') or '/finance').strip()
-                    if not return_to.startswith('/finance'):return_to='/finance'
-                    row=c.execute("select id,amount,payment_status from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()
+                    if return_to!='/' and not return_to.startswith('/finance'):return_to='/finance'
+                    row=c.execute("select id,amount,payment_status,category from finance where id=? and payment_method='Vadeli'",(record_id,)).fetchone()
                     if not row:return self.redirect('/finance','Vadeli ödeme kaydı bulunamadı.')
-                    if row['payment_status']=='Ödendi':return self.redirect('/finance','Bu ödeme daha önce ödendi olarak kapatılmış.')
+                    if row['payment_status']=='Ödendi':return self.redirect(return_to,'Bu ödeme daha önce ödendi olarak kapatılmış.')
                     try:date.fromisoformat(paid_date)
-                    except Exception:return self.redirect('/finance','Ödeme tarihi geçersiz.')
+                    except Exception:return self.redirect(return_to,'Ödeme tarihi geçersiz.')
                     c.execute("update finance set payment_status='Ödendi',paid_date=?,paid_amount=? where id=?",(paid_date,float(row['amount'] or 0),record_id))
+                    c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username,'Vadeli ödeme ödendi',f"Finans #{record_id} · {row['category']} · {money(row['amount'])} · {fmt_date(paid_date)}",datetime.now().strftime('%Y-%m-%d %H:%M:%S'),self.client_ip()))
                     return self.redirect(return_to,'Vadeli ödeme ödendi olarak kapatıldı.')
                 if path=='/finance':
                     category=f['category']; tx_type=normalize_finance_type(category,f.get('tx_type','Gelir'))
@@ -13866,3 +14376,230 @@ APP_LABEL='v'+APP_VERSION
 # aynı aktif gebelik kaynağını kullanır; doğumla kapanan kayıt sayaçtan anında düşer.
 APP_VERSION='3.9.23 DEV4 Hotfix1.22bh'
 APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22bi: Üreme Merkezi aşama filtrelerini onarır; Gebe Değil filtresi
+# ve karttan ayrıntı sayfasına gitmeden hızlı gebelik sonucu düzeltmesi ekler.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bi'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BI_REPRO=r"""
+<style id="hotfix122bi-reproduction-filter-status">
+.repro-board-compact .repro-column[hidden],.repro-board-compact .repro-card[hidden]{display:none!important}
+.repro-status-dialog{width:min(560px,calc(100% - 28px));max-width:560px;margin:auto;padding:0;border:1px solid #cfe0d5;border-radius:18px;background:#fff;color:#173426;box-shadow:0 24px 70px #102b1d4d;overflow:hidden}
+.repro-status-dialog:not([open]){display:none}.repro-status-dialog::backdrop{background:#10251aa8;backdrop-filter:blur(2px)}
+.repro-status-form{padding:20px}.repro-status-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.repro-status-head h2{margin:3px 0 2px;font-size:22px}.repro-status-head p{margin:0}
+.repro-status-kicker{color:#17723f;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.repro-status-close{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:1px solid #d6e4da;border-radius:10px;background:#f4f8f5;color:#274b37;font:700 25px/1 Arial;cursor:pointer}
+.repro-status-help{margin:15px 0 11px;color:#62756a;font-size:12px}.repro-status-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.repro-status-choice{display:flex;min-width:0;min-height:72px;padding:10px 8px;border:1px solid #d6e4da;border-radius:12px;background:#f7faf8;color:#294c38;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:11px;line-height:1.15;text-align:center;cursor:pointer}.repro-status-choice span{font-size:21px}.repro-status-choice:hover{border-color:#79ad8b;background:#edf7f0}.repro-status-choice.current{border:2px solid #197441;background:#e8f5ec;box-shadow:0 0 0 3px #d9efdf}.repro-status-choice.negative.current{border-color:#bd4035;background:#fff0ed;box-shadow:0 0 0 3px #ffe1dc}
+.repro-status-foot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid #e4ece7}.repro-status-foot .btn{display:flex;align-items:center;justify-content:center;min-height:42px;font-size:11px}.repro-status-cancel{min-width:90px}
+@media(max-width:650px){
+ .repro-stage-tabs{display:flex!important;margin:0 -2px 10px!important;padding:6px!important;gap:6px!important;scroll-snap-type:x proximity}
+ .repro-stage-tabs button{min-height:40px!important;padding:7px 10px!important;font-size:10px!important;scroll-snap-align:start}
+ .repro-stage-tabs button b{min-width:22px!important;height:22px!important;padding:0 6px!important;font-size:9px!important}
+ .repro-status-dialog{width:calc(100% - 20px);max-height:calc(100dvh - 28px);border-radius:15px}
+ .repro-status-form{padding:15px}.repro-status-head h2{font-size:18px}.repro-status-help{margin:12px 0 9px;font-size:11px}
+ .repro-status-options{gap:6px}.repro-status-choice{min-height:68px;padding:8px 4px;font-size:9.5px}.repro-status-choice span{font-size:18px}
+ .repro-status-foot{grid-template-columns:minmax(0,1fr) 82px;gap:7px}.repro-status-foot .btn{min-height:40px;padding:7px 6px!important;font-size:9px!important}.repro-status-cancel{min-width:0}
+}
+</style>
+"""
+_page_before_hotfix122bi=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bi(title,body,path,user,flash)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122BI_REPRO+'</head>',1)
+    return html
+
+# Hotfix1.22bj: Dashboard vadeli ödeme satırına güvenli hızlı ödeme ekler;
+# finans düzenleme ekranında ödeme durumu ve ödeme tarihi üstte görünür.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bj'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BJ_DASHBOARD_PAYMENT=r"""
+<style id="hotfix122bj-dashboard-payment">
+.v122bj-task-side{display:grid;justify-items:end;align-items:center;gap:4px;min-width:68px;overflow:visible}
+.v122bj-task-side .v117-chip{align-self:auto;max-width:100%;white-space:nowrap}
+.v122bj-task-side form{display:block;margin:0}
+.v122bj-pay-btn{display:inline-flex;align-items:center;justify-content:center;min-width:58px;min-height:25px;padding:4px 7px;border:1px solid #0b6f3c;border-radius:999px;background:#117944;color:#fff;font:inherit;font-size:9.5px;font-weight:900;line-height:1;white-space:nowrap;cursor:pointer;box-shadow:0 1px 3px #12372522}
+.v122bj-pay-btn:hover{background:#086738}.v122bj-pay-btn:focus-visible{outline:3px solid #92c9a7;outline-offset:2px}
+@media(max-width:650px){
+ .v122au-task-panel .v117-task>.v122bj-task-side{display:grid!important;justify-items:end!important;align-items:center!important;gap:4px!important;min-width:0!important;max-width:74px!important;overflow:visible!important}
+ .v122bj-task-side .v117-chip{max-width:74px!important;padding:5px 6px!important;font-size:9px!important}
+ .v122bj-pay-btn{min-width:54px;min-height:25px;padding:4px 6px;font-size:9px}
+}
+@media(max-width:360px){
+ .v122au-task-panel .v117-task>.v122bj-task-side{max-width:66px!important}
+ .v122bj-task-side .v117-chip{max-width:66px!important;font-size:8.5px!important}
+ .v122bj-pay-btn{min-width:50px;font-size:8.5px}
+}
+</style>
+"""
+_page_before_hotfix122bj=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bj(title,body,path,user,flash)
+    if path=='/':html=html.replace('</head>',HOTFIX122BJ_DASHBOARD_PAYMENT+'</head>',1)
+    return html
+
+# Hotfix1.22bm: merge unprocessed females into the single Boş / İşlem Bekleyen group.
+APP_VERSION = '3.9.23 DEV4 Hotfix1.22bm'
+APP_LABEL = 'v'+APP_VERSION
+_page_before_122bk = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _page_before_122bk(title, body, path, user, flash)
+    if path=='/reproduction-center':
+        css='<style id="hotfix122bk-population">.v117-kpis [data-repro-filter]{cursor:pointer}.v117-kpis [data-repro-filter].active{border-color:#176f3d;box-shadow:0 0 0 2px #176f3d30}.v117-kpis [data-repro-filter]:focus-visible{outline:2px solid #176f3d;outline-offset:3px}.repro-status-options{grid-template-columns:repeat(4,minmax(0,1fr))}.repro-population-note{font-size:12px;line-height:1.5;overflow-wrap:anywhere}@media(max-width:650px){.repro-population-note{font-size:10px}}</style>'
+        html=html.replace('</head>',css+'</head>',1)
+    return html
+
+
+# Hotfix1.22bn: çıktı araçları (Üreme Sağlık + İlaç/Aşı planları)
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bn'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BN_OUTPUT=r"""
+<style id="hotfix122bn-output">
+.bn-output-actions{display:flex;gap:7px;flex-wrap:wrap}.bn-output-actions .btn{white-space:nowrap}
+@media(max-width:650px){.bn-output-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.bn-output-actions .btn{font-size:11px;padding:9px 7px;text-align:center}}
+</style>
+<script id="hotfix122bn-output-js">
+(function(){function init(){
+ if(location.pathname==='/reproduction-center'){
+  const host=document.querySelector('.v117-head .workspace-actions');if(host&&!document.getElementById('bnReproPrint')){
+   const wrap=document.createElement('span');wrap.className='bn-output-actions';
+   wrap.innerHTML='<a id="bnReproPdf" class="btn alt" target="_blank">📄 PDF</a><a id="bnReproPrint" class="btn alt" target="_blank">🖨 Yazdır</a>';host.appendChild(wrap);
+   function sync(){const u=new URL(location.href),q=new URLSearchParams();q.set('stage',u.searchParams.get('stage')||'all');const s=document.getElementById('reproSearch'),p=document.getElementById('reproPaddock');if(s&&s.value.trim())q.set('search',s.value.trim());if(p&&p.value)q.set('paddock',p.value);document.getElementById('bnReproPdf').href='/reproduction-center.pdf?'+q;document.getElementById('bnReproPrint').href='/reproduction-center/print?'+q;}
+   document.addEventListener('click',e=>{if(e.target.closest('[data-repro-filter]'))setTimeout(sync,0)});document.getElementById('reproSearch')?.addEventListener('input',sync);document.getElementById('reproPaddock')?.addEventListener('change',sync);sync();
+  }
+ }
+ if(location.pathname==='/health'){
+  const host=document.querySelector('.workspace-hero .workspace-actions');if(host&&!document.getElementById('bnHealthPlanPrint')){
+   const wrap=document.createElement('span');wrap.className='bn-output-actions';wrap.innerHTML='<a id="bnHealthPlanPdf" class="btn alt" target="_blank">📄 Plan PDF</a><a id="bnHealthPlanPrint" class="btn alt" target="_blank">🖨 Planları Yazdır</a>';host.appendChild(wrap);
+   const search=document.getElementById('healthWorkspaceSearch');function sync(){const active=document.querySelector('[data-health-filter].active')?.dataset.healthFilter||'all',q=new URLSearchParams({filter:active,search:(search?.value||'').trim()});const hide=active==='history';document.getElementById('bnHealthPlanPdf').style.display=hide?'none':'';document.getElementById('bnHealthPlanPrint').style.display=hide?'none':'';document.getElementById('bnHealthPlanPdf').href='/health/plans.pdf?'+q;document.getElementById('bnHealthPlanPrint').href='/health/plans/print?'+q;}
+   document.querySelectorAll('[data-health-filter]').forEach(x=>x.addEventListener('click',()=>setTimeout(sync,0)));search?.addEventListener('input',sync);sync();
+   setTimeout(()=>{document.querySelectorAll('.workspace-hero .workspace-actions a').forEach(a=>{if((a.getAttribute('href')||'').startsWith('/health/tasks'))a.remove();});},80);
+  }
+ }
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
+</script>
+"""
+_page_before_hotfix122bn=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bn(title,body,path,user,flash)
+    if path in ('/reproduction-center','/health'):
+        html=html.replace('</head>',HOTFIX122BN_OUTPUT+'</head>',1)
+    return html
+
+# Hotfix1.22bp: Akıllı Üreme Yaşam Döngüsü
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bp'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BO_REPRO=r"""
+<style id="hotfix122bo-smart-reproduction">
+.repro-smart-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:10px 0}
+.repro-smart-kpi{display:flex!important;align-items:center;gap:9px;text-align:left;border:1px solid #d8e4dc;background:linear-gradient(180deg,#fff,#f7faf8);min-height:70px;cursor:pointer;padding:10px!important}
+.repro-smart-kpi>span{font-size:24px;line-height:1}.repro-smart-kpi>div{display:grid;gap:2px;min-width:0}.repro-smart-kpi small{font-size:10px;color:#66776c;font-weight:800}.repro-smart-kpi b{font-size:22px;color:#173f2a}.repro-smart-kpi.active{border-color:#167744;box-shadow:0 0 0 2px #16774428;background:#eef8f1}
+.repro-smart-line{margin:8px 0 0;padding:8px 9px;border-radius:8px;background:#f3f8f5;border:1px solid #dfebe3;display:grid;gap:4px;font-size:10.5px;line-height:1.35;color:#40584a}
+.repro-smart-badge{font-weight:900;color:#17613a}.repro-card[data-repro-life="dry_due"] .repro-smart-line{background:#fff7df;border-color:#eedda7}.repro-card[data-repro-life="dry_due"] .repro-smart-badge{color:#8a6500}.repro-card[data-repro-life="birth_alert"] .repro-smart-line{background:#fff0ee;border-color:#f1c8c1}.repro-card[data-repro-life="birth_alert"] .repro-smart-badge{color:#a33d2d}
+@media(max-width:1100px){.repro-smart-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.repro-smart-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.repro-smart-kpi{min-height:58px;padding:8px!important}.repro-smart-kpi>span{font-size:20px}.repro-smart-kpi small{font-size:9px}.repro-smart-kpi b{font-size:18px}.repro-smart-line{font-size:9.5px}}
+</style>
+"""
+_page_before_hotfix122bo=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bo(title,body,path,user,flash)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122BO_REPRO+'</head>',1)
+    return html
+
+
+# Hotfix1.22bp: Üreme Merkezi kartlarını mobil ve masaüstünde yeniden dengeler.
+# Akıllı yaşam döngüsü, filtreler ve işlem akışları değiştirilmez; sadece kart hiyerarşisi ve aksiyon yerleşimi iyileştirilir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bp'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BP_REPRO=r"""
+<style id="hotfix122bp-reproduction-card-ui">
+/* Kartı dört net alana ayır: kimlik, bilgi, akıllı durum, işlemler. */
+.repro-board-compact .repro-card{
+  box-sizing:border-box!important;
+}
+.repro-board-compact .repro-card-top{min-width:0!important}
+.repro-board-compact .repro-card-meta{min-width:0!important}
+.repro-board-compact .repro-smart-line{min-width:0!important;margin:0!important}
+.repro-board-compact .repro-card-action{min-width:0!important}
+.repro-board-compact .repro-card-action>*,
+.repro-board-compact .repro-card-action form{box-sizing:border-box!important}
+
+@media(min-width:651px){
+  .repro-board-compact .repro-card{
+    display:grid!important;
+    grid-template-columns:minmax(300px,1.35fr) minmax(240px,1fr) minmax(165px,190px)!important;
+    grid-template-areas:
+      "identity meta action"
+      "identity smart action"!important;
+    grid-template-rows:auto auto!important;
+    column-gap:18px!important;
+    row-gap:7px!important;
+    align-items:center!important;
+    padding:12px 16px!important;
+    min-height:92px!important;
+    overflow:visible!important;
+  }
+  .repro-board-compact .repro-card-top{grid-area:identity!important;display:grid!important;grid-template-columns:54px minmax(0,1fr) auto!important;gap:11px!important;align-items:center!important}
+  .repro-board-compact .repro-photo{width:54px!important;height:54px!important;border-radius:13px!important}
+  .repro-board-compact .repro-card-identity strong{font-size:13px!important;line-height:1.22!important}
+  .repro-board-compact .repro-card-identity small{display:block;margin-top:3px;font-size:10.5px!important}
+  .repro-board-compact .repro-card-top>.v117-chip{justify-self:start!important;align-self:center!important;padding:5px 8px!important;font-size:9px!important}
+  .repro-board-compact .repro-card-meta{grid-area:meta!important;display:block!important;margin:0!important}
+  .repro-board-compact .repro-card-meta .mut{display:block;font-size:11px!important;line-height:1.3!important;color:#607369!important}
+  .repro-board-compact .repro-select{display:none!important}
+  .repro-board-compact .repro-smart-line{grid-area:smart!important;display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:5px 9px!important;padding:6px 8px!important;border-radius:8px!important;font-size:10px!important;line-height:1.25!important}
+  .repro-board-compact .repro-smart-badge{white-space:nowrap!important}
+  .repro-board-compact .repro-card-action{grid-area:action!important;display:grid!important;grid-template-columns:1fr!important;gap:6px!important;align-self:center!important;justify-self:stretch!important;width:auto!important;max-width:none!important;margin:0!important;overflow:visible!important}
+  .repro-board-compact .repro-card-action form{width:100%!important;margin:0!important}
+  .repro-board-compact .repro-card-action .btn{display:flex!important;width:100%!important;min-width:0!important;max-width:none!important;min-height:36px!important;padding:7px 9px!important;font-size:9.5px!important;line-height:1.1!important;white-space:normal!important;text-align:center!important}
+}
+
+@media(max-width:650px){
+  .repro-board-compact .repro-cards{gap:9px!important;padding:9px!important}
+  .repro-board-compact .repro-card{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    grid-template-areas:
+      "identity"
+      "meta"
+      "smart"
+      "action"!important;
+    gap:8px!important;
+    padding:12px!important;
+    border:1px solid #dfe9e2!important;
+    border-radius:14px!important;
+    overflow:hidden!important;
+    background:#fff!important;
+  }
+  .repro-board-compact .repro-card-top{grid-area:identity!important;display:grid!important;grid-template-columns:64px minmax(0,1fr)!important;grid-template-rows:auto auto!important;gap:2px 10px!important;align-items:center!important}
+  .repro-board-compact .repro-photo{grid-column:1!important;grid-row:1/3!important;width:64px!important;height:64px!important;border-radius:14px!important}
+  .repro-board-compact .repro-card-identity{grid-column:2!important;grid-row:1!important;align-self:end!important}
+  .repro-board-compact .repro-card-identity strong{font-size:15px!important;line-height:1.16!important;white-space:normal!important}
+  .repro-board-compact .repro-card-identity small{display:block;margin-top:4px;font-size:10.5px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  .repro-board-compact .repro-card-top>.v117-chip{grid-column:2!important;grid-row:2!important;justify-self:start!important;align-self:start!important;margin-top:4px!important;padding:5px 9px!important;font-size:9.5px!important}
+  .repro-board-compact .repro-card-meta{grid-area:meta!important;display:block!important;margin:1px 0 0!important;padding:0!important}
+  .repro-board-compact .repro-card-meta .mut{display:block;font-size:11.5px!important;line-height:1.3!important;color:#607369!important}
+  .repro-board-compact .repro-select{display:none!important}
+  .repro-board-compact .repro-smart-line{grid-area:smart!important;display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:4px 8px!important;padding:7px 9px!important;border-radius:9px!important;font-size:10.5px!important;line-height:1.3!important}
+  .repro-board-compact .repro-smart-badge{white-space:nowrap!important}
+  .repro-board-compact .repro-card-action{grid-area:action!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;width:100%!important;max-width:none!important;margin:1px 0 0!important;overflow:visible!important}
+  .repro-board-compact .repro-card-action>button,
+  .repro-board-compact .repro-card-action>a,
+  .repro-board-compact .repro-card-action>form{width:100%!important;min-width:0!important;margin:0!important}
+  .repro-board-compact .repro-card-action .btn{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-width:0!important;max-width:none!important;min-height:40px!important;padding:8px 7px!important;box-sizing:border-box!important;font-size:10px!important;line-height:1.15!important;white-space:normal!important;text-align:center!important;overflow:visible!important;text-overflow:clip!important}
+  .repro-board-compact .repro-card-action>:only-child{grid-column:1/-1!important}
+}
+
+@media(max-width:360px){
+  .repro-board-compact .repro-card-action{grid-template-columns:1fr!important}
+  .repro-board-compact .repro-card-action>*{grid-column:1!important}
+  .repro-board-compact .repro-photo{width:58px!important;height:58px!important}
+  .repro-board-compact .repro-card-top{grid-template-columns:58px minmax(0,1fr)!important}
+}
+</style>
+"""
+_page_before_hotfix122bp=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bp(title,body,path,user,flash)
+    if path=='/reproduction-center':
+        html=html.replace('</head>',HOTFIX122BP_REPRO+'</head>',1)
+    return html

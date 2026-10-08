@@ -1,3 +1,52 @@
+# Hotfix1.22bp — Üreme Kartları Responsive UI
+
+- Üreme Merkezi hayvan kartları masaüstünde 3 bölgeli, mobilde dikey ve kompakt düzene alındı.
+- Sonucu Güncelle / Kuruya Çıkar gibi aksiyonlar kartın ayrı işlem alanında hizalandı.
+- Akıllı durum satırı kart içine kompakt yerleştirildi; gereksiz boşluk ve kart yüksekliği azaltıldı.
+- 1.22bo Akıllı Üreme Yaşam Döngüsü mantığı, filtreler, PDF çıktıları ve solver/rasyon kodu korunur.
+
+## 3.9.23 DEV4 Hotfix1.22bp
+- Akıllı Üreme Yaşam Döngüsü: Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru, Yakın Doğum ve doğum alarmı.
+- Kuruya çıkar / geri al işlemi, doğumda otomatik kuru durum temizliği.
+- Hayvanın geçmiş kızgınlık aralıklarından bireysel sonraki kızgınlık penceresi tahmini.
+- Üreme eşikleri Ayarlar Merkezi'nden işletmeye göre değiştirilebilir.
+- Üreme çıktı raporları yeni akıllı kategorileri destekler.
+
+## 3.9.23 DEV4 Hotfix1.22bn
+- Üreme Merkezi: tüm kategoriler için filtreye göre Yazdır/PDF çıktı.
+- Sağlık Merkezi: ilaç/aşı planları için plan özeti Yazdır/PDF çıktı.
+- Mobil çıktı düğmeleri kompakt yerleşim.
+
+# Hotfix1.22bm — Çoklu Hayvan Sağlık / Aşı Planı
+
+- Sağlık planı Uygulama Kapsamı'na **Birden Fazla Hayvan** eklendi.
+- Küpe/takma ad ile ara → **+ Ekle** akışı ve seçilen hayvan rozetleri eklendi.
+- Tek plan kaydı seçilen tüm aktif hayvan/buzağılara ayrı sağlık görevi üretir.
+- Çoklu plan tek kartta görünür; **X Hayvan Yapıldı** işlemi ilgili uygulamayı tüm seçilen hayvanların sağlık geçmişine işler.
+- Çoklu kapsam Aşı ve İlaç planlarında desteklenir; Muayene tek hayvan olarak kalır.
+- Mükerrer seçim ve 2'den az hedef backend tarafında engellenir.
+
+Hotfix1.22bm: Ayrı “İşlem Yapılmamış” kartı ve filtresi kaldırıldı. Boş / İşlem Bekleyen tek grup olarak gösterilir; özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir, kart rozetleri ayrımı korur.
+Hotfix1.22bm: Üreme Merkezi tüm aktif dişileri kapsar. Ayrı İşlem Yapılmamış filtresi kaldırıldı; tüm boş/işlem bekleyen dişiler tek Boş / İşlem Bekleyen grubunda gösterilir. Özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir; kart rozetleri ayrımı korur.
+
+# Hotfix1.22bj - Dashboard Hızlı Ödeme
+
+- `Bugünün İşleri` vadeli ödeme satırına, onay pencereli ve çift gönderim kilitli `Öde` eylemi eklendi.
+- Hızlı ödeme başarıyla tamamlandığında Dashboard'a dönülür ve kapanan görev bekleyen işler listesinden çıkar.
+- Ödeme satırının ayrıntı bağlantısı `/finance/edit` içindeki yeni `Ödeme Durumu` kartına gider; ödeme tarihi kullanıcı tarafından değiştirilebilir.
+- Genel finans kayıtlarında bekleyen/ödenmiş durumu görünür hale getirildi ve gerektiğinde `Ödenmedi Yap` geri alma eylemi eklendi.
+- Ödeme kapatma işlemi denetim günlüğüne yazılır; finans tutarı, stok ve hayvan ilişkileri değiştirilmez.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22bj` ile eşlendi.
+
+# Hotfix1.22bi - Üreme Filtresi ve Hızlı Gebelik Sonucu
+
+- Üreme Merkezi filtrelerini etkisizleştiren geç yüklenen `display:grid!important` çakışması kesin `hidden` kuralıyla giderildi.
+- Mobilde de görünen aşama çubuğuna `Gebelik Kontrolü` ve `Gebe Değil` filtreleri eklendi; Gebe filtresi tüm pozitif kayıtları gösterir.
+- `Tümü` sayacı, doğuma yaklaşan alt kümesini iki kez saymadan benzersiz hayvan kimliklerinden üretilir.
+- Hayvan kartındaki hızlı sonuç penceresiyle son tohumlama `Kontrol Bekliyor`, `Gebe` veya `Gebe Değil` yapılabilir.
+- Hızlı düzeltme eski bir denemeyi yanlışlıkla değiştirmez; yalnız en güncel tohumlama kaydını kabul eder ve tahmini doğum tarihini sonuçla birlikte senkronlar.
+- Inno Setup ve GitHub Actions kurulum dosyası adları `1.22bi` ile eşlendi.
+
 # Hotfix1.22bh - Gebelik Sayacı Senkronizasyonu
 
 - Dashboard, Üreme Merkezi, Tohumlama listesi ve gebelik aşıları tek aktif gebelik kaynağına bağlandı.

@@ -1,4 +1,24 @@
-# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bh
+Hotfix1.22bp: Akıllı Üreme Yaşam Döngüsü eklendi. Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru ve Yakın Doğum durumları dinamik hesaplanır; bireysel kızgınlık geçmişinden tahmin, kuruya çıkarma işlemi ve işletmeye özel üreme eşikleri desteklenir.
+Hotfix1.22bn: Ayrı “İşlem Yapılmamış” kartı ve filtresi kaldırıldı. Boş / İşlem Bekleyen tek grup olarak gösterilir; özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir, kart rozetleri ayrımı korur.
+Hotfix1.22bn: Üreme Merkezi tüm aktif dişileri kapsar. Ayrı İşlem Yapılmamış filtresi kaldırıldı; tüm boş/işlem bekleyen dişiler tek Boş / İşlem Bekleyen grubunda gösterilir. Özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir; kart rozetleri ayrımı korur.
+
+# ÇiftlikPro Enterprise V3.9.23 DEV4 Hotfix1.22bj
+
+## Hotfix1.22bj – Dashboard Hızlı Ödeme
+
+- Dashboard `Bugünün İşleri` içindeki vadeli ödeme satırlarında durum rozetinin yanında onaylı `Öde` düğmesi bulunur; ödeme bugünün tarihiyle kapatılır ve kullanıcı Dashboard'da kalır.
+- Ödeme başlığına tıklanınca genel finans formunun başındaki `Ödeme Durumu` kartı açılır; ödeme tarihi seçilerek `Ödendi Olarak İşaretle` işlemi yapılabilir.
+- Ödenmiş kayıt aynı karttan yeniden `Ödenmedi` durumuna alınabilir; hızlı işlem yalnız ödeme durumunu değiştirir, gider tutarını veya bağlı hayvan kaydını yeniden oluşturmaz.
+- İşlem kaydı denetim günlüğüne eklenir; yinelenen gönderimler ikinci kez ödeme oluşturmaz.
+- Windows kurulum sürümü, çıktı dosyası ve GitHub Actions artifact yolu `1.22bj` adıyla eşitlendi.
+
+## Hotfix1.22bi – Üreme Filtresi ve Hızlı Gebelik Sonucu
+
+- Üreme Merkezi üst aşama filtrelerinin CSS nedeniyle yeniden açılması giderildi; filtreler masaüstü ve mobilde gerçekten yalnız seçilen grubu gösterir.
+- `Gebelik Kontrolü`, `Gebe`, `Gebe Değil` ve `Doğuma Yaklaşan` ayrı filtreler olarak çalışır; `Tümü` sayısı benzersiz hayvanlar üzerinden hesaplanır.
+- Kontrol bekleyen, gebe ve gebe olmayan hayvan kartlarından `Kontrol Bekliyor / Gebe / Gebe Değil` sonucu tek pencerede değiştirilebilir.
+- Hızlı işlem yalnız hayvanın en güncel tohumlama kaydını günceller; pozitif sonuçta tahmini doğum tarihi yeniden hesaplanır, negatif/bekleyen sonuçta temizlenir.
+- Windows kurulum sürümü, çıktı dosyası ve GitHub Actions artifact yolu `1.22bi` adıyla eşitlendi.
 
 ## Hotfix1.22bh – Gebelik Sayacı Senkronizasyonu
 
