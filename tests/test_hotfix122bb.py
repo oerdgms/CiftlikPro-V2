@@ -19,6 +19,6 @@ class Hotfix122BBTests(unittest.TestCase):
         self.assertAlmostEqual(row['cp_pct'],23.769,places=3)
         self.assertAlmostEqual(row['me_mcal_kg'],3.169,places=3)
         self.assertIn('referans',row['source'])
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22br')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bs')
 
 if __name__=='__main__': unittest.main()

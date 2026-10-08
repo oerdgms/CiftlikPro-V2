@@ -410,13 +410,26 @@ tbody tr:nth-child(even){background:#fbfcfb}tbody tr:hover{background:#f0f7f3}td
 
 '''
 
+class _TestAutoClosingConnection(sqlite3.Connection):
+    """Yalnız CI/test modunda ``with db()`` çıkışında bağlantıyı kapatır.
+
+    Windows runner açık SQLite dosyasını TemporaryDirectory temizlenirken
+    silemediği için testler tearDown aşamasında PermissionError üretiyordu.
+    Runtime/EXE tarafında bu sınıf KESİNLİKLE kullanılmaz; standart sqlite3
+    Connection davranışı korunur.
+    """
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return super().__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+
 def db():
-    # Runtime uyumluluğu: sqlite3'in standart Connection davranışını koru.
-    # Bazı ÇiftlikPro akışları ``with db()`` bloğundan sonra cursor/row yaşam
-    # döngüsünün standart sqlite davranışına dayanıyor. CI dosya kilitlerini
-    # çözmek için global Connection sınıfını değiştirmek uygulamada
-    # ERR_EMPTY_RESPONSE/crash üretebildiği için burada özel subclass yok.
-    c=sqlite3.connect(DB)
+    # Hotfix1.22bs: Windows GitHub testlerinde açık DB dosyası kilitlerini
+    # yalnız test modunda kapat. Kurulu uygulamanın runtime davranışına dokunma.
+    factory = _TestAutoClosingConnection if os.environ.get('CIFTLIKPRO_TEST_AUTOCLOSE_DB') == '1' else sqlite3.Connection
+    c=sqlite3.connect(DB, factory=factory)
     c.row_factory=sqlite3.Row
     return c
 
@@ -14613,3 +14626,8 @@ def page(title,body,path='/',user='admin',flash=''):
     if path=='/reproduction-center':
         html=html.replace('</head>',HOTFIX122BP_REPRO+'</head>',1)
     return html
+
+
+# Hotfix1.22bs: Windows CI SQLite test kilidi fix (runtime davranışı korunur).
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bs'
+APP_LABEL='v'+APP_VERSION

@@ -42,8 +42,8 @@ class Hotfix122BHTests(unittest.TestCase):
                 if animal_id:con.execute('delete from animals where id=?',(animal_id,))
 
     def test_release_version_is_122bh(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22br')
-        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22br')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bs')
+        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bs')
 
 
 if __name__=='__main__':

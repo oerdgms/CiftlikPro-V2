@@ -37,12 +37,16 @@ jobs:
           python -m py_compile app/server.py
           python -m py_compile app/agriculture.py
           python -m py_compile app/desktop_launcher.py
-          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22br'; print('VERSION_OK:', server.APP_VERSION)"
+          python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22bs'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Regresyon testleri
         shell: pwsh
         run: |
+          # Sadece test sırasında SQLite context bağlantılarını kapat.
+          # EXE/runtime bu değişkene sahip değildir.
+          $env:CIFTLIKPRO_TEST_AUTOCLOSE_DB = "1"
           python -m unittest discover -s tests
+          Remove-Item Env:CIFTLIKPRO_TEST_AUTOCLOSE_DB -ErrorAction SilentlyContinue
 
       - name: Kaynak sunucu smoke testi
         shell: pwsh
@@ -136,23 +140,23 @@ jobs:
             choco install innosetup --yes --no-progress
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
-          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bn_Setup.exe")) {
+          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bs_Setup.exe")) {
             throw "Kurulum EXE dosyasi olusturulamadi."
           }
 
       - name: SHA-256 ozeti olustur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bn_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bs_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bn_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
+          "CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bs_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yukle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.23-DEV4-Hotfix1.22br-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.23-DEV4-Hotfix1.22bs-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bn_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22bs_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30

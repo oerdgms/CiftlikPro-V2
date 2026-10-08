@@ -37,6 +37,6 @@ class Hotfix122BLTests(unittest.TestCase):
         self.assertIn('data-repro-section="empty"',html)
         self.assertNotIn('data-repro-filter="unprocessed"',html)
     def test_version(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22br')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bs')
 
 if __name__=='__main__': unittest.main()
