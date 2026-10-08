@@ -1,4 +1,20 @@
-# Hotfix1.22br — Runtime DB / ERR_EMPTY_RESPONSE Fix
+# Hotfix1.22bu — QR / 2D Kamera ve Galeri Okuyucu
+
+- Sürü Merkezi arama satırındaki kod düğmesi etkinleştirildi; telefonda arka kameradan çekim veya galeriden görsel seçimi açılır.
+- Kod çözme EXE içinde çevrimdışı yapılır; QR, Data Matrix, PDF417, Aztec ve yaygın tek boyutlu barkodlar desteklenir.
+- Düz küpe numarası, yalnız rakam içeren kod ve `tag`/`kupe` parametreli URL içeriği aktif hayvan ve buzağı kayıtlarıyla eşleştirilir.
+- Tek eşleşme doğrudan ilgili hayvan kartını açar; eşleşmeyen kod arama alanına aktarılır ve kullanıcıya açık sonuç mesajı gösterilir.
+- Windows EXE iş akışı, PyInstaller tanımı ve kaynaktan çalıştırma denetimi `zxing-cpp` bileşeniyle güncellendi.
+
+# Hotfix1.22bt — Sürü Araması ve Üreme Görünüm Ayrımı
+
+- Sürü Merkezi aramasına görünür `Ara` düğmesi ve 850 ms gecikmeli otomatik arama eklendi; mobilde yalnız metni yazınca sonuçların değişmemesi giderildi.
+- Küpe, takma ad, ırk ve padok araması sunucudaki tüm aktif kayıtları süzmeye devam eder; kategori, padok, sıralama ve sayfalama korunur.
+- QR / 2D barkod düğmesinin mevcut temaya uygun arayüz yeri hazırlandı; kamera taraması bu sürümde bilinçli olarak etkin değildir.
+- Üreme Merkezi `Üreme Takibi` ve `Akıllı Gebelik` çalışma alanlarına ayrıldı; iki özet grubu artık aynı anda üst üste gösterilmez.
+- Mevcut renkler, kartlar, hayvan işlem düğmeleri, akıllı sınıflandırmalar ve PDF/Yazdır araçları korunur.
+
+# Hotfix1.22bs — Runtime DB / ERR_EMPTY_RESPONSE Fix
 
 - 1.22bq'da CI dosya kilidi için eklenen global AutoClosingConnection kaldırıldı.
 - Çalışan uygulamada standart sqlite3.Connection davranışı geri getirildi.

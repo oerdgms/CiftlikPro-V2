@@ -24,4 +24,4 @@ class Hotfix122BsTests(unittest.TestCase):
                 con.execute('select 1')
 
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22bs')
+        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22bu')

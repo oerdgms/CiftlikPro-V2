@@ -63,6 +63,6 @@ class Hotfix122BOTests(unittest.TestCase):
         html,_=self.get('/reproduction-center/print?stage=dry_due')
         self.assertIn('Kuruya Çıkarılacak',html); self.assertIn('TRBOEXPORT',html)
     def test_version(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bs'); self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bs')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bu'); self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bu')
 
 if __name__=='__main__':unittest.main()

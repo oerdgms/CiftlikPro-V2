@@ -76,7 +76,7 @@ class Hotfix122BMTests(unittest.TestCase):
         self.assertIn('msg=',url)
         with server.db() as c:self.assertEqual(c.execute("select count(*) from health_courses where product='BM Tek'").fetchone()[0],0)
     def test_version(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bs')
-        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bs')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bu')
+        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bu')
 
 if __name__=='__main__': unittest.main()

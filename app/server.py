@@ -11,6 +11,13 @@ from PIL import Image, ImageOps
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.exceptions import InvalidSignature
 
+try:
+    import zxingcpp
+except Exception:
+    # Kaynaktan eski bir sanal ortamla çalıştırılırsa uygulamanın tamamını
+    # düşürme; tarama ekranı eksik bileşeni anlaşılır biçimde bildirir.
+    zxingcpp=None
+
 PROGRAM_DIR=Path(__file__).resolve().parent
 DEFAULT_DATA_ROOT=Path(os.environ.get('LOCALAPPDATA') or Path.home())/'CiftlikPro'
 DATA_ROOT=Path(os.environ.get('CIFTLIKPRO_DATA_DIR') or DEFAULT_DATA_ROOT)
@@ -6773,6 +6780,57 @@ def simple_table_pdf(title, subtitle, columns, rows):
     story=[Paragraph(h(farm_display_name(farm_profile())),title_style),Paragraph(h(title),title_style),Paragraph(h(subtitle),style),Spacer(1,10),table]
     doc.build(story);return out.getvalue()
 
+def normalize_scanned_animal_code(value):
+    """QR/2D içeriğini küpe eşleştirmesi için güvenli tek biçime getir."""
+    text=unicodedata.normalize('NFKC',str(value or '')).upper()
+    return re.sub(r'[^A-Z0-9]','',text)
+
+def scanned_animal_code_candidates(value):
+    """Düz küpe, URL query değeri veya açıklama içindeki küpeyi adaylaştır."""
+    raw=urllib.parse.unquote(str(value or '').strip())
+    if not raw:return []
+    values=[raw]
+    try:
+        parsed=urllib.parse.urlparse(raw)
+        query=urllib.parse.parse_qs(parsed.query)
+        for key in ('tag','kupe','ear_tag','animal_tag','code'):
+            values.extend(query.get(key,[]))
+    except Exception:
+        pass
+    values.extend(re.findall(r'TR[\s\-_:]*\d{5,}',raw,flags=re.I))
+    values.extend(re.findall(r'(?<!\d)\d{5,}(?!\d)',raw))
+    result=[]
+    for item in values:
+        normalized=normalize_scanned_animal_code(item)
+        if normalized and normalized not in result:result.append(normalized)
+    return result
+
+def find_animal_from_scanned_values(values):
+    """Okunan değerlerden tek ve güvenilir hayvan/buzağı kartını bul."""
+    candidates=[]
+    for value in values or []:
+        for candidate in scanned_animal_code_candidates(value):
+            if candidate not in candidates:candidates.append(candidate)
+    if not candidates:return None,''
+    with db() as c:
+        rows=[]
+        for row in c.execute("select id,tag from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)").fetchall():
+            rows.append(('animal',row['id'],str(row['tag'] or '')))
+        for row in c.execute("select id,tag from calves where promoted_animal_id is null and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.calf_id=calves.id)").fetchall():
+            rows.append(('calf',row['id'],str(row['tag'] or '')))
+    matches=[]
+    for candidate in candidates:
+        for source,item_id,tag in rows:
+            normalized_tag=normalize_scanned_animal_code(tag)
+            exact=normalized_tag==candidate
+            suffix=candidate.isdigit() and normalized_tag.endswith(candidate)
+            if (exact or suffix) and (source,item_id) not in matches:matches.append((source,item_id))
+    if len(matches)==1:
+        source,item_id=matches[0]
+        return ('/animal?id=' if source=='animal' else '/calf?id=')+str(item_id),candidates[0]
+    return None,candidates[0]
+
+
 class App(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
     def parse_cookie(self):
@@ -9479,6 +9537,28 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 c.execute("insert into settings(setting_key,setting_value) values(?,?) on conflict(setting_key) do update set setting_value=excluded.setting_value",('herd_view_'+username,view))
             audit(username,'Sürü Merkezi görünümünü değiştirdi',{'details':'Ayrıntılı','cards':'Kart','compact':'Kompakt'}[view],self.client_ip())
             self.send_response(204);self.send_header('Cache-Control','no-store');self.end_headers();return
+        if path=='/animal-code-scan':
+            item=f.get('code_image')
+            if not isinstance(item,dict) or not item.get('content'):
+                return self.redirect('/all-animals','Kamera veya galeriden bir kod görüntüsü seçin.')
+            content=item['content']
+            if len(content)>12*1024*1024:
+                return self.redirect('/all-animals','Kod görüntüsü 12 MB sınırını aşıyor.')
+            if zxingcpp is None:
+                return self.redirect('/all-animals','Kod okuyucu bileşeni eksik. requirements.txt bağımlılıklarını kurup yeniden deneyin.')
+            try:
+                scan_image=ImageOps.exif_transpose(Image.open(io.BytesIO(content))).convert('RGB')
+                scan_image.thumbnail((3200,3200),Image.Resampling.LANCZOS)
+                decoded=zxingcpp.read_barcodes(scan_image)
+                values=[str(getattr(result,'text','') or '').strip() for result in decoded]
+                values=[value for value in values if value]
+            except Exception:
+                return self.redirect('/all-animals','Görüntü okunamadı. Kodu net, yakın ve iyi ışıkta yeniden çekin.')
+            if not values:
+                return self.redirect('/all-animals','QR / 2D kod bulunamadı. Kodu net ve yakın çekerek yeniden deneyin.')
+            target,query=find_animal_from_scanned_values(values)
+            if target:return self.redirect(target,'QR / 2D kod okundu.')
+            return self.redirect('/all-animals?q='+urllib.parse.quote(query),'Kod okundu ancak aktif sürüde eşleşen tek bir hayvan bulunamadı.')
         # DEV4: Arayüz kilidine ek olarak tüm kimlik doğrulanmış yazma isteklerini
         # sunucuda da atomik biçimde koru. Böylece çift dokunma/ağ tekrarı yeni
         # hayvan, finans, stok, sağlık veya padok kaydını iki kez oluşturamaz.
@@ -14630,4 +14710,108 @@ def page(title,body,path='/',user='admin',flash=''):
 
 # Hotfix1.22bs: Windows CI SQLite test kilidi fix (runtime davranışı korunur).
 APP_VERSION='3.9.23 DEV4 Hotfix1.22bs'
+APP_LABEL='v'+APP_VERSION
+
+
+# Hotfix1.22bt: mevcut ÇiftlikPro temasını koruyarak Sürü Merkezi aramasını
+# görünür/otomatik hale getirir ve Üreme Merkezi'ndeki iki iş akışını ayırır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bt'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BT_HERD=r"""
+<style id="hotfix122bt-herd-search">
+body.hf122am-herd .hf122bt-herd-search-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 74px 44px!important;
+ gap:7px!important;align-items:center!important;width:100%!important;height:44px!important;
+ min-height:44px!important;line-height:normal!important;margin:0!important
+}
+body.hf122am-herd .hf122bt-herd-search-row>input{min-width:0!important}
+body.hf122am-herd .hf122bt-herd-search-row>.btn{
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;
+ padding:8px!important;border-radius:9px!important;white-space:nowrap!important;font-size:12px!important
+}
+body.hf122am-herd .hf122bu-code-scan{font-size:0!important;cursor:pointer!important}
+body.hf122am-herd .hf122bu-code-scan:before{content:'📷';font-size:19px!important;line-height:1!important}
+body.hf122am-herd .hf122bu-code-scan.is-loading:before{content:'…'}
+@media(max-width:650px){
+ body.hf122am-herd .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 66px 44px!important}
+ body.hf122am-herd .hf122bt-herd-search-row>.btn{font-size:11px!important}
+}
+@media(max-width:370px){
+ body.hf122am-herd .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 58px 42px!important;gap:5px!important}
+ body.hf122am-herd .hf122bt-herd-search-row>.btn{padding:6px!important;font-size:10px!important}
+}
+</style>
+<script id="hotfix122bt-herd-search-js">
+(function(){function init(){
+ const form=document.querySelector('.herd-filter'),label=form&&form.querySelector('.herd-search'),input=label&&label.querySelector('input[type="search"]');
+ if(!form||!label||!input||label.querySelector('.hf122bt-herd-search-row'))return;
+ const row=document.createElement('span');row.className='hf122bt-herd-search-row';input.before(row);row.appendChild(input);
+ const submit=document.createElement('button');submit.type='submit';submit.className='btn';submit.textContent='Ara';row.appendChild(submit);
+ const scan=document.createElement('button');scan.type='button';scan.className='btn alt hf122bu-code-scan';scan.title='QR / 2D barkod tara';scan.setAttribute('aria-label',scan.title);row.appendChild(scan);
+ const file=document.createElement('input');file.type='file';file.name='code_image';file.accept='image/*';file.setAttribute('capture','environment');file.hidden=true;row.appendChild(file);
+ let timer=0,composing=false,last=input.value.trim();
+ function schedule(){if(composing)return;clearTimeout(timer);const value=input.value.trim();if(value===last)return;timer=setTimeout(()=>{last=value;form.requestSubmit?form.requestSubmit(submit):form.submit()},850)}
+ input.addEventListener('compositionstart',()=>{composing=true;clearTimeout(timer)});
+ input.addEventListener('compositionend',()=>{composing=false;schedule()});
+ input.addEventListener('input',schedule);input.addEventListener('search',schedule);
+ scan.addEventListener('click',()=>file.click());
+ file.addEventListener('change',()=>{if(!file.files||!file.files.length)return;clearTimeout(timer);scan.disabled=true;scan.classList.add('is-loading');scan.title='Kod okunuyor…';form.method='post';form.action='/animal-code-scan';form.enctype='multipart/form-data';form.submit()});
+ form.addEventListener('submit',()=>clearTimeout(timer));
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init()})();
+</script>
+"""
+HOTFIX122BT_REPRO=r"""
+<style id="hotfix122bt-reproduction-modes">
+.repro-mode-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0;padding:6px;border:1px solid #d8e5dc;border-radius:12px;background:#f5f9f6}
+.repro-mode-button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:1px solid transparent;border-radius:9px;background:transparent;color:#3e5e4b;font:inherit;font-size:12px;font-weight:850;cursor:pointer}
+.repro-mode-button.active{border-color:#126d3d;background:#147642;color:#fff;box-shadow:0 2px 6px #123d2726}
+.repro-mode-button:focus-visible{outline:3px solid #93c8a7;outline-offset:2px}
+.repro-mode-help{margin:-2px 2px 10px!important;font-size:11px!important;line-height:1.4!important;color:#66786d!important}
+.repro-mode-group[hidden],.repro-stage-tabs[hidden],.repro-smart-kpis[hidden],.v117-kpis[hidden]{display:none!important}
+body .v117-kpis.hf122bt-legacy-summary{display:none!important}
+.repro-smart-kpis.hf122bt-mode-group{display:flex!important;gap:7px!important;overflow-x:auto!important;margin:0 0 10px!important;padding:2px 2px 7px!important;scroll-snap-type:x proximity;scrollbar-width:thin}
+.repro-smart-kpis.hf122bt-mode-group .repro-smart-kpi{flex:1 0 145px!important;min-height:58px!important;padding:8px 10px!important;scroll-snap-align:start}
+.repro-smart-kpis.hf122bt-mode-group .repro-smart-kpi>span{font-size:20px!important}
+.repro-smart-kpis.hf122bt-mode-group .repro-smart-kpi small{font-size:9px!important}
+.repro-smart-kpis.hf122bt-mode-group .repro-smart-kpi b{font-size:18px!important}
+.repro-stage-tabs.hf122bt-mode-group{margin:0 0 10px!important}
+@media(max-width:650px){
+ .repro-mode-switch{position:relative;z-index:2;margin:8px 0;padding:5px;gap:5px}
+ .repro-mode-button{min-height:42px;padding:7px 6px;font-size:11px}
+ .repro-mode-help{font-size:9.5px!important;margin:0 2px 8px!important}
+ .repro-smart-kpis.hf122bt-mode-group{display:flex!important;grid-template-columns:none!important;margin:0 -2px 8px!important;padding:2px 2px 6px!important}
+ .repro-smart-kpis.hf122bt-mode-group .repro-smart-kpi{flex:0 0 132px!important;min-height:54px!important}
+}
+</style>
+<script id="hotfix122bt-reproduction-modes-js">
+(function(){function init(){
+ if(location.pathname!=='/reproduction-center')return;
+ const smart=document.querySelector('.repro-smart-kpis'),tracking=document.querySelector('.repro-stage-tabs'),legacy=document.querySelector('.v117-kpis');
+ if(!smart||!tracking||document.querySelector('.repro-mode-switch'))return;
+ smart.classList.add('hf122bt-mode-group','repro-mode-group');tracking.classList.add('hf122bt-mode-group','repro-mode-group');
+ if(legacy){legacy.classList.add('hf122bt-legacy-summary');legacy.hidden=true}
+ const nav=document.createElement('nav');nav.className='repro-mode-switch';nav.setAttribute('aria-label','Üreme Merkezi görünümü');
+ nav.innerHTML='<button type="button" class="repro-mode-button active" data-repro-mode="tracking">◉ Üreme Takibi</button><button type="button" class="repro-mode-button" data-repro-mode="smart">✦ Akıllı Gebelik</button>';
+ const help=document.createElement('p');help.className='repro-mode-help';smart.before(nav);nav.after(help);
+ const buttons=[...nav.querySelectorAll('[data-repro-mode]')],lifeStages=new Set(['fresh','postpartum_control','ready','dry_due','dry','closeup','birth_alert']);
+ function currentStage(){const value=new URLSearchParams(location.search).get('stage')||'all';return value==='unprocessed'?'empty':value}
+ function firstSmart(){return [...smart.querySelectorAll('[data-repro-filter]')].find(button=>Number(button.querySelector('b')?.textContent||0)>0)||smart.querySelector('[data-repro-filter]')}
+ function setMode(mode,changeFilter){const isSmart=mode==='smart';smart.hidden=!isSmart;tracking.hidden=isSmart;buttons.forEach(button=>button.classList.toggle('active',button.dataset.reproMode===mode));help.textContent=isSmart?'Doğum sonrası, tohumlamaya hazırlık, kuru dönem ve yakın doğum işlerini seçin.':'Kızgınlık, tohumlama, kontrol ve gebelik sonucuna göre hayvanları seçin.';if(changeFilter){const target=isSmart?firstSmart():tracking.querySelector('[data-repro-filter="all"]');target?.click()}}
+ buttons.forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.reproMode,true)));
+ setMode(lifeStages.has(currentStage())?'smart':'tracking',false);
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init()})();
+</script>
+"""
+_page_before_hotfix122bt=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bt(title,body,path,user,flash)
+    if path=='/all-animals':html=html.replace('</head>',HOTFIX122BT_HERD+'</head>',1)
+    if path=='/reproduction-center':html=html.replace('</head>',HOTFIX122BT_REPRO+'</head>',1)
+    return html
+
+
+# Hotfix1.22bu: Sürü Merkezi'nde kamera/galeri görüntüsünden çevrimdışı
+# QR ve 2D barkod çözerek ilgili hayvan veya buzağı kartını açar.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bu'
 APP_LABEL='v'+APP_VERSION

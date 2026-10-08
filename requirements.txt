@@ -3,3 +3,4 @@ cryptography
 openpyxl
 pypdf
 reportlab
+zxing-cpp>=2.2,<3
