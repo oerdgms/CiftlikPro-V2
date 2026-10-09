@@ -1,3 +1,17 @@
+# Hotfix1.22bx - Sürü Merkezi filtre çubuğu yeniden tasarımı
+
+- Kategori düğmeleri ayrı yatay şeritte tutuldu.
+- Masaüstünde Arama + Ara + Kamera + Padok + Göster + Filtrele + Temizle tek kompakt kontrol satırına alındı.
+- Mobilde arama/kamera ve filtre kontrolleri kontrollü iki satırlı responsive düzene geçti.
+- Gizli kamera dosya girişi yer kaplamaz; QR/2D okuma ve mevcut arama davranışı korunur.
+- Solver/rasyon hesapları değiştirilmedi.
+
+# Hotfix1.22bv — Kamera / Arama Responsive Yerleşimi
+
+- Masaüstünde arama kutusu, `Ara` ve kamera düğmesi aynı satıra sabitlendi.
+- Mobilde arama alanının filtre kartıyla üst üste binmesine neden olan yükseklik hesabı düzeltildi.
+- QR / 2D kamera ve galeri okuma davranışı değiştirilmeden korundu.
+
 # Hotfix1.22bu — QR / 2D Kamera ve Galeri Okuyucu
 
 - Sürü Merkezi arama satırındaki kod düğmesi etkinleştirildi; telefonda arka kameradan çekim veya galeriden görsel seçimi açılır.
@@ -1152,3 +1166,8 @@ Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon
 - Temiz DB ilk katalog yüklemesi artık üretici etiket (`label_*`) alanlarını da taşır.
 - 1.22bb ile oluşmuş Sunar 21.28 sıfır etiket alanları güvenli migrasyonla onarılır.
 - GitHub regresyon testi için sürüm/Setup beklentileri 1.22bd ile eşitlendi.
+
+## Hotfix1.22by
+- Tüm canlı metin aramalarında sayfa yenilemesiz 280 ms debounce standardı.
+- Sürü Merkezi ve Yem Kataloğu sonuçları fetch ile arka planda yenilenir; odak korunur.
+- Mevcut 1.22bx responsive görünümü korunur.

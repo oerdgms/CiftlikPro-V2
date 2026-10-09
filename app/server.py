@@ -31,7 +31,7 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.22a'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
 APP_CHANNEL='RELEASE'
 # Tek sürüm kaynağı: login, footer, yedek manifesti ve diğer ekranlar aynı değeri kullanır.
 APP_LABEL='v'+APP_VERSION
@@ -320,6 +320,13 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
   .live-clear{font-size:0;width:46px!important}.live-clear:after{content:'×';font-size:24px;line-height:1}
   .business-summary-grid .stat b{font-size:21px}.mobile-animal-table tr.data-row td{grid-template-columns:92px 1fr}
 }
+
+
+/* Hotfix1.22bz — Arşiv hayvanları mobil kart + üst sekmeler */
+.archive-tabs{margin:0 0 14px;display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.archive-tabs .count-tab{flex:0 0 auto;white-space:nowrap}
+.archive-card-head{display:flex;align-items:center;gap:10px;min-width:180px}.archive-thumb{width:46px;height:46px;border-radius:10px;object-fit:cover;background:#eef4ef;border:1px solid #d9e5dc;flex:0 0 46px}.archive-thumb-placeholder{width:46px;height:46px;border-radius:10px;background:#edf4ef;display:flex;align-items:center;justify-content:center;font-size:22px;flex:0 0 46px}.archive-card-head .animal-tag-btn{min-width:0}.archive-card-head small{display:block;color:var(--mut);font-size:12px;margin-top:3px}.archive-status-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:900;margin-top:5px}.archive-status-sold{background:#e9f7ee;color:#176b3a}.archive-status-cut{background:#fff1e8;color:#9b4c13}.archive-status-lost{background:#fdebea;color:#a52d25}
+@media(max-width:700px){.archive-page-title{font-size:30px;margin-bottom:8px}.archive-info{font-size:14px;line-height:1.45;margin-bottom:12px}.archive-animal-table,.archive-loss-table,.archive-animal-table tbody,.archive-loss-table tbody,.archive-animal-table tr,.archive-loss-table tr,.archive-animal-table td,.archive-loss-table td{display:block;width:100%!important;min-width:0!important}.archive-animal-table,.archive-loss-table{background:transparent!important;min-width:0!important}.archive-animal-table thead,.archive-loss-table thead{display:none}.archive-animal-table tr.data-row,.archive-loss-table tr.data-row{position:relative;background:#fff;border:1px solid #dce8df;border-radius:16px;margin:0 0 12px;padding:14px 14px 12px;box-shadow:0 3px 13px rgba(20,39,27,.06);overflow:hidden}.archive-animal-table tr.data-row:before,.archive-loss-table tr.data-row:before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:#2c8a55}.archive-loss-table tr.data-row:before{background:#c63d31}.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{border:0;padding:6px 0;display:grid;grid-template-columns:128px minmax(0,1fr);gap:10px;align-items:center;font-size:14px}.archive-animal-table tr.data-row td:before,.archive-loss-table tr.data-row td:before{font-size:12px;font-weight:900;color:var(--mut)}.archive-animal-table tr.data-row td:first-child,.archive-loss-table tr.data-row td:first-child{display:block;padding:0 0 10px;margin-bottom:4px;border-bottom:1px solid #edf2ee}.archive-animal-table tr.data-row td:first-child:before,.archive-loss-table tr.data-row td:first-child:before{display:none}.archive-animal-table td:nth-child(2):before{content:'Takma Ad'}.archive-animal-table td:nth-child(3):before{content:'Cinsiyet'}.archive-animal-table td:nth-child(4):before{content:'Çıkış Tarihi'}.archive-animal-table td:nth-child(5):before{content:'Alış'}.archive-animal-table td:nth-child(6):before{content:'Rasyon + Bakım'}.archive-animal-table td:nth-child(7):before{content:'Toplam Maliyet'}.archive-animal-table td:nth-child(8):before{content:'Satış Geliri'}.archive-animal-table td:nth-child(9):before{content:'Net Kâr/Zarar'}.archive-animal-table td:nth-child(7),.archive-animal-table td:nth-child(8),.archive-animal-table td:nth-child(9){margin-top:4px;padding-top:8px;border-top:1px dashed #e3ebe5}.archive-loss-table td:nth-child(2):before{content:'Cinsiyet'}.archive-loss-table td:nth-child(3):before{content:'Olay'}.archive-loss-table td:nth-child(4):before{content:'Tarih'}.archive-loss-table td:nth-child(5):before{content:'Neden'}.archive-loss-table td:nth-child(6):before{content:'Alış'}.archive-loss-table td:nth-child(7):before{content:'Rasyon + Bakım'}.archive-loss-table td:nth-child(8):before{content:'Tedavi'}.archive-loss-table td:nth-child(9):before{content:'Diğer'}.archive-loss-table td:nth-child(10):before{content:'Brüt Kayıp'}.archive-loss-table td:nth-child(11):before{content:'Önceden Finans'}.archive-loss-table td:nth-child(12):before{content:'Yeni Gider'}.archive-loss-table td:nth-child(13):before{content:'Sigorta / Et'}.archive-loss-table td:nth-child(14):before{content:'Net Zayiat'}.archive-loss-table td:nth-child(15){display:flex!important;gap:8px;flex-wrap:wrap;border-top:1px solid #edf2ee!important;margin-top:7px;padding-top:10px!important}.archive-loss-table td:nth-child(15):before{display:none}.archive-loss-table td:nth-child(15) .actions{width:100%}.archive-loss-table td:nth-child(15) .btn{flex:1 1 auto}.archive-tabs{margin-top:2px}.archive-tabs .count-tab{padding:10px 13px}}
+@media(max-width:430px){.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{grid-template-columns:112px minmax(0,1fr)}.archive-thumb,.archive-thumb-placeholder{width:42px;height:42px;flex-basis:42px}}
 
 /* V3.7.6 Görsel Standartlar */
 .btn{min-height:40px;border-radius:11px;padding:9px 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;line-height:1.15;text-decoration:none;transition:transform .12s ease,filter .12s ease,box-shadow .12s ease}
@@ -8056,7 +8063,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             per_options=''.join(f'<option value="{n}" {"selected" if per_page==n else ""}>{n} kayıt</option>' for n in (10,15,30))
             headers=''.join(f'<th>{herd_sort_link(key,label)}</th>' for key,label in [('animal','Hayvan'),('kind','Tür'),('breed','Irk'),('paddock','Padok'),('age','Yaş'),('status','Durum')])+'<th>İşlemler</th>'
             view_buttons=''.join(f'''<button type="button" class="herd-view-button" data-herd-view-button="{key}" aria-pressed="{'true' if selected_herd_view==key else 'false'}" title="{title}"><span aria-hidden="true">{icon}</span><b>{label}</b></button>''' for key,icon,label,title in [('details','▤','Ayrıntı','Ayrıntılı tablo görünümü'),('cards','▦','Kart','Fotoğraflı kart görünümü'),('compact','☷','Kompakt','Daha fazla hayvan gösteren kompakt görünüm')])
-            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs">{tabs}</nav><form class="card herd-filter" method="get" action="/all-animals"><label class="herd-search"><span>Hayvan ara</span><input type="search" name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok ara…" aria-label="Hayvan ara"></label><input type="hidden" name="kind" value="{h(kind)}"><input type="hidden" name="page" value="1"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"><details class="herd-filter-details" open><summary>⚲ Filtreler{' <b class="herd-filter-badge">1</b>' if paddock else ''}<span class="herd-filter-chevron">⌄</span></summary><div class="herd-filter-controls"><label><span>Padok</span><select name="paddock"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label><span>Göster</span><select name="per_page">{per_options}</select></label><div class="herd-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></div></details></form><div class="herd-list-toolbar"><div class="herd-result-summary" role="status">{total_count} hayvan · {h(paddock) if paddock else 'Tüm padoklar'}{(' · '+h(search)) if search else ''}</div><div class="herd-view-switch" role="group" aria-label="Sürü görünümü">{view_buttons}</div></div><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card herd-list-card"><div class="workspace-table-wrap"><table class="workspace-table herd-table"><thead><tr>{headers}</tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
+            body=f'''<header class="workspace-hero"><div><h1>🐄 Sürü Merkezi</h1><p>Aktif sürüyü bulun, filtreleyin ve kaydın kendi satırından yönetin.</p></div><div class="workspace-actions"><a class="btn" href="/animal-add">＋ Hayvan Ekle</a><a class="btn alt" href="/reports#animal-report">Rapor Al</a></div></header><nav class="count-tabs herd-category-strip">{tabs}</nav><form class="card herd-filter" method="get" action="/all-animals"><div class="herd-filter-bx-row"><label class="herd-search"><span>Hayvan ara</span><input type="search" name="q" value="{h(search)}" placeholder="Küpe, takma ad, ırk veya padok ara…" aria-label="Hayvan ara"></label><details class="herd-filter-details" open><summary>⚲ Filtreler{' <b class="herd-filter-badge">1</b>' if paddock else ''}<span class="herd-filter-chevron">⌄</span></summary><div class="herd-filter-controls"><label><span>Padok</span><select name="paddock" aria-label="Padok"><option value="">Tüm Padoklar</option>{paddock_options}</select></label><label><span>Göster</span><select name="per_page" aria-label="Göster">{per_options}</select></label><div class="herd-filter-actions"><button class="btn">Filtrele</button><a class="btn alt" href="/all-animals">Temizle</a></div></div></details></div><input type="hidden" name="kind" value="{h(kind)}"><input type="hidden" name="page" value="1"><input type="hidden" name="sort" value="{h(sort_key)}"><input type="hidden" name="dir" value="{h(sort_dir)}"></form><div class="herd-list-toolbar"><div class="herd-result-summary" role="status">{total_count} hayvan · {h(paddock) if paddock else 'Tüm padoklar'}{(' · '+h(search)) if search else ''}</div><div class="herd-view-switch" role="group" aria-label="Sürü görünümü">{view_buttons}</div></div><script>document.querySelector('select[name=paddock]').value={json.dumps(paddock)};</script><div class="card herd-list-card"><div class="workspace-table-wrap"><table class="workspace-table herd-table"><thead><tr>{headers}</tr></thead><tbody>{trs}</tbody></table></div>{pager}</div>'''
             return self.send_html(page('Tüm Aktif Hayvanlar',body,'/all-animals',u,msg))
 
         if path=='/animals':
@@ -8108,28 +8115,43 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             title='Satılan Hayvanlar' if status=='Satıldı' else 'Kesilen Hayvanlar'
             with db() as c:
                 rows=c.execute("select * from animals where status=? order by exit_date desc,tag",(status,)).fetchall()
+                active_count=c.execute("select count(*) from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)").fetchone()[0]
+                sold_count=c.execute("select count(*) from animals where status='Satıldı'").fetchone()[0]
+                cut_count=c.execute("select count(*) from animals where status='Kesildi'").fetchone()[0]
+                lost_count=c.execute("select count(*) from animal_losses").fetchone()[0]
             archive_rows=[]
             for r in rows:
                 _,_,operating,total_cost=animal_cost_values(r)
                 revenue=float(r['sold_price'] or 0);profit=revenue-total_cost
                 profit_class='color:#08783f' if profit>=0 else 'color:#c0392b'
-                archive_rows.append(f'<tr><td><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r["id"]}">{h(r["tag"])}</a></td><td>{h(r["nickname"])}</td><td>{h(r["gender"])}</td><td>{fmt_date(r["exit_date"])}</td><td>{money(r["purchase_price"])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>')
+                photo=str(r['photo_url'] or '').strip()
+                thumb=(f'<img class="archive-thumb" src="{h(photo)}" alt="">' if photo else '<span class="archive-thumb-placeholder">🐄</span>')
+                status_cls='archive-status-sold' if status=='Satıldı' else 'archive-status-cut'
+                archive_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r['id']}">{h(r['tag'])}</a><small>{h(r['nickname']) or 'Takma ad yok'}</small><span class="archive-status-pill {status_cls}">{h(status)}</span></div></div></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['exit_date'])}</td><td>{money(r['purchase_price'])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>''')
             trs=''.join(archive_rows) or '<tr><td colspan="9">Kayıt yok.</td></tr>'
-            body=f'<h1>{title}</h1><div class="card"><p class="mut">Maliyet çıkış tarihinde donar. Alış + tarihsel padok/rasyon + bakım gideri satış geliriyle karşılaştırılır; geçmiş kayıtlar silinmez.</p><div style="overflow:auto"><table class="mobile-animal-table archive-animal-table" style="min-width:1050px"><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Çıkış Tarihi</th><th>Alış</th><th>Rasyon + Bakım</th><th>Toplam Maliyet</th><th>Satış Geliri</th><th>Net Kâr/Zarar</th></tr>{trs}</table></div></div>'
+            tabs=f'''<nav class="count-tabs archive-tabs"><a class="count-tab" href="/all-animals">Aktif<b>{active_count}</b></a><a class="count-tab {'active' if status=='Satıldı' else ''}" href="/archive/sold">Satılan<b>{sold_count}</b></a><a class="count-tab {'active' if status=='Kesildi' else ''}" href="/archive/slaughtered">Kesilen<b>{cut_count}</b></a><a class="count-tab" href="/archive/lost">Ölen / Kayıp<b>{lost_count}</b></a></nav>'''
+            body=f'''<h1 class="archive-page-title">{title}</h1>{tabs}<div class="card"><p class="mut archive-info">Maliyet çıkış tarihinde donar. Alış + tarihsel padok/rasyon + bakım gideri satış geliriyle karşılaştırılır; geçmiş kayıtlar silinmez.</p><div style="overflow:auto"><table class="archive-animal-table" style="min-width:1050px"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Çıkış Tarihi</th><th>Alış</th><th>Rasyon + Bakım</th><th>Toplam Maliyet</th><th>Satış Geliri</th><th>Net Kâr/Zarar</th></tr></thead><tbody>{trs}</tbody></table></div></div>'''
             return self.send_html(page(title,body,path,u,msg))
         if path=='/archive/lost':
             with db() as c:
-                rows=c.execute('''select l.*,a.tag animal_tag,a.nickname animal_nickname,a.gender animal_gender,
-                    ca.tag calf_tag,ca.nickname calf_nickname,ca.gender calf_gender
+                rows=c.execute('''select l.*,a.tag animal_tag,a.nickname animal_nickname,a.gender animal_gender,a.photo_url animal_photo,
+                    ca.tag calf_tag,ca.nickname calf_nickname,ca.gender calf_gender,ca.photo_url calf_photo
                     from animal_losses l left join animals a on a.id=l.animal_id
                     left join calves ca on ca.id=l.calf_id order by l.event_date desc,l.id desc''').fetchall()
+                active_count=c.execute("select count(*) from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)").fetchone()[0]
+                sold_count=c.execute("select count(*) from animals where status='Satıldı'").fetchone()[0]
+                cut_count=c.execute("select count(*) from animals where status='Kesildi'").fetchone()[0]
+                lost_count=c.execute("select count(*) from animal_losses").fetchone()[0]
             loss_rows=[]
             for r in rows:
                 tag=r['animal_tag'] or r['calf_tag'] or '-';nick=r['animal_nickname'] or r['calf_nickname'] or ''
                 gender=r['animal_gender'] or r['calf_gender'] or '-';href=('/animal?id='+str(r['animal_id'])) if r['animal_id'] else ('/calf?id='+str(r['calf_id']))
-                loss_rows.append(f'''<tr><td><a class="animal-tag-btn" href="{href}">{h(tag)}</a><div class="mut">{h(nick)}</div></td><td>{h(gender)}</td><td>{h(r['event_type'])}</td><td>{fmt_date(r['event_date'])}</td><td>{h(r['cause']) or '-'}</td><td>{money(r['purchase_cost'])}</td><td>{money(r['operating_cost'])}</td><td>{money(r['treatment_cost'])}</td><td>{money(r['other_cost'])}</td><td><b>{money(r['total_cost'])}</b></td><td>{money(r['previously_financed'])}</td><td>{money(r['new_expense'])}</td><td>{money(r['recovery_amount'])}</td><td><b style="color:#b42318">{money(r['net_loss'])}</b></td><td><div class="actions"><a class="btn alt compact-btn" href="/loss-edit?id={r['id']}">Düzenle</a><form class="inline-form" method="post" action="/loss-delete" onsubmit="return confirm('Bu zayiat kaydı silinsin, otomatik finans hareketleri geri alınsın ve hayvan yeniden aktif sürüye dönsün mü?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil / Geri Al</button></form></div></td></tr>''')
+                photo=str(r['animal_photo'] or r['calf_photo'] or '').strip()
+                thumb=(f'<img class="archive-thumb" src="{h(photo)}" alt="">' if photo else '<span class="archive-thumb-placeholder">🕯</span>')
+                loss_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" href="{href}">{h(tag)}</a><small>{h(nick) or 'Takma ad yok'}</small><span class="archive-status-pill archive-status-lost">{h(r['event_type'])}</span></div></div></td><td>{h(gender)}</td><td>{h(r['event_type'])}</td><td>{fmt_date(r['event_date'])}</td><td>{h(r['cause']) or '-'}</td><td>{money(r['purchase_cost'])}</td><td>{money(r['operating_cost'])}</td><td>{money(r['treatment_cost'])}</td><td>{money(r['other_cost'])}</td><td><b>{money(r['total_cost'])}</b></td><td>{money(r['previously_financed'])}</td><td>{money(r['new_expense'])}</td><td>{money(r['recovery_amount'])}</td><td><b style="color:#b42318">{money(r['net_loss'])}</b></td><td><div class="actions"><a class="btn alt compact-btn" href="/loss-edit?id={r['id']}">Düzenle</a><form class="inline-form" method="post" action="/loss-delete" onsubmit="return confirm('Bu zayiat kaydı silinsin, otomatik finans hareketleri geri alınsın ve hayvan yeniden aktif sürüye dönsün mü?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil / Geri Al</button></form></div></td></tr>''')
             trs=''.join(loss_rows) or '<tr><td colspan="15">Ölüm, kayıp veya zorunlu imha kaydı yok.</td></tr>'
-            body=f'''<h1>🕯 Ölen / Kayıp Hayvanlar</h1><p class="mut">Maliyet olay tarihinde donar. Küpeye bağlı eski alış ve giderler tekrar yazılmaz; yalnız finansa aktarılmamış maliyet giderleşir. Sigorta, et veya kurtarma geliri net zayiattan düşer.</p><div class="card" style="overflow:auto"><table style="min-width:1950px"><tr><th>Küpe</th><th>Cinsiyet</th><th>Olay</th><th>Tarih</th><th>Neden</th><th>Alış</th><th>Rasyon + Bakım</th><th>Tedavi</th><th>Diğer</th><th>Brüt Kayıp</th><th>Önceden Finans</th><th>Yeni Gider</th><th>Sigorta/Et</th><th>Net Zayiat</th><th>İşlem</th></tr>{trs}</table></div>'''
+            tabs=f'''<nav class="count-tabs archive-tabs"><a class="count-tab" href="/all-animals">Aktif<b>{active_count}</b></a><a class="count-tab" href="/archive/sold">Satılan<b>{sold_count}</b></a><a class="count-tab" href="/archive/slaughtered">Kesilen<b>{cut_count}</b></a><a class="count-tab active" href="/archive/lost">Ölen / Kayıp<b>{lost_count}</b></a></nav>'''
+            body=f'''<h1 class="archive-page-title">🕯 Ölen / Kayıp Hayvanlar</h1>{tabs}<p class="mut archive-info">Maliyet olay tarihinde donar. Küpeye bağlı eski alış ve giderler tekrar yazılmaz; yalnız finansa aktarılmamış maliyet giderleşir. Sigorta, et veya kurtarma geliri net zayiattan düşer.</p><div class="card" style="overflow:auto"><table class="archive-loss-table" style="min-width:1950px"><thead><tr><th>Küpe</th><th>Cinsiyet</th><th>Olay</th><th>Tarih</th><th>Neden</th><th>Alış</th><th>Rasyon + Bakım</th><th>Tedavi</th><th>Diğer</th><th>Brüt Kayıp</th><th>Önceden Finans</th><th>Yeni Gider</th><th>Sigorta/Et</th><th>Net Zayiat</th><th>İşlem</th></tr></thead><tbody>{trs}</tbody></table></div>'''
             return self.send_html(page('Ölen / Kayıp Hayvanlar',body,path,u,msg))
         if path=='/loss-edit':
             lid=q.get('id',[''])[0]
@@ -14720,10 +14742,14 @@ APP_LABEL='v'+APP_VERSION
 HOTFIX122BT_HERD=r"""
 <style id="hotfix122bt-herd-search">
 body.hf122am-herd .hf122bt-herd-search-row{
- display:grid!important;grid-template-columns:minmax(0,1fr) 74px 44px!important;
- gap:7px!important;align-items:center!important;width:100%!important;height:44px!important;
- min-height:44px!important;line-height:normal!important;margin:0!important
+ display:contents!important
 }
+body.hf122am-herd label.herd-search{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 74px 44px!important;
+ grid-template-rows:auto 44px!important;column-gap:7px!important;row-gap:6px!important;
+ align-items:end!important;width:100%!important;min-width:0!important;margin:0!important
+}
+body.hf122am-herd label.herd-search>span:first-child{grid-column:1/-1!important}
 body.hf122am-herd .hf122bt-herd-search-row>input{min-width:0!important}
 body.hf122am-herd .hf122bt-herd-search-row>.btn{
  display:flex!important;align-items:center!important;justify-content:center!important;
@@ -14734,11 +14760,11 @@ body.hf122am-herd .hf122bu-code-scan{font-size:0!important;cursor:pointer!import
 body.hf122am-herd .hf122bu-code-scan:before{content:'📷';font-size:19px!important;line-height:1!important}
 body.hf122am-herd .hf122bu-code-scan.is-loading:before{content:'…'}
 @media(max-width:650px){
- body.hf122am-herd .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 66px 44px!important}
+ body.hf122am-herd label.herd-search{grid-template-columns:minmax(0,1fr) 66px 44px!important}
  body.hf122am-herd .hf122bt-herd-search-row>.btn{font-size:11px!important}
 }
 @media(max-width:370px){
- body.hf122am-herd .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 58px 42px!important;gap:5px!important}
+ body.hf122am-herd label.herd-search{grid-template-columns:minmax(0,1fr) 58px 42px!important;column-gap:5px!important}
  body.hf122am-herd .hf122bt-herd-search-row>.btn{padding:6px!important;font-size:10px!important}
 }
 </style>
@@ -14815,3 +14841,258 @@ def page(title,body,path='/',user='admin',flash=''):
 # QR ve 2D barkod çözerek ilgili hayvan veya buzağı kartını açar.
 APP_VERSION='3.9.23 DEV4 Hotfix1.22bu'
 APP_LABEL='v'+APP_VERSION
+
+
+# Hotfix1.22bv: Kamera/aramanın masaüstünde alt satırlara düşmesini ve mobilde
+# filtre kartıyla çakışmasını tek satırlı responsive grid ile düzeltir.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bv'
+APP_LABEL='v'+APP_VERSION
+
+# Hotfix1.22bw: Sürü Merkezi arama + QR/kamera üst kontrol satırını
+# eski genel form CSS'inden izole eder. Gizli file input masaüstü/mobilde yer kaplamaz.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bw'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BW_HERD=r"""
+<style id="hotfix122bw-herd-toolbar-fix">
+body.hf122am-herd label.herd-search{
+ display:block!important;
+ width:100%!important;
+ min-width:0!important;
+ margin:0!important;
+}
+body.hf122am-herd label.herd-search>span:first-child{
+ display:block!important;
+ min-height:16px!important;
+ line-height:16px!important;
+ margin:0 0 5px!important;
+ font-size:12px!important;
+ font-weight:650!important;
+ color:#355547!important;
+}
+body.hf122am-herd .hf122bt-herd-search-row{
+ display:grid!important;
+ grid-template-columns:minmax(0,1fr) 74px 44px!important;
+ gap:7px!important;
+ align-items:center!important;
+ width:100%!important;
+ min-width:0!important;
+}
+body.hf122am-herd .hf122bt-herd-search-row>input[type="search"]{
+ display:block!important;
+ grid-column:1!important;
+ width:100%!important;
+ min-width:0!important;
+ height:44px!important;
+ margin:0!important;
+}
+body.hf122am-herd .hf122bt-herd-search-row>.btn{
+ display:flex!important;
+ align-items:center!important;
+ justify-content:center!important;
+ width:100%!important;
+ min-width:0!important;
+ height:44px!important;
+ min-height:44px!important;
+ margin:0!important;
+ padding:7px 8px!important;
+ border-radius:9px!important;
+ box-sizing:border-box!important;
+ white-space:nowrap!important;
+ font-size:12px!important;
+}
+body.hf122am-herd .hf122bt-herd-search-row>input[type="file"][hidden]{
+ display:none!important;
+ position:absolute!important;
+ width:1px!important;
+ height:1px!important;
+ overflow:hidden!important;
+ opacity:0!important;
+ pointer-events:none!important;
+}
+@media(min-width:651px){
+ body.hf122am-herd .herd-filter{
+  grid-template-columns:minmax(360px,1.25fr) minmax(500px,1.55fr)!important;
+  gap:12px!important;
+  align-items:end!important;
+ }
+ body.hf122am-herd .herd-filter-details>.herd-filter-controls{
+  height:auto!important;
+  grid-template-columns:minmax(150px,1fr) 120px auto!important;
+  align-items:end!important;
+ }
+ body.hf122am-herd .herd-filter-actions{margin:0!important;align-self:end!important}
+}
+@media(min-width:651px) and (max-width:1180px){
+ body.hf122am-herd .herd-filter{grid-template-columns:1fr!important}
+}
+@media(max-width:650px){
+ body.hf122am-herd .hf122bt-herd-search-row{
+  grid-template-columns:minmax(0,1fr) 62px 44px!important;
+  gap:6px!important;
+ }
+ body.hf122am-herd .hf122bt-herd-search-row>.btn{font-size:11px!important;padding:6px!important}
+}
+@media(max-width:370px){
+ body.hf122am-herd .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 56px 40px!important;gap:5px!important}
+ body.hf122am-herd .hf122bt-herd-search-row>.btn{font-size:10px!important}
+}
+</style>
+"""
+_page_before_hotfix122bw=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bw(title,body,path,user,flash)
+    if path=='/all-animals':
+        html=html.replace('</head>',HOTFIX122BW_HERD+'</head>',1)
+    return html
+
+
+# Hotfix1.22bx: Sürü Merkezi filtre çubuğu yeniden tasarımı.
+# Kategori şeridi ile arama/QR/padok/göster/aksiyon kontrolleri ayrılır;
+# masaüstünde tek kompakt satır, mobilde kontrollü iki satır kullanılır.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BX_HERD=r"""
+<style id="hotfix122bx-herd-filterbar">
+body.hf122am-herd .herd-category-strip{
+ display:flex!important;gap:8px!important;align-items:center!important;
+ overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;
+ margin:10px 0 10px!important;padding:0 0 4px!important;
+ scrollbar-width:thin!important
+}
+body.hf122am-herd .herd-category-strip .count-tab{
+ flex:0 0 auto!important;min-height:42px!important;margin:0!important
+}
+body.hf122am-herd .herd-filter{
+ display:block!important;padding:10px 12px!important;margin:0 0 12px!important;
+ min-height:0!important;overflow:visible!important
+}
+body.hf122am-herd .herd-filter-bx-row{
+ display:grid!important;grid-template-columns:minmax(340px,1.35fr) minmax(500px,1.65fr)!important;
+ gap:12px!important;align-items:center!important;width:100%!important;min-width:0!important
+}
+body.hf122am-herd .herd-filter .herd-search{
+ display:block!important;width:100%!important;min-width:0!important;margin:0!important
+}
+body.hf122am-herd .herd-filter .herd-search>span:first-child{
+ position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+ overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important
+}
+body.hf122am-herd .herd-filter .hf122bt-herd-search-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 76px 46px!important;
+ gap:7px!important;align-items:center!important;width:100%!important;min-width:0!important;margin:0!important
+}
+body.hf122am-herd .herd-filter .hf122bt-herd-search-row>input[type="search"]{
+ width:100%!important;min-width:0!important;height:44px!important;margin:0!important;padding:8px 11px!important;box-sizing:border-box!important
+}
+body.hf122am-herd .herd-filter .hf122bt-herd-search-row>.btn{
+ width:100%!important;min-width:0!important;height:44px!important;min-height:44px!important;margin:0!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;padding:7px 8px!important;box-sizing:border-box!important
+}
+body.hf122am-herd .herd-filter .hf122bt-herd-search-row>input[type="file"]{display:none!important}
+body.hf122am-herd .herd-filter .herd-filter-details{
+ display:block!important;width:100%!important;min-width:0!important;margin:0!important;border:0!important;background:transparent!important
+}
+body.hf122am-herd .herd-filter .herd-filter-details>summary{display:none!important}
+body.hf122am-herd .herd-filter .herd-filter-controls{
+ display:grid!important;grid-template-columns:minmax(180px,1fr) 120px auto!important;
+ gap:8px!important;align-items:center!important;width:100%!important;min-width:0!important;margin:0!important;padding:0!important
+}
+body.hf122am-herd .herd-filter .herd-filter-controls>label{
+ display:block!important;min-width:0!important;margin:0!important
+}
+body.hf122am-herd .herd-filter .herd-filter-controls>label>span{
+ position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+ overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important
+}
+body.hf122am-herd .herd-filter .herd-filter-controls select{
+ display:block!important;width:100%!important;min-width:0!important;height:44px!important;margin:0!important;padding:7px 10px!important;box-sizing:border-box!important
+}
+body.hf122am-herd .herd-filter .herd-filter-actions{
+ display:grid!important;grid-template-columns:auto auto!important;gap:7px!important;align-items:center!important;margin:0!important;min-width:0!important
+}
+body.hf122am-herd .herd-filter .herd-filter-actions .btn{
+ display:flex!important;align-items:center!important;justify-content:center!important;height:44px!important;min-height:44px!important;
+ margin:0!important;padding:7px 14px!important;white-space:nowrap!important;box-sizing:border-box!important
+}
+@media(min-width:651px) and (max-width:1180px){
+ body.hf122am-herd .herd-filter-bx-row{grid-template-columns:1fr!important;gap:8px!important}
+ body.hf122am-herd .herd-filter{padding:9px 10px!important}
+}
+@media(max-width:650px){
+ body.hf122am-herd .herd-category-strip{margin:8px -2px 8px!important;padding:0 2px 5px!important;gap:6px!important;scroll-snap-type:x proximity!important}
+ body.hf122am-herd .herd-category-strip .count-tab{min-height:38px!important;padding:7px 10px!important;scroll-snap-align:start!important}
+ body.hf122am-herd .herd-filter{padding:9px!important;margin-bottom:9px!important}
+ body.hf122am-herd .herd-filter-bx-row{grid-template-columns:1fr!important;gap:8px!important}
+ body.hf122am-herd .herd-filter .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 64px 44px!important;gap:6px!important}
+ body.hf122am-herd .herd-filter .herd-filter-controls{grid-template-columns:minmax(0,1fr) 96px!important;gap:7px!important}
+ body.hf122am-herd .herd-filter .herd-filter-actions{grid-column:1/-1!important;grid-template-columns:1fr 1fr!important}
+ body.hf122am-herd .herd-filter .herd-filter-actions .btn{width:100%!important;padding:7px 8px!important}
+}
+@media(max-width:370px){
+ body.hf122am-herd .herd-filter .hf122bt-herd-search-row{grid-template-columns:minmax(0,1fr) 58px 42px!important;gap:5px!important}
+ body.hf122am-herd .herd-filter .herd-filter-controls{grid-template-columns:minmax(0,1fr) 88px!important;gap:6px!important}
+}
+</style>
+"""
+_page_before_hotfix122bx=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122bx(title,body,path,user,flash)
+    if path=='/all-animals':
+        html=html.replace('</head>',HOTFIX122BX_HERD+'</head>',1)
+    return html
+
+
+# Hotfix1.22bz: tüm canlı metin aramalarında yenilemesiz debounce standardı.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
+APP_LABEL='v'+APP_VERSION
+HOTFIX122BY_LIVE_SEARCH=r"""
+<script id="hotfix122by-live-search">
+(function(){
+ const DEBOUNCE=280;
+ const keepFocus=(el)=>{try{if(document.activeElement!==el)el.focus({preventScroll:true})}catch(e){}};
+ const paramsFromForm=(form)=>{const p=new URLSearchParams();new FormData(form).forEach((v,k)=>{if(!(v instanceof File))p.set(k,String(v))});return p};
+ const replaceHtml=(dst,src)=>{if(dst&&src)dst.innerHTML=src.innerHTML};
+ function initHerd(){
+  if(location.pathname!=='/all-animals')return;
+  const form=document.querySelector('.herd-filter'); if(!form)return;
+  const old=form.querySelector('input[type="search"][name="q"]'); if(!old)return;
+  const input=old.cloneNode(true); old.replaceWith(input); // eski auto-submit listenerlerini kaldır
+  let timer=0,seq=0;
+  async function run(){
+   const my=++seq,p=paramsFromForm(form);p.set('q',input.value.trim());p.set('page','1');
+   const url='/all-animals?'+p.toString();
+   try{input.setAttribute('aria-busy','true');const r=await fetch(url,{headers:{'X-Requested-With':'CiftlikPro-LiveSearch'}});if(!r.ok)throw 0;const text=await r.text();if(my!==seq)return;const doc=new DOMParser().parseFromString(text,'text/html');replaceHtml(document.querySelector('.herd-list-card'),doc.querySelector('.herd-list-card'));replaceHtml(document.querySelector('.herd-result-summary'),doc.querySelector('.herd-result-summary'));history.replaceState(null,'',url);}
+   catch(e){}finally{input.removeAttribute('aria-busy');keepFocus(input)}
+  }
+  function schedule(){clearTimeout(timer);timer=setTimeout(run,DEBOUNCE)}
+  input.addEventListener('input',schedule);input.addEventListener('search',schedule);
+  form.addEventListener('submit',e=>{e.preventDefault();clearTimeout(timer);run()});
+ }
+ function initFeeds(){
+  if(location.pathname!=='/feeds')return;
+  const form=document.getElementById('feed-catalog-search-form');if(!form)return;
+  const old=document.getElementById('feed-catalog-search');if(!old)return;
+  const input=old.cloneNode(true);old.replaceWith(input); // 350 ms form.submit listenerini kaldır
+  let timer=0,seq=0;
+  const norm=v=>(v||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  function local(){const q=norm(input.value),tokens=q.split(' ').filter(Boolean);let n=0;document.querySelectorAll('.feed-catalog-row').forEach(row=>{const h=norm(row.dataset.search||row.textContent),ok=!tokens.length||tokens.every(t=>h.includes(t));row.style.display=ok?'':'none';if(ok)n++});const c=document.getElementById('feed-search-count');if(c)c.textContent=n+' yem'}
+  async function run(){const my=++seq,p=paramsFromForm(form);p.set('q',input.value.trim());p.set('page','1');const url='/feeds?'+p.toString();try{input.setAttribute('aria-busy','true');const r=await fetch(url,{headers:{'X-Requested-With':'CiftlikPro-LiveSearch'}});if(!r.ok)throw 0;const text=await r.text();if(my!==seq)return;const doc=new DOMParser().parseFromString(text,'text/html');replaceHtml(document.getElementById('feed-catalog-table'),doc.getElementById('feed-catalog-table'));const curPager=document.querySelector('#feed-catalog-table + .workspace-pager'),newPager=doc.querySelector('#feed-catalog-table + .workspace-pager');if(curPager&&newPager)replaceHtml(curPager,newPager);history.replaceState(null,'',url);local()}catch(e){}finally{input.removeAttribute('aria-busy');keepFocus(input)}}
+  function schedule(){local();clearTimeout(timer);timer=setTimeout(run,DEBOUNCE)}
+  input.addEventListener('input',schedule);form.addEventListener('submit',e=>{e.preventDefault();clearTimeout(timer);run()});local();
+ }
+ function debounceExisting(selector,eventName='input'){
+  document.querySelectorAll(selector).forEach(el=>{if(el.dataset.byDebounce)return;el.dataset.byDebounce='1';let t=0;el.addEventListener(eventName,e=>{clearTimeout(t);t=setTimeout(()=>el.dispatchEvent(new CustomEvent('ciftlikpro:debounced',{bubbles:true,detail:{originalEvent:e}})),DEBOUNCE)},{capture:false})});
+ }
+ function init(){
+  initHerd();initFeeds();
+  // Bu alanlar zaten istemci tarafında, sayfa yenilemeden arar. Ortak standart işaretlenir.
+  debounceExisting('#healthWorkspaceSearch,#paddockSearch,#breedSearch,#bulkSearch,#milkSearch,#quick-feed-search,input[data-live-search]');
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+"""
+_page_before_hotfix122by=page
+def page(title,body,path='/',user='admin',flash=''):
+    html=_page_before_hotfix122by(title,body,path,user,flash)
+    return html.replace('</head>',HOTFIX122BY_LIVE_SEARCH+'</head>',1)
