@@ -31,7 +31,7 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ca'
 APP_CHANNEL='RELEASE'
 # Tek sürüm kaynağı: login, footer, yedek manifesti ve diğer ekranlar aynı değeri kullanır.
 APP_LABEL='v'+APP_VERSION
@@ -322,7 +322,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 }
 
 
-/* Hotfix1.22bz — Arşiv hayvanları mobil kart + üst sekmeler */
+/* Hotfix1.22ca — Arşiv hayvanları mobil kart + üst sekmeler */
 .archive-tabs{margin:0 0 14px;display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.archive-tabs .count-tab{flex:0 0 auto;white-space:nowrap}
 .archive-card-head{display:flex;align-items:center;gap:10px;min-width:180px}.archive-thumb{width:46px;height:46px;border-radius:10px;object-fit:cover;background:#eef4ef;border:1px solid #d9e5dc;flex:0 0 46px}.archive-thumb-placeholder{width:46px;height:46px;border-radius:10px;background:#edf4ef;display:flex;align-items:center;justify-content:center;font-size:22px;flex:0 0 46px}.archive-card-head .animal-tag-btn{min-width:0}.archive-card-head small{display:block;color:var(--mut);font-size:12px;margin-top:3px}.archive-status-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:900;margin-top:5px}.archive-status-sold{background:#e9f7ee;color:#176b3a}.archive-status-cut{background:#fff1e8;color:#9b4c13}.archive-status-lost{background:#fdebea;color:#a52d25}
 @media(max-width:700px){.archive-page-title{font-size:30px;margin-bottom:8px}.archive-info{font-size:14px;line-height:1.45;margin-bottom:12px}.archive-animal-table,.archive-loss-table,.archive-animal-table tbody,.archive-loss-table tbody,.archive-animal-table tr,.archive-loss-table tr,.archive-animal-table td,.archive-loss-table td{display:block;width:100%!important;min-width:0!important}.archive-animal-table,.archive-loss-table{background:transparent!important;min-width:0!important}.archive-animal-table thead,.archive-loss-table thead{display:none}.archive-animal-table tr.data-row,.archive-loss-table tr.data-row{position:relative;background:#fff;border:1px solid #dce8df;border-radius:16px;margin:0 0 12px;padding:14px 14px 12px;box-shadow:0 3px 13px rgba(20,39,27,.06);overflow:hidden}.archive-animal-table tr.data-row:before,.archive-loss-table tr.data-row:before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:#2c8a55}.archive-loss-table tr.data-row:before{background:#c63d31}.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{border:0;padding:6px 0;display:grid;grid-template-columns:128px minmax(0,1fr);gap:10px;align-items:center;font-size:14px}.archive-animal-table tr.data-row td:before,.archive-loss-table tr.data-row td:before{font-size:12px;font-weight:900;color:var(--mut)}.archive-animal-table tr.data-row td:first-child,.archive-loss-table tr.data-row td:first-child{display:block;padding:0 0 10px;margin-bottom:4px;border-bottom:1px solid #edf2ee}.archive-animal-table tr.data-row td:first-child:before,.archive-loss-table tr.data-row td:first-child:before{display:none}.archive-animal-table td:nth-child(2):before{content:'Takma Ad'}.archive-animal-table td:nth-child(3):before{content:'Cinsiyet'}.archive-animal-table td:nth-child(4):before{content:'Çıkış Tarihi'}.archive-animal-table td:nth-child(5):before{content:'Alış'}.archive-animal-table td:nth-child(6):before{content:'Rasyon + Bakım'}.archive-animal-table td:nth-child(7):before{content:'Toplam Maliyet'}.archive-animal-table td:nth-child(8):before{content:'Satış Geliri'}.archive-animal-table td:nth-child(9):before{content:'Net Kâr/Zarar'}.archive-animal-table td:nth-child(7),.archive-animal-table td:nth-child(8),.archive-animal-table td:nth-child(9){margin-top:4px;padding-top:8px;border-top:1px dashed #e3ebe5}.archive-loss-table td:nth-child(2):before{content:'Cinsiyet'}.archive-loss-table td:nth-child(3):before{content:'Olay'}.archive-loss-table td:nth-child(4):before{content:'Tarih'}.archive-loss-table td:nth-child(5):before{content:'Neden'}.archive-loss-table td:nth-child(6):before{content:'Alış'}.archive-loss-table td:nth-child(7):before{content:'Rasyon + Bakım'}.archive-loss-table td:nth-child(8):before{content:'Tedavi'}.archive-loss-table td:nth-child(9):before{content:'Diğer'}.archive-loss-table td:nth-child(10):before{content:'Brüt Kayıp'}.archive-loss-table td:nth-child(11):before{content:'Önceden Finans'}.archive-loss-table td:nth-child(12):before{content:'Yeni Gider'}.archive-loss-table td:nth-child(13):before{content:'Sigorta / Et'}.archive-loss-table td:nth-child(14):before{content:'Net Zayiat'}.archive-loss-table td:nth-child(15){display:flex!important;gap:8px;flex-wrap:wrap;border-top:1px solid #edf2ee!important;margin-top:7px;padding-top:10px!important}.archive-loss-table td:nth-child(15):before{display:none}.archive-loss-table td:nth-child(15) .actions{width:100%}.archive-loss-table td:nth-child(15) .btn{flex:1 1 auto}.archive-tabs{margin-top:2px}.archive-tabs .count-tab{padding:10px 13px}}
@@ -14949,7 +14949,7 @@ def page(title,body,path='/',user='admin',flash=''):
 # Hotfix1.22bx: Sürü Merkezi filtre çubuğu yeniden tasarımı.
 # Kategori şeridi ile arama/QR/padok/göster/aksiyon kontrolleri ayrılır;
 # masaüstünde tek kompakt satır, mobilde kontrollü iki satır kullanılır.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ca'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BX_HERD=r"""
 <style id="hotfix122bx-herd-filterbar">
@@ -15042,8 +15042,8 @@ def page(title,body,path='/',user='admin',flash=''):
     return html
 
 
-# Hotfix1.22bz: tüm canlı metin aramalarında yenilemesiz debounce standardı.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22bz'
+# Hotfix1.22ca: tüm canlı metin aramalarında yenilemesiz debounce standardı.
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ca'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BY_LIVE_SEARCH=r"""
 <script id="hotfix122by-live-search">

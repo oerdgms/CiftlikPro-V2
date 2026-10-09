@@ -135,8 +135,8 @@ class Hotfix122BITests(unittest.TestCase):
             server.SESSIONS.pop('hotfix122bi-post',None)
 
     def test_release_version_is_122bi(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bz')
-        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bz')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ca')
+        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22ca')
 
 
 if __name__=='__main__':

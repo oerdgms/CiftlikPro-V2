@@ -16,8 +16,8 @@ class Hotfix122BFTests(unittest.TestCase):
         self.assertNotIn('body.v118-shell .v117-dashboard>.v122au-task-panel{grid-row:auto',html)
 
     def test_release_version_is_122bf(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22bz')
-        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22bz')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ca')
+        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22ca')
 
 
 if __name__=='__main__':

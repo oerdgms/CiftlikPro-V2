@@ -4,7 +4,7 @@ import server
 
 class Hotfix122BXTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, "3.9.23 DEV4 Hotfix1.22bz")
+        self.assertEqual(server.APP_VERSION, "3.9.23 DEV4 Hotfix1.22ca")
     def test_new_filterbar_markup_and_css(self):
         src=pathlib.Path(server.__file__).read_text(encoding="utf-8")
         self.assertIn("herd-filter-bx-row", src)
