@@ -70,10 +70,10 @@ class Hotfix122BETests(unittest.TestCase):
         self.assertIn('hotfix122be-completion',dashboard)
         self.assertNotIn('body.v118-shell .v117-dashboard>.v122au-task-panel{grid-row:auto',dashboard)
         self.assertIn('scroll-margin-top:144px',reproduction)
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ca')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22cd')
         installer=(ROOT/'installer.iss').read_text(encoding='utf-8')
         workflow=(ROOT/'.github'/'workflows'/'windows-installer.yml').read_text(encoding='utf-8')
-        expected='CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22ca_Setup.exe'
+        expected='CiftlikPro_Enterprise_V3_9_23_DEV4_Hotfix1_22cd_Setup.exe'
         self.assertIn('OutputBaseFilename='+expected[:-4],installer)
         self.assertIn(expected,workflow)
 

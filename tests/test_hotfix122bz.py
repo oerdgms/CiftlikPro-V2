@@ -4,7 +4,7 @@ import server
 
 class Hotfix122BZTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22ca')
+        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22cd')
     def test_archive_mobile_card_css(self):
         src=pathlib.Path('app/server.py').read_text(encoding='utf-8')
         self.assertIn('.archive-tabs', src)

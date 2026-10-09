@@ -1171,3 +1171,21 @@ Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon
 - Tüm canlı metin aramalarında sayfa yenilemesiz 280 ms debounce standardı.
 - Sürü Merkezi ve Yem Kataloğu sonuçları fetch ile arka planda yenilenir; odak korunur.
 - Mevcut 1.22bx responsive görünümü korunur.
+
+## Hotfix1.22cb
+- Kızgınlık kaydında küpe parçası veya takma adla anlık hayvan arama ve tek eşleşmede otomatik seçim eklendi.
+- Kızgınlık geçmişindeki küpe, takma ad, belirti ve not araması regresyon testiyle doğrulandı.
+- Aynı gün tohumlama kaydı bulunan hayvanda aktif “Bugün Tohumlandı” düğmesi kaldırıldı; tamamlandı rozeti ve “Kaydı Aç” bağlantısı gösterilir.
+- Eski veya bağlantısız aynı gün tohumlama kaydı, mükerrer kayıt oluşturmadan ilgili kızgınlık kaydıyla eşleştirilir.
+
+## Hotfix1.22cc
+- İlaç planlarına **Kaç Günde Bir?** alanı eklendi; günlük olmayan aralıklı uygulamalar ayrı tarihlere planlanabilir.
+- “Tedavi Kaç Gün?” alanı, anlamı açık olacak şekilde **Kaç Uygulama Günü?** olarak düzenlendi.
+- Örneğin 2 uygulama günü, 9 günde bir ve uygulama gününde 1 doz seçimi başlangıç günü ile 9 gün sonrasına iki görev oluşturur.
+- Mevcut günlük planlar için varsayılan aralık 1 gün olarak korunur; eski veritabanları güvenli migrasyonla güncellenir.
+
+## Hotfix1.22cd
+- Çoklu hayvan sağlık planları Dashboard'da ilk hayvanın görevi gibi görünmek yerine **Çoklu Hayvan Planı** adıyla tek iş altında gösterilir.
+- Dashboard iş satırında hayvan sayısı ve plana bağlı tüm küpeler görünür; toplu uygulamanın yanlışlıkla ayrı ayrı tamamlanması önlenir.
+- Dashboard bağlantısı metin araması yerine plan ve uygulama kimliğiyle Sağlık Merkezi'ndeki tam karta gider; boş sonuç ekranı giderildi.
+- Sağlık kartında çoklu plana bağlı küpeler görünür ve hedef kart açılışta vurgulanarak ekrana getirilir.

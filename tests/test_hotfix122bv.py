@@ -15,8 +15,8 @@ class Hotfix122BVTests(unittest.TestCase):
         self.assertIn("file.setAttribute('capture','environment')",source)
 
     def test_version(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ca')
-        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22ca')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22cd')
+        self.assertEqual(server.APP_LABEL,'v3.9.23 DEV4 Hotfix1.22cd')
 
 
 if __name__=='__main__':
