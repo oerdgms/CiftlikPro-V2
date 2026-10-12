@@ -1,3 +1,26 @@
+# Hotfix1.22ch — Hayvan Alımı Finans Yönü ve Tarih Bağımsız Uzlaştırma
+
+- Alış tarihi boş olan eski hayvanlarda `Hayvan Alımı` satırının yanlışlıkla gelir sayılması giderildi.
+- Sabit finans kategorileri uygulama açılışında kategori yönüyle idempotent biçimde uzlaştırılır; `Hayvan Alımı` her zaman gider, satış kategorileri her zaman gelir kabul edilir.
+- Hayvan kartındaki finans özeti ve hareket tablosu, eski yanlış tür verisi bulunsa bile kategori yönünü esas alır.
+- Hayvan kartında `Gelir`, `Gider`, `Maliyet` ve `Net Kâr/Zarar` ayrı gösterilir. Net sonuç; satış gelirinden alış/sağlık/diğer giderleri ve çıkış tarihine kadar tarihsel rasyon/bakım maliyetini düşer; alış finans satırı ikinci kez eklenmez.
+- Mevcut alış tarihi ve finans işlem tarihi değiştirilmez; satış tarihine kadar biriken rasyon/bakım maliyeti hesabı korunur.
+
+# Hotfix1.22cg — Finans Satış Listesi Arama İzolasyonu
+
+- Hayvan Satışı arama alanının Buzağı Satışı ve Süt Satışı satırlarını yanlışlıkla gizlemesi giderildi; her arama artık yalnız kendi seçim listesini etkiler.
+- Kategori değiştirildiğinde buzağı listesinde boş aramaya rağmen yalnız önceki sorguyla eşleşen kayıtların kalması engellendi.
+- Buzağı Satışı başlığında satışa uygun aktif kayıt sayısı gösterilir; uygun kayıt yoksa boş durum mesajı görüntülenir.
+- Birden çok aktif buzağının eksiksiz listelendiği ve üç satış aramasının birbirinden yalıtıldığı regresyon testleri eklendi.
+
+# Hotfix1.22cf — Finans Üzerinden Buzağı Satışı
+
+- Finans > Yeni Finans Kaydı > Buzağı Satışı seçiminde aktif, yetişkin karta aktarılmamış buzağılar artık küpe ve takma adlarıyla listelenir.
+- Tek veya birden çok buzağı satışında toplam gelir kuruş kaybetmeden buzağılara dağıtılır; finans hareketleri doğrudan ilgili buzağı kayıtlarına bağlanır.
+- Satılan buzağı aktif sürüden çıkarılır ve Satılan Hayvanlar arşivinde maliyet, satış geliri ve net kâr/zararıyla gösterilir.
+- Buzağı satış finansı düzenlendiğinde durum ve satış tutarı yeniden hesaplanır; satış kaydı silinirse buzağı güvenli biçimde aktif duruma döner.
+- Finans listesi ve araması, buzağı satışlarında ilgili buzağının küpesini gösterir.
+
 # Hotfix1.22bx - Sürü Merkezi filtre çubuğu yeniden tasarımı
 
 - Kategori düğmeleri ayrı yatay şeritte tutuldu.
@@ -1189,3 +1212,9 @@ Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon
 - Dashboard iş satırında hayvan sayısı ve plana bağlı tüm küpeler görünür; toplu uygulamanın yanlışlıkla ayrı ayrı tamamlanması önlenir.
 - Dashboard bağlantısı metin araması yerine plan ve uygulama kimliğiyle Sağlık Merkezi'ndeki tam karta gider; boş sonuç ekranı giderildi.
 - Sağlık kartında çoklu plana bağlı küpeler görünür ve hedef kart açılışta vurgulanarak ekrana getirilir.
+
+## Hotfix1.22ce
+- Hayvanın alış/doğum tarihi boş olduğunda birikmiş maliyetin sıfır kalması düzeltildi; giriş tarihi, padok hareketi ve rasyon başlangıcı güvenli başlangıç sırasına eklendi.
+- Geri tarihli padok rasyonu, o tarihte daha eski tarif anlık görüntüsü yoksa mevcut ilk tarifi başlangıç kabulüyle kullanır.
+- Geri tarihli yem maliyetinde geçmiş fiyat bulunamazsa sıfır yerine bilinen en eski stok maliyeti/fiyat kullanılır.
+- Alım bedeli sıfır olan hayvanlarda da rasyon, ek yem, bakım ve iç üretim maliyetleri hayvan kartının toplamına eklenir.
