@@ -1,11 +1,15 @@
 import unittest
+import ast
+import re
 from pathlib import Path
 
 SERVER=(Path(__file__).resolve().parents[1]/"app"/"server.py").read_text(encoding="utf-8")
 
 class Hotfix122BRTests(unittest.TestCase):
     def test_reproduction_updates_bypass_general_record_dedupe(self):
-        self.assertIn("dedupe_exempt_paths={'/reproduction-status','/reproduction/dry','/reproduction/dry-cancel'}",SERVER)
+        match=re.search(r'dedupe_exempt_paths=(\{[^\n]+\})',SERVER)
+        self.assertIsNotNone(match)
+        self.assertTrue({'/reproduction-status','/reproduction/dry','/reproduction/dry-cancel'}.issubset(ast.literal_eval(match.group(1))))
 
     def test_runtime_db_uses_standard_sqlite_connection(self):
         self.assertIn("os.environ.get('CIFTLIKPRO_TEST_AUTOCLOSE_DB') == '1'",SERVER)
@@ -14,6 +18,6 @@ class Hotfix122BRTests(unittest.TestCase):
         self.assertNotIn('class AutoClosingConnection(sqlite3.Connection):',SERVER)
 
     def test_current_version(self):
-        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22ch'",SERVER)
+        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22ci'",SERVER)
 
 if __name__=='__main__': unittest.main()

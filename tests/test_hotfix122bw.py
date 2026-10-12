@@ -7,7 +7,7 @@ import server
 
 class Hotfix122BWTests(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ch')
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ci')
     def test_toolbar_css_hides_camera_file_input(self):
         css=server.HOTFIX122BW_HERD
         self.assertIn('input[type="file"][hidden]',css)
@@ -20,9 +20,9 @@ class Hotfix122BWTests(unittest.TestCase):
     def test_installer_and_workflow_version(self):
         wf=(ROOT/'.github/workflows/windows-installer.yml').read_text(encoding='utf-8')
         iss=(ROOT/'installer.iss').read_text(encoding='utf-8')
-        self.assertIn('Hotfix1.22ch',wf)
-        self.assertIn('Hotfix1_22ch',wf)
-        self.assertIn('Hotfix1.22ch',iss)
-        self.assertIn('Hotfix1_22ch',iss)
+        self.assertIn('Hotfix1.22ci',wf)
+        self.assertIn('Hotfix1_22ci',wf)
+        self.assertIn('Hotfix1.22ci',iss)
+        self.assertIn('Hotfix1_22ci',iss)
 
 if __name__=='__main__': unittest.main()

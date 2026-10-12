@@ -1,3 +1,17 @@
+# Hotfix1.22ci — Finans Tutarlılığı ve Yedekten Güvenli Dönüş
+
+- Satılan, Kesilen ve Ölen/Kayıp arşivlerine yazdıkça çalışan metin arama, Ara/Temizle düğmeleri ve sonuç sayısı eklendi. Küpe, takma ad, ırk, padok, GG/AA/YYYY tarih ve ölüm/kayıp nedeni aranabilir; Türkçe karakterler sade yazımla da eşleşir.
+- Hayvan kartı, buzağı kartı ve satış/kesim arşivi aynı maliyet özetini kullanır. Alış, sağlık ve diğer giderler bir kez düşülür; rasyon/bakım ve iç üretim maliyeti çıkış tarihine kadar hesaplanır.
+- Alış tarihi boşsa bağlı Hayvan Alımı işleminin tarihi maliyet başlangıcında değerlendirilir. Kalemler ve net sonuç kuruş düzeyinde tutarlı hesaplanır.
+- Toplu süt gelirinin hayvanlara düşen payları kartta gösterilir; toplam gelir mükerrer yazılmaz.
+- Geri tarihli satış onayındaki net kâr, satış tarihindeki maliyet üzerinden hesaplanır.
+- Finans giderini düzenleme/silme, ölüm/kayıp durumunu yanlışlıkla Aktif'e çeviremez.
+- Ödendi → geri al → tekrar Ödendi akışı korunur. Eşzamanlı tekrarlar ikinci ödeme/audit kaydı üretmez; ödenmiş tutar düzenlenince ödeme toplamı da güncellenir.
+- Aynı saniyedeki yedekler farklı dosyalara yazılır; boş fotoğraf klasörü tam yedeğe dahil edilir. Günlük yedek ve saklama kuralı seçili klasörü esas alır.
+- Geri yüklemeden önce ZIP ve ÇiftlikPro şeması doğrulanır. Migrasyon başarısızsa mevcut veritabanı/fotoğraflar geri alınır. SQLite bağlantıları ve WAL için dosya değiştirmek yerine backup API kullanılır.
+- Kaynaktan açılış, son Hotfix tanımları yüklendikten sonra başlar. Windows iş akışı bağımlılıkları requirements.txt üzerinden kurar.
+- Finans/yedek/satış/arşiv araması/gerçek QR-Data Matrix için 24 davranış senaryosu eklendi; mobil cihazda kamera izni ve kullanıcı verisiyle saha sonucu ayrıca doğrulanmalıdır.
+
 # Hotfix1.22ch — Hayvan Alımı Finans Yönü ve Tarih Bağımsız Uzlaştırma
 
 - Alış tarihi boş olan eski hayvanlarda `Hayvan Alımı` satırının yanlışlıkla gelir sayılması giderildi.

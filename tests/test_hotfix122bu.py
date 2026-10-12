@@ -85,8 +85,8 @@ class Hotfix122BUTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         self.assertIn('zxing-cpp', (root/'requirements.txt').read_text(encoding='utf-8'))
         self.assertIn('"zxingcpp"', (root/'CiftlikPro.spec').read_text(encoding='utf-8'))
-        self.assertIn('zxing-cpp', (root/'.github/workflows/windows-installer.yml').read_text(encoding='utf-8'))
-        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ch')
+        self.assertIn('--requirement requirements.txt', (root/'.github/workflows/windows-installer.yml').read_text(encoding='utf-8'))
+        self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22ci')
 
 
 if __name__=='__main__':

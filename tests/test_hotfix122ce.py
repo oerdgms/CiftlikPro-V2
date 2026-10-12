@@ -81,8 +81,8 @@ class Hotfix122CETests(unittest.TestCase):
         self.assertAlmostEqual(total, 105.0)
 
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22ch')
-        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22ch')
+        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22ci')
+        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22ci')
 
 
 if __name__ == '__main__':

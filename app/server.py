@@ -6,6 +6,7 @@ from email.policy import default
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http import cookies
 from datetime import datetime, date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from PIL import Image, ImageOps
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -31,7 +32,7 @@ ANIMAL_IMPORT_PREVIEWS={}
 ANIMAL_IMPORT_LOCK=threading.Lock()
 
 APP_NAME='ÇiftlikPro Enterprise'
-APP_VERSION='3.9.23 DEV4 Hotfix1.22ch'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ci'
 APP_CHANNEL='RELEASE'
 # Tek sürüm kaynağı: login, footer, yedek manifesti ve diğer ekranlar aynı değeri kullanır.
 APP_LABEL='v'+APP_VERSION
@@ -326,7 +327,7 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 /* Hotfix1.22ca — Arşiv hayvanları mobil kart + üst sekmeler */
 .archive-tabs{margin:0 0 14px;display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.archive-tabs .count-tab{flex:0 0 auto;white-space:nowrap}
 .archive-card-head{display:flex;align-items:center;gap:10px;min-width:180px}.archive-thumb{width:46px;height:46px;border-radius:10px;object-fit:cover;background:#eef4ef;border:1px solid #d9e5dc;flex:0 0 46px}.archive-thumb-placeholder{width:46px;height:46px;border-radius:10px;background:#edf4ef;display:flex;align-items:center;justify-content:center;font-size:22px;flex:0 0 46px}.archive-card-head .animal-tag-btn{min-width:0}.archive-card-head small{display:block;color:var(--mut);font-size:12px;margin-top:3px}.archive-status-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:900;margin-top:5px}.archive-status-sold{background:#e9f7ee;color:#176b3a}.archive-status-cut{background:#fff1e8;color:#9b4c13}.archive-status-lost{background:#fdebea;color:#a52d25}
-@media(max-width:700px){.archive-page-title{font-size:30px;margin-bottom:8px}.archive-info{font-size:14px;line-height:1.45;margin-bottom:12px}.archive-animal-table,.archive-loss-table,.archive-animal-table tbody,.archive-loss-table tbody,.archive-animal-table tr,.archive-loss-table tr,.archive-animal-table td,.archive-loss-table td{display:block;width:100%!important;min-width:0!important}.archive-animal-table,.archive-loss-table{background:transparent!important;min-width:0!important}.archive-animal-table thead,.archive-loss-table thead{display:none}.archive-animal-table tr.data-row,.archive-loss-table tr.data-row{position:relative;background:#fff;border:1px solid #dce8df;border-radius:16px;margin:0 0 12px;padding:14px 14px 12px;box-shadow:0 3px 13px rgba(20,39,27,.06);overflow:hidden}.archive-animal-table tr.data-row:before,.archive-loss-table tr.data-row:before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:#2c8a55}.archive-loss-table tr.data-row:before{background:#c63d31}.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{border:0;padding:6px 0;display:grid;grid-template-columns:128px minmax(0,1fr);gap:10px;align-items:center;font-size:14px}.archive-animal-table tr.data-row td:before,.archive-loss-table tr.data-row td:before{font-size:12px;font-weight:900;color:var(--mut)}.archive-animal-table tr.data-row td:first-child,.archive-loss-table tr.data-row td:first-child{display:block;padding:0 0 10px;margin-bottom:4px;border-bottom:1px solid #edf2ee}.archive-animal-table tr.data-row td:first-child:before,.archive-loss-table tr.data-row td:first-child:before{display:none}.archive-animal-table td:nth-child(2):before{content:'Takma Ad'}.archive-animal-table td:nth-child(3):before{content:'Cinsiyet'}.archive-animal-table td:nth-child(4):before{content:'Çıkış Tarihi'}.archive-animal-table td:nth-child(5):before{content:'Alış'}.archive-animal-table td:nth-child(6):before{content:'Rasyon + Bakım'}.archive-animal-table td:nth-child(7):before{content:'Toplam Maliyet'}.archive-animal-table td:nth-child(8):before{content:'Satış Geliri'}.archive-animal-table td:nth-child(9):before{content:'Net Kâr/Zarar'}.archive-animal-table td:nth-child(7),.archive-animal-table td:nth-child(8),.archive-animal-table td:nth-child(9){margin-top:4px;padding-top:8px;border-top:1px dashed #e3ebe5}.archive-loss-table td:nth-child(2):before{content:'Cinsiyet'}.archive-loss-table td:nth-child(3):before{content:'Olay'}.archive-loss-table td:nth-child(4):before{content:'Tarih'}.archive-loss-table td:nth-child(5):before{content:'Neden'}.archive-loss-table td:nth-child(6):before{content:'Alış'}.archive-loss-table td:nth-child(7):before{content:'Rasyon + Bakım'}.archive-loss-table td:nth-child(8):before{content:'Tedavi'}.archive-loss-table td:nth-child(9):before{content:'Diğer'}.archive-loss-table td:nth-child(10):before{content:'Brüt Kayıp'}.archive-loss-table td:nth-child(11):before{content:'Önceden Finans'}.archive-loss-table td:nth-child(12):before{content:'Yeni Gider'}.archive-loss-table td:nth-child(13):before{content:'Sigorta / Et'}.archive-loss-table td:nth-child(14):before{content:'Net Zayiat'}.archive-loss-table td:nth-child(15){display:flex!important;gap:8px;flex-wrap:wrap;border-top:1px solid #edf2ee!important;margin-top:7px;padding-top:10px!important}.archive-loss-table td:nth-child(15):before{display:none}.archive-loss-table td:nth-child(15) .actions{width:100%}.archive-loss-table td:nth-child(15) .btn{flex:1 1 auto}.archive-tabs{margin-top:2px}.archive-tabs .count-tab{padding:10px 13px}}
+@media(max-width:700px){.archive-page-title{font-size:30px;margin-bottom:8px}.archive-info{font-size:14px;line-height:1.45;margin-bottom:12px}.archive-animal-table,.archive-loss-table,.archive-animal-table tbody,.archive-loss-table tbody,.archive-animal-table tr,.archive-loss-table tr,.archive-animal-table td,.archive-loss-table td{display:block;width:100%!important;min-width:0!important}.archive-animal-table,.archive-loss-table{background:transparent!important;min-width:0!important}.archive-animal-table thead,.archive-loss-table thead{display:none}.archive-animal-table tr.data-row,.archive-loss-table tr.data-row{position:relative;background:#fff;border:1px solid #dce8df;border-radius:16px;margin:0 0 12px;padding:14px 14px 12px;box-shadow:0 3px 13px rgba(20,39,27,.06);overflow:hidden}.archive-animal-table tr.data-row:before,.archive-loss-table tr.data-row:before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:#2c8a55}.archive-loss-table tr.data-row:before{background:#c63d31}.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{border:0;padding:6px 0;display:grid;grid-template-columns:128px minmax(0,1fr);gap:10px;align-items:center;font-size:14px}.archive-animal-table tr.data-row td:before,.archive-loss-table tr.data-row td:before{font-size:12px;font-weight:900;color:var(--mut)}.archive-animal-table tr.data-row td:first-child,.archive-loss-table tr.data-row td:first-child{display:block;padding:0 0 10px;margin-bottom:4px;border-bottom:1px solid #edf2ee}.archive-animal-table tr.data-row td:first-child:before,.archive-loss-table tr.data-row td:first-child:before{display:none}.archive-animal-table td:nth-child(2):before{content:'Takma Ad'}.archive-animal-table td:nth-child(3):before{content:'Cinsiyet'}.archive-animal-table td:nth-child(4):before{content:'Çıkış Tarihi'}.archive-animal-table td:nth-child(5):before{content:'Gider'}.archive-animal-table td:nth-child(6):before{content:'Maliyet'}.archive-animal-table td:nth-child(7):before{content:'Toplam Maliyet'}.archive-animal-table td:nth-child(8):before{content:'Gelir'}.archive-animal-table td:nth-child(9):before{content:'Net Kâr/Zarar'}.archive-animal-table td:nth-child(7),.archive-animal-table td:nth-child(8),.archive-animal-table td:nth-child(9){margin-top:4px;padding-top:8px;border-top:1px dashed #e3ebe5}.archive-loss-table td:nth-child(2):before{content:'Cinsiyet'}.archive-loss-table td:nth-child(3):before{content:'Olay'}.archive-loss-table td:nth-child(4):before{content:'Tarih'}.archive-loss-table td:nth-child(5):before{content:'Neden'}.archive-loss-table td:nth-child(6):before{content:'Alış'}.archive-loss-table td:nth-child(7):before{content:'Rasyon + Bakım'}.archive-loss-table td:nth-child(8):before{content:'Tedavi'}.archive-loss-table td:nth-child(9):before{content:'Diğer'}.archive-loss-table td:nth-child(10):before{content:'Brüt Kayıp'}.archive-loss-table td:nth-child(11):before{content:'Önceden Finans'}.archive-loss-table td:nth-child(12):before{content:'Yeni Gider'}.archive-loss-table td:nth-child(13):before{content:'Sigorta / Et'}.archive-loss-table td:nth-child(14):before{content:'Net Zayiat'}.archive-loss-table td:nth-child(15){display:flex!important;gap:8px;flex-wrap:wrap;border-top:1px solid #edf2ee!important;margin-top:7px;padding-top:10px!important}.archive-loss-table td:nth-child(15):before{display:none}.archive-loss-table td:nth-child(15) .actions{width:100%}.archive-loss-table td:nth-child(15) .btn{flex:1 1 auto}.archive-tabs{margin-top:2px}.archive-tabs .count-tab{padding:10px 13px}}
 @media(max-width:430px){.archive-animal-table tr.data-row td,.archive-loss-table tr.data-row td{grid-template-columns:112px minmax(0,1fr)}.archive-thumb,.archive-thumb-placeholder{width:42px;height:42px;flex-basis:42px}}
 
 /* V3.7.6 Görsel Standartlar */
@@ -490,6 +491,11 @@ def pregnancy_display_status(latest_record, active_record):
 def recalculate_animal_exit_status(con, animal_id):
     if not animal_id:
         return
+    loss=con.execute('select event_type,event_date,cause from animal_losses where animal_id=? order by event_date desc,id desc limit 1',(animal_id,)).fetchone()
+    if loss:
+        con.execute('update animals set status=?,exit_date=?,exit_reason=? where id=?',
+                    (loss['event_type'],loss['event_date'],loss['cause'] or loss['event_type'],animal_id))
+        return
     row=con.execute(
         """select animal_status_action,tx_date,category,amount
            from finance
@@ -504,13 +510,18 @@ def recalculate_animal_exit_status(con, animal_id):
         )
     else:
         con.execute(
-            "update animals set status='Aktif',exit_date='',exit_reason='',sold_price=0 where id=?",
+            "update animals set status='Aktif',exit_date='',exit_reason='',sold_price=0 where id=? and status in ('Satıldı','Kesildi')",
             (animal_id,)
         )
 
 def recalculate_calf_exit_status(con, calf_id):
     """Buzağı satış finansı düzenlenir/silinirse aktiflik durumunu güvenle yenile."""
     if not calf_id:
+        return
+    loss=con.execute('select event_type,event_date,cause from animal_losses where calf_id=? order by event_date desc,id desc limit 1',(calf_id,)).fetchone()
+    if loss:
+        con.execute('update calves set status=?,exit_date=?,exit_reason=? where id=?',
+                    (loss['event_type'],loss['event_date'],loss['cause'] or loss['event_type'],calf_id))
         return
     row=con.execute(
         """select animal_status_action,tx_date,category,amount
@@ -526,7 +537,7 @@ def recalculate_calf_exit_status(con, calf_id):
         )
     else:
         con.execute(
-            "update calves set status='Aktif',exit_date='',exit_reason='',sold_price=0 where id=?",
+            "update calves set status='Aktif',exit_date='',exit_reason='',sold_price=0 where id=? and status='Satıldı' and promoted_animal_id is null",
             (calf_id,)
         )
 
@@ -1317,7 +1328,7 @@ def init_db():
         for col,typ in [('due_date','TEXT'),('payment_status',"TEXT DEFAULT 'Ödendi'"),
                         ('paid_date','TEXT'),('paid_amount','REAL DEFAULT 0'),('supplier','TEXT'),('invoice_no','TEXT')]:
             if col not in finance_cols:c.execute(f'ALTER TABLE finance ADD COLUMN {col} {typ}')
-        # Hotfix1.22ch: Hayvan Alımı ve diğer sabit kategorilerin yönü alış
+        # Hotfix1.22ci: Hayvan Alımı ve diğer sabit kategorilerin yönü alış
         # tarihi varlığına bağlı değildir. Eski yanlış Gelir/Gider satırlarını
         # her açılışta idempotent olarak kategori yönüyle uzlaştır.
         reconcile_fixed_finance_types(c)
@@ -2544,13 +2555,22 @@ def animal_cost_start_date(c, a, end_date, source='animal'):
     Eski/import edilmiş kayıtlarda alış veya doğum tarihi boş olabildiği için
     giriş tarihi, padok hareketi ve atanmış rasyon başlangıcı da değerlendirilir.
     """
-    for key in ('purchase_date','entry_date','birth_date'):
+    for key in ('purchase_date','entry_date'):
         try:
             raw=a[key] if key in a.keys() else ''
             if raw:
                 parsed=date.fromisoformat(str(raw)[:10])
                 if parsed<=end_date:return parsed
         except (TypeError,ValueError):pass
+    column='animal_id' if source=='animal' else 'calf_id'
+    purchase=c.execute(f"select min(tx_date) from finance where {column}=? and category='Hayvan Alımı' and tx_date<=?",(int(a['id']),end_date.isoformat())).fetchone()[0]
+    if purchase:
+        try:return date.fromisoformat(str(purchase)[:10])
+        except (TypeError,ValueError):pass
+    try:
+        born=date.fromisoformat(str(a['birth_date'])[:10])
+        if born<=end_date:return born
+    except (KeyError,IndexError,TypeError,ValueError):pass
     candidates=[];paddock_ids=set()
     try:
         current_pid=int(a['paddock_id'] or 0) if 'paddock_id' in a.keys() else 0
@@ -2600,7 +2620,7 @@ def animal_cost_values(a, con=None, source='animal'):
             part,_,_=paddock_feed_cost_between(c,pid,a0,b0,manual_feed);feed_acc+=part
         internal_cost=0.0
         if source=='calf':
-            internal_cost=float(c.execute('select coalesce(sum(amount),0) total from calf_internal_costs where calf_id=?',(int(a['id']),)).fetchone()['total'] or 0)
+            internal_cost=float(c.execute('select coalesce(sum(amount),0) total from calf_internal_costs where calf_id=? and cost_date<=?',(int(a['id']),end_date.isoformat())).fetchone()['total'] or 0)
         elif 'internal_production_cost' in a.keys():
             internal_cost=float(a['internal_production_cost'] or 0)
         accumulated=feed_acc + days*care + internal_cost
@@ -2613,6 +2633,109 @@ def animal_cost_values(a, con=None, source='animal'):
 def calf_cost_values(calf, con=None):
     """Buzağıları yetişkinlerle aynı tarihsel padok/rasyon maliyet motorunda hesaplar."""
     return animal_cost_values(calf,con,'calf')
+
+
+def financial_cents(value):
+    """Gösterilen kalemlerle net tutarın kuruş düzeyinde tutarlı kalmasını sağlar."""
+    return int((Decimal(str(value or 0))*100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
+
+
+def animal_financial_summary(c, rec, source='animal'):
+    """Kart/arşiv/besi için aynı maliyet ve gelir özeti; bağlı giderleri bir kez sayar."""
+    sid=int(rec['id']);column='animal_id' if source=='animal' else 'calf_id'
+    end_date=date.today().isoformat()
+    if str(rec['status'] or 'Aktif')!='Aktif' and rec['exit_date']:
+        end_date=min(end_date,str(rec['exit_date'])[:10])
+    if source=='animal':
+        rows=c.execute('''select distinct f.* from finance f left join finance_animals fa on fa.finance_id=f.id
+            where (f.animal_id=? or fa.animal_id=?) and f.tx_date<=? order by f.tx_date desc,f.id desc''',
+            (sid,sid,end_date)).fetchall()
+    else:
+        rows=c.execute('select * from finance where calf_id=? and tx_date<=? order by tx_date desc,id desc',
+                       (sid,end_date)).fetchall()
+    linked=[]
+    for row in rows:
+        item=dict(row);item['tx_type']=normalize_finance_type(item['category'],item['tx_type'])
+        cents=financial_cents(item['amount'])
+        if source=='animal':
+            owners={int(x['animal_id']) for x in c.execute('select animal_id from finance_animals where finance_id=?',(item['id'],)).fetchall()}
+            if owners:
+                if item['animal_id']:owners.add(int(item['animal_id']))
+                owners=sorted(owners);base,remainder=divmod(cents,len(owners))
+                cents=base+(1 if owners.index(sid)<remainder else 0)
+                if len(owners)>1:item['description']=(item['description'] or '')+f' · {len(owners)} hayvandan payı'
+        item['amount']=cents/100;linked.append(item)
+    expense_rows=[x for x in linked if x['tx_type'] in ('Gider','Zarar') and x['category']!='Hayvan Ölümü / Zayiat']
+    posted_ids={int(x['id']) for x in expense_rows}
+    purchase=max(financial_cents(rec['purchase_price']),sum(financial_cents(x['amount']) for x in expense_rows if x['category']=='Hayvan Alımı'))
+    other=sum(financial_cents(x['amount']) for x in expense_rows if x['category']!='Hayvan Alımı')
+    health=c.execute(f'select * from health where {column}=? and applied_date<=?',(sid,end_date)).fetchall()
+    health_treatments={int(x['treatment_id']) for x in health if x['treatment_id']}
+    seen_medical=set(posted_ids)
+    for table,date_column in (('health','applied_date'),('treatments','start_date'),('veterinary_visits','visit_date')):
+        medical=health if table=='health' else c.execute(f'select * from {table} where {column}=? and {date_column}<=?',(sid,end_date)).fetchall()
+        for row in medical:
+            if table=='treatments' and int(row['id']) in health_treatments:continue
+            fid=int(row['finance_id']) if row['finance_id'] else None
+            if fid and fid in seen_medical:continue
+            other+=financial_cents(row['cost'])
+            if fid:seen_medical.add(fid)
+    days,daily,operating,_=animal_cost_values(rec,c,source)
+    operating=financial_cents(operating);income=sum(financial_cents(x['amount']) for x in linked if x['tx_type']=='Gelir')
+    has_sale=any(x['category'] in ('Hayvan Satışı','Kesim Geliri','Buzağı Satışı') and x['tx_type']=='Gelir' for x in linked)
+    if not has_sale and str(rec['status'] or '') in ('Satıldı','Kesildi'):
+        income+=financial_cents(rec['sold_price'])
+    expense=purchase+other;total=expense+operating
+    return {'days':days,'daily':daily,'purchase':purchase/100,'other_expense':other/100,
+            'operating':operating/100,'expense':expense/100,'income':income/100,
+            'total_cost':total/100,'net_profit':(income-total)/100,'finance_rows':linked}
+
+
+def render_animal_financial_metrics(summary):
+    return f'''<div class="costbox"><h3>Finans Özeti</h3><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(summary['income'])}</b></span><span class="pill">Gider<br><b>{money(summary['expense'])}</b></span><span class="pill">Maliyet<br><b>{money(summary['operating'])}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(summary['net_profit'])}</b></span></div><p class="mut">Gider: alış {money(summary['purchase'])} · sağlık ve diğer {money(summary['other_expense'])}. Maliyet: rasyon, bakım ve iç üretim. Net = gelir − gider − maliyet.</p></div>'''
+
+
+def archive_record_matches(rec, query):
+    fields=('tag','nickname','breed','paddock','gender','status','exit_date','event_date',
+            'event_type','cause','diagnosis','notes','animal_tag','animal_nickname','animal_gender',
+            'calf_tag','calf_nickname','calf_gender','animal_breed','calf_breed','animal_paddock','calf_paddock')
+    values=[str(rec[key] or '') for key in fields if key in rec.keys()]
+    values+=[fmt_date(rec[key]) for key in ('exit_date','event_date') if key in rec.keys()]
+    haystack=_feed_search_norm(' '.join(values))
+    return all(word in haystack for word in _feed_search_norm(query).split())
+
+
+def render_archive_search(query, path):
+    return f'''<form method="get" action="{h(path)}" class="card archive-search-form" id="archiveSearchForm" role="search"><label for="archiveSearchInput">Arşivde hayvan ara</label><div class="archive-search-controls"><input type="search" name="q" id="archiveSearchInput" value="{h(query)}" placeholder="Küpe, takma ad, ırk, padok, tarih veya neden ara…" autocomplete="off"><button type="submit" class="btn">Ara</button><button type="button" class="btn alt" id="archiveSearchClear">Temizle</button></div><span class="mut" id="archiveSearchStatus" aria-live="polite"></span></form><style>.archive-search-form{{margin:0 0 14px;padding:14px}}.archive-search-form label{{display:block;font-size:13px;font-weight:700;color:#355547;margin-bottom:7px}}.archive-search-controls{{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}}.archive-search-controls input{{width:100%;min-width:0;height:44px;padding:10px 12px;border:1px solid #cfded4;border-radius:9px;background:#fff;font:inherit}}.archive-search-controls .btn{{min-height:44px;margin:0}}.archive-search-form #archiveSearchStatus{{display:block;font-size:12px;margin-top:5px}}@media(max-width:650px){{.archive-search-controls{{grid-template-columns:minmax(0,1fr) 62px 76px;gap:6px}}.archive-search-controls .btn{{padding:8px 5px;font-size:12px}}.archive-search-controls input{{font-size:16px}}}}</style>'''+ARCHIVE_SEARCH_SCRIPT
+
+
+ARCHIVE_SEARCH_SCRIPT=r'''<script id="archive-live-search-script">
+(function(){function init(){
+ const form=document.getElementById('archiveSearchForm'),input=document.getElementById('archiveSearchInput'),results=document.getElementById('archiveSearchResults'),status=document.getElementById('archiveSearchStatus');
+ if(!form||!input||!results)return;
+ let timer=0,controller=null,generation=0,composing=false;
+ async function search(){
+  const request=++generation;controller?.abort();controller=new AbortController();
+  const url=new URL(form.action,location.href),value=input.value.trim();if(value)url.searchParams.set('q',value);else url.searchParams.delete('q');
+  input.setAttribute('aria-busy','true');status.textContent='Aranıyor…';
+  try{
+   const response=await fetch(url,{signal:controller.signal,headers:{'X-Requested-With':'XMLHttpRequest'}});
+   if(!response.ok)throw new Error('Arama yanıtı alınamadı.');
+   const html=await response.text();if(request!==generation)return;
+   const doc=new DOMParser().parseFromString(html,'text/html'),updated=doc.getElementById('archiveSearchResults');
+   if(!updated)throw new Error('Arama için sayfayı yenileyin.');
+   results.innerHTML=updated.innerHTML;status.textContent='';history.replaceState(null,'',url.pathname+url.search);
+  }catch(error){if(error.name!=='AbortError'&&request===generation)status.textContent='Arama tamamlanamadı. Ara düğmesiyle yeniden deneyin.';}
+  finally{if(request===generation)input.removeAttribute('aria-busy');}
+ }
+ function schedule(){if(composing)return;clearTimeout(timer);timer=setTimeout(search,280);}
+ input.addEventListener('input',schedule);input.addEventListener('search',schedule);
+ input.addEventListener('compositionstart',()=>{composing=true;clearTimeout(timer)});
+ input.addEventListener('compositionend',()=>{composing=false;schedule()});
+ form.addEventListener('submit',event=>{event.preventDefault();clearTimeout(timer);search()});
+ document.getElementById('archiveSearchClear').addEventListener('click',()=>{clearTimeout(timer);input.value='';search();input.focus()});
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();})();
+</script>'''
 
 
 def calf_internal_cost_total(c, calf_id):
@@ -6617,73 +6740,119 @@ def render_smart_animal_add(mothers,breeds,paddocks):
 </script>'''
 
 def create_backup(label='manuel'):
-    target_dir=configured_backup_dir()
-    target_dir.mkdir(parents=True,exist_ok=True)
-    ts=datetime.now().strftime('%Y%m%d_%H%M%S')
-    name=f'CiftlikPro_Backup_{label}_{ts}.zip'
-    dst=target_dir/name
-    temp_db=DATA_ROOT/f'.snapshot_{ts}.db'
-    with db() as src, sqlite3.connect(temp_db) as out:src.backup(out)
-    manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),'database':'ciftlik.db','includes_uploads':True,'label':label,'backup_directory':str(target_dir)}
+    target_dir=configured_backup_dir();target_dir.mkdir(parents=True,exist_ok=True)
+    token=uuid.uuid4().hex[:12];ts=datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+    safe_label=re.sub(r'[^\w-]+','_',str(label)) or 'manuel'
+    name=f'CiftlikPro_Backup_{safe_label}_{ts}_{token}.zip';dst=target_dir/name
+    temp_db=DATA_ROOT/f'.snapshot_{token}.db';temp_zip=target_dir/f'.{name}.tmp'
+    src=db();out=sqlite3.connect(temp_db)
+    try:src.backup(out)
+    finally:out.close();src.close()
+    manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),
+              'database':'ciftlik.db','includes_uploads':True,'label':label,'backup_directory':str(target_dir)}
     try:
-        with zipfile.ZipFile(dst,'w',zipfile.ZIP_DEFLATED) as z:
+        with zipfile.ZipFile(temp_zip,'w',zipfile.ZIP_DEFLATED) as z:
             z.write(temp_db,'ciftlik.db')
             z.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+            z.writestr('uploads/',b'')
             if UPLOADS.exists():
                 for fp in UPLOADS.rglob('*'):
-                    if fp.is_file():z.write(fp,'uploads/'+str(fp.relative_to(UPLOADS)).replace('\\','/'))
+                    if fp.is_file():z.write(fp,'uploads/'+fp.relative_to(UPLOADS).as_posix())
+        os.replace(temp_zip,dst)
     finally:
-        gc.collect()
-        for attempt in range(12):
-            try:
-                if temp_db.exists():temp_db.unlink()
-                break
-            except PermissionError:
-                if attempt<11:time.sleep(.25)
-            except FileNotFoundError:break
-    with db() as c:c.execute('insert into backups(filename,created_at,size_bytes) values(?,?,?)',(name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),dst.stat().st_size))
+        temp_db.unlink(missing_ok=True);temp_zip.unlink(missing_ok=True)
+    con=db()
+    try:
+        with con:con.execute('insert into backups(filename,created_at,size_bytes) values(?,?,?)',
+                            (name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),dst.stat().st_size))
+    finally:con.close()
     return name
 
+
 def validate_backup_zip(zip_path):
-    with zipfile.ZipFile(zip_path,'r') as z:
-        names=set(z.namelist())
-        if 'ciftlik.db' not in names:return False,'Yedekte ciftlik.db bulunamadı.',None
-        for name in names:
-            p=Path(name)
-            if name.startswith('/') or '..' in p.parts:return False,'Güvensiz ZIP yolu tespit edildi.',None
-        manifest={}
-        if 'manifest.json' in names:
-            try:manifest=json.loads(z.read('manifest.json').decode('utf-8'))
-            except Exception:return False,'manifest.json okunamadı.',None
-        with tempfile.TemporaryDirectory() as td:
-            db_copy=Path(td)/'ciftlik.db';db_copy.write_bytes(z.read('ciftlik.db'))
-            try:
-                with sqlite3.connect(db_copy) as c:
-                    if c.execute('pragma quick_check').fetchone()[0]!='ok':return False,'Yedek veritabanı bozuk.',None
-            except Exception as exc:return False,'Yedek veritabanı açılamadı: '+str(exc),None
-    return True,'Yedek geçerli.',manifest
+    try:
+        with zipfile.ZipFile(zip_path,'r') as z:
+            names=z.namelist()
+            if 'ciftlik.db' not in names:return False,'Yedekte ciftlik.db bulunamadı.',None
+            if len(names)!=len(set(names)):return False,'Yedekte yinelenen dosya adları var.',None
+            for name in names:
+                normalized=name.replace(chr(92),'/');parts=normalized.split('/')
+                if normalized.startswith('/') or '..' in parts or any(':' in part for part in parts):
+                    return False,'Güvensiz ZIP yolu tespit edildi.',None
+            manifest={}
+            if 'manifest.json' in names:
+                try:manifest=json.loads(z.read('manifest.json').decode('utf-8'))
+                except Exception:return False,'manifest.json okunamadı.',None
+                if not isinstance(manifest,dict):return False,'Yedek bilgisi geçersiz.',None
+                if manifest.get('product') not in (None,APP_NAME,'ÇiftlikPro'):
+                    return False,'Bu dosya ÇiftlikPro yedeği değil.',None
+            with tempfile.TemporaryDirectory() as td:
+                db_copy=Path(td)/'ciftlik.db';db_copy.write_bytes(z.read('ciftlik.db'))
+                con=sqlite3.connect(db_copy)
+                try:
+                    if con.execute('pragma quick_check').fetchone()[0]!='ok':return False,'Yedek veritabanı bozuk.',None
+                    tables={r[0] for r in con.execute("select name from sqlite_master where type='table'")}
+                    if not {'animals','finance','users'}.issubset(tables):
+                        return False,'Veritabanı ÇiftlikPro kayıtlarını içermiyor.',None
+                    required={'animals':{'id','tag','gender'},'finance':{'id','tx_date','tx_type','category','amount'},'users':{'id','username','password'}}
+                    for table,columns in required.items():
+                        if not columns.issubset({r[1] for r in con.execute(f'pragma table_info({table})')}):
+                            return False,'Yedek şeması ÇiftlikPro ile uyumsuz.',None
+                finally:con.close()
+            bad=z.testzip()
+            if bad:return False,'Yedek dosyasında bozuk içerik var.',None
+        return True,'Yedek geçerli.',manifest
+    except (OSError,ValueError,sqlite3.Error,zipfile.BadZipFile,RuntimeError) as exc:
+        return False,'Yedek okunamadı: '+str(exc),None
+
+
+def _restore_database_file(source):
+    # SQLite backup API açık bağlantılar/WAL varlığında da veritabanını tek
+    # işlemde değiştirir; çalışan DB dosyasını doğrudan replace etmeyiz.
+    origin=sqlite3.connect(source);destination=sqlite3.connect(DB)
+    try:origin.backup(destination)
+    finally:destination.close();origin.close()
+
 
 def restore_backup_zip(zip_path):
     ok,message,manifest=validate_backup_zip(zip_path)
     if not ok:raise ValueError(message)
-    emergency=create_backup('EmergencyBeforeRestore')
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(dir=DATA_ROOT,prefix='.restore_') as td:
         target=Path(td)
         with zipfile.ZipFile(zip_path,'r') as z:z.extractall(target)
-        staged=DB.with_suffix('.restore.tmp');shutil.copy2(target/'ciftlik.db',staged);os.replace(staged,DB)
-        restored=target/'uploads'
-        if restored.exists():
-            shutil.rmtree(UPLOADS,ignore_errors=True);shutil.copytree(restored,UPLOADS)
-        else:UPLOADS.mkdir(exist_ok=True)
-    init_db();return emergency,manifest
+        # Tam yedekte fotoğraf klasörü boşsa da eski fotoğraflar kaldırılır.
+        replace_uploads=bool(manifest.get('includes_uploads')) or (target/'uploads').exists()
+        staged_uploads=target/'uploads';previous_uploads=target/'previous_uploads'
+        if replace_uploads:staged_uploads.mkdir(exist_ok=True)
+        emergency=create_backup('EmergencyBeforeRestore')
+        with zipfile.ZipFile(configured_backup_dir()/emergency,'r') as z:
+            (target/'previous.db').write_bytes(z.read('ciftlik.db'))
+        had_uploads=False;db_changed=False
+        try:
+            _restore_database_file(target/'ciftlik.db');db_changed=True
+            if replace_uploads:
+                if UPLOADS.exists():os.replace(UPLOADS,previous_uploads);had_uploads=True
+                os.replace(staged_uploads,UPLOADS)
+            init_db()
+        except Exception:
+            if db_changed:_restore_database_file(target/'previous.db')
+            if replace_uploads:
+                if had_uploads:
+                    shutil.rmtree(UPLOADS,ignore_errors=True);os.replace(previous_uploads,UPLOADS)
+                elif not staged_uploads.exists():shutil.rmtree(UPLOADS,ignore_errors=True)
+            raise
+    return emergency,manifest
+
 
 def daily_backup():
-    BACKUPS.mkdir(exist_ok=True);today=date.today().strftime('%Y%m%d')
-    if not any(BACKUPS.glob(f'CiftlikPro_Backup_otomatik_{today}_*.zip')):create_backup('otomatik')
-    files=sorted(BACKUPS.glob('CiftlikPro_Backup_otomatik_*.zip'),key=lambda x:x.stat().st_mtime,reverse=True)
+    target_dir=configured_backup_dir();target_dir.mkdir(parents=True,exist_ok=True)
+    today=date.today().strftime('%Y%m%d')
+    if not any(target_dir.glob(f'CiftlikPro_Backup_otomatik_{today}_*.zip')):create_backup('otomatik')
+    files=sorted(target_dir.glob('CiftlikPro_Backup_otomatik_*.zip'),key=lambda x:x.stat().st_mtime,reverse=True)
     for fp in files[30:]:
         try:fp.unlink()
-        except:pass
+        except OSError:pass
+
 
 
 def export_payload():
@@ -7986,7 +8155,8 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                     if exit_start and (not completed or not ed or ed<exit_start):continue
                     if exit_end and (not completed or not ed or ed>exit_end):continue
                     if status_filter and perf['status']!=status_filter:continue
-                    days,daily,operating,total_cost=animal_cost_values(ar)
+                    financial=animal_financial_summary(c,ar)
+                    days,daily,operating,total_cost=(financial[k] for k in ('days','daily','operating','total_cost'))
                     revenue=float(c.execute("select coalesce(sum(amount),0) from finance where animal_id=? and tx_type='Gelir' and category in ('Kesim Geliri','Hayvan Satışı')",(ar['id'],)).fetchone()[0] or 0)
                     if completed and revenue<=0 and float(ar['sold_price'] or 0)>0:revenue=float(ar['sold_price'] or 0)
                     net_profit=(revenue-total_cost) if completed and revenue>0 else None;profit_pct=((net_profit/total_cost)*100) if net_profit is not None and total_cost>0 else None
@@ -8246,36 +8416,49 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 sold_count=c.execute("select (select count(*) from animals where status='Satıldı')+(select count(*) from calves where status='Satıldı' and promoted_animal_id is null)").fetchone()[0]
                 cut_count=c.execute("select count(*) from animals where status='Kesildi'").fetchone()[0]
                 lost_count=c.execute("select count(*) from animal_losses").fetchone()[0]
+            archive_query=(q.get('q',[''])[0] or '').strip()
+            archive_total=len(rows)+len(calf_rows)
+            rows=[r for r in rows if archive_record_matches(r,archive_query)]
+            calf_rows=[r for r in calf_rows if archive_record_matches(r,archive_query)]
+            search_ui=render_archive_search(archive_query,path)
+            result_count=f'<p class="mut" aria-live="polite">{len(rows)+len(calf_rows)} / {archive_total} kayıt</p>'
             archive_rows=[]
             for r in rows:
-                _,_,operating,total_cost=animal_cost_values(r)
-                revenue=float(r['sold_price'] or 0);profit=revenue-total_cost
+                with db() as fc:financial=animal_financial_summary(fc,r)
+                operating=financial['operating'];total_cost=financial['total_cost']
+                revenue=financial['income'];profit=financial['net_profit']
                 profit_class='color:#08783f' if profit>=0 else 'color:#c0392b'
                 photo=str(r['photo_url'] or '').strip()
                 thumb=(f'<img class="archive-thumb" src="{h(photo)}" alt="">' if photo else '<span class="archive-thumb-placeholder">🐄</span>')
                 status_cls='archive-status-sold' if status=='Satıldı' else 'archive-status-cut'
-                archive_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r['id']}">{h(r['tag'])}</a><small>{h(r['nickname']) or 'Takma ad yok'}</small><span class="archive-status-pill {status_cls}">{h(status)}</span></div></div></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['exit_date'])}</td><td>{money(r['purchase_price'])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>''')
+                archive_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" title="Hayvan kartını aç" href="/animal?id={r['id']}">{h(r['tag'])}</a><small>{h(r['nickname']) or 'Takma ad yok'}</small><span class="archive-status-pill {status_cls}">{h(status)}</span></div></div></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['gender'])}</td><td>{fmt_date(r['exit_date'])}</td><td>{money(financial['expense'])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>''')
             for r in calf_rows:
-                _,_,operating,total_cost=calf_cost_values(r)
-                revenue=float(r['sold_price'] or 0);profit=revenue-total_cost
+                with db() as fc:financial=animal_financial_summary(fc,r,'calf')
+                operating=financial['operating'];total_cost=financial['total_cost']
+                revenue=financial['income'];profit=financial['net_profit']
                 profit_class='color:#08783f' if profit>=0 else 'color:#c0392b'
                 photo=str(r['photo_url'] or '').strip()
                 thumb=(f'<img class="archive-thumb" src="{h(photo)}" alt="">' if photo else '<span class="archive-thumb-placeholder">🐮</span>')
-                archive_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" title="Buzağı kartını aç" href="/calf?id={r['id']}">{h(r['tag'])}</a><small>{h(r['nickname']) or 'Takma ad yok'} · Buzağı</small><span class="archive-status-pill archive-status-sold">Satıldı</span></div></div></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['gender'])} · Buzağı</td><td>{fmt_date(r['exit_date'])}</td><td>{money(r['purchase_price'])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>''')
-            trs=''.join(archive_rows) or '<tr><td colspan="9">Kayıt yok.</td></tr>'
+                archive_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" title="Buzağı kartını aç" href="/calf?id={r['id']}">{h(r['tag'])}</a><small>{h(r['nickname']) or 'Takma ad yok'} · Buzağı</small><span class="archive-status-pill archive-status-sold">Satıldı</span></div></div></td><td>{h(r['nickname']) or '-'}</td><td>{h(r['gender'])} · Buzağı</td><td>{fmt_date(r['exit_date'])}</td><td>{money(financial['expense'])}</td><td>{money(operating)}</td><td><b>{money(total_cost)}</b></td><td><b>{money(revenue)}</b></td><td><b style="{profit_class}">{money(profit)}</b></td></tr>''')
+            trs=''.join(archive_rows) or ('<tr><td colspan="9">Aramayla eşleşen kayıt bulunamadı.</td></tr>' if archive_query else '<tr><td colspan="9">Kayıt yok.</td></tr>')
             tabs=f'''<nav class="count-tabs archive-tabs"><a class="count-tab" href="/all-animals">Aktif<b>{active_count}</b></a><a class="count-tab {'active' if status=='Satıldı' else ''}" href="/archive/sold">Satılan<b>{sold_count}</b></a><a class="count-tab {'active' if status=='Kesildi' else ''}" href="/archive/slaughtered">Kesilen<b>{cut_count}</b></a><a class="count-tab" href="/archive/lost">Ölen / Kayıp<b>{lost_count}</b></a></nav>'''
-            body=f'''<h1 class="archive-page-title">{title}</h1>{tabs}<div class="card"><p class="mut archive-info">Maliyet çıkış tarihinde donar. Alış + tarihsel padok/rasyon + bakım gideri satış geliriyle karşılaştırılır; geçmiş kayıtlar silinmez.</p><div style="overflow:auto"><table class="archive-animal-table" style="min-width:1050px"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Çıkış Tarihi</th><th>Alış</th><th>Rasyon + Bakım</th><th>Toplam Maliyet</th><th>Satış Geliri</th><th>Net Kâr/Zarar</th></tr></thead><tbody>{trs}</tbody></table></div></div>'''
+            body=f'''<h1 class="archive-page-title">{title}</h1>{tabs}{search_ui}<div id="archiveSearchResults">{result_count}<div class="card"><p class="mut archive-info">Maliyet çıkış tarihinde donar. Alış, sağlık ve diğer giderler ile tarihsel rasyon/bakım maliyeti gelirle karşılaştırılır; geçmiş kayıtlar silinmez.</p><div style="overflow:auto"><table class="archive-animal-table" style="min-width:1050px"><thead><tr><th>Küpe</th><th>Takma Ad</th><th>Cinsiyet</th><th>Çıkış Tarihi</th><th>Gider (Alış + Sağlık + Diğer)</th><th>Maliyet (Rasyon + Bakım)</th><th>Toplam Maliyet</th><th>Gelir</th><th>Net Kâr/Zarar</th></tr></thead><tbody>{trs}</tbody></table></div></div></div>'''
             return self.send_html(page(title,body,path,u,msg))
         if path=='/archive/lost':
             with db() as c:
-                rows=c.execute('''select l.*,a.tag animal_tag,a.nickname animal_nickname,a.gender animal_gender,a.photo_url animal_photo,
-                    ca.tag calf_tag,ca.nickname calf_nickname,ca.gender calf_gender,ca.photo_url calf_photo
+                rows=c.execute('''select l.*,a.tag animal_tag,a.nickname animal_nickname,a.gender animal_gender,a.photo_url animal_photo,a.breed animal_breed,a.paddock animal_paddock,
+                    ca.tag calf_tag,ca.nickname calf_nickname,ca.gender calf_gender,ca.photo_url calf_photo,ca.breed calf_breed,ca.paddock calf_paddock
                     from animal_losses l left join animals a on a.id=l.animal_id
                     left join calves ca on ca.id=l.calf_id order by l.event_date desc,l.id desc''').fetchall()
                 active_count=c.execute("select count(*) from animals where coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=animals.id)").fetchone()[0]
                 sold_count=c.execute("select (select count(*) from animals where status='Satıldı')+(select count(*) from calves where status='Satıldı' and promoted_animal_id is null)").fetchone()[0]
                 cut_count=c.execute("select count(*) from animals where status='Kesildi'").fetchone()[0]
                 lost_count=c.execute("select count(*) from animal_losses").fetchone()[0]
+            archive_query=(q.get('q',[''])[0] or '').strip()
+            archive_total=len(rows)
+            rows=[r for r in rows if archive_record_matches(r,archive_query)]
+            search_ui=render_archive_search(archive_query,path)
+            result_count=f'<p class="mut" aria-live="polite">{len(rows)} / {archive_total} kayıt</p>'
             loss_rows=[]
             for r in rows:
                 tag=r['animal_tag'] or r['calf_tag'] or '-';nick=r['animal_nickname'] or r['calf_nickname'] or ''
@@ -8283,9 +8466,9 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 photo=str(r['animal_photo'] or r['calf_photo'] or '').strip()
                 thumb=(f'<img class="archive-thumb" src="{h(photo)}" alt="">' if photo else '<span class="archive-thumb-placeholder">🕯</span>')
                 loss_rows.append(f'''<tr class="data-row"><td><div class="archive-card-head">{thumb}<div><a class="animal-tag-btn" href="{href}">{h(tag)}</a><small>{h(nick) or 'Takma ad yok'}</small><span class="archive-status-pill archive-status-lost">{h(r['event_type'])}</span></div></div></td><td>{h(gender)}</td><td>{h(r['event_type'])}</td><td>{fmt_date(r['event_date'])}</td><td>{h(r['cause']) or '-'}</td><td>{money(r['purchase_cost'])}</td><td>{money(r['operating_cost'])}</td><td>{money(r['treatment_cost'])}</td><td>{money(r['other_cost'])}</td><td><b>{money(r['total_cost'])}</b></td><td>{money(r['previously_financed'])}</td><td>{money(r['new_expense'])}</td><td>{money(r['recovery_amount'])}</td><td><b style="color:#b42318">{money(r['net_loss'])}</b></td><td><div class="actions"><a class="btn alt compact-btn" href="/loss-edit?id={r['id']}">Düzenle</a><form class="inline-form" method="post" action="/loss-delete" onsubmit="return confirm('Bu zayiat kaydı silinsin, otomatik finans hareketleri geri alınsın ve hayvan yeniden aktif sürüye dönsün mü?')"><input type="hidden" name="id" value="{r['id']}"><button class="btn red compact-btn">Sil / Geri Al</button></form></div></td></tr>''')
-            trs=''.join(loss_rows) or '<tr><td colspan="15">Ölüm, kayıp veya zorunlu imha kaydı yok.</td></tr>'
+            trs=''.join(loss_rows) or ('<tr><td colspan="15">Aramayla eşleşen kayıt bulunamadı.</td></tr>' if archive_query else '<tr><td colspan="15">Ölüm, kayıp veya zorunlu imha kaydı yok.</td></tr>')
             tabs=f'''<nav class="count-tabs archive-tabs"><a class="count-tab" href="/all-animals">Aktif<b>{active_count}</b></a><a class="count-tab" href="/archive/sold">Satılan<b>{sold_count}</b></a><a class="count-tab" href="/archive/slaughtered">Kesilen<b>{cut_count}</b></a><a class="count-tab active" href="/archive/lost">Ölen / Kayıp<b>{lost_count}</b></a></nav>'''
-            body=f'''<h1 class="archive-page-title">🕯 Ölen / Kayıp Hayvanlar</h1>{tabs}<p class="mut archive-info">Maliyet olay tarihinde donar. Küpeye bağlı eski alış ve giderler tekrar yazılmaz; yalnız finansa aktarılmamış maliyet giderleşir. Sigorta, et veya kurtarma geliri net zayiattan düşer.</p><div class="card" style="overflow:auto"><table class="archive-loss-table" style="min-width:1950px"><thead><tr><th>Küpe</th><th>Cinsiyet</th><th>Olay</th><th>Tarih</th><th>Neden</th><th>Alış</th><th>Rasyon + Bakım</th><th>Tedavi</th><th>Diğer</th><th>Brüt Kayıp</th><th>Önceden Finans</th><th>Yeni Gider</th><th>Sigorta/Et</th><th>Net Zayiat</th><th>İşlem</th></tr></thead><tbody>{trs}</tbody></table></div>'''
+            body=f'''<h1 class="archive-page-title">🕯 Ölen / Kayıp Hayvanlar</h1>{tabs}{search_ui}<div id="archiveSearchResults">{result_count}<p class="mut archive-info">Maliyet olay tarihinde donar. Küpeye bağlı eski alış ve giderler tekrar yazılmaz; yalnız finansa aktarılmamış maliyet giderleşir. Sigorta, et veya kurtarma geliri net zayiattan düşer.</p><div class="card" style="overflow:auto"><table class="archive-loss-table" style="min-width:1950px"><thead><tr><th>Küpe</th><th>Cinsiyet</th><th>Olay</th><th>Tarih</th><th>Neden</th><th>Alış</th><th>Rasyon + Bakım</th><th>Tedavi</th><th>Diğer</th><th>Brüt Kayıp</th><th>Önceden Finans</th><th>Yeni Gider</th><th>Sigorta/Et</th><th>Net Zayiat</th><th>İşlem</th></tr></thead><tbody>{trs}</tbody></table></div></div>'''
             return self.send_html(page('Ölen / Kayıp Hayvanlar',body,path,u,msg))
         if path=='/loss-edit':
             lid=q.get('id',[''])[0]
@@ -8355,30 +8538,11 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                         + '</div>')
                     pregnancy_line=''
                 except Exception:pass
-            # Finans özeti yalnız muhasebe satırlarını değil, hayvanın çıkış
-            # tarihine kadar biriken gerçek rasyon/bakım maliyetini de içerir.
-            # Hayvan Alımı finans satırı ile karttaki alış bedeli aynı giderin
-            # iki gösterimidir; ikisini toplayıp mükerrer maliyet üretmeyiz.
-            stay_days,daily_cost,accumulated_cost,current_cost=animal_cost_values(a)
-            finance_ids={int(r['id']) for r in fin}
-            purchase_finance=sum(
-                float(r['amount'] or 0) for r in fin
-                if r['category']=='Hayvan Alımı'
-                and normalize_finance_type(r['category'],r['tx_type'])=='Gider'
-            )
-            other_finance_cost=sum(
-                float(r['amount'] or 0) for r in fin
-                if r['category']!='Hayvan Alımı'
-                and normalize_finance_type(r['category'],r['tx_type'])=='Gider'
-            )
-            unlinked_health_cost=sum(
-                float(r['cost'] or 0) for r in health
-                if not r['finance_id'] or int(r['finance_id']) not in finance_ids
-            )
-            purchase_cost=max(float(a['purchase_price'] or 0),purchase_finance)
-            other_cost=other_finance_cost+unlinked_health_cost
-            finance_expense_total=purchase_cost+other_cost
-            total_cost=finance_expense_total+accumulated_cost
+            with db() as fc:financial=animal_financial_summary(fc,a)
+            fin=financial['finance_rows']
+            stay_days,daily_cost,accumulated_cost,current_cost=(financial[k] for k in ('days','daily','operating','total_cost'))
+            purchase_cost=financial['purchase'];other_cost=financial['other_expense']
+            finance_expense_total=financial['expense'];total_cost=financial['total_cost']
             latest_weight=weights[0]['weight'] if weights else None
             first_weight=weights[-1]['weight'] if weights else (a['purchase_weight'] or None)
             try:
@@ -8389,7 +8553,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             daily_gain=(weight_gain/perf_days) if weight_gain is not None and perf_days>0 else None
             latest_milk=milk[0]['liters'] if milk else None
             total_income=sum(r['amount'] for r in fin if normalize_finance_type(r['category'],r['tx_type'])=='Gelir')
-            net_value=total_income-total_cost
+            total_income=financial['income'];net_value=financial['net_profit']
             feed_ctx=animal_current_feed_context(a)
             target_profit=float(a['target_sale_price'] or 0)-current_cost if float(a['target_sale_price'] or 0)>0 else None
             period_perf=male_weight_performance(aid) if a['gender']=='Erkek' else None
@@ -8525,7 +8689,8 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             icon='🐮' if calf['gender']=='Dişi' else '🐂'
             photo=f'<img src="{h(calf["photo_url"])}" alt="{h(calf["tag"])} fotoğrafı" data-photo-zoom>' if calf['photo_url'] else icon
             last_weight=float(weight_rows[0]['weight']) if weight_rows else None
-            calf_days,calf_daily,calf_operating,calf_total=calf_cost_values(calf)
+            with db() as fc:calf_financial=animal_financial_summary(fc,calf,'calf')
+            calf_days,calf_daily,calf_operating,calf_total=(calf_financial[k] for k in ('days','daily','operating','total_cost'))
             calf_feed=animal_current_feed_context(calf)
             internal_total=sum(float(x['amount'] or 0) for x in internal_rows)
             mother_html=(f'<a class="taglink" href="/animal?id={calf["mother_id"]}">{h(calf["mother_tag"])} {h(calf["mother_name"])}</a>' if calf['mother_id'] and calf['mother_tag'] else '<span class="mut">Girilmemiş</span>')
@@ -8547,7 +8712,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             <div class="card profile"><div class="photo">{photo}</div><div><h1>{h(calf["tag"])}</h1><span class="pill">{h(calf["gender"])}</span><span class="pill">Yaş: {age_text(calf["birth_date"])}</span>
             <p>Takma ad: <b>{h(calf["nickname"]) or "-"}</b></p><p>Irk: <b>{h(calf["breed"]) or "-"}</b> · Padok: <b>{h(calf["paddock"]) or "-"}</b></p>
             <p>Doğum tarihi: <b>{fmt_date(calf["birth_date"])}</b></p><p>Anne: {mother_html}</p><p>Baba: <b>{h(calf["father_tag"]) or "-"}</b></p>
-            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p>{origin_line}{calf_cost_box}<p>{h(calf["notes"])}</p></div></div>
+            <p>Son kilo: <b>{f"{last_weight:.1f} kg" if last_weight is not None else "-"}</b></p>{origin_line}{calf_cost_box}{render_animal_financial_metrics(calf_financial)}<p>{h(calf["notes"])}</p></div></div>
             <div class="grid calf-entry-grid" style="margin-top:14px"><div class="card calf-photo-card"><h2>📷 Fotoğraf</h2><form method="post" action="/calf/photo" enctype="multipart/form-data" class="form calf-photo-form" data-smart-photo-form="1"><input type="hidden" name="calf_id" value="{cid}"><label class="full">Kamera / Galeri<input type="file" name="photo_file" accept="image/*" required></label><div class="full"><button class="btn">Fotoğrafı Yükle</button></div></form></div>
             <div class="card calf-weight-card"><h2>⚖️ Kilo / Gelişim</h2><form method="post" action="/calf/weight" class="form calf-weight-form"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="measure_date" value="{date.today().isoformat()}" required></label><label>Kilo (kg)<input type="number" step="0.1" min="0.1" name="weight" required></label><label class="full">Not<input name="notes"></label><div class="full"><button class="btn">Tartımı Kaydet</button></div></form></div></div>
             {internal_cost_box}<div class="card" style="margin-top:14px"><h2>💉 Sağlık / Tedavi Geçmişi</h2><p><a class="btn" href="/health">Sağlık Kaydı Ekle</a></p><div class="tablewrap"><table><tr><th>Tarih</th><th>Tür</th><th>Ürün/İşlem</th><th>Sonraki</th><th>Not</th></tr>{health_html}</table></div></div>
@@ -9796,7 +9961,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
         # Kayıt oluşturmayan/idempotent güncellemeler genel mükerrer POST kapısına girmez.
         # Özellikle hızlı gebelik sonucu ve kuru durum güncellemeleri aynı kaydı UPDATE eder;
         # ağ tekrarı yeni bir kayıt üretmediği için güvenle yeniden uygulanabilir.
-        dedupe_exempt_paths={'/reproduction-status','/reproduction/dry','/reproduction/dry-cancel'}
+        dedupe_exempt_paths={'/reproduction-status','/reproduction/dry','/reproduction/dry-cancel','/finance/mark-paid','/finance/unmark-paid'}
         if path not in dedupe_exempt_paths:
             with db() as dedupe_db:
                 if not claim_request_once(dedupe_db,general_request_fingerprint(username,path,f),20):
@@ -10758,7 +10923,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
             try:
                 restore_backup_zip(fp)
                 audit(username,'Klasörden yedek geri yükledi',name,self.client_ip())
-                return self.redirect('/backups','Yedek başarıyla geri yüklendi.')
+                SESSIONS.clear()
+                return self.redirect('/login','Yedek başarıyla geri yüklendi. Yeniden giriş yapın.')
             except Exception as exc:
                 return self.redirect('/backups','Geri yükleme hatası: '+str(exc))
         if path=='/photos/optimize-existing':
@@ -11098,7 +11264,11 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     a=c.execute("select * from animals where id=?",(aid,)).fetchone()
                     if not a:return self.redirect('/animals','Hayvan bulunamadı.')
                     if a['status']!='Aktif':return self.redirect('/animal?id='+aid,'Bu hayvan daha önce aktif sürüden çıkarılmış.')
-                    days,daily,accumulated,current=animal_cost_values(a); profit=sale_price-current
+                    try:sale_day=date.fromisoformat(sale_date)
+                    except ValueError:return self.redirect('/animal?id='+aid,'Satış tarihi geçersiz.')
+                    if not (0<sale_price<float('inf')) or sale_day>date.today():return self.redirect('/animal?id='+aid,'Satış fiyatı pozitif ve satış tarihi bugün veya önceki bir gün olmalıdır.')
+                    frozen=dict(a);frozen.update(status='Satıldı',exit_date=sale_date,sold_price=sale_price)
+                    financial=animal_financial_summary(c,frozen);current=financial['total_cost'];profit=financial['net_profit']
                     desc=(f.get('description') or '').strip()
                     detail=f"{desc} | Satış kilosu: {sale_weight:.1f} kg | Anlık maliyet: {current:.2f} TL | Net kâr/zarar: {profit:.2f} TL"
                     c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action) values(?,?,?,?,?,?,?,?,?)',(sale_date,'Gelir','Hayvan Satışı',sale_price,detail,f.get('payment_method') or 'Nakit',aid,datetime.now().isoformat(),'Satıldı'))
@@ -11694,9 +11864,14 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('update feed_stock_transactions set tx_date=?,quantity_kg=?,unit_price=? where id=?',(f['tx_date'],linked_qty,linked_unit,link['stock_tx_id']))
                         c.execute('update feed_finance_links set quantity_kg=?,unit_price=? where finance_id=?',(linked_qty,linked_unit,record_id))
                         c.execute('insert into feed_prices(feed_id,effective_date,price_per_kg,notes) values(?,?,?,?)',(link['feed_id'],f['tx_date'],linked_unit,'Bağlı Finans/Stok düzenlemesinden güncellendi'))
+                    was_paid=old['payment_method']=='Vadeli' and old['payment_status']=='Ödendi' and bool(old['paid_date']) and float(old['paid_amount'] or 0)>0
+                    paid=payment_method!='Vadeli' or was_paid
+                    status='Ödendi' if paid else 'Bekliyor'
+                    paid_date=(old['paid_date'] or f['tx_date']) if paid else ''
+                    paid_amount=new_amount if paid else 0
                     c.execute(
-                        'update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,payment_method=?,animal_id=?,calf_id=?,animal_status_action=?,due_date=?,payment_status=case when ?=\'Vadeli\' and payment_status<>\'Ödendi\' then \'Bekliyor\' when ?<>\'Vadeli\' then \'Ödendi\' else payment_status end where id=?',
-                        (f['tx_date'],tx_type,category,new_amount,f.get('description'),payment_method,animal_id,calf_id,action,due_date,payment_method,payment_method,record_id)
+                        'update finance set tx_date=?,tx_type=?,category=?,amount=?,description=?,payment_method=?,animal_id=?,calf_id=?,animal_status_action=?,due_date=?,payment_status=?,paid_date=?,paid_amount=? where id=?',
+                        (f['tx_date'],tx_type,category,new_amount,f.get('description'),payment_method,animal_id,calf_id,action,due_date,status,paid_date,paid_amount,record_id)
                     )
                     if category!='Süt Satışı':
                         c.execute('delete from finance_animals where finance_id=?',(record_id,))
@@ -11733,7 +11908,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if not row:return self.redirect('/finance','Finans kaydı bulunamadı.')
                     if str(row['payment_method'] or '')!='Vadeli':return self.redirect('/finance','Yalnız vadeli ödemelerin ödeme durumu geri alınabilir.')
                     if str(row['payment_status'] or '')!='Ödendi':return self.redirect('/finance','Bu vadeli kayıt zaten Bekliyor durumunda.')
-                    c.execute("update finance set payment_status='Bekliyor',paid_date='',paid_amount=0 where id=?",(record_id,))
+                    changed=c.execute("update finance set payment_status='Bekliyor',paid_date='',paid_amount=0 where id=? and payment_status='Ödendi'",(record_id,)).rowcount
+                    if not changed:return self.redirect(return_to,'Bu vadeli kayıt zaten Bekliyor durumunda.')
                     c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username,'Vadeli ödeme geri alındı',f"Finans #{record_id} · {row['category']} · {money(row['amount'])}",datetime.now().strftime('%Y-%m-%d %H:%M:%S'),self.client_ip()))
                     return self.redirect(return_to,'Ödendi işlemi geri alındı. Kayıt tekrar Bekliyor durumunda; finans gideri ve yem stokları değişmedi.')
                 if path=='/finance/mark-paid':
@@ -11744,7 +11920,8 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if row['payment_status']=='Ödendi':return self.redirect(return_to,'Bu ödeme daha önce ödendi olarak kapatılmış.')
                     try:date.fromisoformat(paid_date)
                     except Exception:return self.redirect(return_to,'Ödeme tarihi geçersiz.')
-                    c.execute("update finance set payment_status='Ödendi',paid_date=?,paid_amount=? where id=?",(paid_date,float(row['amount'] or 0),record_id))
+                    changed=c.execute("update finance set payment_status='Ödendi',paid_date=?,paid_amount=? where id=? and coalesce(payment_status,'')<>'Ödendi'",(paid_date,float(row['amount'] or 0),record_id)).rowcount
+                    if not changed:return self.redirect(return_to,'Bu ödeme daha önce ödendi olarak kapatılmış.')
                     c.execute('insert into audit_log(username,action,detail,created_at,ip_address) values(?,?,?,?,?)',(username,'Vadeli ödeme ödendi',f"Finans #{record_id} · {row['category']} · {money(row['amount'])} · {fmt_date(paid_date)}",datetime.now().strftime('%Y-%m-%d %H:%M:%S'),self.client_ip()))
                     return self.redirect(return_to,'Vadeli ödeme ödendi olarak kapatıldı.')
                 if path=='/finance':
@@ -11881,8 +12058,6 @@ def local_ip():
         s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('8.8.8.8',80));ip=s.getsockname()[0];s.close();return ip
     except:return '127.0.0.1'
 
-if __name__=='__main__':
-    init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
 
 
 # DEV4.3 — desktop-only ration workbench refinement; solver logic untouched
@@ -15198,7 +15373,7 @@ def page(title,body,path='/',user='admin',flash=''):
 # Hotfix1.22bx: Sürü Merkezi filtre çubuğu yeniden tasarımı.
 # Kategori şeridi ile arama/QR/padok/göster/aksiyon kontrolleri ayrılır;
 # masaüstünde tek kompakt satır, mobilde kontrollü iki satır kullanılır.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22ch'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ci'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BX_HERD=r"""
 <style id="hotfix122bx-herd-filterbar">
@@ -15292,7 +15467,7 @@ def page(title,body,path='/',user='admin',flash=''):
 
 
 # Hotfix1.22ca: tüm canlı metin aramalarında yenilemesiz debounce standardı.
-APP_VERSION='3.9.23 DEV4 Hotfix1.22ch'
+APP_VERSION='3.9.23 DEV4 Hotfix1.22ci'
 APP_LABEL='v'+APP_VERSION
 HOTFIX122BY_LIVE_SEARCH=r"""
 <script id="hotfix122by-live-search">
@@ -15345,3 +15520,6 @@ _page_before_hotfix122by=page
 def page(title,body,path='/',user='admin',flash=''):
     html=_page_before_hotfix122by(title,body,path,user,flash)
     return html.replace('</head>',HOTFIX122BY_LIVE_SEARCH+'</head>',1)
+
+if __name__=='__main__':
+    init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
