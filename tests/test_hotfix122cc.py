@@ -96,8 +96,8 @@ class Hotfix122CCTests(unittest.TestCase):
         with server.db() as connection:
             columns = {row[1] for row in connection.execute('pragma table_info(health_courses)').fetchall()}
         self.assertIn('treatment_interval_days', columns)
-        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22ci')
-        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22ci')
+        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22cr')
+        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22cr')
 
 
 if __name__ == '__main__':

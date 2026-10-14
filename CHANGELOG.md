@@ -1,3 +1,20 @@
+## Mobile Full V5
+- Padoklar arası tekli/toplu taşıma
+- Sağlık kaydı düzenle/sil
+- Mobil saha rapor merkezi
+- V4 finans filtre ve rasyon UI korunur
+
+# 3.9.23 DEV4 Hotfix1.22cr — MobileAPI17
+
+- Mobil hayvan detay fotoğrafı geri getirildi ve büyütme/ekleme davranışları ayrıldı.
+- Fotoğraf ekleme formunun tekrarlı açılması engellendi.
+- Yetişkin/buzağı detay fotoğrafı en güncel fotoğraf kaydından besleniyor.
+
+# 3.9.23 DEV4 Hotfix1.22cq — MobileAPI16
+
+- Mobil fotoğraf büyütme, Satılan/Kesilen/Ölen-Kayıp arşivi ve gebe hayvandan doğum kaydı eklendi.
+- Doğum kaydı anne gebeliğini kapatır ve buzağıyı anne padokuyla oluşturur.
+
 # Hotfix1.22ci — Finans Tutarlılığı ve Yedekten Güvenli Dönüş
 
 - Satılan, Kesilen ve Ölen/Kayıp arşivlerine yazdıkça çalışan metin arama, Ara/Temizle düğmeleri ve sonuç sayısı eklendi. Küpe, takma ad, ırk, padok, GG/AA/YYYY tarih ve ölüm/kayıp nedeni aranabilir; Türkçe karakterler sade yazımla da eşleşir.
@@ -1232,3 +1249,24 @@ Kontrol: mevcut 137 Python testi ve ek sağlık entegrasyon testi geçti. Rasyon
 - Geri tarihli padok rasyonu, o tarihte daha eski tarif anlık görüntüsü yoksa mevcut ilk tarifi başlangıç kabulüyle kullanır.
 - Geri tarihli yem maliyetinde geçmiş fiyat bulunamazsa sıfır yerine bilinen en eski stok maliyeti/fiyat kullanılır.
 - Alım bedeli sıfır olan hayvanlarda da rasyon, ek yem, bakım ve iç üretim maliyetleri hayvan kartının toplamına eklenir.
+
+
+## 1.22cm / MobileAPI12
+Fotoğraflı sürü listesi, yeni kayıtta TR sabit küpe ve kamera/galeri, buzağı fotoğrafı, masaüstü ortak maliyet motoru mobil karta taşındı.
+
+## Hotfix1.22cn — MobileAPI13
+- Mobil hayvan görünümleri ortak kompakt karta geçirildi.
+- Padok içi hayvan listesine fotoğraf eklendi ve satırlar sıkılaştırıldı.
+- Hayvanlar ekranına Tümü, Dişi, Erkek, Buzağı, Gebe hızlı filtreleri eklendi.
+
+## Hotfix1.22co / MobileAPI14
+- Mobil hayvan düzenle formu tek ve kompakt görünüme geçirildi; detay üstüne tekrarlı form eklenmesi kaldırıldı.
+- TR sabit küpe düzenleme standardı uygulandı.
+- Satış, kesim, ölüm/kayıp çıkış işlemleri ve ortak finans bağlantıları mobile taşındı.
+
+## 1.22cp / MobileAPI15
+- Mobil Dişi/Erkek/Buzağı kayıt ve düzenleme masaüstü hayvan kayıt mantığına yaklaştırıldı.
+- Irk listesi ortak masaüstü verisinden geliyor.
+- Alış tarihi/fiyatı/ödeme/vade ve Finansa dahil et eklendi.
+- Bağlı Hayvan Alımı kaydı mükerrer oluşturmadan güncelleniyor; finans seçeneği kapatılırsa bağlı kayıt kaldırılıyor.
+- TR sabit küpe girişi ve mevcut numaranın düzenlemede doldurulması korunuyor.

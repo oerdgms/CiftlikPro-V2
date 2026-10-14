@@ -1,3 +1,17 @@
+# ÇiftlikPro Enterprise — App Edition 2.0.5
+
+Fotoğraf referansına yaklaşan iOS/Android mobil web görünümü. Normal :8953 adresinden, masaüstüyle aynı veritabanı ve Enterprise işlemleriyle kullanılır.
+
+2.0.5 giriş ekranındaki Göster/Gizle hizalamasını ve hayvan listesindeki Görüntüle/Düzenle/Sil işlem satırını düzeltir. 2.0.4 yatay sayfa ve yakınlaştırma kilidi, hayvan kartı düzeni, çekirdek kayıt kuralları ve masaüstü görünümü korunmuştur.
+
+Kurulum ve telefon yönergeleri: [MOBIL_KURULUM.md](MOBIL_KURULUM.md). Teknik kapsam: [APP_EDITION_2_0.md](APP_EDITION_2_0.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
+
+Windows kurulum dosyası GitHub Actions ile oluşturulur. Bu ZIP kaynak paketidir; hazır EXE/APK/IPA içermez.
+
+Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
+
+---
+
 Hotfix1.22br: Akıllı Üreme Yaşam Döngüsü eklendi. Taze, Üreme Kontrolü, Tohumlamaya Hazır, Kuruya Çıkarılacak, Kuru ve Yakın Doğum durumları dinamik hesaplanır; bireysel kızgınlık geçmişinden tahmin, kuruya çıkarma işlemi ve işletmeye özel üreme eşikleri desteklenir.
 Hotfix1.22bn: Ayrı “İşlem Yapılmamış” kartı ve filtresi kaldırıldı. Boş / İşlem Bekleyen tek grup olarak gösterilir; özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir, kart rozetleri ayrımı korur.
 Hotfix1.22bn: Üreme Merkezi tüm aktif dişileri kapsar. Ayrı İşlem Yapılmamış filtresi kaldırıldı; tüm boş/işlem bekleyen dişiler tek Boş / İşlem Bekleyen grubunda gösterilir. Özet satırı işlem yapılmamış ve yeniden işlem bekleyen sayılarını ayrı verir; kart rozetleri ayrımı korur.

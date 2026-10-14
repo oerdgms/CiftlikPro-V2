@@ -18,6 +18,6 @@ class Hotfix122BRTests(unittest.TestCase):
         self.assertNotIn('class AutoClosingConnection(sqlite3.Connection):',SERVER)
 
     def test_current_version(self):
-        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22ci'",SERVER)
+        self.assertIn("APP_VERSION='3.9.23 DEV4 Hotfix1.22cr'",SERVER)
 
 if __name__=='__main__': unittest.main()

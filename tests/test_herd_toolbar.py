@@ -59,7 +59,7 @@ class HerdToolbarTests(unittest.TestCase):
             self.assertIn('class="herd-animal-summary"',html)
             self.assertIn('Boncuk',html)
             self.assertIn('return confirm(',html)
-            self.assertIn('class="hf122am-herd"',html)
+            self.assertRegex(html,r'class="[^"]*\bhf122am-herd\b')
             self.assertLess(html.index('hotfix122am-herd-toolbar'),html.index('</head>'))
             self.assertLess(html.index('hotfix122an-herd-list'),html.index('</head>'))
         finally:

@@ -105,8 +105,8 @@ class Hotfix122CBTests(unittest.TestCase):
         self.assertEqual(linked['insemination_id'], insemination_id)
 
     def test_version(self):
-        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22ci')
-        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22ci')
+        self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22cr')
+        self.assertEqual(server.APP_LABEL, 'v3.9.23 DEV4 Hotfix1.22cr')
 
 
 if __name__ == '__main__':
