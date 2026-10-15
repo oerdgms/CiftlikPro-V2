@@ -1,12 +1,14 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.5
+# ÇiftlikPro Enterprise — App Edition 2.0.8
 
 Fotoğraf referansına yaklaşan iOS/Android mobil web görünümü. Normal :8953 adresinden, masaüstüyle aynı veritabanı ve Enterprise işlemleriyle kullanılır.
 
-2.0.5 giriş ekranındaki Göster/Gizle hizalamasını ve hayvan listesindeki Görüntüle/Düzenle/Sil işlem satırını düzeltir. 2.0.4 yatay sayfa ve yakınlaştırma kilidi, hayvan kartı düzeni, çekirdek kayıt kuralları ve masaüstü görünümü korunmuştur.
+2.0.8 Dashboard sorgularını hızlandırır. Tartım, gebelik, stok ve padok sorguları için indeksler eklenir; aynı sayfa açılışında tekrarlanan gebelik/sağlık hesapları paylaşılır. Her yeni açılış güncel verileri yeniden okur. 2.0.7 mobil rasyon/rapor düzenlemeleri ve önceki düzeltmeler dahildir.
 
 Kurulum ve telefon yönergeleri: [MOBIL_KURULUM.md](MOBIL_KURULUM.md). Teknik kapsam: [APP_EDITION_2_0.md](APP_EDITION_2_0.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
 
 Windows kurulum dosyası GitHub Actions ile oluşturulur. Bu ZIP kaynak paketidir; hazır EXE/APK/IPA içermez.
+
+Eski mobil sürüm belgeleri `docs/history` klasöründe korunur. Güncel düzeltmeler: [DUZELTME_NOTLARI_2_0_8.md](DUZELTME_NOTLARI_2_0_8.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
 
 Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
 

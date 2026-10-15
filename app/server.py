@@ -16241,18 +16241,19 @@ def page(title,body,path='/',user='admin',flash=''):
     html=_page_before_hotfix122by(title,body,path,user,flash)
     return html.replace('</head>',HOTFIX122BY_LIVE_SEARCH+'</head>',1)
 
-# App Edition 2.0.5 — one Enterprise backend, one mobile presentation.
-APP_EDITION_BUILD='AppEdition2.0.5-MobileControlsFix'
+# App Edition 2.0.6 — one Enterprise backend, one mobile presentation.
 _page_before_app_edition=page
 from mobile_ui import install as install_mobile_ui
 install_mobile_ui(globals())
+from dashboard_performance import install as install_dashboard_performance
+install_dashboard_performance(globals())
 
 # Mobile Full V1 final runtime identity.
 # Enterprise core stays on the verified 1.22cr baseline; mobile has its own build identity.
 APP_VERSION='3.9.23 DEV4 Hotfix1.22cr'
 APP_LABEL='v'+APP_VERSION
 MOBILE_API_BUILD='MobileFullV13-EnterpriseParity-SharedLogic'
-APP_EDITION_BUILD='AppEdition2.0.5-MobileControlsFix'
+APP_EDITION_BUILD='AppEdition2.0.8-DashboardPerformance'
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

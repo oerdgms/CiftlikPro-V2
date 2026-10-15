@@ -2,10 +2,11 @@
 import html
 import json
 import re
+import gzip
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
-BUILD = 'AppEdition2.0.5-MobileControlsFix'
+BUILD = 'AppEdition2.0.8-DashboardPerformance'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -89,7 +90,7 @@ def home_markup(ns, username):
     <section class="cp-home-jobs"><div class="cp-section-head"><h2>Bugünün işleri</h2><span class="cp-total">{states['today']}</span><a href="/?app_view=tasks">Tümü ›</a></div>
     <div class="cp-task-tabs">{tabs}</div><div class="cp-task-list">{task_html}</div><div class="cp-empty cp-filter-empty" hidden>Bu grupta bekleyen iş yok.</div></section>
     <div class="cp-shortcuts"><a href="/rations">{icon('ration')}<span>Rasyon</span></a><a href="/health">{icon('health')}<span>Sağlık</span></a><a href="/finance">{icon('finance')}<span>Finans</span></a><a href="/feeds">{icon('feeds')}<span>Yem & Stok</span></a></div>
-    <button type="button" class="cp-business-more" aria-expanded="false">İşletme ayrıntıları <span>⌄</span></button>
+    <a class="cp-business-more" href="/farm-profile#farm-settings">İşletme bilgileri ve ayarlar <span>›</span></a>
     </section>'''
 
 
@@ -98,7 +99,7 @@ def shell_markup(title, path, username):
     display_title = titles.get(path, title)
     back_url = '/' if path in titles else '/?app_view=modules'
     leading = f'<a class="cp-header-back" href="{back_url}" aria-label="Geri">{icon("back")}</a>' if path != '/' else '<span class="cp-leaf">'+icon('farm')+'</span>'
-    header = f'<header class="cp-app-header"><div class="cp-header-title">{leading}<div><b id="cpScreenTitle">{esc(display_title)}</b><small id="cpScreenSubtitle">{esc(username) if path=="/" else "ÇiftlikPro Enterprise"}</small></div></div><a class="cp-notifications" href="/?app_view=tasks" aria-label="Bugünün işleri ve bildirimler">{icon("bell")}<i id="cpNotificationDot" hidden></i></a></header>'
+    header = f'<header class="cp-app-header"><div class="cp-header-title">{leading}<div><b id="cpScreenTitle">{esc(display_title)}</b><small id="cpScreenSubtitle">{esc(username) if path=="/" else "ÇiftlikPro Enterprise"}</small></div></div><a class="cp-notifications" href="/notifications" aria-label="Bugünün işleri ve bildirimler">{icon("bell")}<i id="cpNotificationDot" hidden></i></a></header>'
     links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar'),('jobs','/?app_view=tasks','İşler'),('paddocks','/paddocks','Padoklar'),('modules','/?app_view=modules','Modüller')]
     nav = '<nav class="cp-bottom-nav" aria-label="Mobil ana menü">' + ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in links) + '</nav>'
     quick = '<div class="cp-overlay" id="cpQuickOverlay" hidden><section class="cp-sheet" role="dialog" aria-modal="true" aria-labelledby="cpQuickTitle" tabindex="-1"><div class="cp-sheet-head"><h2 id="cpQuickTitle">Hızlı işlem</h2><button type="button" class="cp-icon-button" data-cp-close aria-label="Kapat">'+icon('close')+'</button></div><div class="cp-quick-grid">'
@@ -108,12 +109,13 @@ def shell_markup(title, path, username):
     return header + nav + fab + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.5">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.8">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
     if 'id="cpAppConfig"' in document:
         return document
+    document = document.replace('href="/#approaching-estrus"', 'href="/notifications"')
     viewport_pattern = re.compile(r'<meta\b(?=[^>]*\bname=(["\'])viewport\1)[^>]*>', re.I)
     viewport_tag = f'<meta name="viewport" content="{MOBILE_VIEWPORT}">'
     if viewport_pattern.search(document):
@@ -140,7 +142,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user)
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.5" defer></script>'
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.8" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 
@@ -149,6 +151,15 @@ def install(ns):
     original_page = ns['_page_before_app_edition']
     def page(title, body, path='/', user='admin', flash=''):
         extra = {}
+        if 'data-animal-panel="history"' in body:
+            subject = re.search(r'name="animal_id" value="(\d+)"', body)
+            if subject:
+                body = body.replace('data-animal-tab="history">↶ Geçmiş', 'data-animal-tab="operations">Satış / Zayiat')
+                body = body.replace('data-animal-panel="history"', 'data-animal-panel="operations"')
+                body = body.replace("showAnimalPanel('history');", "showAnimalPanel('operations');")
+                body = body.replace('</nav>', '<button class="animal-card-tab" data-animal-tab="history">↶ Geçmiş</button></nav>', 1)
+                history_panel = '<section class="animal-card-panel" data-animal-panel="history">'+animal_history_markup(ns, int(subject.group(1)))+'</section>'
+                body = body.replace('<script>(function(){const tabs=[...document.querySelectorAll', history_panel+'<script>(function(){const tabs=[...document.querySelectorAll', 1)
         if path == '/':
             body = home_markup(ns, user) + body
         if path == '/rations':
@@ -177,9 +188,21 @@ def install(ns):
             config['request_url'] = self.path
             payload = json.dumps(config,ensure_ascii=False).replace('<','\\u003c')
             document = document[:match.start(2)]+payload+document[match.end(2):]
-        original_send_html(self, document, status, headers)
+        # Compress negotiated responses, including authenticated pages; no page cache.
+        if accepts_gzip(self) and len(document) > 1024:
+            send_response_bytes(self, gzip.compress(document.encode('utf-8'), compresslevel=5), 'text/html; charset=utf-8', status, [('Content-Encoding','gzip'),('Vary','Accept-Encoding'),('Cache-Control','no-store'),*(headers or [])])
+        else:
+            original_send_html(self, document, status, headers)
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/notifications':
+            allowed, _, message = ns['license_status']()
+            if not allowed:
+                return self.redirect('/license', message)
+            if not self.require():
+                return
+            account = self.user()
+            return self.send_html(ns['page']('Bildirimler', notifications_markup(ns), path, account['username']))
         if path in ('/mobile','/mobile/'):
             return self.redirect('/')
         if path == '/app-manifest.json':
@@ -260,15 +283,82 @@ def move_subjects(ns, connection, refs, destination, notes=''):
     return selected
 
 
-def send_bytes(handler, data, mime, headers=()):
+def accepts_gzip(handler):
+    for item in (handler.headers.get('Accept-Encoding') or '').lower().split(','):
+        parts = item.strip().split(';')
+        if parts[0] == 'gzip':
+            return not any(part.strip() in ('q=0', 'q=0.0', 'q=0.00', 'q=0.000') for part in parts[1:])
+    return False
+
+
+def send_response_bytes(handler, data, mime, status=200, headers=()):
     try:
-        handler.send_response(200)
+        handler.send_response(status)
         handler.send_header('Content-Type', mime)
         handler.send_header('Content-Length', str(len(data)))
-        handler.send_header('Cache-Control', 'no-cache')
         for name, value in headers:
             handler.send_header(name, value)
         handler.end_headers()
         handler.wfile.write(data)
     except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
         pass
+
+
+def send_bytes(handler, data, mime, headers=()):
+    cache = 'public, max-age=31536000, immutable' if 'v=' in urlparse(handler.path).query else 'no-cache'
+    response_headers = [('Cache-Control',cache),*headers]
+    if mime in ('text/css', 'application/javascript', 'application/manifest+json') and accepts_gzip(handler):
+        data = gzip.compress(data, compresslevel=5)
+        response_headers += [('Content-Encoding','gzip'),('Vary','Accept-Encoding')]
+    send_response_bytes(handler, data, mime, headers=response_headers)
+
+
+def notifications_markup(ns):
+    rows = ns['dashboard_export_tasks']('all')
+    cards = ''.join(f'<a class="cp-notification-item card" href="{esc(task_url(row))}"><b>{esc(row["subject"])} · {esc(row["task"])}</b><span>{esc(ns["fmt_date"](row["date"]))} · {esc(row["status"])} · {esc(row.get("detail",""))}</span></a>' for row in rows)
+    today = ns['date'].today()
+    reproductive = []
+    with ns['db']() as c:
+        pregnancies = ns['active_pregnancy_records'](c)
+        latest = {}
+        for row in c.execute("select e.*,a.tag from estrus_records e join animals a on a.id=e.animal_id where coalesce(a.status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=a.id) order by e.estrus_date desc,e.id desc"):
+            if row['animal_id'] in latest or row['animal_id'] in pregnancies:
+                continue
+            latest[row['animal_id']] = row
+            cycle = ns['next_estrus_cycle'](c, row, today)
+            if cycle and cycle['end'] >= today and cycle['start'] <= today+ns['timedelta'](days=30):
+                reproductive.append((cycle['center'], '/reproduction-center?stage=estrus&animal='+str(row['animal_id']), row['tag']+' · Kızgınlık takibi', ns['fmt_date'](cycle['start'].isoformat())+' – '+ns['fmt_date'](cycle['end'].isoformat())))
+        for aid, row in pregnancies.items():
+            try:
+                due = ns['date'].fromisoformat(row['due_date'])
+            except (ValueError,TypeError):
+                continue
+            if today <= due <= today+ns['timedelta'](days=60):
+                animal = c.execute('select tag from animals where id=?',(aid,)).fetchone()
+                reproductive.append((due, '/reproduction-center?stage=birth&animal='+str(aid), animal['tag']+' · Yaklaşan doğum', ns['fmt_date'](due.isoformat())))
+    reproductive.sort(key=lambda item:item[0])
+    reproductive_cards = ''.join(f'<a class="cp-notification-item card" href="{esc(url)}"><b>{esc(label)}</b><span>{esc(detail)}</span></a>' for _,url,label,detail in reproductive)
+    return '<h1>🔔 Bildirimler</h1><p>Sağlık görevleri ve bekleyen ödemeler</p><div class="cp-notification-list">'+(cards or '<div class="card">Bekleyen sağlık görevi veya ödeme yok.</div>')+'</div><div class="card cp-notification-links"><h2>Üreme bildirimleri</h2><div class="cp-notification-list">'+(reproductive_cards or '<p>Yaklaşan kızgınlık veya doğum bildirimi yok.</p>')+'</div><a class="btn alt" href="/estrus">Kızgınlık takibi</a> <a class="btn alt" href="/reproduction-center?stage=birth">Yaklaşan doğumlar</a></div>'
+
+
+def animal_history_markup(ns, aid):
+    # Read existing records only; sales and loss forms remain in their own panel.
+    events = []
+    fmt = ns['fmt_date']
+    with ns['db']() as c:
+        animal = c.execute('select * from animals where id=?', (aid,)).fetchone()
+        if animal and animal['purchase_date']:
+            events.append((animal['purchase_date'], 'İşletmeye giriş', animal['tag']))
+        for row in c.execute('select applied_date,kind,product,notes from health where animal_id=? order by applied_date desc,id desc', (aid,)):
+            events.append((row['applied_date'], 'Sağlık · '+str(row['kind'] or ''), str(row['product'] or '')+' · '+str(row['notes'] or '')))
+        for row in c.execute('select measure_date,weight,notes from weights where animal_id=? order by measure_date desc,id desc', (aid,)):
+            events.append((row['measure_date'], 'Tartım', str(row['weight'])+' kg · '+str(row['notes'] or '')))
+        for row in c.execute('select insemination_date,attempt,pregnancy_result from inseminations where animal_id=? order by insemination_date desc,id desc', (aid,)):
+            events.append((row['insemination_date'], 'Tohumlama', str(row['attempt'])+'. deneme · '+str(row['pregnancy_result'] or '')))
+        for row in c.execute("select moved_at,notes from paddock_history where animal_source='animal' and animal_id=? order by moved_at desc,id desc", (aid,)):
+            events.append((row['moved_at'], 'Padok hareketi', row['notes']))
+        for row in c.execute('select tx_date,tx_type,description,amount from finance where animal_id=? order by tx_date desc,id desc', (aid,)):
+            events.append((row['tx_date'], 'Finans · '+str(row['tx_type']), str(row['description'] or '')+' · '+ns['money'](row['amount'])))
+    events.sort(key=lambda item: str(item[0] or ''), reverse=True)
+    items = ''.join(f'<div class="animal-360-event"><b>{esc(fmt(str(day or "")[:10]))}</b> · {esc(label)}<small>{esc(detail)}</small></div>' for day,label,detail in events)
+    return '<div class="card cp-animal-history"><h2>Hayvan Geçmişi</h2><div class="cp-history-events">'+(items or '<p>Bu hayvana ait geçmiş kayıt yok.</p>')+'</div></div>'

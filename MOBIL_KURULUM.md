@@ -1,4 +1,4 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.5
+# ÇiftlikPro Enterprise — App Edition 2.0.6
 
 Bu paket mevcut Windows uygulamanızın iPhone, iPad ve Android için mobil görünümünü içerir. Bilgisayar ve telefon aynı işletme verisini kullanır.
 
@@ -6,7 +6,7 @@ Bu paket mevcut Windows uygulamanızın iPhone, iPad ve Android için mobil gör
 
 1. Paketin tamamını GitHub kaynaklarına yükleyin. app klasörü, CiftlikPro.spec ve installer.iss birlikte güncellenmelidir.
 2. Actions → CiftlikPro Windows Kurulum → Run workflow ile Windows kurulumunu oluşturun.
-3. Oluşan CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_5_Setup.exe dosyasını mevcut ÇiftlikPro bilgisayarına kurun.
+3. Oluşan CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_6_Setup.exe dosyasını mevcut ÇiftlikPro bilgisayarına kurun.
 4. ÇiftlikPro’yu bilgisayarda açın. Telefon aynı yerel ağa veya mevcut VPN bağlantınıza bağlı olsun.
 5. Telefonda normal ÇiftlikPro adresini açın. Önceki görüşmemizdeki örnek: http://10.0.0.60:8953. Bilgisayarınızın IP adresi değiştiyse uygulamanın Ağ adresindeki yeni IP’yi kullanın.
 6. Mevcut kullanıcı adınız ve şifrenizle giriş yapın.
@@ -24,6 +24,9 @@ Bu sürüm ana ekrana eklenebilen mobil web uygulamasıdır. Mağaza üzerinden 
 ## Kullanım
 
 - Alt menü: Ana Sayfa, Hayvanlar, İşler, Padoklar, Modüller.
+- Zil düğmesi ayrı Bildirimler listesini açar; masaüstündeki Bildirimler bağlantısı da aynı listeyi kullanır.
+- Hayvan kartının Geçmiş sekmesi kayıt akışını gösterir. Satış ve zayiat işlemleri ayrı Satış / Zayiat sekmesinde korunur.
+- Mobil İşletme Bilgileri ve Ayarlar bağlantısı işletme formunu açar; ikinci Dashboard açılmaz.
 - Mobil sayfa ekran genişliğinde sabit kalır; sağa-sola sürükleme ve sayfa yakınlaştırma kapalıdır. Finans raporundaki geniş tablo gibi özel alanlar gerektiğinde yalnız kendi kutusu içinde yatay kaydırılır.
 - Yeşil + düğmesi bulunduğunuz ekranda yeni kayıt açar. Ana sayfada hızlı işlem menüsü açılır.
 - Ana sayfadaki İşler sağlık görevleriyle vadeli ödemeleri birlikte gösterir. Ödeme satırı ilgili ödemenin mevcut finans ekranını açar.

@@ -31,21 +31,31 @@
     document.documentElement.classList.add('cp-viewport-locked');
     const stopGesture = event => event.preventDefault();
     ['gesturestart','gesturechange','gestureend'].forEach(name => document.addEventListener(name,stopGesture,{passive:false}));
+    let tapStart = null;
+    document.addEventListener('touchstart',event => {
+      const touch = event.touches[0];
+      tapStart = event.touches.length === 1 ? {time:event.timeStamp,x:touch.clientX,y:touch.clientY,moved:false} : null;
+    },{passive:true});
     document.addEventListener('touchmove',event => {
       if (event.touches && event.touches.length > 1) event.preventDefault();
+      const touch = event.touches[0];
+      if (tapStart && touch && Math.hypot(touch.clientX-tapStart.x,touch.clientY-tapStart.y)>10) tapStart.moved = true;
     },{passive:false});
-    let clampPending = false;
-    window.addEventListener('scroll',() => {
-      if (!window.scrollX || clampPending) return;
-      clampPending = true;
-      requestAnimationFrame(() => {
-        const top = window.scrollY;
-        document.documentElement.scrollLeft = 0;
-        document.body.scrollLeft = 0;
-        window.scrollTo(0,top);
-        clampPending = false;
-      });
-    },{passive:true});
+    // CSS contains horizontal overflow. Never interrupt native scroll momentum.
+    let lastTap = null;
+    document.addEventListener('touchend',event => {
+      if (event.changedTouches.length !== 1 || event.touches.length || !tapStart || tapStart.moved || event.timeStamp-tapStart.time>300) { lastTap = null; return; }
+      const touch = event.changedTouches[0], now = event.timeStamp;
+      const interactive = event.target.closest('input,select,textarea,button,a,label,[role="button"],[contenteditable="true"]');
+      if (!interactive && lastTap && lastTap.target===event.target && now-lastTap.time<350 && Math.hypot(touch.clientX-lastTap.x,touch.clientY-lastTap.y)<24) {
+        event.preventDefault();
+        lastTap = null;
+      } else lastTap = {time:now,x:touch.clientX,y:touch.clientY,target:event.target};
+      tapStart = null;
+    },{passive:false});
+    document.addEventListener('dblclick',event => {
+      if (!event.target.closest('input,select,textarea,button,a,label,[role="button"],[contenteditable="true"]')) event.preventDefault();
+    },{passive:false});
   }
   lockMobileViewport();
   if (config.login) {
@@ -114,11 +124,6 @@
     if (!homeElement) return;
     [...main.children].forEach(child => {
       if (child !== homeElement && !['STYLE','SCRIPT'].includes(child.tagName) && !child.classList.contains('flash')) child.classList.add('cp-home-extra');
-    });
-    const more = $('.cp-business-more',homeElement);
-    more.addEventListener('click', () => {
-      const expanded = document.body.classList.toggle('cp-home-expanded');
-      more.setAttribute('aria-expanded',String(expanded));
     });
     if (taskView) {
       title.textContent = 'İşler';
@@ -362,6 +367,14 @@
     $$('.herd-table,.paddock-animal-table,.archive-animal-table,.mobile-animal-table,.health-group table',main).forEach(table => cardTable(table));
     cardTable($('.finance-table',main),true);
     if (path === '/feeds') $$('main table').forEach(table => { if ($$('th',table).length >= 8) cardTable(table); });
+    if (path === '/calf') $$('.tablewrap table',main).forEach(table => {
+      table.classList.add('cp-calf-record-table');
+      cardTable(table);
+      $$('.cp-record',table).forEach(row => {
+        row.classList.add('cp-row-open');
+        $('.cp-row-toggle',row)?.setAttribute('aria-expanded','true');
+      });
+    });
   }
   function herd() {
     const strip = $('.herd-category-strip');
@@ -587,6 +600,39 @@
     });
     subtitle.textContent = cards.length+' rasyon';
   }
+  function rationWorkbench() {
+    const table = $('.ration-workbench-table');
+    if (!table) return;
+    const lockSync = [];
+    $$('.ration-row',table).forEach(row => {
+      // Keep the original button and its listeners; only change its placement.
+      const lock = $('.hf119h-lock',row);
+      const name = $('td:first-child',row);
+      if (lock && name) {
+        name.append(lock);
+        // Enterprise stores this hidden field on the form, outside the row.
+        const sync = () => {
+          const field = row.closest('form')?.elements.namedItem('lock_'+row.dataset.itemId);
+          if (field) field.value = row.dataset.locked === '1' ? '1' : '0';
+          lock.setAttribute('aria-label',(row.dataset.feedName || 'Yem')+(row.dataset.locked === '1' ? ' miktar kilidini aç' : ' miktarını kilitle'));
+        };
+        lock.addEventListener('click',sync);
+        lockSync.push(sync);
+        sync();
+      }
+      const remove = $('.qty-zero',row);
+      if (remove) {
+        remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+        remove.setAttribute('aria-label',(row.dataset.feedName || 'Yem')+' rasyondan çıkar');
+      }
+    });
+    const form = table.closest('form');
+    const syncLocks = () => lockSync.forEach(sync => sync());
+    form?.addEventListener('submit',syncLocks);
+    form?.addEventListener('click',event => {
+      if (event.target.closest('#ration-reset')) setTimeout(syncLocks,0);
+    });
+  }
   function reports() {
     if (path !== '/reports') return;
     const index = !params.has('tab');
@@ -606,7 +652,15 @@
     main.prepend(hub);
     document.body.classList.toggle('cp-report-index',index);
     if (!index) hub.hidden = true;
-    else if (config.request_url) history.replaceState(null,'',config.request_url);
+    // The legacy tab controller replaces the URL with only the tab name.
+    // Retain submitted dates and animal filters when switching mobile tabs.
+    const reportURL = new URL(config.request_url || location.href,location.origin);
+    const keepFilters = tab => {
+      if (tab) reportURL.searchParams.set('tab',tab);
+      history.replaceState(null,'',reportURL.pathname+reportURL.search+reportURL.hash);
+    };
+    $$('[data-report-tab]',main).forEach(button => button.addEventListener('click',() => keepFilters(button.dataset.reportTab)));
+    keepFilters();
   }
   home();
   if (moduleView) moduleHub();
@@ -621,6 +675,8 @@
     if (cards) cards.click();
   }
   if (path === '/rations') rations();
+  // Enterprise queues one final layout pass after DOMContentLoaded.
+  setTimeout(rationWorkbench,0);
   reports();
   // Enterprise live search replaces the main content without a navigation.
   // Reapply only the presentation to freshly returned tables and filters.

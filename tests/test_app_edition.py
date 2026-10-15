@@ -1,5 +1,6 @@
 import ast
 import hashlib
+import gzip
 import json
 import tempfile
 import threading
@@ -100,8 +101,8 @@ class AppEditionTests(unittest.TestCase):
         config=json.loads(text.split('id="cpAppConfig">',1)[1].split('</script>',1)[0])
         self.assertEqual(config['request_url'],'/animal-add?entry=calf')
         self.assertIn('id="smartAnimalForm"',text)
-        self.assertIn('/app-assets/mobile.css?v=2.0.5',text)
-        self.assertIn('/app-assets/mobile.js?v=2.0.5',text)
+        self.assertIn('/app-assets/mobile.css?v=2.0.8',text)
+        self.assertIn('/app-assets/mobile.js?v=2.0.8',text)
         shell=mobile_ui.shell_markup('Hayvanlar','/all-animals','admin')
         self.assertIn('/animal-add?entry=adult',shell)
         self.assertIn('/animal-add?entry=calf',shell)
@@ -123,7 +124,7 @@ class AppEditionTests(unittest.TestCase):
         self.assertIn('tr.cp-finance-record>td.cp-actions-cell{display:none!important',stylesheet)
         self.assertIn('tr.cp-finance-record.cp-row-open>td.cp-actions-cell{display:block!important',stylesheet)
         self.assertIn('min-height:72px!important',stylesheet)
-        self.assertIn("ciftlikpro-app-edition-2.0.5",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
+        self.assertIn("ciftlikpro-app-edition-2.0.8",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
 
     def test_mobile_viewport_locks_page_drift_and_user_zoom(self):
         text=self.get('/reports?tab=finance')[2].decode()
@@ -136,14 +137,48 @@ class AppEditionTests(unittest.TestCase):
         stylesheet=(ROOT/'app'/'mobile_assets'/'mobile.css').read_text()
         self.assertIn('function lockMobileViewport()',javascript)
         self.assertIn("event.touches.length > 1",javascript)
-        self.assertIn('document.documentElement.scrollLeft = 0',javascript)
+        self.assertNotIn("window.addEventListener('scroll',",javascript)
+        self.assertIn("document.addEventListener('touchend'",javascript)
         self.assertIn('overflow-x:hidden!important;overscroll-behavior-x:none!important',stylesheet)
-        self.assertIn('touch-action:manipulation!important',stylesheet)
+        self.assertIn('touch-action:pan-x pan-y!important',stylesheet)
         self.assertIn('body.cp-app .finance-report-chart',stylesheet)
         self.assertIn('.password-wrap #loginPassword',stylesheet)
         self.assertIn('padding:13px 96px 13px 13px!important',stylesheet)
         self.assertIn('.cp-existing-actions .row-actions>form',stylesheet)
         self.assertIn('grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.65fr)',stylesheet)
+
+    def test_notifications_require_session_and_use_existing_task_targets(self):
+        self.assertIn('/login',self.get('/notifications',False)[3])
+        text=self.get('/notifications')[2].decode()
+        self.assertIn('🔔 Bildirimler',text)
+        self.assertIn('/reproduction-center?stage=birth',text)
+        self.assertNotIn('href="/#approaching-estrus"',text)
+
+    def test_history_panel_contains_actual_records_and_preserves_sale_forms(self):
+        _,_,adult,_,_=self.seed()
+        with server.db() as c:
+            c.execute('insert into weights(animal_id,measure_date,weight,notes) values(?,?,?,?)',(adult,'2026-10-14',123,'Geçmiş tartım örneği'))
+        text=self.get(f'/animal?id={adult}')[2].decode()
+        self.assertIn('data-animal-tab="operations">Satış / Zayiat',text)
+        self.assertIn('data-animal-panel="history"><div class="card cp-animal-history"',text)
+        self.assertIn('Geçmiş tartım örneği',text)
+        self.assertIn('123.0 kg',text)
+        self.assertIn('id="animalSale"',text)
+        self.assertLess(text.index('cp-animal-history'),text.index('<script>(function(){const tabs='))
+
+    def test_compressed_response_and_versioned_assets_preserve_content(self):
+        path='/reports?tab=finance'
+        plain=self.get(path)[2]
+        request=urllib.request.Request(self.base+path,headers={'Cookie':'sid=app-edition-test','Accept-Encoding':'gzip'})
+        with urllib.request.urlopen(request) as response:
+            payload=response.read()
+            self.assertEqual(response.headers['Content-Encoding'],'gzip')
+            self.assertEqual(response.headers['Cache-Control'],'no-store')
+        self.assertEqual(gzip.decompress(payload),plain)
+        self.assertLess(len(payload),len(plain)/2)
+        self.assertIn('immutable',self.get('/app-assets/mobile.css?v=2.0.8',False)[1]['Cache-Control'])
+        request=urllib.request.Request(self.base+path,headers={'Cookie':'sid=app-edition-test','Accept-Encoding':'gzip;q=0'})
+        with urllib.request.urlopen(request) as response:self.assertIsNone(response.headers.get('Content-Encoding'))
 
     def test_animal_cards_use_compact_mobile_layout_without_replacing_enterprise_forms(self):
         _,_,adult,_,calf=self.seed()
@@ -255,11 +290,12 @@ class AppEditionTests(unittest.TestCase):
         spec=(ROOT/'CiftlikPro.spec').read_text()
         self.assertIn('mobile_assets',spec)
         self.assertIn('"mobile_ui"',spec)
+        self.assertIn('"dashboard_performance"',spec)
         workflow=(ROOT/'.github/workflows/windows-installer.yml').read_text()
         installer=(ROOT/'installer.iss').read_text()
         self.assertIn("server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22cr'",workflow)
-        self.assertIn('AppEdition_2_0_5_Setup.exe',workflow)
-        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_5_Setup',installer)
+        self.assertIn('AppEdition_2_0_8_Setup.exe',workflow)
+        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_8_Setup',installer)
 
 
 if __name__=='__main__':

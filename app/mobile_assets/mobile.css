@@ -1,4 +1,4 @@
-/* App Edition 2.0.5. Every visual rule is confined to the mobile viewport. */
+/* App Edition 2.0.8. Every visual rule is confined to the mobile viewport. */
 @layer ciftlikpro-mobile {
 .cp-mobile-only,.cp-app-header,.cp-bottom-nav,.cp-global-fab,.cp-overlay,.cp-network-status,.cp-module-hub{display:none!important}
 .cp-icon{width:24px!important;height:24px!important;flex:0 0 auto!important}
@@ -6,7 +6,8 @@
 @media(max-width:900px){
  body.cp-app [hidden]{display:none!important}
  html{--cp-green:#086a46!important;--cp-dark:#063e2b!important;--cp-ink:#172b22!important;--cp-muted:#75837c!important;--cp-line:#e5ebe7!important;--cp-bg:#f5f8f6!important;--cp-nav:calc(66px + env(safe-area-inset-bottom))!important;--cp-head:calc(64px + env(safe-area-inset-top))!important;--cp-content-bottom:calc(var(--cp-nav) + 92px)!important;width:100%!important;max-width:100%!important;overflow-x:hidden!important;overscroll-behavior-x:none!important;scroll-padding-top:calc(var(--cp-head) + 12px)!important;scroll-padding-bottom:var(--cp-content-bottom)!important}
- html body.cp-app{margin:0!important;padding:0!important;width:100%!important;max-width:100vw!important;min-height:100dvh!important;background:var(--cp-bg)!important;color:var(--cp-ink)!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;font-size:14px!important;line-height:1.4!important;overflow-x:hidden!important;overscroll-behavior-x:none!important;touch-action:manipulation!important}
+ html body.cp-app{margin:0!important;padding:0!important;width:100%!important;max-width:100vw!important;height:auto!important;min-height:100svh!important;background:var(--cp-bg)!important;color:var(--cp-ink)!important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;font-size:14px!important;line-height:1.4!important;overflow-x:clip!important;overflow-y:visible!important;overscroll-behavior-x:none!important;touch-action:pan-x pan-y!important}
+ html:has(body.cp-app){touch-action:pan-x pan-y!important;scroll-behavior:auto!important}
  body.cp-app *,body.cp-app *:before,body.cp-app *:after{box-sizing:border-box!important}
  body.cp-app .top,body.cp-app .erp-commandbar,body.cp-app .erp-tabs,body.cp-app .erp-statusbar,body.cp-app .app-edition-nav,body.cp-app .app-edition-sheet-backdrop,body.cp-app .side,body.cp-app .side-menu-backdrop{display:none!important}
  body.cp-app .layout{padding-top:var(--cp-head)!important;width:100%!important;min-height:0!important;display:block!important;max-width:100%!important;overflow-x:clip!important}
@@ -22,7 +23,7 @@
  .cp-notifications{position:relative!important}
  .cp-notifications i{position:absolute!important;right:8px!important;top:6px!important;width:7px!important;height:7px!important;background:#ff7366!important;border-radius:50%!important;border:1px solid var(--cp-dark)!important}
  .cp-leaf{font-size:26px!important;line-height:1!important}
- body.cp-app .cp-bottom-nav{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:start!important;position:fixed!important;z-index:1100!important;left:0!important;right:0!important;bottom:0!important;height:var(--cp-nav)!important;padding:9px 4px calc(7px + env(safe-area-inset-bottom))!important;background:#fffffff5!important;backdrop-filter:blur(14px)!important;border-top:1px solid var(--cp-line)!important;box-shadow:0 -4px 18px #163d2807!important}
+ body.cp-app .cp-bottom-nav{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:start!important;position:fixed!important;z-index:1100!important;left:0!important;right:0!important;bottom:0!important;height:var(--cp-nav)!important;padding:9px 4px calc(7px + env(safe-area-inset-bottom))!important;background:#fff!important;backdrop-filter:none!important;border-top:1px solid var(--cp-line)!important;box-shadow:0 -4px 18px #163d2807!important}
  .cp-bottom-nav a{display:flex!important;flex-direction:column!important;align-items:center!important;gap:4px!important;min-width:0!important;padding:2px!important;color:#77887f!important;font-size:10px!important;font-weight:500!important;line-height:1.1!important}
  .cp-bottom-nav .cp-icon{width:21px!important;height:21px!important}
  .cp-bottom-nav a.active{color:var(--cp-green)!important;font-weight:800!important}
@@ -55,7 +56,7 @@
  body.cp-app .form>*{min-width:0!important;max-width:100%!important}
  body.cp-app .form .form{gap:10px!important}
  body.cp-app .form label{display:block!important;font-size:12px!important;font-weight:600!important;min-width:0!important}
- body.cp-app input:not([type=checkbox]):not([type=radio]):not([type=hidden]),body.cp-app select,body.cp-app textarea{appearance:auto!important;min-width:0!important;width:100%!important;max-width:100%!important;font-size:16px!important;line-height:1.3!important;min-height:44px!important;padding:11px 12px!important;border:1px solid #dfe6e1!important;border-radius:11px!important;background:#f8faf9!important;color:#263c30!important;margin-top:5px!important;box-shadow:none!important}
+ body.cp-app input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not(.ration-qty),body.cp-app select,body.cp-app textarea{appearance:auto!important;min-width:0!important;width:100%!important;max-width:100%!important;font-size:16px!important;line-height:1.3!important;min-height:44px!important;padding:11px 12px!important;border:1px solid #dfe6e1!important;border-radius:11px!important;background:#f8faf9!important;color:#263c30!important;margin-top:5px!important;box-shadow:none!important}
  body.cp-app input[type=checkbox],body.cp-app input[type=radio]{width:19px!important;height:19px!important;min-height:19px!important;accent-color:var(--cp-green)!important;flex:0 0 auto!important}
  body.cp-app input[type=date]{min-width:0!important;display:block!important;min-height:45px!important;-webkit-appearance:none!important}
  body.cp-app textarea{min-height:85px!important;resize:vertical!important}
@@ -87,7 +88,6 @@
  body.cp-app .workspace-pager>div{display:flex!important;gap:6px!important}
  body.cp-app .flash{font-size:13px!important;border-radius:12px!important;overflow-wrap:anywhere!important}
  body.cp-app .cp-home-extra{display:none!important}
- body.cp-app.cp-home-expanded .cp-home-extra{display:block!important}
  body.cp-app .cp-welcome{display:flex!important;align-items:center!important;gap:12px!important;background:linear-gradient(115deg,#12794f,#539b73)!important;color:#fff!important;border-radius:16px!important;min-height:85px!important;padding:16px!important;box-shadow:0 4px 13px #1c6d4423!important;margin-bottom:12px!important}
  .cp-welcome>div{flex:1!important;min-width:0!important}
  .cp-welcome b{display:block!important;font-size:17px!important;font-weight:750!important;letter-spacing:-.35px!important}
@@ -127,7 +127,7 @@
  .cp-empty{font-size:12px!important;color:var(--cp-muted)!important;text-align:center!important;padding:22px 8px!important}
  .cp-shortcuts{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:9px!important;margin-top:15px!important}
  .cp-shortcuts a{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;background:#fff!important;border:1px solid var(--cp-line)!important;border-radius:14px!important;padding:13px 4px!important;color:#366b51!important;font-size:10px!important}
- .cp-business-more{width:100%!important;border:0!important;border-radius:12px!important;background:#edf3ef!important;padding:13px!important;color:#516c5d!important;text-align:left!important;margin:13px 0 0!important;font-size:12px!important}
+ .cp-business-more{display:block!important;width:100%!important;border:0!important;border-radius:12px!important;background:#edf3ef!important;padding:13px!important;color:#516c5d!important;text-align:left!important;margin:13px 0 0!important;font-size:12px!important}
  .cp-business-more span{float:right!important}
  body.cp-app.cp-tasks-route .cp-welcome,body.cp-app.cp-tasks-route .cp-stats,body.cp-app.cp-tasks-route .cp-shortcuts,body.cp-app.cp-tasks-route .cp-business-more,body.cp-app.cp-modules-route .cp-home{display:none!important}
  body.cp-app .cp-module-hub{display:block!important}
@@ -379,7 +379,7 @@
  body.cp-app .ration-launch-card .launch-icon{font-size:21px!important}
  body.cp-app .solve-feed-grid,body.cp-app .drawer-feed-grid{grid-template-columns:1fr!important;gap:7px!important;overflow:auto!important}
  body.cp-app .solve-target-grid{grid-template-columns:1fr 1fr!important}
- body.cp-app .workbench-shell{padding:12px!important;min-width:0!important;max-width:100%!important}
+ body.cp-app .workbench-shell{padding:0!important;min-width:0!important;max-width:100%!important}
  body.cp-app .target-controlbar{grid-template-columns:1fr!important;display:grid!important;gap:8px!important}
  body.cp-app .target-controlbar .target-form{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}
  body.cp-app .target-compare-sticky{position:static!important;max-height:none!important;overflow:visible!important}
@@ -388,12 +388,34 @@
  body.cp-app .nutri-card-title{font-size:12px!important}
  body.cp-app .nutri-side b{font-size:17px!important}
  body.cp-app .nutri-card-footer{font-size:10px!important}
- body.cp-app .ration-workbench-table{display:table!important;table-layout:fixed!important;width:100%!important;max-width:100%!important}
- body.cp-app .ration-workbench-table th,body.cp-app .ration-workbench-table td{padding:8px 5px!important;font-size:11px!important;min-width:0!important;white-space:normal!important;overflow-wrap:anywhere!important}
- body.cp-app .ration-workbench-table input{padding:8px 3px!important;min-height:38px!important;font-size:15px!important;width:100%!important;min-width:0!important}
+ /* Feed identity and editable quantity each have their own full row. */
+ body.cp-app #ration-workbench{padding:10px!important;min-width:0!important;max-width:100%!important}
+ body.cp-app #ration-workbench form{padding:0!important;min-width:0!important;max-width:100%!important}
+ body.cp-app .ration-workbench-table,body.cp-app .ration-workbench-table tbody{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:fixed!important}
+ body.cp-app .ration-workbench-table thead{display:none!important}
+ body.cp-app .ration-workbench-table tr.ration-row{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr)) 44px!important;grid-template-areas:'name name name' 'qty qty remove' 'price daily daily'!important;gap:9px 8px!important;width:100%!important;min-width:0!important;min-height:0!important;padding:10px!important;margin:0 0 9px!important;background:#fff!important;border:1px solid var(--cp-line)!important;border-radius:14px!important}
+ body.cp-app .ration-workbench-table tr.ration-row:before{content:none!important;display:none!important}
+ body.cp-app .ration-workbench-table tr.ration-row td{display:none!important;position:static!important;width:auto!important;min-width:0!important;max-width:100%!important;padding:0!important;border:0!important;background:transparent!important;white-space:normal!important;font-size:12px!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:first-child{display:grid!important;grid-area:name!important;grid-template-columns:36px minmax(0,1fr) 44px!important;grid-template-rows:auto auto!important;align-items:center!important;gap:3px 8px!important;overflow:visible!important}
+ body.cp-app .ration-workbench-table .hf122f-feed-thumb{grid-column:1!important;grid-row:1/3!important;width:36px!important;height:36px!important;min-width:36px!important;margin:0!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:first-child>b{display:block!important;grid-column:2!important;grid-row:1!important;min-width:0!important;max-width:100%!important;font-size:14px!important;line-height:1.25!important;white-space:normal!important;overflow:visible!important;overflow-wrap:anywhere!important;-webkit-line-clamp:unset!important}
+ body.cp-app .ration-workbench-table .hf119h-feed-meta{display:flex!important;grid-column:2!important;grid-row:2!important;flex-wrap:wrap!important;gap:2px 4px!important;min-width:0!important;margin:0!important;font-size:10px!important;line-height:1.3!important;overflow:visible!important}
+ body.cp-app .ration-workbench-table .hf119h-lock{display:grid!important;place-items:center!important;position:static!important;grid-column:3!important;grid-row:1/3!important;align-self:center!important;width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0!important;border:1px solid #d4e1d8!important;border-radius:10px!important;background:#f4f8f5!important;font-size:18px!important;line-height:1!important;box-shadow:none!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:nth-child(2){display:block!important;grid-area:qty!important;width:100%!important;min-width:0!important;max-width:100%!important}
+ body.cp-app .ration-workbench-table .ration-stepper{display:grid!important;grid-template-columns:44px minmax(0,1fr) 44px!important;align-items:center!important;gap:6px!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px!important}
+ body.cp-app .ration-workbench-table .ration-stepper .qty-step{width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0!important;font-size:21px!important;line-height:1!important}
+ body.cp-app .ration-workbench-table input.ration-qty{appearance:textfield!important;-moz-appearance:textfield!important;width:100%!important;min-width:0!important;max-width:100%!important;height:44px!important;min-height:44px!important;margin:0!important;padding:4px 3px!important;font-size:16px!important;font-weight:750!important;line-height:1.2!important;text-align:center!important;font-variant-numeric:tabular-nums!important}
+ body.cp-app .ration-workbench-table input.ration-qty::-webkit-inner-spin-button,body.cp-app .ration-workbench-table input.ration-qty::-webkit-outer-spin-button{-webkit-appearance:none!important;margin:0!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:nth-child(6){display:flex!important;grid-area:price!important;align-items:center!important;min-width:0!important;padding:7px 5px!important;border-radius:8px!important;background:#f1f6f3!important;font-size:11px!important;line-height:1.3!important;white-space:normal!important;overflow-wrap:anywhere!important;overflow:visible!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:nth-child(7){display:flex!important;grid-area:daily!important;align-items:center!important;justify-content:flex-end!important;gap:4px!important;min-width:0!important;padding:7px 5px!important;border-radius:8px!important;background:#f1f6f3!important;font-size:11px!important;line-height:1.3!important;white-space:normal!important;overflow-wrap:anywhere!important;overflow:visible!important}
+ body.cp-app .ration-workbench-table tr.ration-row td:nth-child(8){display:block!important;grid-area:remove!important;align-self:center!important;text-align:center!important}
+ body.cp-app .ration-workbench-table .qty-zero{display:grid!important;place-items:center!important;width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0!important;border:0!important;border-radius:10px!important;background:#fff0ee!important;color:#b7443b!important;font-size:0!important;line-height:1!important;overflow:visible!important}
+ body.cp-app .ration-workbench-table .qty-zero:before,body.cp-app .ration-workbench-table .qty-zero:after{content:none!important;display:none!important}
+ body.cp-app .ration-workbench-table .qty-zero svg{display:block!important;width:20px!important;height:20px!important;flex:none!important}
  body.cp-app .workbench-actions{display:flex!important;flex-wrap:wrap!important;gap:6px!important;width:100%!important}
  body.cp-app .workbench-actions>*{flex:1 1 40%!important;font-size:11px!important}
- body.cp-app .workbench-mobile-dock{bottom:var(--cp-nav)!important;z-index:1060!important;max-width:100%!important}
+ body.cp-app .wb2-mobile-dock,body.cp-app .workbench-mobile-dock{position:fixed!important;left:8px!important;right:8px!important;bottom:calc(var(--cp-nav) + 8px)!important;z-index:1060!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;max-width:100%!important;padding:8px!important;margin:0!important;background:#fff!important;border-radius:14px!important;backdrop-filter:none!important}
+ body.cp-app .wb2-mobile-dock .btn,body.cp-app .workbench-mobile-dock .btn{width:100%!important;min-width:0!important;min-height:44px!important;margin:0!important;padding:10px 6px!important;font-size:13px!important;line-height:1.2!important}
  body.cp-app.cp-route-rations:has(.workbench-shell) .cp-global-fab,body.cp-app.cp-route-ration-workbench .cp-global-fab{display:none!important}
  body.cp-app .quick-feed-card[open]{left:8px!important;right:8px!important;top:calc(var(--cp-head) + 8px)!important;bottom:calc(var(--cp-nav) + 8px)!important;width:auto!important;max-height:none!important;z-index:5050!important;overflow:auto!important}
  body.cp-app .feed-picker-grid{grid-template-columns:1fr!important}
@@ -432,6 +454,13 @@
  body.cp-app .calf-entry-grid input[type=file]{min-width:0!important;width:100%!important;max-width:100%!important;min-height:47px!important;padding:8px!important;font-size:12px!important;overflow:hidden!important}
  body.cp-app .calf-entry-grid .btn{width:100%!important}
  body.cp-app .cp-calf-internal{padding:12px!important;margin-top:9px!important}
+ body.cp-app .cp-calf-internal>.form{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px!important}
+ body.cp-app .cp-calf-internal>.form>label{grid-column:1/-1!important;width:100%!important;min-width:0!important;display:block!important}
+ body.cp-app .cp-calf-internal input[type=date]{width:100%!important;min-width:0!important;max-width:100%!important;min-inline-size:0!important}
+ body.cp-app .cp-calf-internal .filter-title{flex-direction:column!important}
+ body.cp-app .tablewrap:has(.cp-calf-record-table){overflow:visible!important}
+ body.cp-app table.cp-calf-record-table tr.cp-record>td{overflow-wrap:anywhere!important;min-width:0!important}
+ body.cp-app table.cp-calf-record-table .cp-actions-cell .cp-existing-actions:empty{display:none!important}
  body.cp-app .cp-calf-internal .filter-title{gap:8px!important;align-items:flex-start!important;margin-bottom:10px!important}
  body.cp-app .cp-calf-internal .filter-title h2{font-size:15px!important;margin:0 0 4px!important}
  body.cp-app .cp-calf-internal .filter-title .mut{font-size:10.5px!important;line-height:1.4!important;margin:0!important}
@@ -464,10 +493,25 @@
  body.cp-app .report-column-check{font-size:11px!important}
  body.cp-app .finance-report-summary{grid-template-columns:1fr 1fr!important}
  body.cp-app .finance-report-panels{grid-template-columns:1fr!important}
+ /* Let native date controls fit without creating focus-scroll containers. */
+ html:has(body.cp-app.cp-route-reports){overflow-x:clip!important}
+ body.cp-app.cp-route-reports .layout,body.cp-app.cp-route-reports .main{overflow:visible!important}
+ body.cp-app.cp-route-reports .workspace-hero,body.cp-app.cp-route-reports .workspace-hero>div,body.cp-app.cp-route-reports .module-panel,body.cp-app.cp-route-reports .module-panel>.card{width:100%!important;min-width:0!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;transform:none!important}
+ body.cp-app.cp-route-reports .workspace-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;min-width:0!important}
+ body.cp-app.cp-route-reports .module-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;min-width:0!important;max-width:100%!important}
+ body.cp-app.cp-route-reports .module-tab:last-child{grid-column:1/-1!important}
+ body.cp-app.cp-route-reports .finance-report-filter{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 8px!important;width:100%!important;min-width:0!important;max-width:100%!important;align-items:end!important}
+ body.cp-app.cp-route-reports .finance-report-filter label{display:block!important;grid-column:1/-1!important;width:100%!important;min-width:0!important;max-width:100%!important;font-size:12px!important}
+ body.cp-app.cp-route-reports .finance-report-filter .btn{width:100%!important;min-width:0!important;min-height:44px!important}
+ body.cp-app.cp-route-reports input[type=date]{width:100%!important;min-width:0!important;max-width:100%!important;inline-size:100%!important;min-inline-size:0!important;max-inline-size:100%!important;contain:inline-size!important;text-align:left!important}
+ body.cp-app.cp-route-reports input[type=date]::-webkit-date-and-time-value{min-width:0!important;text-align:left!important}
+ body.cp-app.cp-route-reports input[type=date]::-webkit-datetime-edit{min-width:0!important;padding:0!important}
+ body.cp-app.cp-route-reports .finance-report-summary>.card{min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important}
+ body.cp-app.cp-route-reports .finance-report-summary b{font-size:20px!important;white-space:normal!important;overflow-wrap:anywhere!important}
  body.cp-app .agri-kpis,body.cp-app .agri-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
  body.cp-app .tablewrap,body.cp-app .finance-report-table-wrap,body.cp-app .finance-report-chart{width:100%!important;min-width:0!important;max-width:100%!important;overflow-x:auto!important;overscroll-behavior-x:contain!important;-webkit-overflow-scrolling:touch!important}
  body.cp-app .main table:not(.cp-record-table):not(.ration-workbench-table){min-width:0!important}
- body.cp-app.cp-login{padding:0!important;background:#153e2a url("/app-assets/login.jpg") center/cover fixed!important;min-height:100dvh!important;display:block!important}
+ body.cp-app.cp-login{padding:0!important;background:#153e2a url("/app-assets/login.jpg?v=2.0.8") center/cover fixed!important;min-height:100dvh!important;display:block!important}
  body.cp-app.cp-login:before{content:""!important;position:fixed!important;inset:0!important;background:linear-gradient(180deg,#092d4440,#0d3d2410 35%,#061c15e8 94%)!important;pointer-events:none!important}
  body.cp-app.cp-login .login-shell{position:relative!important;display:flex!important;flex-direction:column!important;min-height:100dvh!important;width:100%!important;max-width:500px!important;margin:0 auto!important;padding:calc(52px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom))!important;background:transparent!important;border-radius:0!important;box-shadow:none!important}
  body.cp-app.cp-login .login-visual{display:block!important;background:transparent!important;min-height:0!important;padding:0!important;text-align:center!important}
@@ -487,8 +531,22 @@
  body.cp-app.cp-login .password-toggle{position:absolute!important;display:flex!important;align-items:center!important;justify-content:center!important;color:#36684b!important;background:transparent!important;height:44px!important;min-height:44px!important;width:88px!important;min-width:0!important;margin:0!important;padding:0 6px!important;right:4px!important;top:50%!important;bottom:auto!important;transform:translateY(-50%)!important;font-size:12px!important;line-height:1!important;white-space:nowrap!important}
  body.cp-app.cp-login .flash{background:#ffefea!important;color:#993c2c!important}
 }
+/* Shared photo form and notification page: preserve all original form fields. */
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox{display:grid!important;grid-template-columns:minmax(240px,1.4fr) minmax(160px,1fr) auto!important;align-items:end!important;gap:14px!important;padding:16px!important;min-width:0!important}
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox>label{display:flex!important;flex-direction:column!important;gap:8px!important;min-width:0!important;font-size:13px!important}
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox input{box-sizing:border-box!important;min-width:0!important;width:100%!important;max-width:100%!important;min-height:44px!important;margin:0!important}
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox input[type=file]{display:block!important;padding:8px!important;overflow:hidden!important;font-size:13px!important}
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox>.btn{min-height:44px!important;margin:0!important;white-space:nowrap!important}
+body.cp-app .animal-card-panel[data-animal-panel="photos"] .gallery>p{grid-column:1/-1!important;margin:0!important;width:100%!important}
+.cp-notification-list{display:grid;gap:10px}.cp-notification-item{display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit}.cp-notification-item span{font-size:13px;color:#66796d}.cp-notification-links{margin-top:16px}
+.cp-history-events{display:grid;gap:8px}.cp-animal-history .animal-360-event{padding:10px;border-bottom:1px solid #e5ebe7;overflow-wrap:anywhere}.cp-animal-history small{display:block;margin-top:4px;color:#66796d}
+@media(max-width:900px){
+ body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox{grid-template-columns:minmax(0,1fr)!important;gap:12px!important}
+ body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox>*{grid-column:1!important}
+ body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox>.btn{width:100%!important}
+}
 @media(min-width:361px) and (max-width:900px){
- body.cp-app .calf-entry-grid .calf-weight-form,body.cp-app .cp-calf-internal>.form{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ body.cp-app .calf-entry-grid .calf-weight-form{grid-template-columns:repeat(2,minmax(0,1fr))!important}
  body.cp-app .calf-weight-form>.full,body.cp-app .cp-calf-internal>.form>.full{grid-column:1/-1!important}
 }
 @media(min-width:620px) and (max-width:900px){
