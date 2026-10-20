@@ -7915,10 +7915,18 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 # HOTFIX 6.10: Dashboard ilk açılışında kullanılmayan erkek maliyet/performans
                 # N+1 hesaplarını çalıştırma. Bu veriler Besi Performansı ekranında hesaplanır.
                 due_start=date.today().isoformat();due_end=(date.today()+timedelta(days=45)).isoformat()
+                # AppEdition 2.0.12 Performance: yaklaşan doğumlarda hayvan başına
+                # ayrı SELECT (N+1) yerine adayları tek sorguda getir.
+                due_candidates={aid:rec for aid,rec in active_pregnancy_by_animal.items()
+                                if rec['due_date'] and due_start<=rec['due_date']<=due_end}
                 due_rows=[]
-                for aid,rec in active_pregnancy_by_animal.items():
-                    if rec['due_date'] and due_start<=rec['due_date']<=due_end:
-                        a=c.execute("select id,tag,nickname from animals where id=?",(aid,)).fetchone()
+                if due_candidates:
+                    due_ids=list(due_candidates)
+                    ph=','.join('?' for _ in due_ids)
+                    due_animals={int(a['id']):a for a in c.execute(
+                        f"select id,tag,nickname from animals where id in ({ph})",due_ids).fetchall()}
+                    for aid,rec in due_candidates.items():
+                        a=due_animals.get(int(aid))
                         if a:due_rows.append({'due_date':rec['due_date'],'id':a['id'],'tag':a['tag'],'nickname':a['nickname']})
                 due_rows=sorted(due_rows,key=lambda r:r['due_date'])[:8]
                 payment_due_rows=c.execute("""select id,due_date,category,amount,description,supplier from finance
@@ -7947,8 +7955,19 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 male_ids=[int(x['id']) for x in adult_latest if x['gender']=='Erkek']
                 adgs=[]; low_perf_count=0
                 perf_target=setting_float('male_min_daily_gain',1.0); perf_warn=setting_float('male_warning_ratio',0.90)
+                # AppEdition 2.0.12 Performance: erkek başına LIMIT 2 sorgusu yerine
+                # tüm gerekli tartımları tek sorguda al, Python tarafında son ikiyi kullan.
+                recent_by_male={mid:[] for mid in male_ids}
+                if male_ids:
+                    ph=','.join('?' for _ in male_ids)
+                    all_male_weights=c.execute(
+                        f'select animal_id,measure_date,weight from weights where animal_id in ({ph}) order by animal_id,measure_date desc,id desc',
+                        male_ids).fetchall()
+                    for wr in all_male_weights:
+                        bucket=recent_by_male.get(int(wr['animal_id']))
+                        if bucket is not None and len(bucket)<2:bucket.append(wr)
                 for mid in male_ids:
-                    wr=c.execute('select measure_date,weight from weights where animal_id=? order by measure_date desc,id desc limit 2',(mid,)).fetchall()
+                    wr=recent_by_male.get(mid,[])
                     if len(wr)>=2:
                         try:
                             dd=(date.fromisoformat(wr[0]['measure_date'])-date.fromisoformat(wr[1]['measure_date'])).days
@@ -16253,7 +16272,7 @@ install_dashboard_performance(globals())
 APP_VERSION='3.9.23 DEV4 Hotfix1.22cr'
 APP_LABEL='v'+APP_VERSION
 MOBILE_API_BUILD='MobileFullV13-EnterpriseParity-SharedLogic'
-APP_EDITION_BUILD='AppEdition2.0.8-DashboardPerformance'
+APP_EDITION_BUILD='AppEdition2.0.12-Performance'
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

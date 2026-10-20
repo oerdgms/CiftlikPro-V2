@@ -1,14 +1,14 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.8
+# ÇiftlikPro Enterprise — App Edition 2.0.10
 
 Fotoğraf referansına yaklaşan iOS/Android mobil web görünümü. Normal :8953 adresinden, masaüstüyle aynı veritabanı ve Enterprise işlemleriyle kullanılır.
 
-2.0.8 Dashboard sorgularını hızlandırır. Tartım, gebelik, stok ve padok sorguları için indeksler eklenir; aynı sayfa açılışında tekrarlanan gebelik/sağlık hesapları paylaşılır. Her yeni açılış güncel verileri yeniden okur. 2.0.7 mobil rasyon/rapor düzenlemeleri ve önceki düzeltmeler dahildir.
+2.0.10, mobil Rasyon Detayı ekranındaki KM, GCAA, HP ve NDF kartlarının durum rozetlerini başlığa taşmadan 3 px yukarı alır. 2.0.9 mobil Üreme Merkezi filtre/pencere düzeni, 2.0.8 Dashboard performansı ve önceki düzeltmeler dahildir.
 
 Kurulum ve telefon yönergeleri: [MOBIL_KURULUM.md](MOBIL_KURULUM.md). Teknik kapsam: [APP_EDITION_2_0.md](APP_EDITION_2_0.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
 
 Windows kurulum dosyası GitHub Actions ile oluşturulur. Bu ZIP kaynak paketidir; hazır EXE/APK/IPA içermez.
 
-Eski mobil sürüm belgeleri `docs/history` klasöründe korunur. Güncel düzeltmeler: [DUZELTME_NOTLARI_2_0_8.md](DUZELTME_NOTLARI_2_0_8.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
+Eski mobil sürüm belgeleri `docs/history` klasöründe korunur. Güncel düzeltmeler: [DUZELTME_NOTLARI_2_0_10.md](DUZELTME_NOTLARI_2_0_10.md). Kontrol sonuçları: [DOGRULAMA_APP_EDITION_2_0.md](DOGRULAMA_APP_EDITION_2_0.md).
 
 Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
 

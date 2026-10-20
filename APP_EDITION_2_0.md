@@ -1,8 +1,8 @@
-# App Edition 2.0.8 — Ortak Enterprise mobil arayüzü
+# App Edition 2.0.10 — Ortak Enterprise mobil arayüzü
 
 ## Temel
 
-AppEdition 2.0.7 paketi üzerine Dashboard performans düzeltmesi uygulanmıştır. Çekirdek sürüm 3.9.23 DEV4 Hotfix1.22cr olarak korunur. Güncel katmanın kimliği AppEdition2.0.8-DashboardPerformance’tur.
+AppEdition 2.0.9 paketi üzerine Rasyon Detayı ana bilimsel kartlarının küçük mobil hizalama düzeltmesi uygulanmıştır. Çekirdek sürüm 3.9.23 DEV4 Hotfix1.22cr olarak korunur. Güncel katmanın kimliği AppEdition2.0.10-RationBadgeAlignment’tır.
 
 Normal giriş adresi aynı kalır: port 8953, kök adres /. Eski /mobile bağlantısı ortak uygulamaya yönlendirilir.
 
@@ -20,6 +20,20 @@ Normal giriş adresi aynı kalır: port 8953, kök adres /. Eski /mobile bağlan
 - iOS güvenli alanları, dinamik ekran yüksekliği, 16 px form alanları.
 
 Eski mobil CSS katmanlarıyla çakışma, yalnız mobilde etkin olan bağımsız CSS katmanıyla giderilir. Masaüstünde yeni gezinme ve mobil kart dönüştürme çalışmaz.
+
+## 2.0.10 rasyon durum rozeti hizası
+
+- Mobil Rasyon Detayı ekranındaki KM, GCAA, HP ve NDF kartlarının `Sınıra yakın`, `Yeterli` ve `Aralıkta` durum rozetleri 3 px yukarı alındı.
+- Değişiklik yalnız bu dört ana bilimsel karta ve en fazla 900 px mobil genişliğe uygulanır; kart ölçüsü, hedef/rasyon değerleri, solver hesabı ve masaüstü görünümü değişmez.
+- Mobil CSS önbellek kimliği yenilendiği için güncel dosya kurulumdan sonra eski cihaz önbelleğine takılmaz.
+
+## 2.0.9 mobil filtre ve pencere denetimi
+
+- Üreme Merkezi aşama filtresi üç dar kutu yerine iki sütun kullanır. Her kutuda başlık ve sayaç ayrı sütundadır; `Gebelik Kontrolü`, `Boş / İşlem Bekleyen` ve `Doğuma Yaklaşan` gibi uzun başlıklar komşu kutuya taşmadan satır içinde sarılır. `Tümü` ayrı tam satırdır.
+- Hızlı gebelik sonucu dört dar seçenek yerine iki sütunda gösterilir. Sonuç seçenekleri, ayrıntı bağlantısı ve vazgeçme alanı pencere içinde kalır; uzun içerikte yalnız pencerenin gövdesi kayar.
+- Hızlı işlem, ırk/kamera, Dashboard kart seçimi, sağlık, finans, rasyon, ilaç, yem hareketi, padok taşıma ve fatura önizleme pencereleri `100dvh`, iOS/Android güvenli alanları ve bağımsız dikey kaydırma kurallarıyla ortaklaştırılmıştır.
+- Başlık ve kapatma düğmeleri sabit ölçüdedir. Alt işlem alanları ekranın güvenli alt boşluğunu kullanır; sabit alt menü pencere içeriğini kapatmaz.
+- Değişiklikler `mobile_ui.py` ve `mobile_assets/mobile.css` sunum katmanındadır. Enterprise kayıt işleyicileri, veritabanı şeması, finans hesapları, üreme kuralları ve solver değiştirilmemiştir.
 
 ## 2.0.8 Dashboard performansı
 
@@ -114,7 +128,7 @@ Geçersiz seçim veya yetersiz kapasitede işlem bütünüyle geri alınır. Ayn
 
 ## Paketleme
 
-mobile_ui ve dashboard_performance Python modülleri ile mobile_assets klasörü PyInstaller paketine eklenmiştir. Windows Actions ve Inno Setup AppEdition 2.0.8 kurulum dosyasını hedefler. Çalışma zamanı veri klasörü ve mevcut lisans düzeni korunur.
+mobile_ui ve dashboard_performance Python modülleri ile mobile_assets klasörü PyInstaller paketine eklenmiştir. Windows Actions ve Inno Setup AppEdition 2.0.10 kurulum dosyasını hedefler. Çalışma zamanı veri klasörü ve mevcut lisans düzeni korunur.
 
 Giriş arka planı bu uygulama için üretilen bir görseldir. Bitmap üretim promptu: gerçekçi Simental sığır, Türkiye kırsalında gün batımı, dikey fotoğraf, metin ve arayüz olmadan; üstte gökyüzü, altta form için koyu çimen. Üretim yerleşik görsel üretme aracıyla yapılmış ve JPEG olarak pakete alınmıştır.
 

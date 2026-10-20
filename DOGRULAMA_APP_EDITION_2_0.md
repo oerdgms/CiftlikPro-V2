@@ -1,54 +1,45 @@
-# App Edition 2.0.8 doğrulama — 15/10/2026
+# App Edition 2.0.10 doğrulama — 20/10/2026
 
-## Ölçülen sorun
+## 2.0.10 düzenlemesi
 
-Kullanıcı `[PERF] Dashboard hazır` satırlarında 0,4–7,2 saniye aralığında değerler bildirdi. Bu mevcut ölçüm Dashboard gövdesini hazırlayan bölümü kapsar; bakım işlemleri, son sunum katmanları ve gzip iletimi ölçümün dışındadır.
+Mobil Rasyon Detayı ekranındaki KM, GCAA, HP ve NDF kartlarında bulunan durum rozetleri önceki `top:8px` konumundan `top:5px` konumuna alındı. Değişiklik yalnız bu dört karta, mobil genişliğe ve rozet konumuna uygulanır. Kart boyutları, metinler, bilimsel hedefler, solver ve masaüstü görünümü değişmez.
 
-Yerel profilde SQL execute/fetchall süreleri baskındı. Aynı açılışta ortak gebelik kaynağı iki, sağlık görevleri iki kez çalışıyor; 300 dişi için `current_pregnancy_record` 1.500 kez çağrılıyordu. Tartım ve stok sorgularındaki tekrarlı taramalar için uygun indeksler bulunmuyordu.
+## Korunan 2.0.9 düzenlemeleri
 
-## Karşılaştırmalı performans testi
+Telefon ekranında Üreme Merkezi durum filtresi üç dar sütuna bölündüğü için `Gebelik Kontrolü`, `Boş / İşlem Bekleyen` ve `Doğuma Yaklaşan` başlıkları sayaçlara ve yan kutulara taşıyordu.
 
-Önceki sürüm: teslim edilmiş AppEdition 2.0.7. Sonraki sürüm: aynı kaynağa bu performans değişikliği eklenmiş sürüm. Aynı Linux/Python/SQLite ortamında, aynı deterministik yapay veriyle ayrı geçici veritabanları kullanıldı:
+2.0.9’da filtre HTML’i yalnız sunum katmanında başlık ve sayaç sütunlarına ayrıldı. Mobil CSS iki sütunlu grid, ayrı 28 px sayaç alanı, satır sarma ve tam satır `Tümü` düğmesi kullanır. Enterprise `/reproduction-center` işleyicisi değiştirilmedi; 2.0.10 bu yapıyı aynen korur.
 
-- 600 yetişkin hayvan; 300 dişi ve 300 erkek.
-- 100 yeni doğmuş buzağı, 900 tohumlama ve 600 eski tip sağlık kaydı.
-- 12.000 tartım, 90.000 stok hareketi ve 3.000 finans kaydı.
-- Beş ardışık istek; ardından dört istemciyle sekiz eşzamanlı istek. Ön ısıtma/profil isteği istatistiklere dahil edilmedi.
-- Süreler oturumlu HTTP isteğinin gzip yanıt gövdesi tamamen alınıncaya kadarki süredir; tarayıcı çizimi dahil değildir.
+## Pencere denetimi
 
-| Ölçüm | 2.0.7 | 2.0.8 değişikliği |
-|---|---:|---:|
-| Tek istek ortancası | 0,662 sn | 0,120 sn |
-| Eşzamanlı istek ortancası | 1,817 sn | 0,726 sn |
-| Eşzamanlı istek en yüksek değeri | 2,111 sn | 0,916 sn |
-| Bir açılışta `current_pregnancy_record` gerçek hesap çağrısı | 1.500 | 300 |
-| Bir açılışta sağlık planı hesap çağrısı | 2 | 1 |
+Aşağıdaki mobil pencere grupları ekran yüksekliği, güvenli alan, kapatma düğmesi ve içerik kaydırması açısından ortak kurallara bağlandı:
 
-Süreler kullanıcının gerçek Windows bilgisayarında veya gerçek veritabanında ölçülmedi. Kullanıcıdaki 7,2 saniyenin belirli bir değere düşeceği bu deneyden garanti edilemez.
+1. Hızlı işlem alt sayfası
+2. Irk seçimi ve QR/2D kamera sayfası
+3. Dashboard kart seçimi
+4. Sağlık, finans, rasyon, ilaç/veteriner ve yem işlemi çekmeceleri
+5. Padok taşıma penceresi
+6. Yem faturası önizlemesi
+7. Hızlı gebelik sonucu penceresi
+8. Hızlı yem ekleme ve fotoğraf büyütme pencereleri (mevcut güvenli alan kuralları korunarak kontrol edildi)
 
-## Veri güncelliği ve güvenilirlik
+Tam ekran çekmeceleri `100dvh` kullanır. Alt işlem alanları `safe-area-inset-bottom`, başlıklar `safe-area-inset-top` değerini hesaba katar. Uzun içerik ana sayfayı veya pencere genişliğini büyütmez; ilgili pencerenin gövdesinde kayar. Kapatma düğmeleri en az 44 × 44 px’tir.
 
-12 indeks non-unique olarak mevcut şema hazırlandıktan sonra başlangıçta oluşturulur. Kayıt verileri ve eski iş kuralları korunur. İndekslerin ilk oluşturulması başlangıçta ek çalışma gerektirir; sonraki başlangıçlarda `IF NOT EXISTS` ile tekrar oluşturulmaz.
+## Otomatik doğrulama
 
-Yalnız bir Dashboard HTTP isteğinde, bakım/doğum uzlaştırması sonrasındaki ortak okuma sonuçları yeniden kullanılır. Süreli sayfa önbelleği yoktur. ContextVar ile istekler ayrılır; yanıt bittiğinde veya istisna oluştuğunda alan temizlenir. Diğer sayfalar ve POST işlemleri bu okuma paylaşımına girmez.
+- `python3 -m py_compile app/server.py app/mobile_ui.py app/dashboard_performance.py app/agriculture.py app/desktop_launcher.py`: başarılı.
+- `node --check app/mobile_assets/mobile.js`: başarılı.
+- `python3 -m unittest discover -s tests`: **354 test başarılı**, 189,352 saniye.
+- Gerçek QR ve Data Matrix görüntü testi `zxing-cpp 2.3.0` ile geçti.
+- 2.0.10 özel testi, dört kart seçicisini ve rozetlerin 3 px yukarı alınan kesin konumunu doğrular. Önceki sürüm/önbellek, filtre başlığı-sayaç, pencere viewport/kaydırma, hızlı sonuç penceresi ve CSS bütünlük kontrolleri de geçti.
+- Üreme Merkezi HTTP regresyonu, gerçek sayfa çıktısında üç uzun başlığın `repro-tab-label` alanına dönüştürüldüğünü doğrular.
+- Enterprise çekirdek koruma testi geçti. Korunan kayıt işleyicileri ve solver fonksiyonlarının AST özetleri 2.0.8 tabanıyla aynıdır.
 
-Altı yeni regresyon testi şu davranışları doğruladı:
+## Sürüm ve paketleme
 
-1. İndeksler mevcut tablolarda oluşturulur; tekrar başlatma kayıtları değiştirmez. Tartım sorgusu yeni indeksi kullanır.
-2. Ortak gebelik sonucu orijinal yardımcıyla aynıdır; aynı açılışın ikinci okuması yeniden SQL çalıştırmaz.
-3. Doğum kaydından sonraki yeni açılışta gebe sayısı ve buzağı sayısı hemen güncellenir.
-4. Bakım aşamasında, sayaçlar başlamadan önce okumalar tazedir.
-5. İstek hatası sonraki işlemlere eski veri taşımaz.
-6. Eşzamanlı bir başka istek yeni doğumu görür; ilk isteğin okuma alanıyla karışmaz.
+- Enterprise çekirdeği: `3.9.23 DEV4 Hotfix1.22cr` (değişmedi)
+- Mobil katman: `AppEdition2.0.10-RationBadgeAlignment`
+- Mobil kaynak önbelleği: `2.0.10`
+- Windows kurulum hedefi: `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe`
 
-## Kaynak ve paket
-
-`python3 -m unittest discover -s tests`: **348 test başarılı**, 178,556 saniye. Altı yeni performans/güncellik testi ve önceki 342 regresyon testi dahildir. QR/DataMatrix testi proje gereksinimi olan zxing-cpp 2.3.0 ile çalışmıştır.
-
-Yedi mobil ve iki masaüstü ölçüsündeki **431 tarayıcı kontrolü başarılıdır**; JavaScript hatası görülmedi. Önceki rasyon kilidi, miktar POST kaydı, Geri Al, ekleme penceresi, alt işlem çubuğu, rapor tarihleri ve CSV kontrolü yeniden geçti. Mobil düğme sınırları kesirli tarayıcı koordinatları için 0,01 px toleransla ölçüldü; CSS boyutları 44 px olarak korunur. Mobil JavaScript/service worker sözdizimi ve Python derleme kontrolleri başarılıdır. Mevcut taslak koruma ve sağlık ajandası JavaScript testleri de başarılıdır.
-
-2.0.7 kaynağındaki 274 üst seviye fonksiyon/sınıf tanımı AST olarak aynıdır. Mevcut 219 tanımlık Enterprise çekirdek koruma listesi değiştirilmedi. Yeni `dashboard_performance` modülü Windows PyInstaller hiddenimports listesine ve kaynak derleme kontrolüne eklenmiştir. Mevcut solver ve kayıt işleyicileri değiştirilmedi.
-
-Mobil kaynak ve kurulum adı 2.0.8 olarak güncellenmiştir. Önceki sürümün ayrıntılı doğrulaması `docs/history/DOGRULAMA_APP_EDITION_2_0_7.md` içindedir.
-
-Gerçek Windows EXE kurulumu, iPhone/Safari ve Android cihazları bu ortamda çalıştırılmadı. Paket tam kaynak ve GitHub Windows kurulum akışıdır.
+Bu çalışma ortamında gerçek Windows EXE kurulumu ile fiziksel iPhone/Android cihazı çalıştırılmadı. Otomatik test ve statik responsive denetim başarılıdır; 3 px hizanın saha cihazındaki son görsel kontrolü kurulumdan sonra yapılmalıdır. 2.0.8 performans doğrulaması `docs/history/DOGRULAMA_APP_EDITION_2_0_8.md` içinde korunur.

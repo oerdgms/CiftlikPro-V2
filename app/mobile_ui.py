@@ -3,10 +3,11 @@ import html
 import json
 import re
 import gzip
+import time
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
-BUILD = 'AppEdition2.0.8-DashboardPerformance'
+BUILD = 'AppEdition2.0.15-BottomNavPlus'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -38,6 +39,30 @@ def icon(name):
 
 def esc(value):
     return html.escape(str(value or ''), quote=True)
+
+
+def wrap_reproduction_tab_labels(document):
+    """Give long mobile filter labels a column without touching core routes."""
+    marker = '<nav class="repro-stage-tabs"'
+    start = document.find(marker)
+    if start < 0:
+        return document
+    end = document.find('</nav>', start)
+    if end < 0:
+        return document
+    end += len('</nav>')
+    fragment = document[start:end]
+    if 'repro-tab-label' in fragment:
+        return document
+    pattern = re.compile(
+        r'(<button\b(?=[^>]*\bdata-repro-filter=)[^>]*>)(.*?)(\s*<b>.*?</b>\s*</button>)',
+        re.I | re.S,
+    )
+    fragment = pattern.sub(
+        lambda match: match.group(1) + '<span class="repro-tab-label">' + match.group(2).strip() + '</span>' + match.group(3),
+        fragment,
+    )
+    return document[:start] + fragment + document[end:]
 
 
 def task_url(row):
@@ -100,22 +125,25 @@ def shell_markup(title, path, username):
     back_url = '/' if path in titles else '/?app_view=modules'
     leading = f'<a class="cp-header-back" href="{back_url}" aria-label="Geri">{icon("back")}</a>' if path != '/' else '<span class="cp-leaf">'+icon('farm')+'</span>'
     header = f'<header class="cp-app-header"><div class="cp-header-title">{leading}<div><b id="cpScreenTitle">{esc(display_title)}</b><small id="cpScreenSubtitle">{esc(username) if path=="/" else "ÇiftlikPro Enterprise"}</small></div></div><a class="cp-notifications" href="/notifications" aria-label="Bugünün işleri ve bildirimler">{icon("bell")}<i id="cpNotificationDot" hidden></i></a></header>'
-    links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar'),('jobs','/?app_view=tasks','İşler'),('paddocks','/paddocks','Padoklar'),('modules','/?app_view=modules','Modüller')]
-    nav = '<nav class="cp-bottom-nav" aria-label="Mobil ana menü">' + ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in links) + '</nav>'
+    links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar')]
+    nav = '<nav class="cp-bottom-nav" aria-label="Mobil ana menü">' + ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in links)
+    nav += '<button type="button" class="cp-global-fab cp-nav-plus" id="cpGlobalAdd" aria-label="Yeni kayıt ve hızlı işlemler">'+icon('plus')+'</button>'
+    nav += ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in [('paddocks','/paddocks','Padoklar'),('modules','/?app_view=modules','Modüller')]) + '</nav>'
     quick = '<div class="cp-overlay" id="cpQuickOverlay" hidden><section class="cp-sheet" role="dialog" aria-modal="true" aria-labelledby="cpQuickTitle" tabindex="-1"><div class="cp-sheet-head"><h2 id="cpQuickTitle">Hızlı işlem</h2><button type="button" class="cp-icon-button" data-cp-close aria-label="Kapat">'+icon('close')+'</button></div><div class="cp-quick-grid">'
     actions = [('animals','/animal-add?entry=adult','Hayvan ekle'),('animals','/animal-add?entry=calf','Buzağı ekle'),('health','/health?app_action=add','Sağlık planı'),('finance','/finance?app_action=add','Finans kaydı'),('paddocks','/paddocks?app_action=move','Padok taşıma'),('ration','/rations?app_action=add','Rasyon ekle'),('milk','/milk-center','Süt kaydı')]
     quick += ''.join(f'<a data-cp-quick="{kind}" href="{url}">{icon(kind)}<span>{label}</span></a>' for kind,url,label in actions) + '</div></section></div>'
-    fab = '<button type="button" class="cp-global-fab" id="cpGlobalAdd" aria-label="Yeni kayıt ve hızlı işlemler">'+icon('plus')+'</button>'
-    return header + nav + fab + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
+    return header + nav + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.8">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.15">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
     if 'id="cpAppConfig"' in document:
         return document
     document = document.replace('href="/#approaching-estrus"', 'href="/notifications"')
+    if path == '/reproduction-center':
+        document = wrap_reproduction_tab_labels(document)
     viewport_pattern = re.compile(r'<meta\b(?=[^>]*\bname=(["\'])viewport\1)[^>]*>', re.I)
     viewport_tag = f'<meta name="viewport" content="{MOBILE_VIEWPORT}">'
     if viewport_pattern.search(document):
@@ -142,7 +170,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user)
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.8" defer></script>'
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.15" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 
@@ -150,6 +178,7 @@ def install(ns):
     # Decorate after all historical visual layers; never overwrite a record handler.
     original_page = ns['_page_before_app_edition']
     def page(title, body, path='/', user='admin', flash=''):
+        _cp_page_t0 = time.perf_counter() if path == '/' else None
         extra = {}
         if 'data-animal-panel="history"' in body:
             subject = re.search(r'name="animal_id" value="(\d+)"', body)
@@ -171,7 +200,16 @@ def install(ns):
                     if item is not None and row['name'] not in item['paddocks']:
                         item['paddocks'].append(row['name'])
             extra['ration_meta'] = meta
-        return enhance(original_page(title, body, path, user, flash), title, path, user, extra=extra)
+        _cp_base_t0 = time.perf_counter() if path == '/' else None
+        document = original_page(title, body, path, user, flash)
+        if path == '/':
+            print(f'[PERF] Dashboard base HTML: {time.perf_counter()-_cp_base_t0:.3f} sn')
+        _cp_enhance_t0 = time.perf_counter() if path == '/' else None
+        document = enhance(document, title, path, user, extra=extra)
+        if path == '/':
+            print(f'[PERF] Dashboard AppEdition render: {time.perf_counter()-_cp_enhance_t0:.3f} sn')
+            print(f'[PERF] Dashboard page toplam: {time.perf_counter()-_cp_page_t0:.3f} sn')
+        return document
     ns['page'] = page
     ns['APP_EDITION_BUILD'] = BUILD
     app = ns['App']
@@ -180,6 +218,7 @@ def install(ns):
     original_send_html = app.send_html
     def send_html(self, document, status=200, headers=None):
         path = urlparse(self.path).path
+        _cp_send_t0 = time.perf_counter() if path == '/' else None
         if path == '/login' and 'class="login-shell"' in document:
             document = enhance(document, 'Giriş', path, '', login=True)
         match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
@@ -190,9 +229,13 @@ def install(ns):
             document = document[:match.start(2)]+payload+document[match.end(2):]
         # Compress negotiated responses, including authenticated pages; no page cache.
         if accepts_gzip(self) and len(document) > 1024:
-            send_response_bytes(self, gzip.compress(document.encode('utf-8'), compresslevel=5), 'text/html; charset=utf-8', status, [('Content-Encoding','gzip'),('Vary','Accept-Encoding'),('Cache-Control','no-store'),*(headers or [])])
+            _cp_zip_t0 = time.perf_counter() if path == '/' else None
+            payload = gzip.compress(document.encode('utf-8'), compresslevel=5)
+            if path == '/': print(f'[PERF] Dashboard gzip: {time.perf_counter()-_cp_zip_t0:.3f} sn')
+            send_response_bytes(self, payload, 'text/html; charset=utf-8', status, [('Content-Encoding','gzip'),('Vary','Accept-Encoding'),('Cache-Control','no-store'),*(headers or [])])
         else:
             original_send_html(self, document, status, headers)
+        if path == '/': print(f'[PERF] Dashboard response yazma: {time.perf_counter()-_cp_send_t0:.3f} sn')
     def do_GET(self):
         path = urlparse(self.path).path
         if path == '/notifications':

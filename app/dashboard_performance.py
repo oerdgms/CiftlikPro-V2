@@ -55,6 +55,20 @@ def _reuse(name, original):
     return read
 
 
+
+def _reuse_request_function(name, original):
+    """Reuse pure dashboard reads that open their own DB connection within one GET / request."""
+    @wraps(original)
+    def read(*args, **kwargs):
+        state = _request.get()
+        if state is None or not state['active']:
+            return original(*args, **kwargs)
+        key = (name, args, tuple(sorted(kwargs.items())))
+        if key not in state['values']:
+            state['values'][key] = original(*args, **kwargs)
+        return state['values'][key]
+    return read
+
 def install(ns):
     if ns.get('_dashboard_performance_installed'):
         return
@@ -77,6 +91,11 @@ def install(ns):
                  'current_pregnancy_record', 'health_plan_entries',
                  'pregnancy_vaccine_tasks'):
         ns[name] = _reuse(name, ns[name])
+    # App Edition home is appended after the canonical dashboard is rendered.
+    # Reuse the task export already calculated during the same request instead of
+    # repeating its health/finance reads for the mobile presentation layer.
+    if 'dashboard_export_tasks' in ns:
+        ns['dashboard_export_tasks'] = _reuse_request_function('dashboard_export_tasks', ns['dashboard_export_tasks'])
 
     app = ns['App']
     original_get = app.do_GET

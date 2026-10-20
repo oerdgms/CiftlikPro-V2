@@ -1,3 +1,16 @@
+# App Edition 2.0.10 — Rasyon mobil rozet hizası
+
+- KM, GCAA, HP ve NDF kartlarındaki durum rozetleri mobilde 3 px yukarı alındı.
+- Kapsam yalnız dört ana bilimsel kartla sınırlandı; solver, hedefler ve masaüstü arayüzü değiştirilmedi.
+- Mobil varlık, servis çalışanı, kurulum ve GitHub Actions sürüm kimlikleri 2.0.10 olarak yenilendi.
+
+# App Edition 2.0.9 — Mobil filtre ve pencere düzeni
+
+- Üreme Merkezi durum filtreleri, uzun metin ve sayaçların çakışmayacağı iki sütunlu mobil düzene alındı.
+- Hızlı gebelik sonucu penceresi iki sütunlu seçimler ve güvenli kaydırma alanıyla yenilendi.
+- Sağlık, finans, rasyon, ilaç, yem, padok, kamera/ırk seçimi, fatura önizleme, Dashboard kart seçimi ve hızlı işlem pencereleri mobil güvenli alan/ekran yüksekliği bakımından ortaklaştırıldı.
+- Değişiklik sunum katmanıyla sınırlandı; Enterprise çekirdek işleyicilerinin koruma özeti değişmedi.
+
 ## Mobile Full V5
 - Padoklar arası tekli/toplu taşıma
 - Sağlık kaydı düzenle/sil

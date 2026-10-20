@@ -1,4 +1,4 @@
-/* App Edition 2.0.8. Every visual rule is confined to the mobile viewport. */
+/* App Edition 2.0.10. Every visual rule is confined to the mobile viewport. */
 @layer ciftlikpro-mobile {
 .cp-mobile-only,.cp-app-header,.cp-bottom-nav,.cp-global-fab,.cp-overlay,.cp-network-status,.cp-module-hub{display:none!important}
 .cp-icon{width:24px!important;height:24px!important;flex:0 0 auto!important}
@@ -98,7 +98,7 @@
  .cp-stat{display:flex!important;align-items:center!important;gap:12px!important;min-height:96px!important;padding:16px!important;background:white!important;border:1px solid #e5eae7!important;border-radius:15px!important;box-shadow:0 3px 11px #213d2405!important;min-width:0!important}
  .cp-stat>span{display:grid!important;place-items:center!important}
  .cp-stat b{display:block!important;font-size:27px!important;line-height:1.15!important;letter-spacing:-.8px!important;color:var(--cp-green)!important}
- .cp-stat small{display:block!important;font-size:11px!important;color:#344d40!important;margin-top:7px!important}
+ .cp-stat small{display:block!important;font-size:11px!important;color:#344d40!important;margin-top:2px!important}
  .cp-stat .cp-icon{width:30px!important;height:30px!important;color:var(--cp-green)!important}
  .cp-stat.cp-blue{background:#f0f7ff!important}.cp-stat.cp-blue b,.cp-stat.cp-blue .cp-icon{color:#2876d2!important}
  .cp-stat.cp-pink{background:#fff4fa!important}.cp-stat.cp-pink b,.cp-stat.cp-pink .cp-icon{color:#de5489!important}
@@ -125,7 +125,7 @@
  .cp-due{font-style:normal!important;font-size:9px!important;border-radius:5px!important;background:#eef4f0!important;color:#56806b!important;padding:2px 5px!important;text-align:right!important}
  .cp-due.cp-today{background:#fff0e1!important;color:#c87622!important}.cp-due.cp-overdue{background:#fff0ee!important;color:#ce5349!important}
  .cp-empty{font-size:12px!important;color:var(--cp-muted)!important;text-align:center!important;padding:22px 8px!important}
- .cp-shortcuts{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:9px!important;margin-top:15px!important}
+ .cp-shortcuts{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:9px!important;margin-top:2px!important}
  .cp-shortcuts a{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;background:#fff!important;border:1px solid var(--cp-line)!important;border-radius:14px!important;padding:13px 4px!important;color:#366b51!important;font-size:10px!important}
  .cp-business-more{display:block!important;width:100%!important;border:0!important;border-radius:12px!important;background:#edf3ef!important;padding:13px!important;color:#516c5d!important;text-align:left!important;margin:13px 0 0!important;font-size:12px!important}
  .cp-business-more span{float:right!important}
@@ -188,7 +188,7 @@
  body.cp-app .herd-filter-details .workspace-actions{display:flex!important;flex-wrap:wrap!important;margin-top:9px!important}
  body.cp-app .herd-table .herd-photo .cp-icon{width:28px!important;height:28px!important;color:#679873!important}
  body.cp-app .herd-filter-controls{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;min-width:0!important}
- body.cp-app .herd-filter-actions{grid-column:1/-1!important;display:flex!important;gap:7px!important;margin-top:7px!important}
+ body.cp-app .herd-filter-actions{grid-column:1/-1!important;display:flex!important;gap:7px!important;margin-top:2px!important}
  body.cp-app .herd-list-toolbar{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:7px!important;margin:8px 0!important}
  body.cp-app .herd-result-summary{font-size:11px!important}
  body.cp-app .herd-view-switch{display:flex!important;gap:3px!important;margin-left:auto!important}
@@ -349,13 +349,48 @@
  body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;min-width:0!important;max-width:100%!important;overflow:hidden!important}
  body.cp-app .animal-card-panel[data-animal-panel="photos"] .uploadbox>*{width:100%!important;min-width:0!important;max-width:100%!important;margin:0!important}
  body.cp-app .animal-card-panel[data-animal-panel="photos"] input[type=file]{font-size:12px!important;overflow:hidden!important;padding:9px!important}
- body.cp-app .repro-stage-tabs{display:flex!important;flex-wrap:wrap!important;gap:5px!important}
- body.cp-app .repro-stage-tabs>button,body.cp-app .repro-stage-tabs>a{flex:1 1 29%!important;min-width:0!important;font-size:11px!important;padding:8px!important}
+ /* Long reproduction labels need their own text column; three narrow columns
+    caused count badges and adjacent labels to overlap on iPhone widths. */
+ body.cp-app .repro-stage-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;padding:7px!important;overflow:visible!important;white-space:normal!important}
+ body.cp-app .repro-stage-tabs>button,body.cp-app .repro-stage-tabs>a{display:grid!important;grid-template-columns:minmax(0,1fr) 28px!important;align-items:center!important;justify-content:stretch!important;gap:6px!important;width:100%!important;min-width:0!important;min-height:52px!important;margin:0!important;padding:8px 7px 8px 10px!important;font-size:11px!important;line-height:1.2!important;text-align:left!important;white-space:normal!important;overflow:hidden!important}
+ body.cp-app .repro-stage-tabs>button[data-repro-filter="all"],body.cp-app .repro-stage-tabs>a[data-repro-filter="all"]{grid-column:1/-1!important;min-height:46px!important}
+ body.cp-app .repro-stage-tabs .repro-tab-label{display:block!important;min-width:0!important;max-width:100%!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}
+ body.cp-app .repro-stage-tabs>button>b,body.cp-app .repro-stage-tabs>a>b{display:inline-flex!important;align-items:center!important;justify-content:center!important;justify-self:end!important;flex:0 0 28px!important;width:28px!important;min-width:28px!important;max-width:28px!important;height:28px!important;padding:0 3px!important;font-size:10px!important;font-variant-numeric:tabular-nums!important}
  body.cp-app .repro-card{border-radius:14px!important;padding:11px!important}
  body.cp-app .repro-card-action{display:flex!important;flex-wrap:wrap!important;gap:5px!important;min-width:0!important}
  body.cp-app .repro-card-action .btn{flex:1!important;min-width:0!important;font-size:10px!important;padding:8px 5px!important}
  body.cp-app .repro-selected-metrics{display:flex!important;flex-wrap:wrap!important}
- body.cp-app .repro-status-dialog{width:calc(100% - 24px)!important;max-width:560px!important;max-height:88dvh!important}
+ /* Shared mobile window audit: every sheet, dialog and drawer stays inside the
+    visual viewport, respects safe areas and owns its own vertical scrolling. */
+ body.cp-app .cp-sheet{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;padding:18px 16px max(18px,env(safe-area-inset-bottom))!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .cp-sheet-head{position:sticky!important;top:-18px!important;z-index:2!important;padding:18px 0 10px!important;margin-top:-18px!important;background:#fff!important}
+ body.cp-app .breed-sheet,body.cp-app .scan-sheet{z-index:6100!important;padding-top:env(safe-area-inset-top)!important}
+ body.cp-app .breed-sheet .sheet-panel,body.cp-app .scan-sheet .sheet-panel{width:100%!important;max-width:680px!important;max-height:calc(100dvh - env(safe-area-inset-top))!important;padding:18px 16px max(18px,env(safe-area-inset-bottom))!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .breed-sheet .sheet-head,body.cp-app .scan-sheet .sheet-head{position:sticky!important;top:-18px!important;z-index:2!important;padding:18px 0 10px!important;margin-top:-18px!important;background:#fff!important}
+ body.cp-app .dashboard-picker-backdrop{z-index:6100!important;align-items:flex-end!important;padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom))!important}
+ body.cp-app .dashboard-picker{width:100%!important;max-width:680px!important;max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;padding:16px!important;border-radius:20px!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .dashboard-picker-head{position:sticky!important;top:-16px!important;z-index:2!important;margin:-16px -16px 14px!important;padding:16px!important;background:#fff!important;border-bottom:1px solid var(--cp-line)!important}
+ body.cp-app #financeDrawer.finance-drawer,body.cp-app .section-drawer,body.cp-app .ration-drawer,body.cp-app .medicine-drawer{display:flex!important;flex-direction:column!important;width:100%!important;max-width:100%!important;height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+ body.cp-app .medicine-drawer{z-index:5100!important}
+ body.cp-app .medicine-drawer-backdrop{z-index:5090!important}
+ body.cp-app #financeDrawer .finance-drawer-head,body.cp-app .section-drawer-head,body.cp-app .ration-drawer-head,body.cp-app .medicine-drawer-head{position:relative!important;top:auto!important;z-index:3!important;flex:0 0 auto!important;min-width:0!important;padding:calc(14px + env(safe-area-inset-top)) 14px 12px!important;background:#fff!important}
+ body.cp-app #financeDrawer .finance-drawer-head>div,body.cp-app .section-drawer-head>div,body.cp-app .ration-drawer-head>div,body.cp-app .medicine-drawer-head>div{min-width:0!important;overflow-wrap:anywhere!important}
+ body.cp-app #financeDrawer .finance-drawer-body,body.cp-app .section-drawer-body,body.cp-app .ration-drawer-body,body.cp-app .medicine-drawer-body{flex:1 1 auto!important;min-height:0!important;width:100%!important;max-width:100%!important;padding:14px 14px calc(22px + env(safe-area-inset-bottom))!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .finance-drawer-close,body.cp-app .section-drawer-close,body.cp-app .ration-drawer-close,body.cp-app .medicine-drawer-close,body.cp-app .paddock-dialog-close,body.cp-app .feed-invoice-preview-close{display:grid!important;place-items:center!important;flex:0 0 44px!important;width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;margin:0!important;padding:0!important;line-height:1!important}
+ body.cp-app .finance-savebar,body.cp-app .ration-drawer-foot,body.cp-app .paddock-dialog-actions{bottom:0!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important}
+ body.cp-app .feed-invoice-preview-backdrop{z-index:6100!important;align-items:flex-end!important;padding:max(8px,env(safe-area-inset-top)) 8px max(8px,env(safe-area-inset-bottom))!important}
+ body.cp-app .feed-invoice-preview-card{display:flex!important;flex-direction:column!important;width:100%!important;max-width:560px!important;max-height:calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;overflow:hidden!important;border-radius:18px!important}
+ body.cp-app .feed-invoice-preview-head{flex:0 0 auto!important;padding:14px!important}
+ body.cp-app .feed-invoice-preview-body{flex:1 1 auto!important;min-height:0!important;max-height:none!important;padding:14px 14px max(18px,env(safe-area-inset-bottom))!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .feed-invoice-preview-btn{white-space:normal!important;overflow-wrap:anywhere!important;text-align:left!important}
+ body.cp-app .feed-invoice-payment{align-items:stretch!important;flex-direction:column!important}
+ body.cp-app .feed-invoice-payment .btn{width:100%!important}
+ body.cp-app .repro-status-dialog{width:calc(100% - 20px)!important;max-width:560px!important;max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;margin:auto!important;padding:0!important;border:0!important;border-radius:18px!important;overflow:hidden!important}
+ body.cp-app .repro-status-dialog::backdrop{background:#0b261a75!important;backdrop-filter:blur(3px)!important}
+ body.cp-app .repro-status-form{display:flex!important;flex-direction:column!important;max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;padding:15px!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+ body.cp-app .repro-status-options{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+ body.cp-app .repro-status-choice{min-width:0!important;min-height:74px!important;white-space:normal!important;overflow-wrap:anywhere!important}
+ body.cp-app .repro-status-foot{position:sticky!important;bottom:-15px!important;z-index:2!important;margin:14px -15px -15px!important;padding:12px 15px max(15px,env(safe-area-inset-bottom))!important;background:#fff!important}
  /* Ration list and the original, protected solver workspace. */
  body.cp-app .ration-page-title,body.cp-app .ration-page-subtitle,body.cp-app .ration-page-steps{display:none!important}
  body.cp-app .ration-picker-grid{display:grid!important;grid-template-columns:1fr!important;gap:9px!important;margin:10px 0!important}
@@ -511,7 +546,7 @@
  body.cp-app .agri-kpis,body.cp-app .agri-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
  body.cp-app .tablewrap,body.cp-app .finance-report-table-wrap,body.cp-app .finance-report-chart{width:100%!important;min-width:0!important;max-width:100%!important;overflow-x:auto!important;overscroll-behavior-x:contain!important;-webkit-overflow-scrolling:touch!important}
  body.cp-app .main table:not(.cp-record-table):not(.ration-workbench-table){min-width:0!important}
- body.cp-app.cp-login{padding:0!important;background:#153e2a url("/app-assets/login.jpg?v=2.0.8") center/cover fixed!important;min-height:100dvh!important;display:block!important}
+ body.cp-app.cp-login{padding:0!important;background:#153e2a url("/app-assets/login.jpg?v=2.0.10") center/cover fixed!important;min-height:100dvh!important;display:block!important}
  body.cp-app.cp-login:before{content:""!important;position:fixed!important;inset:0!important;background:linear-gradient(180deg,#092d4440,#0d3d2410 35%,#061c15e8 94%)!important;pointer-events:none!important}
  body.cp-app.cp-login .login-shell{position:relative!important;display:flex!important;flex-direction:column!important;min-height:100dvh!important;width:100%!important;max-width:500px!important;margin:0 auto!important;padding:calc(52px + env(safe-area-inset-top)) 24px calc(20px + env(safe-area-inset-bottom))!important;background:transparent!important;border-radius:0!important;box-shadow:none!important}
  body.cp-app.cp-login .login-visual{display:block!important;background:transparent!important;min-height:0!important;padding:0!important;text-align:center!important}
@@ -569,5 +604,50 @@ body.cp-app .animal-card-panel[data-animal-panel="photos"] .gallery>p{grid-colum
 @media(max-width:900px){
  html body.cp-app [hidden],html body.cp-app .cp-overlay[hidden],html body.cp-app .cp-network-status[hidden]{display:none!important}
  html body.cp-app [style*="display: none"],html body.cp-app [style*="display:none"]{display:none!important}
+ /* Rasyon ayrıntısındaki dört ana bilimsel kartın durum rozetleri başlıktan 3 px yukarı alınır. */
+ body.cp-app:has(.workbench-shell) .wb2-kpi:is([data-key="dm"],[data-key="adg"],[data-key="cp"],[data-key="ndf"]) .wb2-kpi-status{top:5px!important}
 }
+}
+
+/* AppEdition 2.0.11 - mobil ana sayfa kompakt ozet kartlari
+   Ustteki 4 KPI kartini dikeyde kisaltir; ikon/sayi/yazi boyutlari korunur.
+   Boylece Bugunun Isleri ve 4 hizli kisayol ilk ekranda daha yukarida/tam gorunur. */
+@media (max-width: 768px){
+ body.cp-app:not(.cp-tasks-route):not(.cp-modules-route) .cp-stat{
+   min-height:84px!important;
+   padding:11px 16px!important;
+ }
+ body.cp-app:not(.cp-tasks-route):not(.cp-modules-route) .cp-stats{
+   gap:8px!important;
+   margin-bottom:12px!important;
+ }
+}
+
+/* AppEdition 2.0.13 - ana sayfa son kompakt ayarları */
+@media (max-width:768px){
+ body.cp-app:not(.cp-tasks-route):not(.cp-modules-route) .cp-stats{margin-bottom:6px!important;}
+ body.cp-app .cp-global-fab{bottom:calc(var(--cp-nav) + 25px)!important;right:10px!important;}
+}
+
+
+/* AppEdition 2.0.14 - ana sayfada KPI -> Bugunun Isleri gercek akis boslugu
+   Negatif margin karti ve altindaki kisayollari birlikte yukari tasir. */
+@media (max-width:768px){
+ body.cp-app.cp-route-home .cp-home-jobs{margin-top:-10px!important;}
+}
+
+/* AppEdition 2.0.15 - mevcut + fonksiyonu alt navigasyonda Isler konumuna tasindi. */
+@media(max-width:900px){
+ body.cp-app .cp-bottom-nav .cp-nav-plus{
+   display:grid!important;place-items:center!important;position:relative!important;
+   inset:auto!important;justify-self:center!important;align-self:start!important;
+   width:50px!important;height:50px!important;margin:-5px 0 0!important;padding:0!important;
+   border:0!important;border-radius:50%!important;background:linear-gradient(145deg,#117b53,#075c3d)!important;
+   color:#fff!important;box-shadow:0 5px 14px #075d3938!important;cursor:pointer!important;z-index:1!important;
+ }
+ body.cp-app .cp-bottom-nav .cp-nav-plus .cp-icon{width:27px!important;height:27px!important;color:#fff!important}
+ body.cp-app.cp-route-animal-add .cp-bottom-nav .cp-nav-plus,
+ body.cp-app.cp-route-animal-edit .cp-bottom-nav .cp-nav-plus,
+ body.cp-app.cp-route-calf-edit .cp-bottom-nav .cp-nav-plus,
+ body.cp-app.cp-route-finance-edit .cp-bottom-nav .cp-nav-plus{display:grid!important}
 }
