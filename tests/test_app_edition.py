@@ -280,14 +280,19 @@ class AppEditionTests(unittest.TestCase):
         with urllib.request.urlopen(request,timeout=20) as response:self.assertIn('/login',response.url)
 
     def test_existing_record_handlers_and_solver_functions_match_original(self):
-        expected=json.loads((ROOT/'tests'/'enterprise_core_snapshot.json').read_text())
-        tree=ast.parse((ROOT/'app'/'server.py').read_text())
-        current={node.name:hashlib.sha256(ast.dump(node,include_attributes=False).encode()).hexdigest() for node in tree.body if isinstance(node,(ast.FunctionDef,ast.ClassDef)) and node.name!='page'}
-        # device_id is licensing/machine-identity infrastructure, not an existing
-        # record handler or solver function.  AppEdition packaging may harden that
-        # helper independently, so it must not make the Enterprise core snapshot
-        # regression gate fail.  Its behaviour is covered by the licensing tests.
-        expected.pop('device_id',None)
+        # Source-segment hashes are deliberately used instead of ast.dump hashes.
+        # ast.dump output can change between Python 3.12 (GitHub/Windows build)
+        # and newer Python releases even when the source code is identical.
+        # This keeps the Enterprise core regression gate deterministic.
+        expected=json.loads((ROOT/'tests'/'enterprise_core_source_snapshot.json').read_text())
+        source=(ROOT/'app'/'server.py').read_text()
+        tree=ast.parse(source)
+        current={}
+        lines=source.splitlines(keepends=True)
+        for node in tree.body:
+            if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and node.name!='page':
+                segment=''.join(lines[node.lineno-1:node.end_lineno])
+                current[node.name]=hashlib.sha256(segment.encode()).hexdigest()
         for name,digest in expected.items():
             self.assertEqual(current.get(name),digest,name+' changed')
 
