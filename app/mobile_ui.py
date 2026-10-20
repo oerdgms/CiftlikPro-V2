@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
-BUILD = 'AppEdition2.0.16-BottomNavPlusFix'
+BUILD = 'AppEdition2.0.20-RationInfoPanelBuildSync'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -135,7 +135,7 @@ def shell_markup(title, path, username):
     return header + nav + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.16">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.20">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
@@ -170,7 +170,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user)
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.16" defer></script>'
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.20" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 

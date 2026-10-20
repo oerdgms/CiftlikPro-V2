@@ -73,7 +73,7 @@ class Hotfix122BETests(unittest.TestCase):
         self.assertEqual(server.APP_VERSION,'3.9.23 DEV4 Hotfix1.22cr')
         installer=(ROOT/'installer.iss').read_text(encoding='utf-8')
         workflow=(ROOT/'.github'/'workflows'/'windows-installer.yml').read_text(encoding='utf-8')
-        expected='CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe'
+        expected='CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup.exe'
         self.assertIn('OutputBaseFilename='+expected[:-4],installer)
         self.assertIn(expected,workflow)
 

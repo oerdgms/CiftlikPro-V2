@@ -101,8 +101,8 @@ class AppEditionTests(unittest.TestCase):
         config=json.loads(text.split('id="cpAppConfig">',1)[1].split('</script>',1)[0])
         self.assertEqual(config['request_url'],'/animal-add?entry=calf')
         self.assertIn('id="smartAnimalForm"',text)
-        self.assertIn('/app-assets/mobile.css?v=2.0.10',text)
-        self.assertIn('/app-assets/mobile.js?v=2.0.10',text)
+        self.assertIn('/app-assets/mobile.css?v=2.0.20',text)
+        self.assertIn('/app-assets/mobile.js?v=2.0.20',text)
         shell=mobile_ui.shell_markup('Hayvanlar','/all-animals','admin')
         self.assertIn('/animal-add?entry=adult',shell)
         self.assertIn('/animal-add?entry=calf',shell)
@@ -124,7 +124,7 @@ class AppEditionTests(unittest.TestCase):
         self.assertIn('tr.cp-finance-record>td.cp-actions-cell{display:none!important',stylesheet)
         self.assertIn('tr.cp-finance-record.cp-row-open>td.cp-actions-cell{display:block!important',stylesheet)
         self.assertIn('min-height:72px!important',stylesheet)
-        self.assertIn("ciftlikpro-app-edition-2.0.10",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
+        self.assertIn("ciftlikpro-app-edition-2.0.20",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
 
     def test_mobile_viewport_locks_page_drift_and_user_zoom(self):
         text=self.get('/reports?tab=finance')[2].decode()
@@ -176,7 +176,7 @@ class AppEditionTests(unittest.TestCase):
             self.assertEqual(response.headers['Cache-Control'],'no-store')
         self.assertEqual(gzip.decompress(payload),plain)
         self.assertLess(len(payload),len(plain)/2)
-        self.assertIn('immutable',self.get('/app-assets/mobile.css?v=2.0.10',False)[1]['Cache-Control'])
+        self.assertIn('immutable',self.get('/app-assets/mobile.css?v=2.0.20',False)[1]['Cache-Control'])
         request=urllib.request.Request(self.base+path,headers={'Cookie':'sid=app-edition-test','Accept-Encoding':'gzip;q=0'})
         with urllib.request.urlopen(request) as response:self.assertIsNone(response.headers.get('Content-Encoding'))
 
@@ -294,8 +294,8 @@ class AppEditionTests(unittest.TestCase):
         workflow=(ROOT/'.github/workflows/windows-installer.yml').read_text()
         installer=(ROOT/'installer.iss').read_text()
         self.assertIn("server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22cr'",workflow)
-        self.assertIn('AppEdition_2_0_10_Setup.exe',workflow)
-        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup',installer)
+        self.assertIn('AppEdition_2_0_20_Setup.exe',workflow)
+        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup',installer)
 
 
 if __name__=='__main__':

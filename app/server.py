@@ -13205,10 +13205,10 @@ HOTFIX120_RATION_POLISH = r"""
 .wb2-desktop-secondary{margin-top:5px!important}.wb2-desktop-more{margin-top:5px!important}
 /* Rasyon bilgileri sağdan açılan panel; çalışma masasını itmez. */
 .ration-info-details>summary{cursor:pointer;list-style:none}.ration-info-details>summary::-webkit-details-marker{display:none}
-.ration-info-details[open]{position:fixed!important;z-index:130!important;right:0!important;top:0!important;width:min(430px,94vw)!important;height:100vh!important;margin:0!important;padding:72px 18px 18px!important;background:#fff!important;border:0!important;border-left:1px solid #d8e3db!important;border-radius:0!important;box-shadow:-18px 0 45px #173d2826!important;overflow:auto!important}
-.ration-info-details[open]::before{content:'Rasyon Bilgileri';display:block;font-size:18px;font-weight:900;margin-bottom:14px;color:#173d28}
-.ration-info-details[open]>summary{position:absolute;right:14px;top:16px;font-size:0}.ration-info-details[open]>summary:after{content:'×';font-size:30px;color:#52675b}
-.ration-info-details[open] .form{grid-template-columns:1fr!important}.ration-info-details[open] .full{grid-column:1!important}
+.ration-info-details[open]{position:fixed!important;z-index:130!important;right:0!important;top:0!important;width:min(360px,92vw)!important;height:100vh!important;margin:0!important;padding:58px 14px 16px!important;background:#fff!important;border:0!important;border-left:1px solid #d8e3db!important;border-radius:0!important;box-shadow:-18px 0 45px #173d2826!important;overflow:auto!important}
+.ration-info-details[open]::before{content:'Rasyon Bilgileri';display:block;font-size:17px;font-weight:900;margin-bottom:10px;color:#173d28}
+.ration-info-details[open]>summary{position:absolute;right:12px;top:10px;font-size:0}.ration-info-details[open]>summary:after{content:'×';font-size:30px;color:#52675b}
+.ration-info-details[open] .form{grid-template-columns:1fr!important;gap:8px!important;margin-top:6px!important}.ration-info-details[open] .full{grid-column:1!important}.ration-info-details[open] .form label{font-size:12px!important}.ration-info-details[open] .form input,.ration-info-details[open] .form select,.ration-info-details[open] .form textarea{margin-top:3px!important;padding:8px 9px!important;min-height:36px!important}.ration-info-details[open] .btn{min-height:36px!important;padding:8px 11px!important;font-size:12px!important;border-radius:7px!important}.ration-info-details[open] form[action="/ration/delete"]{margin-top:8px!important}
 @media(max-width:900px){.wb2-desktop-kpi-grid{grid-template-columns:1fr 1fr!important}.wb2-desktop-kpi{grid-template-columns:48px 1fr auto!important}.ration-info-details[open]{width:100vw!important}}
 </style>
 <script id="hotfix120-ration-polish-script">
@@ -16285,7 +16285,7 @@ install_dashboard_performance(globals())
 APP_VERSION='3.9.23 DEV4 Hotfix1.22cr'
 APP_LABEL='v'+APP_VERSION
 MOBILE_API_BUILD='MobileFullV13-EnterpriseParity-SharedLogic'
-APP_EDITION_BUILD='AppEdition2.0.12-Performance'
+APP_EDITION_BUILD='AppEdition2.0.20-RationInfoPanelBuildSync'
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

@@ -152,23 +152,23 @@ jobs:
             choco install innosetup --yes --no-progress
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
-          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe")) {
+          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup.exe")) {
             throw "Kurulum EXE dosyasi olusturulamadi."
           }
 
       - name: SHA-256 ozeti olustur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
+          "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yukle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.10-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.20-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_10_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30
