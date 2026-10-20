@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
-BUILD = 'AppEdition2.0.15-BottomNavPlus'
+BUILD = 'AppEdition2.0.16-BottomNavPlusFix'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -127,7 +127,7 @@ def shell_markup(title, path, username):
     header = f'<header class="cp-app-header"><div class="cp-header-title">{leading}<div><b id="cpScreenTitle">{esc(display_title)}</b><small id="cpScreenSubtitle">{esc(username) if path=="/" else "ÇiftlikPro Enterprise"}</small></div></div><a class="cp-notifications" href="/notifications" aria-label="Bugünün işleri ve bildirimler">{icon("bell")}<i id="cpNotificationDot" hidden></i></a></header>'
     links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar')]
     nav = '<nav class="cp-bottom-nav" aria-label="Mobil ana menü">' + ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in links)
-    nav += '<button type="button" class="cp-global-fab cp-nav-plus" id="cpGlobalAdd" aria-label="Yeni kayıt ve hızlı işlemler">'+icon('plus')+'</button>'
+    nav += '<button type="button" class="cp-nav-plus" id="cpGlobalAdd" aria-label="Yeni kayıt ve hızlı işlemler">'+icon('plus')+'</button>'
     nav += ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in [('paddocks','/paddocks','Padoklar'),('modules','/?app_view=modules','Modüller')]) + '</nav>'
     quick = '<div class="cp-overlay" id="cpQuickOverlay" hidden><section class="cp-sheet" role="dialog" aria-modal="true" aria-labelledby="cpQuickTitle" tabindex="-1"><div class="cp-sheet-head"><h2 id="cpQuickTitle">Hızlı işlem</h2><button type="button" class="cp-icon-button" data-cp-close aria-label="Kapat">'+icon('close')+'</button></div><div class="cp-quick-grid">'
     actions = [('animals','/animal-add?entry=adult','Hayvan ekle'),('animals','/animal-add?entry=calf','Buzağı ekle'),('health','/health?app_action=add','Sağlık planı'),('finance','/finance?app_action=add','Finans kaydı'),('paddocks','/paddocks?app_action=move','Padok taşıma'),('ration','/rations?app_action=add','Rasyon ekle'),('milk','/milk-center','Süt kaydı')]
@@ -135,7 +135,7 @@ def shell_markup(title, path, username):
     return header + nav + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.15">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.16">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
@@ -170,7 +170,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user)
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.15" defer></script>'
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.16" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 

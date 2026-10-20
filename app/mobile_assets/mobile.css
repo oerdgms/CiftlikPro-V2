@@ -651,3 +651,17 @@ body.cp-app .animal-card-panel[data-animal-panel="photos"] .gallery>p{grid-colum
  body.cp-app.cp-route-calf-edit .cp-bottom-nav .cp-nav-plus,
  body.cp-app.cp-route-finance-edit .cp-bottom-nav .cp-nav-plus{display:grid!important}
 }
+
+
+/* AppEdition 2.0.16 - + artik floating FAB degil, gercek bottom-nav 3. hucre elemani. */
+@media(max-width:900px){
+ body.cp-app .cp-bottom-nav > button.cp-nav-plus{
+   display:grid!important;place-items:center!important;position:relative!important;
+   top:auto!important;right:auto!important;bottom:auto!important;left:auto!important;inset:auto!important;
+   justify-self:center!important;align-self:start!important;
+   width:50px!important;height:50px!important;margin:-5px 0 0!important;padding:0!important;
+   border:0!important;border-radius:50%!important;background:linear-gradient(145deg,#117b53,#075c3d)!important;
+   color:#fff!important;box-shadow:0 5px 14px #075d3938!important;cursor:pointer!important;z-index:1!important;
+ }
+ body.cp-app .cp-bottom-nav > button.cp-nav-plus .cp-icon{width:27px!important;height:27px!important;color:#fff!important;}
+}

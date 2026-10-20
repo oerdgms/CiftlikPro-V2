@@ -3804,12 +3804,18 @@ def smart_ration_metrics(feeds, qty):
     return z
 
 def _energy_balance(m,t):
-    """Net enerji sisteminde bakım için gereken KM ve kalan KM'nin büyümeye sağlayabildiği NEg."""
+    """Net enerji sisteminde bakım için gereken KM ve kalan KM'nin büyümeye sağlayabildiği NEg.
+
+    NEm/NEg hedefleri besi motoruna aittir. Süt rasyonları ayrı enerji hedefleri
+    kullandığından bu anahtarlar bulunmayabilir; bu durumda besi-GCAA hesabı
+    uygulanmaz ve çağıran kod güvenli biçimde 0 kapasite görür.
+    """
     dm=float(m.get('dm_kg') or 0);nem=float(m.get('nem_density') or 0);neg=float(m.get('neg_density') or 0)
-    if dm<=0 or nem<=0 or neg<=0:return 0.0,0.0,999.0
-    maint_dm=t['nem_req_mcal']/nem
+    nem_req=float(t.get('nem_req_mcal') or 0);neg_req=float(t.get('neg_req_mcal') or 0)
+    if dm<=0 or nem<=0 or neg<=0 or nem_req<=0 or neg_req<=0:return 0.0,0.0,999.0
+    maint_dm=nem_req/nem
     gain_supply=max(0.0,dm-maint_dm)*neg
-    required_dm=maint_dm+t['neg_req_mcal']/neg
+    required_dm=maint_dm+neg_req/neg
     return gain_supply,required_dm,maint_dm
 
 def _predicted_dmi_for_metrics(metrics, targets):
@@ -5897,7 +5903,7 @@ def page(title,body,path='/',user='admin',flash=''):
 @media(max-width:560px){{.nutri-mini-grid{{grid-template-columns:1fr!important}}.nutri-mini.nutri-compare-card{{min-height:112px}}.nutri-side b{{font-size:19px!important}}.nutri-card-footer .nutri-diff,.nutri-card-footer em{{font-size:12.5px!important}}}}
 /* V3.9.18 - Rasyon sayfası kompakt üst alan */
 .ration-page-title{{margin:8px 0 4px!important;font-size:25px!important;line-height:1.05}}.ration-page-subtitle{{margin:0 0 6px!important;font-size:13px}}.ration-page-steps{{display:flex;gap:10px;flex-wrap:wrap;margin:3px 0 8px!important;font-size:12px;color:#486457}}.ration-new-collapsed{{padding:8px 12px!important;margin-bottom:8px}}.ration-new-collapsed>details>summary{{display:flex;align-items:center;gap:7px;min-height:30px}}.ration-new-collapsed>details>summary h2{{font-size:18px!important;line-height:1.1}}.ration-new-collapsed>details>summary .mut{{font-size:11px!important;margin-left:2px!important}}.ration-create-grid{{gap:8px!important;margin-top:8px!important}}.ration-create-grid>.card{{padding:10px!important}}@media(max-width:700px){{.ration-page-title{{font-size:23px!important}}.ration-new-collapsed>details>summary{{flex-wrap:wrap}}}}
-.ration-picker-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,235px));gap:10px;margin-top:10px}}.ration-picker-card{{display:block;min-height:0;padding:12px 14px!important;border:1px solid #dce8df!important;text-decoration:none}}.ration-picker-card.active{{border:2px solid #176b3a!important;padding:11px 13px!important}}.ration-picker-head{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.ration-picker-head h3{{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.ration-picker-type{{font-size:12px;color:#60766a;white-space:nowrap}}.ration-picker-main{{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:14px}}.ration-picker-ratio{{margin-top:5px;font-size:12px;color:#526b5e}}@media(max-width:700px){{.ration-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ration-picker-card{{padding:10px!important}}.ration-picker-main{{font-size:13px;flex-wrap:wrap}}}}@media(max-width:430px){{.ration-picker-grid{{grid-template-columns:1fr}}}}
+.ration-picker-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,235px));gap:10px;margin-top:10px}}.ration-picker-card{{display:block;min-height:0;padding:12px 14px!important;border:1px solid #dce8df!important;text-decoration:none}}.ration-picker-open{{display:block;color:inherit;text-decoration:none}}.ration-picker-actions{{display:flex;align-items:flex-start;gap:7px;margin-top:10px;padding-top:9px;border-top:1px solid #e6eee8}}.ration-picker-actions>form{{margin:0}}.ration-card-edit{{position:relative}}.ration-card-edit>summary{{list-style:none;cursor:pointer}}.ration-card-edit>summary::-webkit-details-marker{{display:none}}.ration-card-edit-form{{position:absolute;z-index:30;left:0;top:40px;width:min(290px,80vw);padding:12px;background:#fff;border:1px solid #d7e5dc;border-radius:12px;box-shadow:0 14px 36px rgba(20,55,35,.18)}}.ration-card-edit-form label{{display:block;font-size:12px;font-weight:700;margin-bottom:8px}}.ration-card-edit-form input{{width:100%;margin-top:4px}}.ration-picker-warning{{color:#9a5b00}}.ration-picker-card.active{{border:2px solid #176b3a!important;padding:11px 13px!important}}.ration-picker-head{{display:flex;align-items:center;justify-content:space-between;gap:8px}}.ration-picker-head h3{{margin:0;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.ration-picker-type{{font-size:12px;color:#60766a;white-space:nowrap}}.ration-picker-main{{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:14px}}.ration-picker-ratio{{margin-top:5px;font-size:12px;color:#526b5e}}@media(max-width:700px){{.ration-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}.ration-picker-card{{padding:10px!important}}.ration-picker-main{{font-size:13px;flex-wrap:wrap}}}}@media(max-width:430px){{.ration-picker-grid{{grid-template-columns:1fr}}}}
 .ration-action-row{{display:grid;grid-template-columns:minmax(280px,430px) minmax(340px,520px);gap:10px;align-items:start;margin:10px 0 8px}}
 .ration-action-row>.card{{margin:0!important;min-width:0}}
 .ration-action-row .ration-new-collapsed{{margin-bottom:0!important}}
@@ -8369,8 +8375,15 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 paddocks=c.execute("select id,name from paddocks where active=1 order by name").fetchall()
                 cards=[]
                 for r in rations:
-                    sm=ration_summary(r['id'],c)
-                    cards.append(f'''<a class="card ration-picker-card{' active' if selected==r['id'] else ''}" href="/ration-workbench?id={r['id']}"><div class="ration-picker-head"><h3>🥣 {h(r['name'])}</h3><span class="ration-picker-type">{('🥛 Süt' if ('ration_type' in r.keys() and (r['ration_type'] or '').startswith('Süt')) else '🥩 Besi')}</span></div><div class="ration-picker-main"><b>{sm['as_fed_kg']:.2f} kg</b><span>·</span><b>{money(sm['cost'])}/gün</b></div><div class="ration-picker-ratio">🌾 K/K <b>%{sm['roughage_pct_dm']:.0f} / %{sm['concentrate_pct_dm']:.0f}</b></div></a>''')
+                    # Rasyon kartı, hesaplama tarafında sorun olsa bile yönetilebilir kalmalı.
+                    # Böylece bozuk/eski bir rasyon yüzünden Düzenle/Sil erişimi kaybolmaz.
+                    try:
+                        sm=ration_summary(r['id'],c)
+                        summary_html=f'''<div class="ration-picker-main"><b>{sm['as_fed_kg']:.2f} kg</b><span>·</span><b>{money(sm['cost'])}/gün</b></div><div class="ration-picker-ratio">🌾 K/K <b>%{sm['roughage_pct_dm']:.0f} / %{sm['concentrate_pct_dm']:.0f}</b></div>'''
+                    except Exception as ex:
+                        print(f"[WARN] Rasyon kart özeti hesaplanamadı id={r['id']} name={r['name']}: {type(ex).__name__}: {ex}")
+                        summary_html='<div class="ration-picker-main ration-picker-warning">⚠️ Hesap özeti açılamadı</div><div class="ration-picker-ratio">Düzenle veya Sil işlemi kullanılabilir.</div>'
+                    cards.append(f'''<div class="card ration-picker-card{' active' if selected==r['id'] else ''}"><a class="ration-picker-open" href="/ration-workbench?id={r['id']}"><div class="ration-picker-head"><h3>🥣 {h(r['name'])}</h3><span class="ration-picker-type">{('🥛 Süt' if ('ration_type' in r.keys() and (r['ration_type'] or '').startswith('Süt')) else '🥩 Besi')}</span></div>{summary_html}</a><div class="ration-picker-actions"><details class="ration-card-edit"><summary class="btn alt compact-btn">✏️ Düzenle</summary><form method="post" action="/ration/edit" class="ration-card-edit-form"><input type="hidden" name="ration_id" value="{r['id']}"><label>Rasyon Adı<input name="name" value="{h(r['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(r['target_group'] or '')}"></label><label>Not<input name="notes" value="{h(r['notes'] or '')}"></label><button class="btn compact-btn">Kaydet</button></form></details><form method="post" action="/ration/delete" onsubmit="return confirm('{h(r['name'])} rasyonunu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{r['id']}"><button class="btn red compact-btn">🗑️ Sil</button></form></div></div>''')
                 detail=''
                 if selected:
                     rr=c.execute("select * from rations where id=?",(selected,)).fetchone()
