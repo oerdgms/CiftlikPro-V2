@@ -1,5 +1,5 @@
 {
-  "App": "ac5918225acca753e8862081a5850937d2c742976d87954512a42adab2920a4e",
+  "App": "98f45d1e5ba1d16bf7936181307e70068a103f50b679a9cdc6285f5fc19d723f",
   "QuietThreadingHTTPServer": "b635be4d32610599b61fb1f4eadfdbd0e8e14760a85d03404c3bbeae753e7f0f",
   "_TestAutoClosingConnection": "5308eb52a3034d9442804a45cec618b3fe59d0f4a737b598fb4258de04d3e521",
   "_achievable_adg": "5916a419e18c739e13124de01e8680df70b8055f9feed961545e683e69244570",
@@ -170,7 +170,7 @@
   "ration_effect_text": "4d7ff3bb730717f4da861a8130ba7da891c038576f8bf97285cbb3cca6ca3567",
   "ration_items_on_date": "b3096cd6997ec145c583f63c0303931cf579e956e0882705b4ddf014ccaacda7",
   "ration_reduction_recommendations": "d301a9f36ab5187c1403aa33741945ec350b04a82a604f72c739280a342cf9be",
-  "ration_requirement_panel": "f877ff7136e656546f456cea28a7a58a33a3148353bb437abb920611d9d4717b",
+  "ration_requirement_panel": "da75feab1485119c5d68ae8f06ef1a52391785b6460a1e700798c0dabcc99701",
   "ration_requirement_targets": "3a6b52add7394a1faa521ffb74233f8ba6ed4e37924bf852ae4282949ca3292f",
   "ration_simulated_multi_summary": "fc6968616a3e90515f8df2521a1eaebb66b3dc6d72d91b633df9aecd00547b3e",
   "ration_simulated_summary": "4ee6f75e755f9654a6c53bb7d009bf29df23ec610a447cd1593527afb42abe8a",

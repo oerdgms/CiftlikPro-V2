@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse, urlencode
 
-BUILD = 'AppEdition2.0.20-RationInfoPanelBuildSync'
+BUILD = 'AppEdition2.0.20n-MobileScienceAboveTargets'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 

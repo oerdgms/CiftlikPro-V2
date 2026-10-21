@@ -4714,7 +4714,7 @@ def ration_requirement_panel(rr,sm):
     @media(min-width:1001px) and (max-width:1450px){{.science-target-row{{grid-template-columns:minmax(78px,.9fr) minmax(100px,1.2fr);gap:2px 4px;padding:4px 5px}}.science-target-values{{gap:3px}}.science-target-values b{{font-size:11px}}.science-target-state i{{display:none}}}}
     @media(max-width:1000px){{body:has(.workbench-shell) .science-target-grid{{grid-template-columns:repeat(2,minmax(0,1fr))!important}}}}
     @media(max-width:650px){{body:has(.workbench-shell) .science-target-grid{{display:grid!important;grid-auto-flow:column!important;grid-template-columns:none!important;grid-auto-columns:minmax(280px,86vw)!important;overflow-x:auto!important;scroll-snap-type:x mandatory;padding-bottom:5px!important}}.science-target-card{{scroll-snap-align:start}}.science-target-row{{padding:6px 7px}}}}
-    </style><div class='target-workspace'><div class='target-controlbar'><div class='target-head'><h3>🎯 Bilimsel Hedef Özeti</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky science-target-shell'><div class='target-compare-title'><b>Gereksinim ↔ Rasyon Arzı</b><span id='target-live-note'>NASEM hayvan profili · Dinamik KM · NEm/NEg performansı</span></div><div class='science-target-grid' data-solver-result='{solver_result}'>{energy_card}{protein_card}{rumen_card}{mineral_card}</div>{details}</div></div>"""
+    </style><div class='target-workspace cp-science-collapsed'><div class='target-controlbar'><div class='target-head'><h3>🎯 Bilimsel Hedef Özeti</h3>{ctx}</div><form method='post' action='/ration/target' class='target-form'><input type='hidden' name='ration_id' value='{rr['id']}'>{form_fields}<button class='btn blue compact-target-btn'>Güncelle</button></form></div><div class='target-compare-sticky science-target-shell'><div class='target-compare-title'><b>Gereksinim ↔ Rasyon Arzı</b><span id='target-live-note'>NASEM hayvan profili · Dinamik KM · NEm/NEg performansı</span></div><div class='science-target-grid' data-solver-result='{solver_result}'>{energy_card}{protein_card}{rumen_card}{mineral_card}</div>{details}</div></div>"""
 
 def ration_smart_recommendations(rr, sm, con=None, limit=6):
     """Katalogdaki yemleri mevcut besin açıklarını iyileştirme potansiyeline göre sıralar.
@@ -8442,7 +8442,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                         if sim_feed:
                             sf=c.execute('select name from feed_catalog where id=?',(sim_feed,)).fetchone();ss=ration_simulated_summary(selected,sim_feed,sim_delta,c)
                             if sf: sim_html=f'''<div class="card" style="margin-top:14px;border:2px solid #2f78d0"><h3>🧪 Kaydetmeden Simülasyon: +{sim_delta:.2f} kg {h(sf['name'])}</h3><div class="grid"><div class="card stat">KM<b>{sm['dm_kg']:.2f} → {ss['dm_kg']:.2f}</b></div><div class="card stat">HP<b>%{sm['cp_pct_dm']:.1f} → %{ss['cp_pct_dm']:.1f}</b></div><div class="card stat">ME<b>{sm['me_mcal']:.1f} → {ss['me_mcal']:.1f}</b></div><div class="card stat">NDF<b>%{sm['ndf_pct_dm']:.1f} → %{ss['ndf_pct_dm']:.1f}</b></div><div class="card stat">Kaba/Kesif<b>%{sm['roughage_pct_dm']:.0f}/%{sm['concentrate_pct_dm']:.0f} → %{ss['roughage_pct_dm']:.0f}/%{ss['concentrate_pct_dm']:.0f}</b></div><div class="card stat metric orange">Maliyet<b>{money(sm['cost'])} → {money(ss['cost'])}</b></div></div><div class="actions"><form method="post" action="/ration/apply-suggestion"><input type="hidden" name="ration_id" value="{selected}"><input type="hidden" name="feed_id" value="{sim_feed}"><input type="hidden" name="delta" value="{sim_delta}"><button class="btn blue">✅ Bu Değişikliği Uygula</button></form><a class="btn alt" href="/rations?id={selected}">↩ Vazgeç</a></div></div>'''
-                        detail=f'''<div class="card workbench-shell" style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Hedef ↔ mevcut → çalışma masası → yem ekle → akıllı çözüm</span></div><details class="ration-info-details"><summary><b>✏️ Rasyon Bilgileri</b></summary><form method="post" action="/ration/edit" class="form" style="margin-top:12px"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="full">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button></div></form><form method="post" action="/ration/delete" style="margin-top:10px" onsubmit="return confirm('Bu rasyonu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">🗑 Rasyonu Sil</button></form></details></div>
+                        detail=f'''<div class="card workbench-shell ration-shell" style="margin-top:14px"><div class="ration-title-row"><div class="ration-title-copy"><h2 style="margin:0">🥣 {h(rr['name'])}</h2><span class="mut">Hedef ↔ mevcut → çalışma masası → yem ekle → akıllı çözüm</span></div><div class="ration-title-actions"><button type="button" class="btn alt compact-btn ration-inline-toggle" aria-expanded="false">✏️ Düzenle</button><form method="post" action="/ration/delete" class="ration-inline-delete" onsubmit="return confirm('Bu rasyonu silmek istediğinize emin misiniz?');"><input type="hidden" name="ration_id" value="{selected}"><button class="btn red compact-btn">🗑 Sil</button></form></div></div><div class="ration-inline-editor" hidden><div class="ration-inline-editor-title">✏️ Rasyon Bilgilerini Düzenle <button type="button" class="ration-inline-close" aria-label="Kapat">⌃</button></div><form method="post" action="/ration/edit" class="form ration-inline-form"><input type="hidden" name="ration_id" value="{selected}"><label>Rasyon Adı<input name="name" value="{h(rr['name'])}" required></label><label>Hedef Grup<input name="target_group" value="{h(rr['target_group'])}"></label><label class="ration-note">Not<input name="notes" value="{h(rr['notes'])}"></label><div class="ration-inline-save"><button type="button" class="btn alt compact-btn ration-inline-cancel">İptal</button><button class="btn compact-btn">✓ Kaydet</button></div></form></div>
                         {ration_requirement_panel(rr,sm)}
                         <div id="ration-workbench" class="card" style="margin-top:14px"><div class="workbench-head"><div><h3 style="margin:0">🌾 Rasyon Çalışma Masası</h3><span class="mut">Miktarı yazın veya −/+ kullanın. Hedef ↔ mevcut değerler üstte canlı güncellenir.</span></div><div class="workbench-actions"><button type="button" class="btn" onclick="document.getElementById('quick-feed-add').open=true;setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),80)">➕ Yem Ekle</button><a class="btn alt" href="/ration-prep-report?id={selected}">🧾 Rasyonu Yazdır</a></div></div><form method="post" action="/ration/items-bulk" id="ration-bulk-form"><input type="hidden" name="ration_id" value="{selected}"><div class="ration-changebar compact-changebar"><span id="dirty-status" class="mut">Kaydedilmiş rasyon gösteriliyor.</span><button type="button" id="ration-reset" class="btn alt compact-btn" style="display:none">↩ Değişiklikleri Geri Al</button></div><div style="overflow:auto;margin-top:8px"><table class="ration-workbench-table"><thead><tr><th>Yem</th><th>Miktar kg/baş/gün</th><th>KM</th><th>HP</th><th>NDF</th><th>₺/kg</th><th>Günlük</th><th></th></tr></thead><tbody>{item_rows}</tbody></table></div><div class="ration-savebar"><button class="btn blue" id="ration-save" disabled>💾 Değişiklikleri Kaydet</button></div></form></div><script>(()=>{{const form=document.getElementById('ration-bulk-form');if(!form)return;const scrollKey='cp-ration-scroll';const rows=[...form.querySelectorAll('.ration-row')],save=document.getElementById('ration-save'),reset=document.getElementById('ration-reset'),status=document.getElementById('dirty-status');const base={{asfed:{sm['as_fed_kg']:.8f},dm:{sm['dm_kg']:.8f},cp:{sm['cp_pct_dm']:.8f},me:{sm['me_mcal']:.8f},ndf:{sm['ndf_pct_dm']:.8f},endf:{sm['endf_pct_dm']:.8f},ca:{sm['ca_g']:.8f},p:{sm['p_g']:.8f},cost:{sm['cost']:.8f},rough:{sm['roughage_pct_dm']:.8f},conc:{sm['concentrate_pct_dm']:.8f}}};const targetsLive={{dm:{targets['dmi_kg']:.8f},cp:{targets['cp_pct']:.8f},me:{targets['me_mcal_day']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const setText=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};function targetStatus(actual,target,tol,upperTol){{upperTol=upperTol===undefined?tol:upperTol;const r=target?actual/target:1;if(r<1-tol)return '⚠️ Eksik %'+((1-r)*100).toFixed(0);if(r>1+upperTol)return '⬆️ Fazla %'+((r-1)*100).toFixed(0);return '✅ Uygun';}}function liveDiff(actual,target,unit,digits){{if(!target)return '—';const d=actual-target,p=d/target*100,sg=d>0?'+':'';return sg+d.toFixed(digits)+unit+' ('+sg+p.toFixed(0)+'%)';}}function updateTargetCard(key,current,status,diff){{setText('target-mini-'+key+'-current',current);setText('target-mini-'+key+'-status',status);setText('target-mini-'+key+'-diff',diff);const b=document.getElementById('target-mini-'+key);if(b){{b.classList.toggle('ok',status.indexOf('Uygun')>=0);b.classList.toggle('warn',status.indexOf('Uygun')<0);}}}}function updateTargetCards(dm,cp,me,ndf,endf,starch,starchKg,rapidStarch,coverage,ca,p,rough,conc,changed){{const ts=targetsLive;const dmS=targetStatus(dm,ts.dm,.10),cpS=targetStatus(cp,ts.cp,.05,.10),meS=targetStatus(me,ts.me,.08,.10),caS=targetStatus(ca,ts.ca,.10),pS=targetStatus(p,ts.p,.10),ndfS=(ndf>=ts.ndfMin&&ndf<=ts.ndfMax)?'✅ Uygun':(ndf<ts.ndfMin?'⚠️ Düşük':'⚠️ Yüksek'),rcS=(rough>=ts.roughMin&&rough<=ts.roughMax)?'✅ Uygun':(rough<ts.roughMin?'⚠️ Kaba yem düşük':'⚠️ Kaba yem yüksek'),starchS=(starch>=ts.starchMin&&starch<=ts.starchIdeal)?'✅ Uygun':(starch<ts.starchMin?'ℹ️ İdeal altı':(starch<=ts.starchIdeal+.5?'⚠️ Sınırda':(starch<=ts.starchMax?'⚠️ Sınıra yakın':'🔴 Yüksek')));updateTargetCard('dm',dm.toFixed(2)+' kg',dmS,liveDiff(dm,ts.dm,' kg',2));updateTargetCard('cp','%'+cp.toFixed(1),cpS,liveDiff(cp,ts.cp,' puan',1));updateTargetCard('me',me.toFixed(1),meS,liveDiff(me,ts.me,' Mcal',1));updateTargetCard('ndf','%'+ndf.toFixed(1),ndfS,ndfS.indexOf('Uygun')>=0?'Aralık içi':(ndf<ts.ndfMin?'Alt sınırın altında':'Üst sınırın üzerinde'));updateTargetCard('ca',ca.toFixed(0)+' g',caS,liveDiff(ca,ts.ca,' g',0));updateTargetCard('p',p.toFixed(0)+' g',pS,liveDiff(p,ts.p,' g',0));const mineral=document.getElementById('target-mini-mineral');if(mineral){{const mok=caS.indexOf('Uygun')>=0&&pS.indexOf('Uygun')>=0;mineral.classList.toggle('ok',mok);mineral.classList.toggle('warn',!mok);}}updateTargetCard('rc','%'+rough.toFixed(0)+' / %'+conc.toFixed(0),rcS,rcS.indexOf('Uygun')>=0?'Aralık içi':(rough<ts.roughMin?'Kaba yem düşük':'Kaba yem yüksek'));let riskScore=0;if(starch>ts.starchMax)riskScore+=2;else if(starch>ts.starchIdeal+.5)riskScore+=1;if(endf<ts.endfMin*.80)riskScore+=2;else if(endf<ts.endfMin)riskScore+=1;if(coverage>=.70&&rapidStarch>ts.starchIdeal*.75)riskScore+=1;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setText('target-mini-starch-current','%'+starch.toFixed(1));setText('target-mini-starch-status',starchS);setText('target-mini-starch-diff',starchKg.toFixed(2)+' kg/baş');setText('target-mini-ph-current',risk);setText('target-mini-ph-status',riskS);setText('target-mini-ph-diff','Veri güveni '+confidence);const sr=document.getElementById('target-mini-starch-rumen');if(sr){{const ok=starchS.indexOf('Uygun')>=0&&risk==='Düşük';sr.classList.toggle('ok',ok);sr.classList.toggle('warn',!ok);}}const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak canlı analiz ediliyor. Hedef kartları çalışma masasıyla birlikte değişiyor.':'🌾 Çalışma masası ile canlı bağlı: miktar değiştikçe bu kartlar anında güncellenir.';}}const trMoney=n=>'₺'+n.toLocaleString('tr-TR',{{minimumFractionDigits:2,maximumFractionDigits:2}});const delta=(id,n,b,suffix='')=>{{const e=document.getElementById(id),d=n-b;e.textContent=Math.abs(d)<0.005?'':((d>0?'+':'')+d.toFixed(2)+suffix);e.style.color=d>0?'#17733d':d<0?'#b33a2b':''}};function calc(){{let asfed=0,dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const i=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((i.value||'0').replace(',','.'))||0),orig=parseFloat(i.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),dmkg=kg*dmp/100;asfed+=kg;dm+=dmkg;cpkg+=dmkg*parseFloat(r.dataset.cp||0)/100;ndfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100;endfkg+=dmkg*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=dmkg*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=dmkg*parseFloat(r.dataset.me||0);ca+=dmkg*parseFloat(r.dataset.ca||0)*10;p+=dmkg*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=dmkg;else if(r.dataset.group==='Kesif')concdm+=dmkg;const ch=Math.abs(kg-orig)>.0005;i.classList.toggle('ration-dirty',ch);r.querySelector('.qty-delta').textContent=ch?((kg-orig>0?'+':'')+(kg-orig).toFixed(2)+' kg'):'';if(ch)changed++;r.querySelector('.row-daily').textContent=trMoney(kg*parseFloat(r.dataset.price||0));}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapidStarch=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,rcdm=roughdm+concdm,rough=rcdm?roughdm/rcdm*100:0,conc=rcdm?concdm/rcdm*100:0;const dc=cost-base.cost;updateTargetCards(dm,cp,me,ndf,endf,starch,starchkg,rapidStarch,coverage,ca,p,rough,conc,changed);setText('target-mini-cost-current',trMoney(cost));setText('target-mini-cost-diff',Math.abs(cost-base.cost)<.005?'Değişiklik yok':((cost-base.cost>0?'+':'')+trMoney(cost-base.cost)));setText('target-mini-cost-status',cost<=base.cost?'💰 Maliyet düştü':'💰 Maliyet arttı');save.disabled=changed===0;reset.style.display=changed?'inline-flex':'none';status.className=changed?'ration-dirty-text':'mut';status.textContent=changed?('● '+changed+' yem kaleminde kaydedilmemiş değişiklik var'):'Kaydedilmiş rasyon gösteriliyor.';}}rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.addEventListener('input',calc);r.querySelectorAll('.qty-step').forEach(b=>b.onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value=Math.max(0,(parseFloat(i.value)||0)+parseFloat(b.dataset.delta)).toFixed(2);calc();requestAnimationFrame(()=>window.scrollTo(0,y));}});r.querySelector('.qty-zero').onclick=(e)=>{{e.preventDefault();const y=window.scrollY;i.value='0.00';calc();requestAnimationFrame(()=>window.scrollTo(0,y));}};}});reset.onclick=()=>{{rows.forEach(r=>{{const i=r.querySelector('.ration-qty');i.value=parseFloat(i.dataset.original||0).toFixed(2);}});calc();}};form.addEventListener('submit',()=>sessionStorage.setItem(scrollKey,String(window.scrollY)));const saved=sessionStorage.getItem(scrollKey);if(saved!==null){{sessionStorage.removeItem(scrollKey);requestAnimationFrame(()=>window.scrollTo(0,parseFloat(saved)||0));}}calc();}})();</script>
                         <script id="dev413-science-live">(()=>{{const form=document.getElementById('ration-bulk-form');if(!form||!document.querySelector('.science-target-grid'))return;const rows=[...form.querySelectorAll('.ration-row')];const t={{weight:{targets['weight_kg']:.8f},sbw:{targets['sbw_kg']:.8f},ebw:{targets['ebw_kg']:.8f},age:{targets.get('age_months',0):.8f},adg:{targets['adg']:.8f},nemReq:{targets['nem_req_mcal']:.8f},negReq:{targets['neg_req_mcal']:.8f},gainCoefficient:{targets.get('gain_energy_coefficient',0.0635):.8f},cp:{targets['cp_pct']:.8f},ndfMin:{targets['ndf_min']:.8f},ndfMax:{targets['ndf_max']:.8f},endfMin:{targets.get('endf_min',0):.8f},starchMin:{targets.get('starch_min',0):.8f},starchIdeal:{targets.get('starch_ideal_max',100):.8f},starchMax:{targets.get('starch_max',100):.8f},ca:{targets['ca_g']:.8f},p:{targets['p_g']:.8f},roughMin:{targets['roughage_min']:.8f},roughMax:{targets['roughage_max']:.8f}}};const fmt=(n,d=1)=>Number(n||0).toLocaleString('tr-TR',{{minimumFractionDigits:d,maximumFractionDigits:d}});const set=(id,v)=>{{const e=document.getElementById(id);if(e)e.textContent=v;}};const level=s=>s.includes('🔴')?'bad':s.includes('⚠️')?'warn':s.includes('✅')?'ok':'info';function setRow(key,target,current,status,diff=''){{set('target-mini-'+key+'-target',target);set('target-mini-'+key+'-current',current);set('target-mini-'+key+'-status',status);set('target-mini-'+key+'-diff',diff);const el=document.getElementById('target-mini-'+key);if(el){{el.classList.remove('ok','warn','bad','info');el.classList.add(level(status));}}}}function symmetric(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d>.10)return '⚠️ Yüksek %'+fmt(d*100,0);if(Math.abs(d)>.05)return '⚠️ Sınıra yakın';return '✅ Uygun';}}function minimum(a,b){{const d=(a-b)/Math.max(b,.01);if(d<-.10)return '🔴 Eksik %'+fmt(Math.abs(d)*100,0);if(d<-.005)return '⚠️ Hedef altı %'+fmt(Math.abs(d)*100,1);return '✅ Yeterli';}}function range(a,lo,hi){{return a<lo?'🔴 Düşük':(a>hi?'⚠️ Yüksek':'✅ Aralıkta');}}function calcScience(){{let dm=0,cpkg=0,ndfkg=0,endfkg=0,starchkg=0,rapidkg=0,knownstarch=0,me=0,nem=0,neg=0,ca=0,p=0,cost=0,roughdm=0,concdm=0,changed=0;rows.forEach(r=>{{const input=r.querySelector('.ration-qty'),kg=Math.max(0,parseFloat((input?.value||'0').replace(',','.'))||0),orig=parseFloat(input?.dataset.original||0),dmp=parseFloat(r.dataset.dm||0),d=kg*dmp/100;dm+=d;cpkg+=d*parseFloat(r.dataset.cp||0)/100;ndfkg+=d*parseFloat(r.dataset.ndf||0)/100;endfkg+=d*parseFloat(r.dataset.ndf||0)/100*parseFloat(r.dataset.endf||0)/100;const skg=d*parseFloat(r.dataset.starch||0)/100,sd=parseFloat(r.dataset.starchDeg||0);starchkg+=skg;if(sd>0){{knownstarch+=skg;rapidkg+=skg*sd/100;}}me+=d*parseFloat(r.dataset.me||0);nem+=d*parseFloat(r.dataset.nem||0);neg+=d*parseFloat(r.dataset.neg||0);ca+=d*parseFloat(r.dataset.ca||0)*10;p+=d*parseFloat(r.dataset.p||0)*10;cost+=kg*parseFloat(r.dataset.price||0);if(r.dataset.group==='Kaba')roughdm+=d;else if(r.dataset.group==='Kesif')concdm+=d;if(Math.abs(kg-orig)>.0005)changed++;}});const cp=dm?cpkg/dm*100:0,ndf=dm?ndfkg/dm*100:0,endf=dm?endfkg/dm*100:0,starch=dm?starchkg/dm*100:0,rapid=dm?rapidkg/dm*100:0,coverage=starchkg?knownstarch/starchkg:1,nemDensity=dm?nem/dm:0,negDensity=dm?neg/dm:0,rc=roughdm+concdm,rough=rc?roughdm/rc*100:0,conc=rc?concdm/rc*100:0;let ne=Math.max(.70,Math.min(nemDensity||1.60,2.50)),nema=Math.max(ne,.95),yearling=t.age>0?t.age>=12:t.weight>=300,pred=Math.pow(t.sbw,.75)*(.2435*nema-.0466*nema*nema-(yearling?.0869:.1128))/nema;pred=Math.max(t.weight*.018,Math.min(t.weight*.035,pred));let capacity=0;if(nemDensity>0&&negDensity>0){{const gain=Math.max(0,dm-t.nemReq/nemDensity)*negDensity;if(gain>0){{const ebg=Math.pow(gain/Math.max(t.gainCoefficient*Math.pow(t.ebw,.75),1e-9),1/1.097);capacity=Math.max(0,ebg/.956);if(cp<t.cp*.95)capacity*=Math.max(.70,cp/Math.max(t.cp*.95,.1));}}}}setRow('dm','≈ '+fmt(pred,2)+' kg',fmt(dm,2)+' kg',symmetric(dm,pred),(dm-pred>=0?'+':'')+fmt(dm-pred,2)+' kg');setRow('adg','≥ '+fmt(t.adg,2)+' kg',capacity?fmt(capacity,2)+' kg':'—',capacity?minimum(capacity,t.adg):'ℹ️ NEm/NEg verisi yok',(capacity-t.adg>=0?'+':'')+fmt(capacity-t.adg,2)+' kg');setRow('cp','≥ %'+fmt(t.cp,1),'%'+fmt(cp,1),minimum(cp,t.cp),'HP tabanı');setRow('ndf','%'+fmt(t.ndfMin,0)+'–'+fmt(t.ndfMax,0),'%'+fmt(ndf,1),range(ndf,t.ndfMin,t.ndfMax));setRow('endf','≥ %'+fmt(t.endfMin,1),'%'+fmt(endf,1),minimum(endf,t.endfMin));setRow('rc','Kaba %'+fmt(t.roughMin,0)+'–'+fmt(t.roughMax,0),'%'+fmt(rough,0)+' / %'+fmt(conc,0),range(rough,t.roughMin,t.roughMax));const starchS=starch>=t.starchMin&&starch<=t.starchIdeal?'✅ İdeal bant':(starch<t.starchMin?'ℹ️ İdeal altı':(starch<=t.starchIdeal+.5?'⚠️ Sınırda':(starch<=t.starchMax?'⚠️ Dikkat bandı':'🔴 Yüksek')));setRow('starch','İdeal %'+fmt(t.starchMin,0)+'–'+fmt(t.starchIdeal,0),'%'+fmt(starch,1),starchS,fmt(starchkg,2)+' kg/baş');let riskScore=0;if(starch>t.starchMax)riskScore+=2;else if(starch>t.starchIdeal+.5)riskScore++;if(endf<t.endfMin*.80)riskScore+=2;else if(endf<t.endfMin)riskScore++;if(coverage>=.70&&rapid>t.starchIdeal*.75)riskScore++;const risk=riskScore>=3?'Yüksek':(riskScore>=1?'Orta':'Düşük'),confidence=coverage>=.85?'Yüksek':(coverage>=.50?'Orta':'Düşük'),riskS=risk==='Düşük'?'✅ Düşük':(risk==='Orta'?'⚠️ Orta':'🔴 Yüksek');setRow('ph','Düşük',risk,riskS,'Veri güveni '+confidence);const caSoft=Math.max(t.ca*1.5,pred*10*.85),pSoft=Math.max(t.p*1.5,pred*10*.50),caHard=Math.max(t.ca*2.25,pred*10*1.20),pHard=Math.max(t.p*2.25,pred*10*.70);function mineral(a,min,soft,hard){{if(a<min*.90)return '🔴 Eksik %'+fmt((1-a/min)*100,0);if(a<min)return '⚠️ Minimuma yakın';if(a>hard)return '🔴 Güvenlik üstü';if(a>soft)return '⚠️ Yüksek';return '✅ Yeterli';}}setRow('ca','≥ '+fmt(t.ca,0)+' g',fmt(ca,0)+' g',mineral(ca,t.ca,caSoft,caHard));setRow('p','≥ '+fmt(t.p,0)+' g',fmt(p,0)+' g',mineral(p,t.p,pSoft,pHard));const ratio=p>0?ca/p:0,ratioS=ratio>=1.2&&ratio<=3?'✅ Dengeli':(ratio<1?'🔴 Düşük':'⚠️ Kontrol');setRow('cap','1,2–3,0',fmt(ratio,2),ratioS);setRow('cost','—','₺'+fmt(cost,2),changed?'💰 Taslak':'💰 Güncel',changed?changed+' kalem değişti':'Kaydedilmiş');set('target-mini-me-current',fmt(me,1));const note=document.getElementById('target-live-note');if(note)note.textContent=changed?'🟡 Kaydedilmemiş taslak; tüm göstergeler canlı yeniden hesaplandı.':'NASEM hayvan profili · Dinamik KM · NEm/NEg performansı';}}rows.forEach(r=>r.querySelector('.ration-qty')?.addEventListener('input',calcScience));form.addEventListener('click',e=>{{if(e.target.closest('.qty-step,.qty-zero,#ration-reset'))requestAnimationFrame(calcScience);}});calcScience();}})();</script>
@@ -13070,7 +13070,7 @@ HOTFIX119D_MOBILE_RATION_UI = r"""
   body:has(.workbench-shell) .wb2-mobile-profile{order:1!important;margin:0!important;padding:8px 10px!important;border-radius:11px!important;background:#f7faf8!important}
   body:has(.workbench-shell) .wb2-decision-rail{order:2!important;margin:0!important;border-radius:11px!important;box-shadow:none!important}
   body:has(.workbench-shell) .wb2-kpi-dashboard{order:3!important;margin:0!important}
-  body:has(.workbench-shell) .target-workspace{order:4!important;margin:0!important}
+  body:has(.workbench-shell) .target-workspace{order:2!important;margin:0!important}
   body:has(.workbench-shell) #ration-workbench{order:5!important}
   body:has(.workbench-shell) #ration-workbench~*:not(script){order:6!important}
   body:has(.workbench-shell) .wb2-decision-rail:not(.wb2-mobile-expanded) .wb2-body{display:none!important}
@@ -16285,7 +16285,170 @@ install_dashboard_performance(globals())
 APP_VERSION='3.9.23 DEV4 Hotfix1.22cr'
 APP_LABEL='v'+APP_VERSION
 MOBILE_API_BUILD='MobileFullV13-EnterpriseParity-SharedLogic'
-APP_EDITION_BUILD='AppEdition2.0.20-RationInfoPanelBuildSync'
+
+
+# AppEdition 2.0.20j — single mobile scientific target toggle; initial HTML collapsed; bottom action clearance.
+# UI-only: solver, ration calculations and persistence handlers are unchanged.
+APP_EDITION_2020D_INLINE_EDITORS = r"""
+<style id="app-edition-2020c-inline-editors">
+.ration-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ration-title-copy{min-width:0}.ration-title-actions{display:flex;align-items:center;gap:7px;margin-left:auto}.ration-title-actions form{margin:0}.ration-title-actions .btn{min-height:32px!important;padding:6px 12px!important;border-radius:7px!important;font-size:11px!important;white-space:nowrap}
+.ration-inline-editor{margin-top:10px;padding:10px 11px;background:linear-gradient(180deg,#f7fcf8,#f1f8f3);border:1px solid #cfe2d5;border-radius:10px}.ration-inline-editor[hidden]{display:none!important}.ration-inline-editor-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;color:#17452e;font-size:12px;font-weight:900}.ration-inline-close{border:0;background:transparent;color:#315b43;font-size:18px;font-weight:900;cursor:pointer;padding:0 4px}
+.ration-inline-form{display:grid!important;grid-template-columns:minmax(180px,1.2fr) minmax(130px,.7fr) minmax(220px,1.5fr) auto!important;align-items:end!important;gap:8px!important;margin:0!important}.ration-inline-form label{min-width:0!important;margin:0!important;font-size:10px!important;font-weight:800!important}.ration-inline-form input,.ration-inline-form select{width:100%!important;min-height:33px!important;height:33px!important;margin-top:3px!important;padding:5px 8px!important;font-size:11px!important}.ration-inline-save{display:flex;align-items:center;gap:6px;justify-content:flex-end}.ration-inline-save .btn{min-height:33px!important;height:33px!important;padding:5px 10px!important;font-size:10px!important;white-space:nowrap}
+/* Old drawer rules are intentionally neutralized. */
+.ration-info-details{display:none!important}
+/* Profile editor belongs immediately below the profile row, never below KPI cards. */
+body.wb2-desktop .wb2-desktop-profile + .target-controlbar{margin:0!important;display:none!important;grid-template-columns:1fr!important;padding:10px!important;background:linear-gradient(180deg,#f7fcf8,#f1f8f3)!important;border:1px solid #cfe2d5!important;border-radius:10px!important}
+body.wb2-desktop .wb2-desktop-profile + .target-controlbar.wb2-desktop-open{display:grid!important}
+body.wb2-desktop .wb2-desktop-profile + .target-controlbar .target-head{display:none!important}
+body.wb2-desktop .wb2-desktop-profile + .target-controlbar .target-form{width:100%!important;display:grid!important;grid-template-columns:repeat(3,minmax(125px,1fr)) auto!important;gap:8px!important;justify-content:stretch!important}
+@media(max-width:900px){
+ .ration-title-row{align-items:flex-start}.ration-title-copy{width:100%}.ration-title-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0 0}.ration-title-actions .btn{width:100%!important;min-height:38px!important;font-size:12px!important}
+ .ration-inline-editor{padding:10px;margin-top:9px}.ration-inline-form{grid-template-columns:1fr!important}.ration-inline-form label,.ration-inline-form .ration-note{grid-column:1!important}.ration-inline-save{display:grid;grid-template-columns:1fr 1fr;width:100%}.ration-inline-save .btn{width:100%!important;min-height:38px!important;height:38px!important}
+ .wb2-mobile-profile{position:relative;display:flex!important;align-items:center!important;gap:6px!important;flex-wrap:wrap!important}.cp-mobile-profile-edit{margin-left:auto!important;min-height:30px!important;padding:5px 8px!important;font-size:9px!important;white-space:nowrap!important}.target-controlbar.cp-profile-inline-mobile{display:block!important;position:static!important;margin:7px 0 9px!important;padding:10px!important;background:linear-gradient(180deg,#f7fcf8,#f1f8f3)!important;border:1px solid #cfe2d5!important;border-radius:10px!important}.target-controlbar.cp-profile-inline-mobile:not(.wb2-desktop-open){display:none!important}.target-controlbar.cp-profile-inline-mobile .target-head{display:none!important}.target-controlbar.cp-profile-inline-mobile .target-form{display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important}.target-controlbar.cp-profile-inline-mobile .target-form label{min-width:0!important}.target-controlbar.cp-profile-inline-mobile .compact-target-btn{grid-column:1/-1!important;width:100%!important}
+ .cp-science-mobile-toggle{display:flex!important;align-items:center!important;justify-content:space-between!important;width:100%!important;min-height:48px!important;margin:8px 0!important;padding:10px 12px!important;border:1px solid #cfe2d5!important;border-radius:12px!important;background:#f7fbf8!important;color:#173f2b!important;font-size:15px!important;font-weight:900!important;text-align:left!important}.cp-science-mobile-toggle .cp-science-chevron{font-size:18px!important;transition:transform .18s ease}.cp-science-mobile-toggle[aria-expanded="true"] .cp-science-chevron{transform:rotate(180deg)}
+ .target-workspace.cp-science-collapsed{display:none!important}
+ .workbench-shell{padding-bottom:190px!important}
+}
+</style>
+<script id="app-edition-2020e-inline-editors-script">
+(function(){
+ function init(){
+  var toggle=document.querySelector('.ration-inline-toggle'),editor=document.querySelector('.ration-inline-editor');
+  // 2.0.20d: ERP masaustu donusumu, title disindaki elemanlari secondary alana tasiyor.
+  // Rasyon editorunu tekrar baslik kartinin hemen altina sabitle; CSS ile sahte tasima yapma.
+  var rationTitleRow=document.querySelector('.ration-title-row');
+  // Mobilde de editor baslik kartinin ICINDE, baslik satirinin hemen altinda kalmali.
+  // Parent kartin disina tasimak flex/order kurallari nedeniyle editoru sayfanin sonuna atiyordu.
+  if(editor&&rationTitleRow&&rationTitleRow.parentNode){
+    rationTitleRow.insertAdjacentElement('afterend',editor);
+  }
+  if(toggle&&editor&&!toggle.dataset.cpBound){
+   toggle.dataset.cpBound='1';
+   function setOpen(open){editor.hidden=!open;toggle.setAttribute('aria-expanded',open?'true':'false');toggle.textContent=open?'✕ Kapat':'✏️ Düzenle';}
+   toggle.addEventListener('click',function(){setOpen(editor.hidden)});
+   editor.querySelector('.ration-inline-close')?.addEventListener('click',function(){setOpen(false)});
+   editor.querySelector('.ration-inline-cancel')?.addEventListener('click',function(){setOpen(false)});
+  }
+  var workspace=document.querySelector('.target-workspace'),control=workspace?.querySelector('.target-controlbar');
+  var desktopProfile=document.querySelector('.wb2-desktop-profile');
+  if(control&&desktopProfile&&window.matchMedia('(min-width:901px)').matches){desktopProfile.insertAdjacentElement('afterend',control);}
+  if(control&&window.matchMedia('(max-width:900px)').matches){
+    // Masaustu kurali daha once acmis olsa bile mobil ilk yuklemede profil editoru kapali baslar.
+    control.classList.remove('wb2-desktop-open');
+    var mobileProfile=document.querySelector('.wb2-mobile-profile');
+    if(mobileProfile){
+      control.classList.add('cp-profile-inline-mobile');mobileProfile.insertAdjacentElement('afterend',control);
+      var mobileEdit=mobileProfile.querySelector('.cp-mobile-profile-edit');
+      if(!mobileEdit){mobileEdit=document.createElement('button');mobileEdit.type='button';mobileEdit.className='btn alt cp-mobile-profile-edit';mobileEdit.textContent='✏️ Profili Düzenle';mobileProfile.appendChild(mobileEdit);}
+      if(!mobileEdit.dataset.cpBound){mobileEdit.dataset.cpBound='1';mobileEdit.addEventListener('click',function(){var open=!control.classList.contains('wb2-desktop-open');control.classList.toggle('wb2-desktop-open',open);mobileEdit.textContent=open?'✕ Profili Kapat':'✏️ Profili Düzenle';});}
+    }
+  }
+ }
+ function lateMobileFix(){
+  if(!window.matchMedia('(max-width:900px)').matches)return;
+  var row=document.querySelector('.ration-title-row'),ed=document.querySelector('.ration-inline-editor');
+  if(row&&ed&&ed.previousElementSibling!==row)row.insertAdjacentElement('afterend',ed);
+  var ctl=document.querySelector('.target-workspace .target-controlbar'),prof=document.querySelector('.wb2-mobile-profile');
+  if(ctl&&prof){
+    ctl.classList.add('cp-profile-inline-mobile');
+    if(ctl.previousElementSibling!==prof)prof.insertAdjacentElement('afterend',ctl);
+    // Acik/kapali durumunu sadece kullanici butonu belirlesin; ilk acilista kapali.
+    if(!ctl.dataset.cpUserToggled)ctl.classList.remove('wb2-desktop-open');
+    var btn=prof.querySelector('.cp-mobile-profile-edit');
+    if(btn&&!btn.dataset.cpStateBound){
+      btn.dataset.cpStateBound='1';
+      btn.addEventListener('click',function(){ctl.dataset.cpUserToggled='1';},{capture:true});
+    }
+  }
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){requestAnimationFrame(init)})},{once:true});else requestAnimationFrame(function(){requestAnimationFrame(init)});
+})();
+</script>
+"""
+_old_page_appedition2020c = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_appedition2020c(title, body, path, user, flash)
+    return html.replace('</body>', APP_EDITION_2020D_INLINE_EDITORS + '</body>')
+
+
+
+# AppEdition 2.0.20n — place the single scientific target panel directly below ration/profile info on mobile.
+# The existing target form is moved back under the single scientific target toggle;
+# no duplicate form is created and no solver/calculation code is changed.
+APP_EDITION_2020K_SCIENCE_PANEL = r"""
+<style id="app-edition-2020k-science-panel">
+@media(max-width:900px){
+  body:has(.workbench-shell) .cp-science-mobile-toggle{order:2!important;display:flex!important;margin:0!important}
+  body:has(.workbench-shell) .target-workspace{order:4!important;margin:0!important}
+  body:has(.workbench-shell) .target-workspace.cp-science-collapsed{display:none!important}
+  body:has(.workbench-shell) .target-workspace:not(.cp-science-collapsed){display:block!important}
+  body:has(.workbench-shell) .target-workspace:not(.cp-science-collapsed)>.target-controlbar{display:block!important;position:static!important;width:100%!important;margin:0 0 8px!important;padding:10px!important;background:linear-gradient(180deg,#f7fcf8,#f1f8f3)!important;border:1px solid #cfe2d5!important;border-radius:10px!important}
+  body:has(.workbench-shell) .target-workspace>.target-controlbar .target-head{display:none!important}
+  body:has(.workbench-shell) .target-workspace>.target-controlbar .target-form{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;width:100%!important;margin-top:9px!important}
+  body:has(.workbench-shell) .target-workspace>.target-controlbar .compact-target-btn{grid-column:1/-1!important;width:100%!important}
+  body:has(.workbench-shell) .cp-mobile-profile-edit{display:none!important}
+  body:has(.workbench-shell){padding-bottom:260px!important}
+  body:has(.workbench-shell) .target-workspace{scroll-margin-bottom:190px!important}
+}
+@media(max-width:560px){body:has(.workbench-shell) .target-workspace>.target-controlbar .target-form{grid-template-columns:1fr 1fr!important}}
+</style>
+<script id="app-edition-2020k-science-panel-script">
+(function(){
+ function placeScience(){
+  if(!window.matchMedia('(max-width:900px)').matches)return;
+  var science=document.querySelector('.target-workspace');
+  if(!science)return;
+  var control=document.querySelector('.target-controlbar.cp-profile-inline-mobile') || document.querySelector('.target-controlbar');
+  if(control && control.parentNode!==science){science.insertBefore(control,science.firstChild);}
+  if(control){control.classList.remove('cp-profile-inline-mobile','wb2-desktop-open');}
+  var oldProfileButton=document.querySelector('.cp-mobile-profile-edit');
+  if(oldProfileButton)oldProfileButton.remove();
+  var toggle=document.querySelector('.cp-science-mobile-toggle');
+  if(!toggle){
+    toggle=document.createElement('button');toggle.type='button';toggle.className='cp-science-mobile-toggle';
+    toggle.innerHTML='<span>🎯 Bilimsel Hedef Özeti</span><span class="cp-science-chevron">⌄</span>';
+  }
+  // Mobile hierarchy mirrors desktop: ration/profile info -> scientific target -> solution status -> KPI cards.
+  // Place the existing nodes once; do not clone the panel and do not defer with timers.
+  var profile=document.querySelector('.wb2-mobile-profile');
+  var rail=document.querySelector('.wb2-decision-rail');
+  var parent=(rail&&rail.parentNode) || (profile&&profile.parentNode) || science.parentNode;
+  if(parent){
+    var anchor=rail || (profile ? profile.nextSibling : science);
+    parent.insertBefore(toggle,anchor);
+    parent.insertBefore(science,anchor);
+  }
+  if(!science.dataset.cp20kReady){
+    science.dataset.cp20kReady='1';science.classList.add('cp-science-collapsed');toggle.setAttribute('aria-expanded','false');
+  }
+  if(!toggle.dataset.cp20kBound){
+    toggle.dataset.cp20kBound='1';
+    toggle.addEventListener('click',function(ev){
+      ev.preventDefault();ev.stopImmediatePropagation();
+      var willOpen=science.classList.contains('cp-science-collapsed');
+      science.classList.toggle('cp-science-collapsed',!willOpen);
+      toggle.setAttribute('aria-expanded',willOpen?'true':'false');
+    },true);
+  }
+ }
+ function reveal(){document.documentElement.classList.add('cp-ration-mobile-ready');}
+ function boot(){requestAnimationFrame(function(){requestAnimationFrame(function(){placeScience();reveal();});});}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+</script>
+"""
+_old_page_appedition2020j = page
+def page(title, body, path='/', user='admin', flash=''):
+    html = _old_page_appedition2020j(title, body, path, user, flash)
+    # Mobile ration page: hide only the mutable workbench area before first paint.
+    # Legacy mobile enhancers finish once, then the stable first-paint guard reveals the final layout.
+    if path == '/ration-workbench':
+        critical = "<style id='cp-ration-first-paint-guard'>@media(max-width:900px){html:not(.cp-ration-mobile-ready) body:has(.workbench-shell) .erp-ration-center{visibility:hidden!important}html.cp-ration-mobile-ready body:has(.workbench-shell) .erp-ration-center{visibility:visible!important}}</style>"
+        html = html.replace('</head>', critical + '</head>', 1)
+    return html.replace('</body>', APP_EDITION_2020K_SCIENCE_PANEL + '</body>')
+
+APP_EDITION_BUILD='AppEdition2.0.20n-MobileScienceAboveTargets'
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()
