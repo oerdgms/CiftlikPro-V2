@@ -11,7 +11,7 @@ CSS = (ROOT / 'app' / 'mobile_assets' / 'mobile.css').read_text(encoding='utf-8'
 
 class AppEdition210LayoutTests(unittest.TestCase):
     def test_build_and_cache_identity_are_current(self):
-        self.assertEqual(mobile_ui.BUILD, 'AppEdition2.0.20-RationInfoPanelBuildSync')
+        self.assertEqual(mobile_ui.BUILD, 'AppEdition2.0.20n-MobileScienceAboveTargets')
         self.assertEqual(server.APP_EDITION_BUILD, mobile_ui.BUILD)
         self.assertIn('/app-assets/mobile.css?v=2.0.20', mobile_ui.HEAD)
         self.assertIn('/app-assets/mobile.js?v=2.0.20', mobile_ui.enhance('<html><head></head><body></body></html>'))
