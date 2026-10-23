@@ -1,3 +1,12 @@
+# App Edition 2.0.33a — GitHub Arayüz Testi Düzeltmesi
+
+23/10/2026
+
+- `test_interface_parity` içindeki, ana sayfada `/dairy-status` bağlantısı bekleyen eski koşul güncel tasarıma uyarlandı.
+- Manuel 12 sağmal hayvan ve erkek sayısı kontrolleri korundu. Mobil / masaüstü Sağmal kartları aynı sürü filtresini açar; özetlerde kaldırılmış Laktasyon Belirle kısayolu bulunmaz.
+- Mevcut HTTP testi, ana sayfadaki Ana Sayfayı Düzenle düğmesini ve `/home-layout` erişimini de denetler.
+- Uygulama kaynakları, veritabanı, laktasyon hesapları, kurulum ve GitHub Actions akışı değiştirilmedi. Derleme sürümü 2.0.33 olarak kalır.
+
 # App Edition 2.0.33 — Canlı Metin Arama ve Ana Sayfa Düğmesi
 
 23/10/2026

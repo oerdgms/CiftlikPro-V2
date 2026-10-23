@@ -1,5 +1,7 @@
 # ÇiftlikPro Enterprise — App Edition 2.0.33
 
+**2.0.33a — GitHub test düzeltmesi:** Eski arayüz testi artık ana sayfadan kaldırılan Laktasyon Belirle bağlantısını beklemez. Mobil ve masaüstü Sağmal kartlarının aynı filtreye açılması, manuel sürü sayıları ve Ana Sayfayı Düzenle erişimi denetlenir. Uygulama, kurulum sürümü ve önceki arama düzeltmeleri 2.0.33 olarak korunur. Ayrıntılar: [2.0.33a notları](DUZELTME_NOTLARI_2_0_33a.md).
+
 Mobil ve masaüstünde canlı metin araması yeniden etkinleştirildi. Masaüstü ana sayfasındaki ortada duran yuvarlak ayar simgesi, ince çerçeveli “Ana Sayfayı Düzenle” düğmesi oldu.
 
 - Hayvan listesi araması küpe, isim, ırk, padok ve notlarda çalışır; bütün kayıtlar arandıktan sonra sayfalama yapılır.

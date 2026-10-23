@@ -39,7 +39,12 @@ class InterfaceParityTests(unittest.TestCase):
         self.assertIn('<span>Sağmal</span><b>12</b>',desktop)
         self.assertIn('<small>Sağmal</small><b>12</b>',mobile)
         self.assertIn('<span>Erkek</span><b>1</b>',desktop)
-        self.assertIn('/dairy-status',desktop)
+        # The summary opens the same filtered herd on both interfaces. Manual
+        # status editing lives in the animal workflows, outside the home summary.
+        for summary in (desktop,mobile):
+            self.assertIn('href="/all-animals?group=lactating"',summary)
+            self.assertNotIn('/dairy-status',summary)
+            self.assertNotIn('Laktasyon Belirle',summary)
 
     def test_desktop_filter_is_global_before_pagination(self):
         view=ref.herd_selection(vars(server),'/all-animals?group=lactating&per_page=10&page=2')
@@ -155,6 +160,10 @@ class InterfaceParityTests(unittest.TestCase):
             with urllib.request.urlopen(req,timeout=20) as response:return response.read().decode(),response.url
         try:
             with patch.object(server,'license_status',return_value=(True,{},'')):
+                text,_=request('/')
+                self.assertIn('class="cp-desktop-home-settings"',text)
+                self.assertIn('href="/home-layout"',text)
+                self.assertIn('Ana Sayfayı Düzenle',text)
                 for path in ('/modules','/?app_view=modules'):
                     text,_=request(path);self.assertEqual(text.count('class="cp-module-tile"'),13)
                 text,_=request('/milk-center');self.assertIn('data-milk-lactating>12<',text)

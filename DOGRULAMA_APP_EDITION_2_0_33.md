@@ -2,6 +2,8 @@
 
 23/10/2026
 
+**2.0.33a ek doğrulama:** Eski ana sayfa kısayolu beklentisi güncellendikten sonra GitHub ile aynı discovery komutunda 434 testin tamamı geçti. Uygulama / kurulum / workflow kaynakları 2.0.33 ile birebir aynıdır. Ayrıntılar: DUZELTME_NOTLARI_2_0_33a.md.
+
 ## Kontroller
 
 - App Edition, sürüm / kurulum / kaynak bütünlüğü, mobil referans verileri, birleşik sağlık, rapor / içe aktarma, mobil üreme ve yeni metin arama paketlerinde 195 Python testi geçti.
