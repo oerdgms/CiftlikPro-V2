@@ -102,9 +102,9 @@
       }
     }
   });
-  const moduleView = path === '/' && params.get('app_view') === 'modules';
+  const moduleView = path === '/modules' || (path === '/' && params.get('app_view') === 'modules');
   const taskView = path === '/' && params.get('app_view') === 'tasks';
-  const activeNav = moduleView ? 'modules' : taskView || path.startsWith('/health') ? 'jobs' : path === '/' ? 'home' : /animal|calf|archive|estrus|insemination|reproduction/.test(path) ? 'animals' : path.startsWith('/paddock') ? 'paddocks' : 'modules';
+  const activeNav = moduleView ? 'modules' : taskView ? 'jobs' : path === '/' ? 'home' : /animal|calf|archive|estrus|insemination|reproduction|dairy-status/.test(path) ? 'animals' : path.startsWith('/paddock') ? 'paddocks' : 'modules';
   $$('[data-cp-nav]',nav).forEach(a => {
     const active = a.dataset.cpNav === activeNav;
     a.classList.toggle('active',active);
@@ -121,7 +121,7 @@
 
   function home() {
     const homeElement = $('.cp-home',main);
-    if (!homeElement) return;
+    if (!homeElement || homeElement.classList.contains('cp-ref-home')) return;
     [...main.children].forEach(child => {
       if (child !== homeElement && !['STYLE','SCRIPT'].includes(child.tagName) && !child.classList.contains('flash')) child.classList.add('cp-home-extra');
     });
@@ -151,6 +151,7 @@
     if (dot) dot.hidden = !tasks.some(row => ['today','overdue'].includes(row.dataset.cpState));
   }
   function moduleHub() {
+    if (config.reference_ui) return;
     const sidebar = $('#sideMenu');
     const available = $$('a[href]',sidebar).map(a => ({url:a.getAttribute('href'),text:a.textContent.trim()}));
     const modules = [
@@ -533,6 +534,7 @@
     dialog.innerHTML = '<div class="paddock-dialog-head"><div><h2>Padok taşıma</h2><span class="mut">Seçtiğin hayvanlar birlikte taşınır.</span></div><button type="button" class="paddock-dialog-close" id="cpMoveClose" aria-label="Kapat">×</button></div><div class="paddock-dialog-body"><form method="post" action="/paddock/assign-many" class="form"><input type="hidden" name="return_paddock_id" value="'+escape(from)+'"><input type="hidden" name="animal_refs" id="cpMoveRefs"><section class="cp-move-step"><h3><span>1</span> Taşınacak hayvanlar <small id="cpMoveCount">0 seçili</small></h3><input type="search" id="cpMoveSearch" placeholder="Küpe veya isim ara…"><div class="cp-move-tools"><button type="button" id="cpMoveAll">Görünenleri seç</button><button type="button" id="cpMoveClear">Temizle</button></div><div class="cp-move-choices">'+choices.map(option => '<label class="cp-move-choice" data-search="'+escape(option.textContent.toLocaleLowerCase('tr-TR'))+'"><input type="checkbox" value="'+escape(option.value)+'"><span>'+icons.animals+'</span><b>'+escape(option.textContent)+'</b></label>').join('')+'</div></section><section class="cp-move-step"><h3><span>2</span> Hedef padok</h3><label>Padok<select name="paddock_id" required id="cpMoveTarget">'+[...targetSelect.options].filter(option => option.value && option.value!==String(from)).map(option => '<option value="'+escape(option.value)+'">'+escape(option.textContent)+'</option>').join('')+'</select></label><label>Not<input name="notes" placeholder="İsteğe bağlı"></label></section><div class="paddock-dialog-actions"><button type="button" class="btn alt" id="cpMoveCancel">İptal</button><button type="submit" class="btn" id="cpMoveSubmit">Taşı (0)</button></div><p class="mut">Kapasite ve kayıtlar birlikte kontrol edilir. İşlem başarısızsa hiçbir hayvan taşınmaz.</p></form></div>';
     $('.paddock-page').append(dialog);
     const checks = $$('input[type=checkbox]',dialog);
+    checks.forEach(input => { input.checked = input.value === params.get('subject'); });
     const submit = $('#cpMoveSubmit',dialog);
     function update() {
       const refs = checks.filter(input => input.checked).map(input => input.value);
@@ -543,8 +545,8 @@
     }
     checks.forEach(input => input.addEventListener('change',update));
     $('#cpMoveSearch',dialog).addEventListener('input',event => {
-      const term = event.target.value.trim().toLocaleLowerCase('tr-TR');
-      $$('.cp-move-choice',dialog).forEach(row => { row.hidden = !row.dataset.search.includes(term); });
+      const term = CPTextSearch.normalize(event.target.value);
+      $$('.cp-move-choice',dialog).forEach(row => { row.hidden = !CPTextSearch.matches(row.dataset.search,term); });
     });
     $('#cpMoveAll',dialog).addEventListener('click',() => { checks.filter(input => !input.closest('.cp-move-choice').hidden).forEach(input => { input.checked = true; }); update(); });
     $('#cpMoveClear',dialog).addEventListener('click',() => { checks.forEach(input => { input.checked = false; }); update(); });
@@ -575,10 +577,10 @@
     empty.className = 'cp-empty';empty.textContent = 'Aramana uygun rasyon bulunamadı.';empty.hidden = true;grid.after(empty);
     let group = 'Tümü';
     function filter() {
-      const term = search.value.trim().toLocaleLowerCase('tr-TR');
+      const term = CPTextSearch.normalize(search.value);
       cards.forEach(card => {
-        const text = card.textContent.toLocaleLowerCase('tr-TR');
-        card.hidden = !text.includes(term) || group !== 'Tümü' && !text.includes(group.toLocaleLowerCase('tr-TR'));
+        const text = CPTextSearch.normalize(card.textContent);
+        card.hidden = !text.includes(term) || group !== 'Tümü' && !text.includes(CPTextSearch.normalize(group));
       });
       empty.hidden = cards.some(card => !card.hidden);
     }

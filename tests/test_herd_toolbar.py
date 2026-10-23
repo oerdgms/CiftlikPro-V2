@@ -48,7 +48,10 @@ class HerdToolbarTests(unittest.TestCase):
                 with urllib.request.urlopen(req,timeout=20) as response:html=response.read().decode()
             self.assertIn('class="card herd-filter"',html)
             self.assertIn('type="hidden" name="kind" value="female"',html)
-            self.assertNotIn('<select name="kind">',html)
+            # The shared desktop filter now exposes type selection beside manual status.
+            self.assertIn('<select name="kind">',html)
+            self.assertIn('<option value="female" selected>Dişi</option>',html)
+            self.assertIn('<option value="AM01" selected>AM01</option>',html)
             self.assertIn('class="herd-filter-details" open',html)
             self.assertIn('1 hayvan · AM01 · TRHERDAM',html)
             self.assertIn('name="sort" value="age"',html)

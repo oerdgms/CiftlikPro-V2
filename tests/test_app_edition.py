@@ -89,7 +89,7 @@ class AppEditionTests(unittest.TestCase):
     def test_existing_body_classes_and_form_fields_survive(self):
         source='<html><head></head><body class="herd-view-detail" data-user="1"><form method="post" action="/animal-edit"><input name="id" value="12"></form></body></html>'
         text=mobile_ui.enhance(source,'Hayvanlar','/all-animals')
-        self.assertIn('class="herd-view-detail cp-app cp-route-all-animals"',text)
+        self.assertIn('class="herd-view-detail cp-app cp-reference cp-route-all-animals"',text)
         self.assertIn('data-user="1"',text)
         self.assertIn('action="/animal-edit"',text)
         self.assertIn('name="id" value="12"',text)
@@ -101,8 +101,8 @@ class AppEditionTests(unittest.TestCase):
         config=json.loads(text.split('id="cpAppConfig">',1)[1].split('</script>',1)[0])
         self.assertEqual(config['request_url'],'/animal-add?entry=calf')
         self.assertIn('id="smartAnimalForm"',text)
-        self.assertIn('/app-assets/mobile.css?v=2.0.20',text)
-        self.assertIn('/app-assets/mobile.js?v=2.0.20',text)
+        self.assertIn('/app-assets/mobile.css?v=2.0.33',text)
+        self.assertIn('/app-assets/mobile.js?v=2.0.33',text)
         shell=mobile_ui.shell_markup('Hayvanlar','/all-animals','admin')
         self.assertIn('/animal-add?entry=adult',shell)
         self.assertIn('/animal-add?entry=calf',shell)
@@ -124,7 +124,7 @@ class AppEditionTests(unittest.TestCase):
         self.assertIn('tr.cp-finance-record>td.cp-actions-cell{display:none!important',stylesheet)
         self.assertIn('tr.cp-finance-record.cp-row-open>td.cp-actions-cell{display:block!important',stylesheet)
         self.assertIn('min-height:72px!important',stylesheet)
-        self.assertIn("ciftlikpro-app-edition-2.0.20",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
+        self.assertIn("ciftlikpro-app-edition-2.0.33",(ROOT/'app'/'mobile_assets'/'service-worker.js').read_text())
 
     def test_mobile_viewport_locks_page_drift_and_user_zoom(self):
         text=self.get('/reports?tab=finance')[2].decode()
@@ -176,7 +176,7 @@ class AppEditionTests(unittest.TestCase):
             self.assertEqual(response.headers['Cache-Control'],'no-store')
         self.assertEqual(gzip.decompress(payload),plain)
         self.assertLess(len(payload),len(plain)/2)
-        self.assertIn('immutable',self.get('/app-assets/mobile.css?v=2.0.20',False)[1]['Cache-Control'])
+        self.assertIn('immutable',self.get('/app-assets/mobile.css?v=2.0.33',False)[1]['Cache-Control'])
         request=urllib.request.Request(self.base+path,headers={'Cookie':'sid=app-edition-test','Accept-Encoding':'gzip;q=0'})
         with urllib.request.urlopen(request) as response:self.assertIsNone(response.headers.get('Content-Encoding'))
 
@@ -227,7 +227,7 @@ class AppEditionTests(unittest.TestCase):
         self.assertIn('APP-A1',html)
         self.assertIn('APP-A2',html)
         self.assertIn('/finance/edit?',html)
-        self.assertIn('3</b><small>Aktif hayvan',html)
+        self.assertIn('<small>Genel</small><b>3</b>',html)
 
     def test_bulk_move_updates_adult_calf_counts_names_history_together(self):
         p1,p2,a1,a2,ca=self.seed()
@@ -286,6 +286,10 @@ class AppEditionTests(unittest.TestCase):
         # This keeps the Enterprise core regression gate deterministic.
         expected=json.loads((ROOT/'tests'/'enterprise_core_source_snapshot.json').read_text())
         source=(ROOT/'app'/'server.py').read_text()
+        # Exclude only the added dashboard link; retain the original core hashes.
+        display_branch = "                elif r.get('source')=='synchronization':\n                    link=r['url']\n"
+        self.assertEqual(source.count(display_branch),1)
+        source=source.replace(display_branch,'',1)
         tree=ast.parse(source)
         current={}
         lines=source.splitlines(keepends=True)
@@ -304,8 +308,8 @@ class AppEditionTests(unittest.TestCase):
         workflow=(ROOT/'.github/workflows/windows-installer.yml').read_text()
         installer=(ROOT/'installer.iss').read_text()
         self.assertIn("server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22cr'",workflow)
-        self.assertIn('AppEdition_2_0_20_Setup.exe',workflow)
-        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_20_Setup',installer)
+        self.assertIn('AppEdition_2_0_33_Setup.exe',workflow)
+        self.assertIn('OutputBaseFilename=CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_33_Setup',installer)
 
 
 if __name__=='__main__':

@@ -30,11 +30,12 @@ class Hotfix122BMTests(unittest.TestCase):
             with urllib.request.urlopen(req,timeout=20) as r:return r.read().decode(),r.geturl()
     def test_multi_selector_is_present_and_compact(self):
         html,_=self._get('/health')
-        self.assertIn('<option value="multi">Birden Fazla Hayvan</option>',html)
-        self.assertIn('id="healthMultiSearch"',html)
-        self.assertIn('id="healthMultiAdd"',html)
-        self.assertIn('id="healthMultiSelected"',html)
-        self.assertIn('Seçilen: 0 hayvan',html)
+        self.assertIn('data-hc-picker',html)
+        self.assertIn('data-hc-animal-search',html)
+        self.assertIn('data-hc-select-visible',html)
+        self.assertIn('data-hc-paddock',html)
+        self.assertIn('name="subjects_json"',html)
+        self.assertIn('0 seçili',html)
     def test_multi_vaccine_plan_creates_one_course_and_tasks_for_each_selected_animal(self):
         keys=[f'A:{x}' for x in self.ids]
         self._post('/health',{
@@ -49,9 +50,10 @@ class Hotfix122BMTests(unittest.TestCase):
         self.assertEqual({t['animal_id'] for t in tasks},set(self.ids))
         self.assertEqual({t['dose_no'] for t in tasks},{1,2})
         html,_=self._get('/health')
-        self.assertIn('👥 Çoklu Hayvan Planı',html)
-        self.assertIn('3 hayvan · 1 / 2. doz',html)
-        self.assertIn('✅ 3 Hayvan Yapıldı',html)
+        self.assertEqual(html.count('data-hc-task '),6)
+        for tag in ('TRBM001','TRBM002','TRBM003'):self.assertIn(tag,html)
+        self.assertIn('Aşı · 1 / 2. doz',html)
+        self.assertIn('data-hc-complete=',html)
     def test_batch_done_writes_health_history_for_all_selected_animals(self):
         keys=[f'A:{x}' for x in self.ids[:2]]
         self._post('/health',{

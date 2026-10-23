@@ -5,9 +5,14 @@ import re
 import gzip
 import time
 from pathlib import Path
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, urlencode, parse_qs
+import mobile_reference as reference
+import dairy_management
+import home_layout
+import desktop_views
+import animal_actions
 
-BUILD = 'AppEdition2.0.20n-MobileScienceAboveTargets'
+BUILD = 'AppEdition2.0.33-LiveTextSearch'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -65,7 +70,27 @@ def wrap_reproduction_tab_labels(document):
     return document[:start] + fragment + document[end:]
 
 
+def compact_reproduction_identities(document):
+    """Separate the two identity lines in the presentation, keeping core actions."""
+    pattern = re.compile(
+        r'(<div class="repro-card-identity"><a\b[^>]*>)<strong>♀ (.*?)<br>(.*?)</strong>(</a>)',
+        re.S,
+    )
+    def identity(match):
+        tag, name = match.group(2), match.group(3)
+        return (match.group(1) + '<strong><span class="cp-repro-tag">' + tag + '</span>'
+                '<span class="cp-repro-name" title="' + esc(html.unescape(name)) + '">' + name + '</span></strong>'
+                + match.group(4))
+    document = pattern.sub(identity, document)
+    return re.sub(
+        r'(<a class="repro-photo"[^>]*>)<span aria-hidden="true">🐄</span>(</a>)',
+        lambda match: match.group(1)[:-1] + ' aria-label="Hayvanın üreme ayrıntılarını aç">' + icon('animals') + match.group(2), document,
+    )
+
+
 def task_url(row):
+    if row.get('source') == 'synchronization':
+        return row['url']
     if row.get('source') == 'finance':
         return '/finance/edit?' + urlencode({'id': row['finance_id']}) + '#payment-status'
     if row.get('course_id'):
@@ -74,57 +99,13 @@ def task_url(row):
 
 
 def home_markup(ns, username):
-    """The same Dashboard helpers supply counts and individual health/payment tasks."""
-    with ns['db']() as connection:
-        counts = ns['dashboard_herd_counts'](connection)
-        pregnant = len(ns['active_pregnancy_records'](connection))
-        paddocks = connection.execute('select count(*) from paddocks where active=1').fetchone()[0]
-        account = connection.execute('select full_name from users where username=?', (username,)).fetchone()
-    display = account['full_name'] if account and account['full_name'] else username
-    rows = ns['dashboard_export_tasks']('all')
-    states = {key: sum(row['state'] == key for row in rows) for key in ('today', 'upcoming', 'overdue')}
-    now = ns['datetime'].now()
-    greeting = 'Günaydın' if 5 <= now.hour < 12 else 'İyi günler' if 12 <= now.hour < 18 else 'İyi akşamlar' if 18 <= now.hour < 23 else 'İyi geceler'
-    date_label = now.strftime('%d/%m/%Y')
-    weekday = ['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'][now.weekday()]
-    metrics = [
-        ('animals', '/all-animals', counts['total'], 'Aktif hayvan', 'green'),
-        ('paddocks', '/paddocks', paddocks, 'Aktif padok', 'blue'),
-        ('reproduction', '/reproduction-center?stage=pregnant', pregnant, 'Gebe', 'pink'),
-        ('jobs', '/?app_view=tasks', states['today'], 'Bugünün işi', 'orange'),
-    ]
-    metric_html = ''.join(f'<a class="cp-stat cp-{color}" href="{url}"><span>{icon(kind)}</span><div><b>{value}</b><small>{label}</small></div></a>' for kind,url,value,label,color in metrics)
-    task_html = ''
-    for row in rows:
-        kind = 'finance' if row['source'] == 'finance' else 'health'
-        task_html += (
-            f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" href="{esc(task_url(row))}">'
-            f'<span class="cp-task-icon">{icon(kind)}</span><div><b>{esc(row["subject"])}</b>'
-            f'<span>{esc(row["task"])} · {esc(row.get("detail", ""))}</span></div>'
-            f'<small><time>{esc(ns["fmt_date"](row["date"]))}</time><em class="cp-due cp-{esc(row["state"])}">{esc(row["status"])}</em></small></a>'
-        )
-    if not rows:
-        task_html = '<div class="cp-empty">Planlanan iş veya bekleyen ödeme yok.</div>'
-    tabs = ''.join(
-        f'<button type="button" data-cp-task-filter="{key}" class="{"active" if key=="today" else ""}">{label}<span>{value}</span></button>'
-        for key,label,value in [('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue']),('all','Tümü',len(rows))]
-    )
-    return f'''<section class="cp-home cp-mobile-only">
-    <a class="cp-welcome" href="/farm-profile"><span class="cp-sun">☀</span><div><b>{greeting}, {esc(display)}</b><span>{date_label} · {weekday}</span></div><span>›</span></a>
-    <div class="cp-stats">{metric_html}</div>
-    <section class="cp-home-jobs"><div class="cp-section-head"><h2>Bugünün işleri</h2><span class="cp-total">{states['today']}</span><a href="/?app_view=tasks">Tümü ›</a></div>
-    <div class="cp-task-tabs">{tabs}</div><div class="cp-task-list">{task_html}</div><div class="cp-empty cp-filter-empty" hidden>Bu grupta bekleyen iş yok.</div></section>
-    <div class="cp-shortcuts"><a href="/rations">{icon('ration')}<span>Rasyon</span></a><a href="/health">{icon('health')}<span>Sağlık</span></a><a href="/finance">{icon('finance')}<span>Finans</span></a><a href="/feeds">{icon('feeds')}<span>Yem & Stok</span></a></div>
-    <a class="cp-business-more" href="/farm-profile#farm-settings">İşletme bilgileri ve ayarlar <span>›</span></a>
-    </section>'''
+    return reference.home(ns, username, icon, task_url)
 
 
-def shell_markup(title, path, username):
-    titles = {'/':'ÇiftlikPro Mobile','/all-animals':'Hayvanlar','/paddocks':'Padoklar','/finance':'Finans','/health':'Sağlık Merkezi','/rations':'Rasyonlar','/ration-workbench':'Rasyon Detayı','/reproduction-center':'Üreme Merkezi','/feeds':'Yem & Stok','/milk-center':'Süt Merkezi','/reports':'Raporlar','/farm-profile':'Ayarlar'}
+def shell_markup(title, path, username, profile=None):
+    titles = {'/':'ÇiftlikPro','/all-animals':'Hayvanlar','/paddocks':'Padoklar','/finance':'Finans','/health':'Sağlık Yönetimi','/rations':'Rasyonlar','/ration-workbench':'Rasyon Detayı','/reproduction-center':'Üreme Yönetimi','/feeds':'Yem & Stok','/milk-center':'Süt & Laktasyon','/reports':'Raporlar','/farm-profile':'Ayarlar','/animal-add':'Yeni Hayvan Ekle','/dairy-status':'Laktasyon Durumu','/home-layout':'Ana Sayfa Düzeni','/modules':'Modüller','/synchronization':'Senkronizasyon'}
     display_title = titles.get(path, title)
-    back_url = '/' if path in titles else '/?app_view=modules'
-    leading = f'<a class="cp-header-back" href="{back_url}" aria-label="Geri">{icon("back")}</a>' if path != '/' else '<span class="cp-leaf">'+icon('farm')+'</span>'
-    header = f'<header class="cp-app-header"><div class="cp-header-title">{leading}<div><b id="cpScreenTitle">{esc(display_title)}</b><small id="cpScreenSubtitle">{esc(username) if path=="/" else "ÇiftlikPro Enterprise"}</small></div></div><a class="cp-notifications" href="/notifications" aria-label="Bugünün işleri ve bildirimler">{icon("bell")}<i id="cpNotificationDot" hidden></i></a></header>'
+    header = '<header class="cp-app-header"><button type="button" class="cp-ref-menu-toggle" id="cpOpenMenu" aria-label="Menüyü aç" aria-expanded="false" aria-controls="cpRefMenu">'+reference.glyph('menu')+'</button><a class="cp-header-back" href="/all-animals" aria-label="Geri">'+icon('back')+'</a><div class="cp-header-title"><div><b id="cpScreenTitle">'+esc(display_title)+'</b><small id="cpScreenSubtitle">ÇiftlikPro Enterprise</small></div></div><a class="cp-notifications" href="/notifications" aria-label="İşler ve bildirimler">'+icon('bell')+'<i id="cpNotificationDot" hidden></i></a><button type="button" class="cp-ref-more" id="cpAnimalMore" aria-label="Hayvan işlemleri">'+reference.glyph('more')+'</button></header>'
     links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar')]
     nav = '<nav class="cp-bottom-nav" aria-label="Mobil ana menü">' + ''.join(f'<a data-cp-nav="{key}" href="{url}">{icon(key)}<span>{label}</span></a>' for key,url,label in links)
     nav += '<button type="button" class="cp-nav-plus" id="cpGlobalAdd" aria-label="Yeni kayıt ve hızlı işlemler">'+icon('plus')+'</button>'
@@ -132,10 +113,13 @@ def shell_markup(title, path, username):
     quick = '<div class="cp-overlay" id="cpQuickOverlay" hidden><section class="cp-sheet" role="dialog" aria-modal="true" aria-labelledby="cpQuickTitle" tabindex="-1"><div class="cp-sheet-head"><h2 id="cpQuickTitle">Hızlı işlem</h2><button type="button" class="cp-icon-button" data-cp-close aria-label="Kapat">'+icon('close')+'</button></div><div class="cp-quick-grid">'
     actions = [('animals','/animal-add?entry=adult','Hayvan ekle'),('animals','/animal-add?entry=calf','Buzağı ekle'),('health','/health?app_action=add','Sağlık planı'),('finance','/finance?app_action=add','Finans kaydı'),('paddocks','/paddocks?app_action=move','Padok taşıma'),('ration','/rations?app_action=add','Rasyon ekle'),('milk','/milk-center','Süt kaydı')]
     quick += ''.join(f'<a data-cp-quick="{kind}" href="{url}">{icon(kind)}<span>{label}</span></a>' for kind,url,label in actions) + '</div></section></div>'
-    return header + nav + quick + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
+    profile = profile or {'name':username, 'initials':username[:2].upper(), 'license_ok':False, 'license_note':'Lisans bilgilerini görüntüle'}
+    items = [('home','Ana Sayfa','/'),('animals','Hayvanlar','/all-animals'),('paddocks','Padoklar','/paddocks'),('reproduction','Üreme Yönetimi','/reproduction-center'),('health','Sağlık Yönetimi','/health'),('feeds','Yem & Rasyon','/rations'),('finance','Finans Yönetimi','/finance'),('jobs','Görev Yönetimi','/?app_view=tasks'),('milk','Süt & Laktasyon','/milk-center'),('farm','Tarım Yönetimi','/agriculture'),('reports','Raporlar','/reports'),('settings','Ayarlar','/farm-profile')]
+    menu = '<div class="cp-ref-menu-backdrop" id="cpRefMenuBackdrop" hidden><aside class="cp-ref-menu" id="cpRefMenu" role="dialog" aria-modal="true" aria-labelledby="cpMenuName" tabindex="-1"><div class="cp-ref-account"><span class="cp-ref-avatar">'+esc(profile['initials'])+'</span><div><b id="cpMenuName">'+esc(profile['name'])+'</b><small>ÇiftlikPro Enterprise</small></div><button type="button" id="cpCloseMenu" aria-label="Menüyü kapat">'+icon('close')+'</button></div><a class="cp-ref-license" href="/license-info"><span>'+reference.glyph('check')+'</span><div><b>'+('Aktif Lisans' if profile['license_ok'] else 'Lisans Bilgileri')+'</b><small>'+esc(profile['license_note'])+'</small></div></a><nav aria-label="Tüm modüller">'+''.join('<a href="'+url+'"'+(' aria-current="page"' if path==url else '')+'>'+icon(kind)+'<span>'+label+'</span>'+reference.glyph('chevron')+'</a>' for kind,label,url in items)+'</nav><a class="cp-ref-business-link" href="/farm-profile">'+icon('settings')+'İşletme Bilgileri</a><a class="cp-ref-logout" href="/logout">Çıkış Yap '+reference.glyph('exit')+'</a></aside></div>'
+    return header + nav + quick + menu + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.20">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css?v=2.0.33"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.33"><link rel="stylesheet" href="/app-assets/shared.css?v=2.0.33">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
@@ -144,6 +128,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
     document = document.replace('href="/#approaching-estrus"', 'href="/notifications"')
     if path == '/reproduction-center':
         document = wrap_reproduction_tab_labels(document)
+        document = compact_reproduction_identities(document)
     viewport_pattern = re.compile(r'<meta\b(?=[^>]*\bname=(["\'])viewport\1)[^>]*>', re.I)
     viewport_tag = f'<meta name="viewport" content="{MOBILE_VIEWPORT}">'
     if viewport_pattern.search(document):
@@ -152,7 +137,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         document = document.replace('</head>', viewport_tag + '</head>', 1)
     config = json.dumps({'build':BUILD,'path':path,'title':title,'user':user,'login':login,**(extra or {})}, ensure_ascii=False).replace('<', '\\u003c')
     route = 'home' if path == '/' else re.sub('[^a-z0-9-]', '-', path.strip('/'))
-    classes = f'cp-app cp-route-{route}{" cp-login" if login else ""}'
+    classes = f'cp-app cp-reference cp-route-{route}{" cp-login" if login else ""}'
     def body_tag(match):
         attrs = match.group(1)
         current = re.search(r'\bclass=(["\'])(.*?)\1', attrs)
@@ -162,24 +147,32 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
             attrs += ' class="' + classes + '"'
         return '<body' + attrs + '>'
     document = re.sub(r'<body([^>]*)>', body_tag, document, count=1)
+    document = desktop_views.desktop_navigation(document, path, icon)
     document = document.replace('</head>', HEAD + '</head>', 1)
+    document = document.replace('</head>', '<script src="/app-assets/search.js?v=2.0.33"></script></head>', 1)
+    if path == '/reproduction-center':
+        document = document.replace('</head>', '<link rel="stylesheet" href="/app-assets/reproduction.css?v=2.0.33"></head>', 1)
     # The smart form calls this existing UI controller before the footer script
     # defines it. Hoist its exact definition; no record or pregnancy rule changes.
     if 'id="smartAnimalForm"' in document:
         controller = re.search(r'(function toggleEntryPregnancy\(\)\s*\{.*?\n\})', document, re.S)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
-    extra = '' if login else shell_markup(title, path, user)
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.20" defer></script>'
+    extra = '' if login else shell_markup(title, path, user, (extra or {}).get('profile'))
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.33" defer></script><script src="/app-assets/shared.js?v=2.0.33" defer></script><script src="/app-assets/reference.js?v=2.0.33" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 
 def install(ns):
+    dairy_management.install(ns)
+    home_layout.install(ns)
+    desktop_views.install(ns, icon)
+    animal_actions.install(ns)
     # Decorate after all historical visual layers; never overwrite a record handler.
     original_page = ns['_page_before_app_edition']
     def page(title, body, path='/', user='admin', flash=''):
         _cp_page_t0 = time.perf_counter() if path == '/' else None
-        extra = {}
+        extra = {'reference_ui':True, 'profile':reference.profile(ns, user), 'ref_icons':{name:reference.glyph(name, icon) for name in set(reference.PATHS)|set(ICONS)}}
         if 'data-animal-panel="history"' in body:
             subject = re.search(r'name="animal_id" value="(\d+)"', body)
             if subject:
@@ -190,7 +183,9 @@ def install(ns):
                 history_panel = '<section class="animal-card-panel" data-animal-panel="history">'+animal_history_markup(ns, int(subject.group(1)))+'</section>'
                 body = body.replace('<script>(function(){const tabs=[...document.querySelectorAll', history_panel+'<script>(function(){const tabs=[...document.querySelectorAll', 1)
         if path == '/':
-            body = home_markup(ns, user) + body
+            body = home_markup(ns, user) + desktop_views.home_body(ns, body, user, icon)
+        if path == '/farm-profile':
+            body = body.replace('href="/?edit=1"','href="/home-layout"').replace('▦ Dashboard Düzeni','▦ Ana Sayfa Düzeni').replace('Ana ekran kartlarını düzenle','Mobil ve masaüstü sürü kartlarını düzenle')
         if path == '/rations':
             today = ns['date'].today().isoformat()
             with ns['db']() as c:
@@ -219,10 +214,31 @@ def install(ns):
     def send_html(self, document, status=200, headers=None):
         path = urlparse(self.path).path
         _cp_send_t0 = time.perf_counter() if path == '/' else None
+        if 'id="cpAppConfig"' in document and path == '/all-animals':
+            start=re.search(r'<main\b[^>]*>',document)
+            end=document.find('</main>',start.end()) if start else -1
+            if start and end!=-1:
+                wide=desktop_views.herd_markup(ns,self.path,self.user()['username'])
+                document=document[:start.end()]+wide+'<div class="cp-legacy-herd">'+document[start.end():end]+'</div>'+document[end:]
+        if 'id="cpAppConfig"' in document and path == '/animal':
+            aid=(parse_qs(urlparse(self.path).query).get('id') or [''])[0]
+            if aid.isdigit():document=desktop_views.animal_document(ns,document,int(aid))
+        if 'id="cpAppConfig"' in document and path in ('/all-animals', '/animal', '/calf'):
+            markup = reference.list_markup(ns, self.path, icon) if path == '/all-animals' else reference.detail_markup(ns, self.path, icon)
+            if markup:
+                document = document.replace('</main>', markup+'</main>', 1)
+                screen = 'list' if path == '/all-animals' else 'detail'
+                document = document.replace('cp-app cp-reference', 'cp-app cp-reference cp-ref-'+screen+'-screen', 1)
         if path == '/login' and 'class="login-shell"' in document:
             document = enhance(document, 'Giriş', path, '', login=True)
         match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
         if match:
+            # Light headers need dark status text in iOS standalone mode.
+            is_home = path=='/' and (parse_qs(urlparse(self.path).query).get('app_view') or [''])[0] not in ('modules','tasks')
+            if path!='/login' and not is_home:
+                document = document.replace('<meta name="theme-color" content="#063e2b">', '<meta name="theme-color" content="#fbfcfd">', 1)
+                document = document.replace('name="apple-mobile-web-app-status-bar-style" content="black-translucent"', 'name="apple-mobile-web-app-status-bar-style" content="default"', 1)
+                match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
             config = json.loads(match.group(2))
             config['request_url'] = self.path
             payload = json.dumps(config,ensure_ascii=False).replace('<','\\u003c')
@@ -255,7 +271,7 @@ def install(ns):
             return send_bytes(self, (ASSETS/'service-worker.js').read_bytes(), 'application/javascript', [('Service-Worker-Allowed','/')])
         if path.startswith('/app-assets/'):
             filename = path.removeprefix('/app-assets/')
-            allowed = {'mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
+            allowed = {'search.js':'application/javascript','reproduction.css':'text/css','synchronization.css':'text/css','synchronization.js':'application/javascript','reference.css':'text/css','reference.js':'application/javascript','dairy.js':'application/javascript','shared.css':'text/css','shared.js':'application/javascript','mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
             if filename not in allowed or not (ASSETS/filename).is_file():
                 return original_send_html(self, 'Dosya bulunamadı', 404)
             return send_bytes(self, (ASSETS/filename).read_bytes(), allowed[filename])

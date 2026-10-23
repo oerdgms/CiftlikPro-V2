@@ -1,3 +1,81 @@
+# App Edition 2.0.33 — Canlı Metin Arama ve Ana Sayfa Düğmesi
+
+23/10/2026
+
+- Yeni masaüstü Sürü Merkezi arama alanı canlı aramaya bağlandı; bütün sürü üzerinde metin eşleştirmesi sayfalamadan önce yapılır.
+- Mobil ve masaüstü liste aramaları ile hayvan / katalog seçimlerinde Türkçe karakter, büyük/küçük harf, kısmi metin ve birden fazla kelime desteği birleştirildi.
+- Mevcut GET liste aramaları yazarken çalışır; kayıt ekleme / düzenleme formları otomatik gönderilmez. Durum, tür ve padok filtreleri korunur.
+- Hızlı yazmada eski sonuçların yeni sorguyu ezmesi önlendi. Aramayı temizleme, sonuç sayacı ve mobil/masaüstü filtre eşleşmesi düzeltildi.
+- Ana sayfadaki yuvarlak ayar simgesi, ince çerçeveli “Ana Sayfayı Düzenle” düğmesine dönüştürüldü.
+- Önbellek, App Edition ve Windows kurulum adı 2.0.33 olarak güncellendi. Ayrıntılar: DUZELTME_NOTLARI_2_0_33.md.
+
+# App Edition 2.0.32 — Masaüstü Ana Sayfa Düzeni
+
+23/10/2026
+
+- Masaüstünde ilk çizimden itibaren karşılama → toplam kartları → Sürü Özeti sırası sağlandı.
+- Laktasyon Belirle ana sayfadan kaldırıldı; Modüller üst menüde yeşil rozet oldu.
+- Ana Sayfa Düzeni karşılama satırının ortasındaki ayar simgesine taşındı.
+- Sürü Özeti başlığı ve kart boşlukları kısaltıldı; kişisel sürü kartı seçimi ve sırası korundu.
+- Klasik görünümde özet, kişisel toplam kartlarından sonra gelir. Mevcut kart düzenleyicisi ve Modern / Klasik geçişleri korunur.
+- Mobil, kompakt üreme kartları ve birleşik sağlık merkezi korunur. Önbellek ve kurulum adı 2.0.32 oldu.
+
+## App Edition 2.0.31 — Kompakt Üreme Kartları
+
+23/10/2026
+
+- Üreme Yönetimi kartlarında kimlik ve fotoğraf aynı satıra alındı; tarih, durum ve işlemlerin boşlukları azaltıldı.
+- Mobilde örnek tek işlemli tohumlama kartı 290 pikselden 156 piksele indi; masaüstünde satır düzeni 90 piksel yüksekliğinde.
+- Uzun küpe / isimler, dar ekranlar ve birden fazla düğmesi olan gebelik kartları için uyarlanan düzen eklendi.
+- Ayrı Seç düğmesi kaldırıldı; kimlik / fotoğraf bağlantısı korunur. Sonuç ve kuruya çıkarma işlemleri aynı gerçek formları kullanır.
+- Stil katmanı çakışması giderildi; yeni CSS yalnız Üreme Yönetimi sayfasına eklenir.
+- Birleşik sağlık merkezi ve çekirdek kayıt / üreme hesapları korunur. Önbellek, derleme kimliği ve kurulum adı 2.0.31 olarak güncellendi.
+
+## App Edition 2.0.30 — Birleşik Sağlık Yönetimi
+
+- Mobil/masaüstü ortak sağlık merkezi, beş kategori, aylık takvim ve arama.
+- Hayvan kimliğine bağlı plan, gerçek uygulama kaydı, bağımsız rapel/tekrar ve çok günlük tedavi takvimi.
+- Hastalık kaydı, iyileşme takibi, gider dağılımı, düzenleme ve geri alma.
+- Senkronizasyon, stok ve veteriner erişimlerinin sağlık merkezinde birleştirilmesi.
+- Buzağı transferinde bekleyen sağlık görevleri ve hastalık bağlantısının korunması.
+- App Edition önbelleği, derleme kimliği ve Windows kurulum adı 2.0.30 olarak güncellendi.
+
+## 22/10/2026 — App Edition 2.0.29
+
+2.0.28 Senkronizasyon sürümünün üzerine mobil liste sadeleştirmesi eklendi. Mobil hayvan listesindeki her filtrede tekrarlanan Laktasyon Belirle bandı ve eski liste yedek kısayolu kaldırıldı. Hayvana bağlı Durum Ekle işlemleri kullanılabilir. Ayrıntılar: DUZELTME_NOTLARI_2_0_29.md.
+
+## 22/10/2026 — App Edition 2.0.28
+
+Mobil ve masaüstü Senkronizasyon modülü eklendi: doğum sonrası / düve / boş inek seçimi, veteriner takvimleri, hayvan ve adım bazında saatli görevler, uygulama / sağlık geçmişi, tohumlama bağlantısı ve açık işlemle hayvan başına finans gideri. Planlama gerçek uygulama ve giderden ayrılır; mükerrer kayıtlar engellenir. Ayrıntılar: DUZELTME_NOTLARI_2_0_28.md.
+
+## 22/10/2026 — App Edition 2.0.27
+
+Sürü Merkezi durum bağlantısı ikonlu “＋ Durum Ekle” menüsüne dönüştürüldü. Seçilen hayvan için kızgınlık, tohumlama, gebelik sonucu, manuel süt durumu, doğum ve tartım formları açılır. Sağlık ve kart notu bağlantıları hayvanı hazır seçer. Aynı pencere dar telefonda alt paneldir. Ayrıntılar: DUZELTME_NOTLARI_2_0_27.md.
+
+## 22/10/2026 — App Edition 2.0.26
+
+Sürü Merkezi satırlarındaki “Laktasyon” düzenleme bağlantısı “Durumu düzenle” olarak adlandırıldı. Kuru/Gebe rozetleriyle karışması önlendi; bağlantıya hayvan küpesini içeren erişilebilir açıklama eklendi. Kart görünümünde metin alanına sığacak biçimde satıra bölünebilir. Ayrıntılar: DUZELTME_NOTLARI_2_0_26.md.
+
+## 22/10/2026 — App Edition 2.0.25
+
+Masaüstü Sürü Merkezi'nde Görüntüle/Düzenle/Sil düğmeleri her kayıt türünde aynı satır ve ölçüye alındı. Laktasyon bağlantısı Durum alanına taşındı. Filtrele/Temizle aynı grupta tutulur; dar masaüstünde filtre ızgarası iki satıra uyarlanır. Kart görünümünde gereksiz yatay tablo genişliği kaldırıldı. Ayrıntılar: DUZELTME_NOTLARI_2_0_25.md.
+
+## 22/10/2026 — App Edition 2.0.24
+
+Hayvan ve buzağı detayında Genel/Üreme/Sağlık sekmeleri kaydırma sırasında ayrı sticky katman yerine mevcut sabit başlığa bağlanır. İçerikte yüksekliği korunan bir yuva bırakılır; negatif üst marj kaldırılır. Yatay kaydırma, sekme geçişi ve üst özete dönüş korunur. Ayrıntılar: DUZELTME_NOTLARI_2_0_24.md.
+
+## 22/10/2026 — App Edition 2.0.23
+
+Masaüstünde manuel laktasyon durumları, ortak sürü özeti ve filtreleri eklendi. Süt & Laktasyon iki ekran için ortak görünüm aldı. Mobil ana sayfa bölümleri ve ortak sürü kartları için kalıcı düzenleyici eklendi. Beş ek modül ana ızgaraya taşındı; 14 modül tek ekranda. Ayrıntılar: DUZELTME_NOTLARI_2_0_23.md.
+
+## 22/10/2026 — App Edition 2.0.22
+
+Ana sayfadaki Kızgın kartı Erkek olarak değiştirildi. Tekli ve toplu manuel laktasyon durumu, isteğe bağlı başlangıç/sıra ve durum geçmişi eklendi. Süt/doğum kayıtlarından otomatik 30/305 günlük Sağmal tahmini kaldırıldı. Kızgınlık takibi Üreme ve liste filtresinden erişilebilir. Ayrıntılar: DUZELTME_NOTLARI_2_0_22.md.
+
+## 22/10/2026 — App Edition 2.0.21
+
+Paylaşılan mobil referansa göre ana sayfa, yan menü, hayvan listesi, ekleme formu ve hayvan/buzağı detayları yenilendi. Sekmeler, açılır kartlar ve üç sütunlu modül ekranı eklendi. Ayrıntılar: DUZELTME_NOTLARI_2_0_21.md.
+
 # App Edition 2.0.10 — Rasyon mobil rozet hizası
 
 - KM, GCAA, HP ve NDF kartlarındaki durum rozetleri mobilde 3 px yukarı alındı.

@@ -96,10 +96,10 @@ class Hotfix122CDTests(unittest.TestCase):
         health = self.get('/health?' + query)
         self.assertIn(f'data-health-course="{self.course_id}"', health)
         self.assertIn(f'data-health-plan-ref="{plan_ref}"', health)
-        self.assertIn('👥 Çoklu Hayvan Planı', health)
-        self.assertIn('🐄 TR583074655, TR583074668', health)
-        self.assertIn('id="hotfix122cd-health-plan-focus"', health)
-        self.assertIn("card.dataset.healthPlanRef===requestedTask", health)
+        self.assertEqual(health.count('data-hc-task '),2)
+        self.assertIn('TR583074655',health)
+        self.assertIn('TR583074668',health)
+        self.assertIn('data-hc-complete=',health)
 
     def test_version(self):
         self.assertEqual(server.APP_VERSION, '3.9.23 DEV4 Hotfix1.22cr')
