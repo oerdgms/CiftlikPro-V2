@@ -32,3 +32,24 @@ body:has(.hc-dialog[open]){overflow:hidden!important}.hc-dialog{position:fixed;i
 /* Enterprise's generic details rule clips popovers; these action menus must escape it. */
 body.cp-app .hc-workspace details.hc-more{overflow:visible!important;display:inline-block!important}
 body.cp-app .hc-workspace details.hc-more[open]{z-index:30}
+/* Keep paired date/money controls aligned under wrapped labels. */
+@layer cp-reference {
+ body.cp-app .hc-dialog .hc-form-grid{align-items:stretch!important}
+ body.cp-app .hc-dialog .hc-form label{min-width:0!important}
+ body.cp-app .hc-dialog .hc-form :is(input:not([type=checkbox]),select,textarea){box-sizing:border-box!important;min-inline-size:0!important;min-width:0!important;max-width:100%!important;margin:0!important;min-height:46px!important;background:#fff!important}
+ body.cp-app .hc-dialog .hc-field-label{display:block!important;line-height:1.5!important;min-height:1.5em!important}
+ body.cp-app .hc-dialog .hc-money-control{display:flex!important;align-items:center!important;position:relative!important;min-width:0!important;width:100%!important;margin:0!important}
+ body.cp-app .hc-dialog .hc-money-control>input{height:46px!important;padding:11px 34px 11px 12px!important;font-variant-numeric:tabular-nums!important}
+ body.cp-app .hc-dialog .hc-money-symbol{position:absolute!important;right:12px!important;pointer-events:none!important;color:#6e897c!important;font-size:15px!important;font-weight:500!important}
+ body.cp-app .hc-dialog :is(.hc-date-field,.hc-cost-field){justify-content:flex-end!important}
+ @media(max-width:600px){
+  body.cp-app .hc-dialog :is(.hc-case-date,.hc-veterinarian-field){grid-column:1/-1!important}
+  body.cp-app .hc-dialog :is(.hc-date-field,.hc-cost-field)>.hc-field-label{min-height:3em!important}
+  /* iOS dates have a native intrinsic width: give date and amount separate rows. */
+  body.cp-app #hcProgram :is(.hc-date-field,.hc-cost-field){grid-column:1/-1!important;justify-content:flex-start!important}
+  body.cp-app #hcProgram :is(.hc-date-field,.hc-cost-field)>.hc-field-label{min-height:1.5em!important}
+  body.cp-app #hcProgram .hc-date-field>input{width:100%!important;inline-size:100%!important;min-inline-size:0!important;max-inline-size:100%!important;box-sizing:border-box!important;overflow:hidden!important;text-align:left!important}
+  body.cp-app #hcProgram input[type=date]::-webkit-date-and-time-value{min-width:0;text-align:left}
+  body.cp-app .hc-dialog .hc-form input[name=veterinarian]{height:48px!important;min-height:48px!important}
+ }
+}

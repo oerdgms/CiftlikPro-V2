@@ -88,6 +88,15 @@ def dialog_head(title,small='SAĞLIK YÖNETİMİ'):
     return '<header class="hc-dialog-head"><div><small>'+esc(small)+'</small><h2>'+esc(title)+'</h2></div><button type="button" class="hc-close" data-hc-close aria-label="Kapat">×</button></header>'
 
 
+def money_field(name,label,amount):
+    value=f'{amount:.2f}'.replace('.',',')
+    return ('<label class="hc-cost-field"><span class="hc-field-label">'+esc(label)+'</span>'
+            '<span class="hc-money-control"><input type="text" name="'+esc(name)+'" '
+            'data-money-skip="1" inputmode="decimal" autocomplete="off" maxlength="12" '
+            'pattern="[0-9]+([,.][0-9]{1,2})?" placeholder="0,00" value="'+value+'">'
+            '<span class="hc-money-symbol" aria-hidden="true">₺</span></span></label>')
+
+
 def program_dialog(c,subjects,query,token):
     pid=value(query,'edit');p={};selected=[];completed=False
     if pid:
@@ -113,7 +122,7 @@ def program_dialog(c,subjects,query,token):
       {hidden('csrf',token)}{hidden('id',p.get('id',''))}{hidden('revision',p.get('revision',''))}{hidden('request_key',secrets.token_urlsafe(24))}{hidden('return_to',link(query))}{fixed_fields}
       <div class="hc-form-grid"><label>Kategori *<select name="category" id="hcProgramCategory"{fixed}>{options}</select></label><label>Kayıt türü<select name="mode" {'disabled' if p else ''}><option value="plan">Plan oluştur</option><option value="record">Yapılan uygulamayı kaydet</option></select></label>
       <label class="hc-full">Ürün / işlem adı *<input name="product" id="hcProduct" list="hcDefinitions" value="{esc(p.get('product',''))}" required maxlength="150" placeholder="Listeden seç veya yeni bir ad yaz" autocomplete="off"><datalist id="hcDefinitions"></datalist></label>
-      <label>İlk uygulama tarihi *<input type="date" name="start_date" value="{esc(date_value)}" required{fixed}></label><label>Hayvan başı uygulama tutarı (₺)<input type="number" name="cost" step="0.01" min="0" max="10000000" inputmode="decimal" value="{p.get('cost_per_application',0):g}"></label>
+      <label class="hc-date-field"><span class="hc-field-label">İlk uygulama tarihi *</span><input type="date" name="start_date" value="{esc(date_value)}" required{fixed}></label>{money_field('cost','Hayvan başı maliyet (₺)',p.get('cost_per_application',0))}
       <div class="hc-full hc-course-fields" data-hc-treatment-options {'' if category=='treatment' else 'hidden'}><label>Plan düzeni<select name="schedule_mode" data-hc-schedule-mode{fixed}><option value="repeat">Tekli / tekrarlı uygulama</option><option value="course" {'selected' if p.get('schedule_mode')=='course' else ''}>Çok günlük tedavi planı</option></select></label><div class="hc-treatment-grid" data-hc-course {'' if p.get('schedule_mode')=='course' else 'hidden'}><label>Kaç Uygulama Günü?<input type="number" name="treatment_days" min="1" max="60" value="{p.get('treatment_days',1)}"{fixed}></label><label>Kaç Günde Bir?<input type="number" name="treatment_interval_days" min="1" max="365" value="{p.get('treatment_interval_days',1)}"{fixed}></label><label>Günde kaç uygulama?<input type="number" name="times_per_day" min="1" max="6" value="{p.get('times_per_day',1)}"{fixed}></label></div></div><div class="hc-full hc-repeat-fields" data-hc-repeat-fields><label>Tekrar aralığı<input type="number" name="repeat_value" min="0" max="3650" value="{p.get('repeat_value',0)}"{fixed}></label><label>Birim<select name="repeat_unit"{fixed}><option value="days" {'selected' if p.get('repeat_unit')=='days' else ''}>Gün</option><option value="months" {'selected' if p.get('repeat_unit','months')=='months' else ''}>Ay</option></select></label><small>0 = tek sefer. Sonraki tekrar, gerçek uygulama tarihinden hesaplanır.</small></div>
       <div class="hc-full hc-rapel-grid" data-hc-rapel-group><label>Rapel var mı?<select name="rapel" data-hc-rapel{fixed}><option value="no">Hayır</option><option value="yes" {'selected' if p.get('rapel_days') else ''}>Evet</option></select></label><label data-hc-rapel-days {'hidden' if not p.get('rapel_days') else ''}>Rapel kaç gün sonra?<input type="number" name="rapel_days" min="1" max="365" value="{p.get('rapel_days') or ''}" placeholder="Gün sayısı"{fixed}></label></div></div>
       {picker(subjects,selected,completed)}
@@ -134,9 +143,9 @@ def case_dialog(c,subjects,query,token):
     return f'''<dialog id="hcCase" class="hc-dialog" {'data-hc-auto' if cid else ''}>{dialog_head('Hastalık Kaydını Düzenle' if p else 'Hasta Hayvan Kaydet')}
       <form method="post" action="/health-center/case" class="hc-form">
       {hidden('csrf',token)}{hidden('id',p.get('id',''))}{hidden('revision',p.get('revision',''))}{hidden('request_key',secrets.token_urlsafe(24))}{hidden('return_to',link(query))}
-      <div class="hc-form-grid"><label>Hastalık tarihi *<input type="date" name="illness_date" max="{hc.today().isoformat()}" value="{p.get('illness_date',hc.today().isoformat())}" required></label><label>Veteriner hekim<input name="veterinarian" value="{esc(p.get('veterinarian',''))}" maxlength="150" placeholder="İsteğe bağlı"></label>
+      <div class="hc-form-grid"><label class="hc-case-date">Hastalık tarihi *<input type="date" name="illness_date" max="{hc.today().isoformat()}" value="{p.get('illness_date',hc.today().isoformat())}" required></label><label class="hc-veterinarian-field">Veteriner hekim<input type="text" name="veterinarian" value="{esc(p.get('veterinarian',''))}" maxlength="150" placeholder="Veteriner hekimin adı" autocomplete="off"></label>
       <label class="hc-full">Hastalık / belirti *<input name="diagnosis" value="{esc(p.get('diagnosis',''))}" list="hcDiseaseNames" required maxlength="150" placeholder="Listeden seç veya açıklama yaz"><datalist id="hcDiseaseNames">{diseases}</datalist></label>
-      <label>Toplam veteriner tutarı (₺)<input name="vet_cost" type="number" min="0" step="0.01" max="10000000" value="{p.get('vet_cents',0)/100:g}" inputmode="decimal"></label><label>Harici ilaç / tedavi tutarı (₺)<input name="medicine_cost" type="number" min="0" step="0.01" max="10000000" value="{p.get('medicine_cents',0)/100:g}" inputmode="decimal"></label></div>
+      {money_field('vet_cost','Veteriner maliyeti (₺)',p.get('vet_cents',0)/100)}{money_field('medicine_cost','İlaç / tedavi maliyeti (₺)',p.get('medicine_cents',0)/100)}</div>
       <p class="hc-note">Tutarlar isteğe bağlıdır ve seçilen hayvanlara eşit dağıtılır. Stoktan kullanılan ilaçları İlaç Stoku bölümündeki Tedavi Kaydı ile kaydedebilirsin.</p>
       {picker(subjects,selected,bool(p))}<label>Tedavi / takip notu<textarea name="treatment_note" rows="2" maxlength="2000" placeholder="Veterinerin belirlediği tedavi ve takip notu">{esc(p.get('treatment_note',''))}</textarea></label>
       <label>Açıklama<textarea name="notes" rows="2" maxlength="2000" placeholder="İsteğe bağlı">{esc(p.get('notes',''))}</textarea></label><p class="hc-form-error" role="alert" hidden></p>
@@ -284,4 +293,4 @@ def markup(ns,c,query,token):
         if category=='general' and view!='calendar' and tab!='done':
             content+='<div class="hc-bottom-grid">'+cases_markup(ns,data,token,query,overview=True)+'<section class="hc-panel"><header class="hc-section-head"><h2>Son Uygulamalar</h2><a href="/health?tab=done">Tümünü gör ›</a></header>'+history_rows(ns,data['history'][:4],token,query)+'</section></div>'
     auto=' data-hc-add-auto' if value(query,'app_action')=='add' else ''
-    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.30"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.33" defer></script>'
+    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.36"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.36" defer></script>'

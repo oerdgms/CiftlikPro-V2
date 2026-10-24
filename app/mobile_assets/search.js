@@ -21,6 +21,8 @@
       if (list && fresh) list.replaceChildren(...fresh.childNodes);
       const count=document.querySelector('.cp-wide-herd .cp-shared-result>b'), freshCount=doc.querySelector('.cp-wide-herd .cp-shared-result>b');
       if (count && freshCount) count.textContent=freshCount.textContent;
+      const size=document.querySelector('.cp-herd-options>summary>small'), freshSize=doc.querySelector('.cp-herd-options>summary>small');
+      if (size && freshSize) size.textContent=freshSize.textContent;
       const chips=document.querySelector('.cp-wide-herd .cp-shared-chips'), freshChips=doc.querySelector('.cp-wide-herd .cp-shared-chips');
       if (chips && freshChips) chips.replaceChildren(...freshChips.childNodes);
       syncForm('.cp-shared-filter',doc);

@@ -1,21 +1,28 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.33
+# ÇiftlikPro Enterprise — App Edition 2.0.36
 
-**2.0.33a — GitHub test düzeltmesi:** Eski arayüz testi artık ana sayfadan kaldırılan Laktasyon Belirle bağlantısını beklemez. Mobil ve masaüstü Sağmal kartlarının aynı filtreye açılması, manuel sürü sayıları ve Ana Sayfayı Düzenle erişimi denetlenir. Uygulama, kurulum sürümü ve önceki arama düzeltmeleri 2.0.33 olarak korunur. Ayrıntılar: [2.0.33a notları](DUZELTME_NOTLARI_2_0_33a.md).
+Üreme Yönetimi’nde Kızgınlık Kaydı ve Tohumlama düğmelerinin yanında tek **Senkronizasyon** düğmesi bulunur. Bu düğme senkronizasyon listesini açar; mevcut planlar görülür ve **Senkronizasyon Tanımla** ile yeni kayıt oluşturulur.
 
-Mobil ve masaüstünde canlı metin araması yeniden etkinleştirildi. Masaüstü ana sayfasındaki ortada duran yuvarlak ayar simgesi, ince çerçeveli “Ana Sayfayı Düzenle” düğmesi oldu.
+- Sol üstteki iki ayrı senkronizasyon kısayolu kaldırıldı.
+- Aktif / Tamamlanan / İptal / Tümü filtreleri, plan araması ve ayrıntılar aynı ekrandadır.
+- Sağlık Yönetimi → Senkronizasyon aynı kayıtları gösterir.
+- Mobil ve masaüstü aynı akışı kullanır. Önceki sürümün pencere genişliği ve sağlık formu düzeltmeleri dahildir.
 
-- Hayvan listesi araması küpe, isim, ırk, padok ve notlarda çalışır; bütün kayıtlar arandıktan sonra sayfalama yapılır.
-- Türkçe karakterler, büyük/küçük harf, kelimenin bir bölümü ve birden fazla kelime desteklenir. Örneğin “ÇİĞDEM” kaydı “cigdem” ile bulunabilir.
-- Arama yazarken çalışır; mevcut durum, tür ve padok filtreleri korunur. Diğer liste ve seçim kutularında da ortak metin eşleştirmesi kullanılır.
+## 2.0.35 mobil pencere ve Sürü Merkezi düzeni
 
-Masaüstü ana sayfasında karşılama, toplam kartları ve Sürü Özeti aynı akıştadır.
+Mobil form pencerelerindeki yatay kayma düzeltildi. Aşı / parazit / vitamin formunda tarih ve maliyet telefonda tam genişlikte ayrı satırlardadır. Masaüstü Sürü Merkezi daha kompakt bir üst bölüm ve satır düzeni kullanır.
 
-- En üstte saate göre karşılama ve “Bugün çiftliğinizde neler oluyor?” açıklaması bulunur.
-- Karşılama satırındaki “Ana Sayfayı Düzenle” düğmesi mevcut Ana Sayfa Düzeni ekranını açar.
-- Toplam Hayvan / Aktif Padok / Bugün Yapılacak / Aylık Net kartlarının hemen altında Sürü Özeti yer alır.
-- Laktasyon Belirle ve eski işlem düğmeleri Sürü Özeti başlığından kaldırıldı.
-- Modüller üst menüde bir rozet olarak görünür; kişisel hızlı menü seçimiyle kaybolmaz.
-- Mobil ana sayfa, kişisel kart seçimleri, Modern / Klasik ve mevcut kart düzenleyicisi korunur.
+- Pencere kaydırma alanları ekrana sığar; yukarı-aşağı kaydırma korunur.
+- Sürü Merkezi’nde arama, tür, durum ve padok öndedir. Sıralama / kayıt sayısı ile Laktasyon Belirle erişimi Liste ayarları altındadır.
+- Yinelenen rozetler kaldırıldı. Ayrıntı / Kart / Kompakt, canlı arama, sayfalama ve mevcut kayıt işlemleri korunur.
+
+2.0.34’te eklenen hayvan düzenleme ve sağlık formu özellikleri dahildir:
+
+- Hayvan İşlemleri menüsü Durum Ekle ile aynı alt paneli, hayvan kimliğini ve ikonlu işlem satırlarını kullanır.
+- Hayvan / buzağı düzenleme mevcut sayfanın üzerinde açılır. Telefonda alt panel, masaüstünde pencere olarak görünür. Doğrudan düzenleme adresleri de çalışır.
+- Standart TR küpelerinde ön ek sabittir; yalnız rakamlar düzenlenir. Tam küpe yapıştırılabilir. Mükerrer küpe kontrolü ve bağlı buzağı / yetişkin kartı eşleşmesi korunur.
+- Veteriner hekim alanı telefonda tam genişliktedir. Aşı, parazit ve vitamin maliyet kutuları TL simgesi ve kuruşlu girişi destekler; 2.0.35’te tarih alanından ayrı satıra alınmıştır.
+- Fotoğraf yükleme, mevcut kayıt alanları, alış maliyeti ve finans eşitleme seçimi korunur. Vazgeçmek kayıt yapmaz.
+- Önceki canlı metin aramaları, masaüstü ana sayfası ve düzeltilmiş GitHub arayüz testleri pakete dahildir.
 
 ## Kompakt Üreme Yönetimi
 
@@ -44,12 +51,12 @@ Mobil ve masaüstünde Aşı, Parazit, Vitamin / Mineral, Hastalık / Tedavi ve 
 
 1. ZIP içindeki kaynakların tamamıyla GitHub deposunu güncelleyin.
 2. Actions → CiftlikPro Windows Kurulum → Run workflow.
-3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_33_Setup.exe` dosyasını mevcut bilgisayara kurun.
+3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_36_Setup.exe` dosyasını mevcut bilgisayara kurun.
 4. Telefon ve masaüstünde mevcut adresi yeniden açın. Masaüstünde ana sayfayı kontrol edin; diğer bölümler üst menüdeki **Modüller** rozetinden açılır.
 
-Bu ZIP tam kaynak / kurulum projesidir; hazır Windows EXE, APK veya IPA içermez. Yeni `app/health_center.py`, `app/health_views.py`, `app/mobile_assets/health-center.css` ve `health-center.js` dosyaları pakete dahildir. Mevcut veritabanı yedekleme adımı korunur; yeni tablolar ilk açılışta mevcut kayıtlara eklenir. Veri klasörünüzü silmeyin.
+Bu ZIP tam kaynak / kurulum projesidir; hazır Windows EXE, APK veya IPA içermez. Yeni `app/animal_edit_ui.py` ve sağlık merkezi dosyaları pakete dahildir. Mevcut veritabanı yedekleme adımı korunur; yeni tablolar ilk açılışta mevcut kayıtlara eklenir. Veri klasörünüzü silmeyin.
 
-Ayrıntılar: [2.0.33 değişiklikler](DUZELTME_NOTLARI_2_0_33.md), [2.0.33 doğrulama](DOGRULAMA_APP_EDITION_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
+Ayrıntılar: [2.0.36 değişiklikler](DUZELTME_NOTLARI_2_0_36.md), [2.0.36 doğrulama](DOGRULAMA_APP_EDITION_2_0_36.md), [2.0.35 değişiklikler](DUZELTME_NOTLARI_2_0_35.md), [2.0.35 doğrulama](DOGRULAMA_APP_EDITION_2_0_35.md), [Hayvan düzenleme](DUZELTME_NOTLARI_2_0_34.md), [Canlı metin araması](DUZELTME_NOTLARI_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
 
 Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
 

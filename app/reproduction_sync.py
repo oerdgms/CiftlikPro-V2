@@ -631,7 +631,7 @@ def page_markup(ns,query,token):
                 cards+=f'<a class="sync-plan-card" href="/synchronization?plan={p["id"]}"><span class="sync-plan-icon">↻</span><div><span class="sync-card-top"><b>{esc(p["title"])}</b><span class="sync-badge">{STATES[p["status"]]}</span></span><p>{p["animal_count"]} hayvan · Başlangıç {display_time(p["start_at"])}</p><small>{esc(p["tags"] or "")}</small><span class="sync-next">{("Sıradaki uygulama · "+display_time(p["next_at"])) if p["next_at"] else "Bekleyen uygulama yok"}</span></div><span>›</span></a>'
             content=f'''<header class="sync-page-head"><div><small>ÜREME & SAĞLIK</small><h1>Senkronizasyon</h1><p>Doğum sonrası inekler, düveler ve boş inekler.</p></div><button class="btn" type="button" data-sync-open>＋ Senkronizasyon Tanımla</button></header><nav class="sync-tabs">{tabs}</nav><form method="get" class="sync-search"><input type="hidden" name="status" value="{filt}"><input type="search" name="q" placeholder="Plan adı, küpe veya veteriner ara" value="{esc(term)}"><button class="btn alt">Ara</button></form><div class="sync-plan-list">{cards or '<div class="sync-empty"><span>↻</span><h2>Bu görünümde senkronizasyon planı yok</h2><p>Hayvanları seçin, veterinerin belirlediği takvimi tanımlayın.</p><button class="btn alt" type="button" data-sync-open>İlk planı oluştur</button></div>'}</div>'''
             editor=editor_markup(ns,c,query,token)
-    return '<link rel="stylesheet" href="/app-assets/synchronization.css?v=2.0.28"><section class="sync-workspace">'+content+'</section>'+editor+'<script src="/app-assets/synchronization.js?v=2.0.33" defer></script>'
+    return '<link rel="stylesheet" href="/app-assets/synchronization.css?v=2.0.36"><section class="sync-workspace">'+content+'</section>'+editor+'<script src="/app-assets/synchronization.js?v=2.0.36" defer></script>'
 
 
 def csrf_token(handler):
@@ -653,8 +653,11 @@ def install(ns):
     ns['health_plan_entries']=health_plan_entries
     original_page=ns['page']
     def page(title,body,path='/',user='admin',flash=''):
-        if path in ('/health','/reproduction-center'):
-            body='<nav class="sync-entry-nav" aria-label="Üreme ve sağlık"><a class="btn alt" href="/synchronization">↻ Senkronizasyon</a><a class="btn alt" href="/synchronization?new=1">＋ Senkronizasyon Tanımla</a></nav>'+body
+        if path=='/reproduction-center':
+            # Keep the entry beside the other reproduction actions.
+            anchor='<a class="btn alt" href="/inseminations">＋ Tohumlama</a>'
+            entry='<a class="btn alt cp-repro-sync" href="/synchronization">↻ Senkronizasyon</a>'
+            body=body.replace(anchor,anchor+entry,1)
         return original_page(title,body,path,user,flash)
     ns['page']=page
     cls=ns['App'];original_get,original_post=cls.do_GET,cls.do_POST
@@ -684,7 +687,9 @@ def install(ns):
         if urlparse(self.path).path!='/synchronization':return original_get(self)
         if not authorized(self):return
         query=parse_qs(urlparse(self.path).query)
-        try:body=page_markup(ns,query,csrf_token(self))
+        try:
+            body=page_markup(ns,query,csrf_token(self))
+            body=body.replace('<section class="sync-workspace">','<section class="sync-workspace"><a class="sync-back" href="/reproduction-center">‹ Üreme Yönetimi</a>',1)
         except ValueError as exc:return self.redirect('/synchronization',str(exc))
         return self.send_html(ns['page']('Senkronizasyon',body,'/synchronization',self.user()['username'],(query.get('msg') or [''])[0]))
     def do_POST(self):

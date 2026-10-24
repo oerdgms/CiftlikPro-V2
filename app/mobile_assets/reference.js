@@ -303,15 +303,20 @@
         window.cpOpenAnimalState?.(`/animal-events?source=${source}&id=${sid}`,document.activeElement);
       }
       function more() {
-        $('#cpRefStateDialog')?.remove();
-        const dialog = document.createElement('dialog');dialog.id='cpRefStateDialog';dialog.className='cp-sheet';
+        const content=document.createElement('section');content.className='cp-state-content';
         const hasRepro = !!$('[data-ref-section=reproduction]',root);
-        dialog.innerHTML = '<div class="cp-sheet-head"><h2>Hayvan İşlemleri</h2><button type="button" class="cp-icon-button" aria-label="Kapat">'+icon('close')+'</button></div><div class="cp-ref-state-links">'+(hasRepro ? `<a href="/dairy-status?animal=${sid}">Laktasyon durumunu düzenle</a><a href="/reproduction-center?animal=${sid}">Üreme / gebelik durumunu güncelle</a>` : '')+`<a href="/${source}-edit?id=${sid}">Hayvan bilgilerini düzenle</a><a href="#operations" data-ref-state-sale>Satış / zayiat işlemleri</a><a href="#operations" data-ref-state-delete>Hayvan kaydını sil</a>`+(source==='animal' ? `<a href="/animal/print?id=${sid}">Hayvan kartını yazdır</a>` : '')+'</div>';
-        document.body.append(dialog);$('.cp-icon-button',dialog).addEventListener('click',()=>dialog.close());
-        $('[data-ref-state-sale]',dialog).addEventListener('click', e => { e.preventDefault();dialog.close();select('operations'); });
-        $('[data-ref-state-delete]',dialog).addEventListener('click',e=>{e.preventDefault();dialog.close();select('operations');$('.cp-ref-delete',root).open=true;});
-        dialog.addEventListener('click',e => { if (e.target===dialog) {const rect=dialog.getBoundingClientRect();if (e.clientX<rect.left || e.clientX>rect.right || e.clientY<rect.top || e.clientY>rect.bottom) dialog.close();} });
-        dialog.showModal();
+        const choice=(url,title,note,kind,tone,attrs='')=>`<a class="cp-state-choice" href="${url}" ${attrs}><span class="cp-state-icon cp-state-${tone}">${icon(kind)}</span><span><b>${title}</b><small>${note}</small></span>${icon('chevron')}</a>`;
+        const links=choice(`/${source}-edit?id=${sid}`,'Hayvan bilgilerini düzenle','Kimlik, küpe ve temel bilgiler','edit','slate')
+          +(hasRepro ? choice(`/dairy-status?animal=${sid}`,'Laktasyon durumunu düzenle','Sağmal, kuru veya düve durumu','milk','green')+choice(`/reproduction-center?animal=${sid}`,'Üreme / gebelik durumunu güncelle','Tohumlama ve gebelik kayıtları','heart','pink') : '')
+          +choice('#operations','Satış / zayiat işlemleri','Satış, kesim veya kayıp kaydı','finance','blue','data-ref-state-sale')
+          +choice('#operations','Hayvan kaydını sil','Silme seçeneklerini ve onayı aç','close','red','data-ref-state-delete')
+          +(source==='animal' ? choice(`/animal/print?id=${sid}`,'Hayvan kartını yazdır','Kimlik ve kayıtları görüntüle','reports','slate') : '');
+        content.innerHTML='<div class="cp-state-handle" aria-hidden="true"></div><header class="cp-state-head"><div><h2 id="cpStateTitle">Hayvan İşlemleri</h2></div><button type="button" class="cp-state-cancel" data-cp-state-close>Vazgeç</button></header><div class="cp-state-subject"><span class="cp-state-subject-icon">'+icon('animals')+'</span><div><b></b><small></small></div></div><div class="cp-state-body"><nav class="cp-state-choices" aria-label="Hayvan işlemleri">'+links+'</nav></div>';
+        $('.cp-state-subject b',content).textContent=$('.cp-ref-profile h1',root).textContent;
+        $('.cp-state-subject small',content).textContent=$$('.cp-ref-profile .cp-ref-badge',root).map(b=>b.textContent).join(' · ');
+        window.cpOpenAnimalMenu(content,document.activeElement);
+        $('[data-ref-state-sale]',content).addEventListener('click',e=>{e.preventDefault();window.cpCloseAnimalPanel();select('operations');});
+        $('[data-ref-state-delete]',content).addEventListener('click',e=>{e.preventDefault();window.cpCloseAnimalPanel();select('operations');$('.cp-ref-delete',root).open=true;});
       }
       $('#cpAnimalMore')?.addEventListener('click',more);
       window.addEventListener('hashchange',()=>{
@@ -342,7 +347,7 @@
       if (matching) { matching.checked=true;matching.dispatchEvent(new Event('change',{bubbles:true})); }
     }
     home();modules();herd();entry();detail();healthTarget();
-    if (isTasks || !['/','/all-animals','/animal','/calf','/animal-add','/dairy-status','/paddocks'].includes(path)) {
+    if (isTasks || !['/','/all-animals','/animal','/calf','/animal-add','/animal-edit','/calf-edit','/dairy-status','/paddocks'].includes(path)) {
       $$('.cp-bottom-nav [data-cp-nav]').forEach(link=>{const active=link.dataset.cpNav==='modules';link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
     }
     // Tiny, readable build marker makes an installed update easy to identify.

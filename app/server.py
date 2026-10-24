@@ -1,5 +1,6 @@
 import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl, random, re, unicodedata, sys
 from text_search import normalize as search_normalize, matches as search_matches
+import animal_edit_ui
 import agriculture as agri
 from email.parser import BytesParser
 from email.message import EmailMessage
@@ -8647,6 +8648,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             body=f'''<h1>Hayvan Düzenle</h1><div class="card"><form method="post" action="/animal-edit" enctype="multipart/form-data" class="form" data-smart-photo-form="1"><input type="hidden" name="id" value="{rec["id"]}"><label>Küpe No<input name="tag" required value="{h(rec["tag"])}"></label><label>Takma Ad<input name="nickname" value="{h(rec["nickname"])}"></label><label>Cinsiyet<select name="gender"><option value="Dişi" {'selected' if rec["gender"]=='Dişi' else ''}>Dişi</option><option value="Erkek" {'selected' if rec["gender"]=='Erkek' else ''}>Erkek</option></select></label><label>Irk<input name="breed" value="{h(rec["breed"])}"></label><label>Doğum Tarihi<input type="date" name="birth_date" value="{h(rec["birth_date"])}"></label><label>Padok / Ahır<input name="paddock" value="{h(rec["paddock"])}"></label><label>Fotoğrafı Değiştir<input type="file" name="photo_file" accept="image/*"><span class="camera-note">Telefonda kamera veya galeriden seçim yapabilirsiniz. Büyük fotoğraflar otomatik küçültülür.</span><div class="photo-upload-status" data-upload-status><span data-upload-text>Fotoğraf hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div></label><input type="hidden" name="photo_url" value="{h(rec["photo_url"])}"><label>Durum<select name="status"><option value="Aktif" {'selected' if rec["status"]=='Aktif' else ''}>Aktif</option><option value="Satıldı" {'selected' if rec["status"]=='Satıldı' else ''}>Satıldı</option><option value="Kesildi" {'selected' if rec["status"]=='Kesildi' else ''}>Kesildi</option></select></label><label>Satış Fiyatı<input type="number" step="0.01" name="sold_price" value="{h(rec["sold_price"])}"></label><label>Alış Tarihi<input type="date" name="purchase_date" value="{h(rec["purchase_date"])}"></label><label>Alış Fiyatı (TL)<input type="number" min="0" step="0.01" name="purchase_price" value="{h(rec["purchase_price"])}"></label><label>Alış Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" value="{h(rec["purchase_weight"])}"></label><label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{h(rec["daily_feed_cost"])}"></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{h(rec["daily_care_cost"])}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{h(rec["target_sale_price"])}"></label><label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label><div class="full"><button class="btn">Değişiklikleri Kaydet</button> <a class="btn alt" href="{cancel}">İptal</a></div></form></div>'''
             body=body.replace('<label class="full">Not<textarea', '<label class="full"><input type="checkbox" name="sync_purchase_finance" value="yes" checked> Alış fiyatını Finans &gt; Hayvan Alımı kaydıyla oluştur/güncelle</label><label class="full">Not<textarea')
             body=body.replace('</label><label>Günlük Bakım (TL)', '<span class="mut">Padokta aktif rasyon varsa otomatik rasyon maliyeti kullanılır.</span></label><label>Günlük Bakım (TL)',1)
+            body=animal_edit_ui.markup(body,'animal',rec)
             return self.send_html(page('Hayvan Düzenle',body,cancel,u,msg))
         if path=='/calf-edit':
             cid=q.get('id',[''])[0]
@@ -8668,6 +8670,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             <label class="full">Not<textarea name="notes">{h(rec["notes"])}</textarea></label>
             <div class="full"><button class="btn">Buzağıyı Güncelle</button> <a class="btn alt" href="/calf?id={cid}">İptal</a></div></form></div>'''
             body=body.replace('<label>Fotoğraf Yükle', f'''<label>Günlük Yem/Rasyon (TL)<input type="number" min="0" step="0.01" name="daily_feed_cost" value="{float(rec['daily_feed_cost'] or 0)}"><span class="mut">Padokta aktif rasyon varsa otomatik maliyet kullanılır.</span></label><label>Günlük Bakım (TL)<input type="number" min="0" step="0.01" name="daily_care_cost" value="{float(rec['daily_care_cost'] or 0)}"></label><label>Hedef Satış Fiyatı (TL)<input type="number" min="0" step="0.01" name="target_sale_price" value="{float(rec['target_sale_price'] or 0)}"></label><label>Fotoğraf Yükle''')
+            body=animal_edit_ui.markup(body,'calf',rec)
             return self.send_html(page('Buzağı Düzenle',body,'/calves',u,msg))
         if path=='/animal-add':
             with db() as c:
@@ -11455,7 +11458,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 with db() as c:
                     rec=c.execute('select * from animals where id=?',(aid,)).fetchone()
                     if not rec:return self.redirect('/','Hayvan kaydı bulunamadı.')
-                    tag=(f.get('tag') or '').strip()
+                    tag=normalize_tr_tag(f.get('tag_digits')) if f.get('tag_prefix')=='TR' or 'tag_digits' in f else (f.get('tag') or '').strip()
                     if animal_edit_tag_conflict(c,tag,aid):return self.redirect('/animal-edit?id='+aid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
                     photo_url=f.get('photo_url','')
                     upload=f.get('photo_file')
@@ -11493,7 +11496,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     if mother_id:
                         mother=c.execute("select id from animals where id=? and gender='Dişi' and coalesce(status,'Aktif')='Aktif'",(mother_id,)).fetchone()
                         if not mother:return self.redirect('/calf-edit?id='+cid,'Seçilen anne kaydı bulunamadı veya aktif değil.')
-                    tag=(f.get('tag') or '').strip()
+                    tag=normalize_tr_tag(f.get('tag_digits')) if f.get('tag_prefix')=='TR' or 'tag_digits' in f else (f.get('tag') or '').strip()
                     if calf_edit_tag_conflict(c,tag,cid,rec['promoted_animal_id']):return self.redirect('/calf-edit?id='+cid,'Bu küpe numarası başka bir kayıtta kullanılıyor.')
                     photo_url=f.get('photo_url') or rec['photo_url'] or '';upload=f.get('photo_file')
                     if upload and isinstance(upload,dict) and upload.get('content'):
@@ -16461,7 +16464,7 @@ install_reproduction_sync(globals())
 from health_center import install as install_health_center
 install_health_center(globals())
 
-APP_EDITION_BUILD='AppEdition2.0.33-LiveTextSearch'
+APP_EDITION_BUILD='AppEdition2.0.36-ReproductionSync'
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

@@ -1,3 +1,35 @@
+# App Edition 2.0.36 — Üreme Yönetimi Senkronizasyon Girişi
+
+24/10/2026
+
+- Sol üstteki Senkronizasyon / Senkronizasyon Tanımla kısayolları kaldırıldı. Tek Senkronizasyon düğmesi, Kızgınlık Kaydı ve Tohumlama işlemlerinin yanına taşındı.
+- Düğme doğrudan senkronizasyon listesini açar. Aktif / Tamamlanan / İptal / Tümü, arama, plan ayrıntısı ve yeni kayıt aynı akışta bulunur.
+- Liste ve ayrıntıdan Üreme Yönetimi’ne geri dönülebilir. Sağlık Yönetimi’nin senkronizasyon bölümü aynı verileri kullanmaya devam eder.
+- Mevcut doğrudan plan / adım / düzenleme / yeni kayıt bağlantıları ve güvenli kayıt işlemleri korunur.
+- Yapı, önbellek ve Windows kurulum adı 2.0.36 olarak güncellendi. 2.0.35’in mobil pencere ve Sürü Merkezi düzeltmeleri dahildir.
+
+# App Edition 2.0.35 — Mobil Pencereler ve Kompakt Sürü Merkezi
+
+24/10/2026
+
+- Aşı / parazit / vitamin formunda telefonda tarih ve hayvan başı maliyet tam genişlikte ayrı satırlara alındı; yerel tarih kutusunun komşu alana taşması önlendi.
+- Hayvan / buzağı düzenleme başta olmak üzere ortak mobil pencere ve çekmecelerde yatay taşma sınırlandı. Form, tarih, dosya ve seçim alanları kapsayıcıya sığar; dikey kaydırma korunur.
+- Finansın görünmeyen yerel tür seçimi dar alanda tutuldu; gizli kontrol pencere genişliğini büyütmez.
+- Masaüstü Sürü Merkezi’nde başlık, sekmeler ve temel filtreler kısaltıldı. Sıralama, sıra ve kayıt sayısı Liste ayarları altında; Laktasyon Belirle aynı menüden açılır.
+- Tekrarlanan durum rozetleri kaldırıldı, renkler ayrıştırıldı; Kompakt satırlar kısaltıldı. Kayıt işlemleri, üç görünüm, arama ve filtre kuralları korunur.
+- Liste ayarlarındaki kayıt sayısı canlı sonuçla birlikte güncellenir. Önbellek, derleme ve Windows kurulum adı 2.0.35 oldu.
+
+# App Edition 2.0.34 — Hayvan Düzenleme ve Sağlık Formları
+
+24/10/2026
+
+- Hayvan İşlemleri menüsü, Durum Ekle'nin ortak alt panel görünümüne taşındı; hayvan kimliği ve açıklamalı ikon satırları eklendi.
+- Hayvan / buzağı düzenleme mobilde alt panel, masaüstünde pencere olarak açılır. Doğrudan sayfa adresi, fotoğraf optimizasyonu ve mevcut form alanları korunur.
+- Standart TR küpeleri sabit ön ek ve rakam alanıyla düzenlenir. Sunucu, girilen rakamları yeni kayıttaki aynı TR doğrulamasından geçirir. Boş, eksik ve mükerrer küpeler kaydedilmez; bağlı buzağı / yetişkin küpeleri eşitlenir.
+- Tedavide veteriner hekim alanı mobilde tam genişliğe alındı. Sağlık maliyet kutuları tarihle hizalandı; TL simgesi ve virgüllü / noktalı kuruş girişi eklendi.
+- Maliyet alanları eski, noktalama işaretlerini silen biçimlendiriciden ayrıldı. Hastalık kaydı, plan ve gerçek uygulama maliyet kuralları korunur.
+- Derleme, önbellek ve Windows kurulum adı 2.0.34 olarak güncellendi. Önceki 2.0.33a GitHub test düzeltmesi dahildir.
+
 # App Edition 2.0.33a — GitHub Arayüz Testi Düzeltmesi
 
 23/10/2026

@@ -570,15 +570,13 @@ def install(ns):
                 return self.send_html(ns['simple_table_print'](title,subtitle,columns,rows,'/health-center/report.pdf?'+parsed.query))
             payload=ns['simple_table_pdf'](title,subtitle,columns,rows)
             self.send_response(200);self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition','attachment; filename="saglik_yonetimi.pdf"');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
-        if parsed.path not in ('/health','/synchronization'):return original_get(self)
+        if parsed.path!='/health':return original_get(self)
         if not authorized(self):return
         query=parse_qs(parsed.query)
-        if parsed.path=='/synchronization':query['category']=['sync']
         try:
             with ns['db']() as c:
                 body=views.markup(ns,c,query,csrf_token(self))
             document=ns['page']('Sağlık Yönetimi',body,'/health',self.user()['username'],(query.get('msg') or [''])[0])
-            document=re.sub(r'<nav class="sync-entry-nav".*?</nav>','',document,flags=re.S)
             return self.send_html(document)
         except (ValueError,TypeError,OverflowError) as exc:return self.redirect('/health',str(exc))
     def do_POST(self):

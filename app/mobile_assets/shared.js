@@ -5,6 +5,19 @@
     if (window.cpSharedStarted) return;
     window.cpSharedStarted = true;
     animalStates();
+    document.addEventListener('click', event => {
+      document.querySelectorAll('.cp-herd-options[open]').forEach(menu=>{if(!menu.contains(event.target))menu.open=false;});
+    });
+    document.addEventListener('keydown', event => {
+      if(event.key!=='Escape')return;
+      document.querySelectorAll('.cp-herd-options[open]').forEach(menu=>{menu.open=false;menu.querySelector('summary')?.focus({preventScroll:true});});
+    });
+    document.addEventListener('input', event => {
+      const input=event.target;
+      if (!input.matches('[data-cp-tag-digits]')) return;
+      const digits=input.value.replace(/^\s*TR\s*/i,'').replace(/\D/g,'').slice(0,14);
+      if (input.value!==digits) input.value=digits;
+    });
     const form = document.querySelector('[data-layout-form]');
     if (!form) return;
     const refresh = () => {
@@ -64,6 +77,14 @@
       });
       document.body.append(dialog);
     }
+    function showContent(content, trigger) {
+      createDialog(trigger);
+      ++serial;controller?.abort();dialog.replaceChildren(content);
+      if (!dialog.open) dialog.showModal();
+      const heading=dialog.querySelector('h2');
+      if (heading) {heading.tabIndex=-1;heading.focus({preventScroll:true});}
+      return dialog;
+    }
     async function open(url, trigger) {
       createDialog(trigger);
       const requested = ++serial;
@@ -74,14 +95,19 @@
       try {
         const target = new URL(url,location.origin);target.searchParams.set('fragment','1');
         const response = await fetch(target,{signal:controller.signal,headers:{'X-Requested-With':'CiftlikPro-State'}});
-        if (new URL(response.url).pathname !== '/animal-events') { location.assign(response.url);return; }
+        if (!['/animal-events','/animal-edit','/calf-edit'].includes(new URL(response.url).pathname)) { location.assign(response.url);return; }
         if (!response.ok) throw new Error('Kayıt ekranı açılamadı. Hayvanın aktif olduğunu kontrol et.');
         const documentResponse = new DOMParser().parseFromString(await response.text(),'text/html');
-        const content = documentResponse.querySelector('[data-cp-state-content]');
+        const content = documentResponse.querySelector('[data-cp-state-content],[data-cp-edit-content]');
         if (!content) throw new Error('Kayıt ekranı yüklenemedi.');
         if (requested !== serial || !current.open) return;
         current.replaceChildren(content);
+        if (content.matches('[data-cp-edit-content]') && typeof window.bindSmartPhotoForms==='function') window.bindSmartPhotoForms();
         const heading = current.querySelector('h2');heading.tabIndex = -1;heading.focus({preventScroll:true});
+        if (target.searchParams.get('focus')==='notes') {
+          const notes=current.querySelector('textarea[name=notes]');
+          notes?.focus({preventScroll:true});notes?.scrollIntoView({block:'center'});
+        }
       } catch (error) {
         if (error.name === 'AbortError' || requested !== serial || !current.open) return;
         current.querySelector('[role=status]').textContent = error.message;
@@ -90,10 +116,12 @@
       }
     }
     window.cpOpenAnimalState = open;
+    window.cpOpenAnimalMenu = showContent;
+    window.cpCloseAnimalPanel = close;
     document.addEventListener('click', event => {
       const cancel = event.target.closest('[data-cp-state-close]');
       if (cancel && dialog?.contains(cancel)) { event.preventDefault();close();return; }
-      const link = event.target.closest('a[data-cp-state-url],a[data-cp-state-step]');
+      const link = event.target.closest('a[data-cp-state-url],a[data-cp-state-step],a[href^="/animal-edit?"],a[href^="/calf-edit?"]');
       if (!link || !isPlainClick(event)) return;
       if (link.hasAttribute('data-cp-state-step') && !dialog?.contains(link)) return;
       event.preventDefault();open(link.href,link);

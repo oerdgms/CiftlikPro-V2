@@ -205,9 +205,20 @@ class SynchronizationTests(unittest.TestCase):
         try:
             with patch.object(server,'license_status',return_value=(True,{},'')):
                 with request('/synchronization',login=False) as response:self.assertEqual(response.headers['Location'],'/login')
+                with request('/reproduction-center') as response:
+                    reproduction=response.read().decode()
+                    self.assertNotIn('sync-entry-nav',reproduction)
+                    self.assertEqual(reproduction.count('class="btn alt cp-repro-sync"'),1)
+                    toolbar=re.search(r'<div class="workspace-actions">(.*?)</div>',reproduction,re.S).group(1)
+                    self.assertLess(toolbar.index('href="/estrus"'),toolbar.index('href="/inseminations"'))
+                    self.assertLess(toolbar.index('href="/inseminations"'),toolbar.index('href="/synchronization"'))
+                    self.assertNotIn('Senkronizasyon Tanımla',toolbar)
                 with request('/synchronization') as response:
                     document=response.read().decode()
                     self.assertIn('Senkronizasyon Tanımla',document)
+                    self.assertIn('href="/reproduction-center"',document)
+                    self.assertIn('class="sync-workspace"',document)
+                    self.assertNotIn('id="healthCenter"',document)
                     csrf=re.search(r'name="csrf" value="([^"]+)"',document).group(1)
                 form=self.form(title='<script>alert(1)</script>');form['animal_id']=[str(self.cow)]
                 with request('/synchronization/save',form) as response:self.assertIn('Oturum',response.headers['Location'])
@@ -220,6 +231,12 @@ class SynchronizationTests(unittest.TestCase):
                     with request('/app-assets/'+asset) as response:self.assertEqual(response.code,200)
                 with request('/synchronization?plan=1') as response:
                     document=response.read().decode();self.assertNotIn('<script>alert(1)</script>',document);self.assertIn('&lt;script&gt;',document)
+                with request('/synchronization') as response:
+                    self.assertIn('&lt;script&gt;',response.read().decode())
+                with request('/health?category=sync') as response:
+                    document=response.read().decode()
+                    self.assertIn('id="healthCenter"',document)
+                    self.assertIn('&lt;script&gt;',document)
                 with request('/synchronization?plan=nan') as response:self.assertEqual(response.code,303)
             with patch.object(server,'license_status',return_value=(False,{},'Lisans gerekli')):
                 with request('/synchronization') as response:self.assertTrue(response.headers['Location'].startswith('/license'))
