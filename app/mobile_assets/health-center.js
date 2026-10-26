@@ -106,6 +106,55 @@
     dialog.querySelector('.hc-complete-label').textContent = button.dataset.hcTitle + '\n' + button.dataset.hcSubject;
     open('hcComplete');
   }));
+  const batchDialog = document.getElementById('hcBatchComplete');
+  const batchForm = document.getElementById('hcBatchForm');
+  const batchGroups = JSON.parse(document.getElementById('hcBatchData')?.textContent || '{}');
+  if (batchForm) {
+    const options = batchForm.querySelector('[data-hc-batch-options]');
+    const search = batchForm.querySelector('[data-hc-batch-search]');
+    const paddock = batchForm.querySelector('[data-hc-batch-paddock]');
+    const save = batchForm.querySelector('[data-hc-batch-save]');
+    const error = batchForm.querySelector('.hc-form-error');
+    const money = new Intl.NumberFormat('tr-TR', {style:'currency',currency:'TRY'});
+    const rows = () => all('.hc-animal-option', options);
+    function updateBatch() {
+      const selected = rows().filter(row => row.querySelector('input').checked);
+      batchForm.querySelector('[name=task_ids]').value = JSON.stringify(selected.map(row => Number(row.querySelector('input').value)));
+      batchForm.querySelector('[data-hc-batch-selected]').textContent = selected.length + ' seçili';
+      const cost = selected.reduce((total,row) => total + Number(row.dataset.cost),0);
+      batchForm.querySelector('[data-hc-batch-summary]').textContent = selected.length + ' hayvan · Toplam ' + money.format(cost / 100);
+      save.textContent = selected.length + ' Hayvana Yapıldı Olarak Kaydet';
+      save.disabled = selected.length === 0; error.hidden = true;
+    }
+    function filterBatch() {
+      const term = normalize(search.value);
+      rows().forEach(row => { row.hidden = !((!term || CPTextSearch.matches(row.dataset.search,term)) && (!paddock.value || row.dataset.paddock === paddock.value)); });
+      batchForm.querySelector('[data-hc-batch-empty]').hidden = rows().some(row => !row.hidden);
+    }
+    all('[data-hc-batch]').forEach(button => button.addEventListener('click', () => {
+      const group = batchGroups[button.dataset.hcBatch]; if (!group) return;
+      batchForm.reset(); options.replaceChildren();
+      batchForm.querySelector('[name=batch_ref]').value = button.dataset.hcBatch;
+      batchForm.querySelector('[data-hc-batch-title]').textContent = group.title + '\n' + group.detail + ' · Planlanan ' + group.date;
+      const pads = [...new Set(group.members.map(member => member.paddock))].sort((a,b) => a.localeCompare(b,'tr'));
+      paddock.replaceChildren(...['',...pads].map(name => {const option=document.createElement('option');option.value=name;option.textContent=name || 'Tüm padoklar';return option;}));
+      group.members.forEach(member => {
+        const row=document.createElement('label');row.className='hc-animal-option';row.dataset.search=member.search;row.dataset.paddock=member.paddock;row.dataset.cost=member.cost;
+        const input=document.createElement('input');input.type='checkbox';input.value=member.id;input.checked=true;input.addEventListener('change',updateBatch);
+        const identity=document.createElement('span'),tag=document.createElement('b'),detail=document.createElement('small');tag.textContent=member.tag;detail.textContent=member.detail;identity.append(tag,detail);row.append(input,identity);options.append(row);
+      });
+      filterBatch(); updateBatch(); open(batchDialog.id);
+    }));
+    search.addEventListener('input',filterBatch);paddock.addEventListener('change',filterBatch);
+    search.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();filterBatch();}});
+    batchForm.querySelector('[data-hc-batch-all]').addEventListener('click',()=>{rows().forEach(row=>row.querySelector('input').checked=true);updateBatch();});
+    batchForm.querySelector('[data-hc-batch-visible]').addEventListener('click',()=>{rows().forEach(row=>row.querySelector('input').checked=!row.hidden);updateBatch();});
+    batchForm.querySelector('[data-hc-batch-clear]').addEventListener('click',()=>{rows().forEach(row=>row.querySelector('input').checked=false);updateBatch();});
+    batchForm.addEventListener('submit',event=>{
+      updateBatch();
+      if (save.disabled) {event.preventDefault();error.textContent='En az bir hayvan seçin.';error.hidden=false;}
+    });
+  }
   all('[data-hc-confirm]').forEach(form => form.addEventListener('submit', event => {
     if (!window.confirm(form.dataset.hcConfirm)) event.preventDefault();
   }));

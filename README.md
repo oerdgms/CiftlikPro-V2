@@ -1,4 +1,15 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.36
+# ÇiftlikPro Enterprise — App Edition 2.0.37
+
+Sağlık programlarında aynı doz / uygulama için **Toplu Yapıldı** eklendi. 67 hayvanın uygulama tarihini tek sefer girip seçilenleri kaydedebilirsiniz.
+
+- Tarihi gelen uygulamanın toplu kartı, liste sayfalansa da gruptaki tüm uygun hayvanları açar.
+- Tümünü seç, yalnız görünenleri seç, küpe / ad araması, padok filtresi ve seçimden çıkarma desteklenir.
+- Kaydetmeden önce hayvan sayısı ve toplam maliyet görünür. Her hayvanın sağlık ve gider kaydı ayrı tutulur.
+- İlk doz kaydedilince rapel beklemede kalır; tarih her hayvanın gerçek ilk uygulamasından hesaplanır. Aynı gönderim ikinci kayıt oluşturmaz.
+- Eski çoklu hayvan / padok programları ile yeni aşı, parazit, vitamin / mineral ve tedavi programları desteklenir.
+- Mobil ana sayfada uzun hayvan listesi kısa bir özet gösterir; karta dokununca tam uygulama listesi açılır.
+
+## 2.0.36 senkronizasyon girişi
 
 Üreme Yönetimi’nde Kızgınlık Kaydı ve Tohumlama düğmelerinin yanında tek **Senkronizasyon** düğmesi bulunur. Bu düğme senkronizasyon listesini açar; mevcut planlar görülür ve **Senkronizasyon Tanımla** ile yeni kayıt oluşturulur.
 
@@ -51,12 +62,12 @@ Mobil ve masaüstünde Aşı, Parazit, Vitamin / Mineral, Hastalık / Tedavi ve 
 
 1. ZIP içindeki kaynakların tamamıyla GitHub deposunu güncelleyin.
 2. Actions → CiftlikPro Windows Kurulum → Run workflow.
-3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_36_Setup.exe` dosyasını mevcut bilgisayara kurun.
+3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_37_Setup.exe` dosyasını mevcut bilgisayara kurun.
 4. Telefon ve masaüstünde mevcut adresi yeniden açın. Masaüstünde ana sayfayı kontrol edin; diğer bölümler üst menüdeki **Modüller** rozetinden açılır.
 
 Bu ZIP tam kaynak / kurulum projesidir; hazır Windows EXE, APK veya IPA içermez. Yeni `app/animal_edit_ui.py` ve sağlık merkezi dosyaları pakete dahildir. Mevcut veritabanı yedekleme adımı korunur; yeni tablolar ilk açılışta mevcut kayıtlara eklenir. Veri klasörünüzü silmeyin.
 
-Ayrıntılar: [2.0.36 değişiklikler](DUZELTME_NOTLARI_2_0_36.md), [2.0.36 doğrulama](DOGRULAMA_APP_EDITION_2_0_36.md), [2.0.35 değişiklikler](DUZELTME_NOTLARI_2_0_35.md), [2.0.35 doğrulama](DOGRULAMA_APP_EDITION_2_0_35.md), [Hayvan düzenleme](DUZELTME_NOTLARI_2_0_34.md), [Canlı metin araması](DUZELTME_NOTLARI_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
+Ayrıntılar: [2.0.37 değişiklikler](DUZELTME_NOTLARI_2_0_37.md), [2.0.37 doğrulama](DOGRULAMA_APP_EDITION_2_0_37.md), [2.0.36 değişiklikler](DUZELTME_NOTLARI_2_0_36.md), [2.0.36 doğrulama](DOGRULAMA_APP_EDITION_2_0_36.md), [2.0.35 değişiklikler](DUZELTME_NOTLARI_2_0_35.md), [2.0.35 doğrulama](DOGRULAMA_APP_EDITION_2_0_35.md), [Hayvan düzenleme](DUZELTME_NOTLARI_2_0_34.md), [Canlı metin araması](DUZELTME_NOTLARI_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
 
 Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
 

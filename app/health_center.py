@@ -43,6 +43,7 @@ ICON_PATHS = {
     'heart':'<path d="M20 5c-3-3-7-1-8 2-2-3-6-5-9-2-5 6 9 15 9 15S25 11 20 5zM5 12h4l2-4 3 8 2-4h3"/>',
     'box':'<path d="m3 7 9-5 9 5v12l-9 3-9-3zM3 7l9 5 9-5M12 12v10"/>',
     'person':'<circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/>',
+    'check':'<circle cx="12" cy="12" r="9"/><path d="m7 12 3 3 7-7"/>',
 }
 
 
@@ -256,7 +257,7 @@ def save_program(ns,c,data,username):
 
 
 def complete_task(ns,c,tid,actual,username):
-    t=c.execute('''select t.*,hc.kind,hc.product,hc.active,hc.cost_per_application,m.repeat_value,m.repeat_unit,m.rapel_days
+    t=c.execute('''select t.*,hc.kind,hc.product,hc.active,hc.cost_per_application,hc.interval_days,m.repeat_value,m.repeat_unit,m.rapel_days
         from health_tasks t join health_courses hc on hc.id=t.course_id
         left join health_program_meta m on m.course_id=hc.id where t.id=?''',(tid,)).fetchone()
     if not t:raise ValueError('Uygulama bulunamadı.')
@@ -280,6 +281,16 @@ def complete_task(ns,c,tid,actual,username):
         values(?,?,?,?,?,?,?,?,?,?)''',(t['animal_id'],t['calf_id'],t['kind'],product,actual.isoformat(),cost/100,
         f'Plan #{t["course_id"]} · Planlanan {t["planned_date"]} · {username}',fid,t['course_id'],tid))
     c.execute("update health_tasks set status='Tamamlandı',completed_date=? where id=?",(actual.isoformat(),tid))
+    if t['rapel_days'] is None and t['kind']=='Aşı' and t['dose_total']>1:
+        # Older multi-animal courses also anchor their remaining doses to the
+        # actual application, without changing already recorded doses.
+        interval=integer(t['interval_days'] or 15,'Doz aralığı',1,365)
+        later=c.execute('''select id,dose_no from health_tasks where course_id=? and coalesce(animal_id,0)=?
+            and coalesce(calf_id,0)=? and cycle_no=? and dose_no>? and status='Bekliyor' ''',
+            (t['course_id'],t['animal_id'] or 0,t['calf_id'] or 0,t['cycle_no'],t['dose_no'])).fetchall()
+        for row in later:
+            c.execute('update health_tasks set planned_date=? where id=?',
+                ((actual+timedelta(days=interval*(row['dose_no']-t['dose_no']))).isoformat(),row['id']))
     if t['rapel_days'] is not None and t['dose_no']==1:
         c.execute('''update health_tasks set planned_date=?,cycle_start=? where course_id=? and coalesce(animal_id,0)=?
             and coalesce(calf_id,0)=? and cycle_no=? and dose_no=2 and status='Bekliyor' ''',
@@ -288,6 +299,50 @@ def complete_task(ns,c,tid,actual,username):
             next_start=add_interval(actual,t['repeat_value'],t['repeat_unit'])
             add_cycle(c,t['course_id'],refs[0],next_start,t['cycle_no']+1,cents(t['cost_per_application']),t['rapel_days'])
     return True
+
+
+def batch_ref(task):
+    return ':'.join(str(task[key]) for key in ('course_id','planned_date','dose_no','day_no','application_no','cycle_no'))
+
+
+def complete_batch(ns,c,data,username):
+    """Complete only the explicitly selected tasks in one frozen application slot.
+
+    The caller holds BEGIN IMMEDIATE. Any validation failure rolls the whole
+    selection back through the surrounding database context manager.
+    """
+    actual=day(data.get('actual_date'),'Gerçek uygulama tarihi')
+    if actual>today():raise ValueError('Gelecekteki uygulama yapılmış olarak kaydedilemez.')
+    scope=str(data.get('batch_ref') or '')
+    if not 1<=len(scope)<=120:raise ValueError('Uygulama grubunu yeniden açın.')
+    try:ids=json.loads(data.get('task_ids','[]'))
+    except (ValueError,TypeError):raise ValueError('Hayvan seçimi geçersiz.')
+    if not isinstance(ids,list) or not 1<=len(ids)<=500:raise ValueError('En az bir, en fazla 500 hayvan seçin.')
+    if any(isinstance(tid,bool) or not isinstance(tid,int) or not 1<=tid<=2147483647 for tid in ids):
+        raise ValueError('Uygulama seçimi geçersiz.')
+    ids=list(dict.fromkeys(ids));tasks=[]
+    for tid in ids:
+        task=c.execute('select * from health_tasks where id=?',(tid,)).fetchone()
+        if not task or batch_ref(task)!=scope:
+            raise ValueError('Program veya uygulama tarihi değişti. Listeyi yenileyip tekrar seçin.')
+        tasks.append(task)
+    for task in tasks:
+        if task['status'] in ('Tamamlandı','Yapıldı'):continue
+        earlier=c.execute('''select 1 from health_tasks where course_id=? and coalesce(animal_id,0)=?
+            and coalesce(calf_id,0)=? and (cycle_no,dose_no,day_no,application_no)<(?,?,?,?)
+            and status not in ('Tamamlandı','Yapıldı') limit 1''',
+            (task['course_id'],task['animal_id'] or 0,task['calf_id'] or 0,task['cycle_no'],
+             task['dose_no'],task['day_no'],task['application_no'])).fetchone()
+        if earlier:raise ValueError('Seçimde önceki dozu veya uygulaması henüz yapılmamış hayvan var. Önce önceki uygulamayı kaydedin.')
+        previous=c.execute('''select max(completed_date) from health_tasks where course_id=? and coalesce(animal_id,0)=?
+            and coalesce(calf_id,0)=? and (cycle_no,dose_no,day_no,application_no)<(?,?,?,?)
+            and status in ('Tamamlandı','Yapıldı')''',
+            (task['course_id'],task['animal_id'] or 0,task['calf_id'] or 0,task['cycle_no'],
+             task['dose_no'],task['day_no'],task['application_no'])).fetchone()[0]
+        if previous and actual.isoformat()<previous:raise ValueError('Uygulama tarihi bu hayvanın önceki dozundan / uygulamasından önce olamaz.')
+    count=sum(bool(complete_task(ns,c,task['id'],actual,username)) for task in tasks)
+    return (f'{count} hayvan için uygulama sağlık geçmişine kaydedildi.' if count
+        else 'Seçilen uygulamalar zaten yapılmış. İkinci kayıt oluşturulmadı.')
 
 
 def split_cost(total,count,index):
@@ -352,6 +407,7 @@ def save_case(ns,c,data,username):
 def action(ns,c,data,username):
     c.execute('BEGIN IMMEDIATE')
     act=data.get('action');result='Kayıt güncellendi.'
+    if act=='complete_batch':return complete_batch(ns,c,data,username)
     if act=='complete':
         actual=day(data.get('actual_date'),'Gerçek uygulama tarihi')
         tid=integer(data.get('task_id'),'Uygulama',1,2147483647)
@@ -428,7 +484,11 @@ def edit_record(ns,c,data,username):
 
 def workspace_data(ns,c):
     active={a['ref']:a for a in subjects(c)}
-    pending=[]
+    pending=[];frontiers={}
+    for task in c.execute("select * from health_tasks where status not in ('Tamamlandı','Yapıldı')"):
+        subject=(task['course_id'],task['animal_id'],task['calf_id'])
+        stage=tuple(task[key] for key in ('cycle_no','dose_no','day_no','application_no'))
+        frontiers[subject]=min(frontiers.get(subject,stage),stage)
     for raw in c.execute('''select t.*,hc.kind,hc.product,hc.scope_type,m.category from health_tasks t
         join health_courses hc on hc.id=t.course_id left join health_program_meta m on m.course_id=hc.id
         where t.status='Bekliyor' and coalesce(hc.active,1)=1 order by t.planned_date,t.id'''):
@@ -440,6 +500,8 @@ def workspace_data(ns,c):
         pending.append({'date':r['planned_date'],'category':category,'title':r['product'],'subject':a['tag'],
             'nickname':a['nickname'],'paddock':a['paddock'],'detail':detail,'source':'course','id':r['id'],
             'course_id':r['course_id'],'plan_ref':f"{r['course_id']}:{r['planned_date']}:{r['dose_no']}:{r['day_no']}:{r['application_no']}",'url':'/health?'+urlencode({'category':category,'plan':r['course_id']}),
+            'batch_ref':batch_ref(r),'batch_ready':tuple(r[k] for k in ('cycle_no','dose_no','day_no','application_no'))==frontiers.get((r['course_id'],r['animal_id'],r['calf_id'])),
+            'cost_cents':cents(r['cost']),
             'edit_url':('/health?'+urlencode({'category':category,'edit':r['course_id']})) if r['category'] else '/health-plan-edit?id='+str(r['course_id'])})
     for raw in c.execute("select * from health where coalesce(next_date,'')<>'' order by next_date,id"):
         r=dict(raw);ref=('animal:' if r['animal_id'] else 'calf:')+str(r['animal_id'] or r['calf_id'])

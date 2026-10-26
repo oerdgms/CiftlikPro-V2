@@ -39,7 +39,25 @@ def status_badge(state):
     return '<span class="hc-badge hc-badge-'+state+'">'+{'today':'Bugün','overdue':'Gecikti','upcoming':'Planlandı','done':'Yapıldı'}[state]+'</span>'
 
 
-def task_rows(ns,rows,token,query):
+def batch_cards(ns,rows,visible):
+    visible_refs={r.get('batch_ref') for r in visible if r.get('batch_ready')}
+    groups={}
+    for row in rows:
+        if row.get('batch_ready') and row['date']<=hc.today().isoformat() and row.get('batch_ref') in visible_refs:
+            groups.setdefault(row['batch_ref'],[]).append(row)
+    cards='';payload={}
+    for ref,members in groups.items():
+        if len(members)<2:continue
+        row=members[0]
+        payload[ref]={'title':row['title'],'detail':row['detail'],'date':ns['fmt_date'](row['date']),
+            'members':[{'id':r['id'],'tag':r['subject'],'detail':r.get('nickname') or r.get('paddock') or 'Padoksuz',
+                'paddock':r.get('paddock') or 'Padoksuz','search':r['search'],'cost':r['cost_cents']} for r in members]}
+        cards+=f'''<article class="hc-batch-card"><span class="hc-icon hc-green">{hc.icon('check')}</span><div><b>{esc(row['title'])}</b><small>{len(members)} hayvan · {esc(row['detail'])} · {esc(ns['fmt_date'](row['date']))}</small></div><button class="hc-primary" type="button" data-hc-batch="{esc(ref)}">Toplu Yapıldı</button></article>'''
+    data=json.dumps(payload,ensure_ascii=False).replace('<','\\u003c')
+    return '<section class="hc-batch-cards" aria-label="Toplu uygulama">'+cards+'</section><script type="application/json" id="hcBatchData">'+data+'</script>' if cards else ''
+
+
+def task_rows(ns,rows,token,query,all_rows=None):
     content=''
     for r in rows:
         category=r['category'];label,ico,tone=hc.CATEGORIES[category]
@@ -58,7 +76,7 @@ def task_rows(ns,rows,token,query):
           <div class="hc-task-main"><span class="hc-icon hc-{tone}">{hc.icon(ico)}</span><div><b>{esc(r['title'])}</b><small>{esc(label)} · {esc(r['detail'])}</small></div></div>
           <div class="hc-task-subject"><b>{esc(r['subject'])}</b><small>{esc(r.get('nickname') or r.get('paddock') or 'Padoksuz')}</small></div>
           <div class="hc-task-date">{esc(date_text)}</div><div class="hc-task-status">{status_badge(r['state'])}</div><div class="hc-task-actions">{control}{menu}</div></article>'''
-    return '<div class="hc-task-head"><span>İşlem</span><span>Hayvan / Grup</span><span>Tarih</span><span>Durum</span><span>İşlem</span></div><div class="hc-task-list">'+content+'</div>' if rows else empty('Bu görünümde planlı işlem yok.','Yeni bir sağlık işlemi ekleyebilir veya filtreleri değiştirebilirsin.')
+    return batch_cards(ns,rows if all_rows is None else all_rows,rows)+'<div class="hc-task-head"><span>İşlem</span><span>Hayvan / Grup</span><span>Tarih</span><span>Durum</span><span>İşlem</span></div><div class="hc-task-list">'+content+'</div>' if rows else empty('Bu görünümde planlı işlem yok.','Yeni bir sağlık işlemi ekleyebilir veya filtreleri değiştirebilirsin.')
 
 
 def history_rows(ns,rows,token,query):
@@ -155,7 +173,11 @@ def case_dialog(c,subjects,query,token):
 def dialogs(c,subjects,query,token):
     chooser=''.join(f'<button type="button" class="hc-choice" data-hc-choice="{key}"><span class="hc-icon hc-{tone}">{hc.icon(ico)}</span><span><b>{esc(label)}</b><small>{"Program ve uygulama kaydı" if key not in ("treatment","sync") else "Hastalık, muayene ve takip" if key=="treatment" else "Program ve hayvan seçimi"}</small></span><span>›</span></button>' for key,(label,ico,tone) in hc.CATEGORIES.items())
     complete=f'''<dialog id="hcComplete" class="hc-dialog hc-dialog-small">{dialog_head('Uygulamayı Kaydet')}<form method="post" action="/health-center/action" class="hc-form">{hidden('csrf',token)}{hidden('action','complete')}{hidden('task_id','')}{hidden('return_to',link(query))}<p class="hc-complete-label"></p><label>Gerçek uygulama tarihi *<input name="actual_date" type="date" max="{hc.today().isoformat()}" value="{hc.today().isoformat()}" required></label><p class="hc-note">Yalnız bu hayvanın seçilen uygulaması tamamlanır.</p><footer class="hc-dialog-footer"><button type="button" class="hc-secondary" data-hc-close>Vazgeç</button><button type="submit" class="hc-primary">Yapıldı Olarak Kaydet</button></footer></form></dialog>'''
-    return '<dialog id="hcChooser" class="hc-dialog hc-dialog-small">'+dialog_head('Sağlık İşlemi Ekle')+'<div class="hc-choices">'+chooser+'</div></dialog>'+program_dialog(c,subjects,{k:v for k,v in query.items() if k!='edit'} if value(query,'category')=='sync' else query,token)+case_dialog(c,subjects,query,token)+complete
+    batch=f'''<dialog id="hcBatchComplete" class="hc-dialog">{dialog_head('Toplu Uygulama Kaydı')}<form method="post" action="/health-center/action" class="hc-form" id="hcBatchForm">{hidden('csrf',token)}{hidden('action','complete_batch')}{hidden('batch_ref','')}{hidden('task_ids','[]')}{hidden('return_to',link(query,task=None))}
+      <p class="hc-complete-label" data-hc-batch-title></p><label>Gerçek uygulama tarihi *<input name="actual_date" type="date" max="{hc.today().isoformat()}" value="{hc.today().isoformat()}" required></label>
+      <fieldset class="hc-picker hc-batch-picker"><legend>Uygulama yapılan hayvanlar <b data-hc-batch-selected>0 seçili</b></legend><div class="hc-batch-filters"><input type="search" data-hc-batch-search placeholder="Küpe, ad veya padok ara" aria-label="Toplu uygulamada hayvan ara"><select data-hc-batch-paddock aria-label="Toplu uygulama padok filtresi"><option value="">Tüm padoklar</option></select></div><div class="hc-picker-tools hc-batch-tools"><button type="button" data-hc-batch-all>Tümünü seç</button><button type="button" data-hc-batch-visible>Yalnız görünenleri seç</button><button type="button" data-hc-batch-clear>Temizle</button></div><div class="hc-animal-options" data-hc-batch-options></div><p class="hc-note" data-hc-batch-empty hidden>Bu aramada hayvan yok.</p></fieldset>
+      <p class="hc-note">Yalnız seçilen hayvanların bu dozu / uygulaması kaydedilir. Seçilmeyenler beklemeye devam eder. Rapel ve dönemsel tekrarlar her hayvanın gerçek uygulama tarihine göre ilerler. Arama mevcut seçimi değiştirmez.</p><p class="hc-form-error" role="alert" hidden></p><footer class="hc-dialog-footer hc-batch-footer"><output class="hc-batch-summary" data-hc-batch-summary></output><div class="hc-batch-buttons"><button type="button" class="hc-secondary" data-hc-close>Vazgeç</button><button type="submit" class="hc-primary" data-hc-batch-save disabled>Seçilenlere Yapıldı</button></div></footer></form></dialog>'''
+    return '<dialog id="hcChooser" class="hc-dialog hc-dialog-small">'+dialog_head('Sağlık İşlemi Ekle')+'<div class="hc-choices">'+chooser+'</div></dialog>'+program_dialog(c,subjects,{k:v for k,v in query.items() if k!='edit'} if value(query,'category')=='sync' else query,token)+case_dialog(c,subjects,query,token)+complete+batch
 
 
 
@@ -286,11 +308,11 @@ def markup(ns,c,query,token):
             filtered=history if tab=='done' else [r for r in scoped if filt=='all' or (r['state']==filt and (filt!='upcoming' or r['date']<=(hc.today()+timedelta(days=30)).isoformat()))]
             page=hc.integer(value(query,'page','1'),'Sayfa',1,100000);pages=max(1,(len(filtered)+24)//25);page=min(page,pages)
             rows=filtered[(page-1)*25:page*25]
-            listing=tabs+timefilters+(history_rows(ns,rows,token,query) if tab=='done' else task_rows(ns,rows,token,query))
+            listing=tabs+timefilters+(history_rows(ns,rows,token,query) if tab=='done' else task_rows(ns,rows,token,query,all_rows=filtered))
             if pages>1:listing+='<nav class="hc-pagination">'+(f'<a href="{esc(link(query,page=page-1))}">‹ Önceki</a>' if page>1 else '<span></span>')+f'<span>{page} / {pages} · {len(filtered)} kayıt</span>'+(f'<a href="{esc(link(query,page=page+1))}">Sonraki ›</a>' if page<pages else '<span></span>')+'</nav>'
         content+='<section class="hc-panel hc-agenda">'+toolbar+listing+'</section>'
         if view!='calendar' and tab!='done':content+=program_cards(ns,c,query,token)
         if category=='general' and view!='calendar' and tab!='done':
             content+='<div class="hc-bottom-grid">'+cases_markup(ns,data,token,query,overview=True)+'<section class="hc-panel"><header class="hc-section-head"><h2>Son Uygulamalar</h2><a href="/health?tab=done">Tümünü gör ›</a></header>'+history_rows(ns,data['history'][:4],token,query)+'</section></div>'
     auto=' data-hc-add-auto' if value(query,'app_action')=='add' else ''
-    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.36"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.36" defer></script>'
+    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.37"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.37" defer></script>'

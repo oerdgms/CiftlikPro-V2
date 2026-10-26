@@ -1,3 +1,15 @@
+# App Edition 2.0.37 — Toplu Sağlık Uygulaması
+
+24/10/2026
+
+- Sağlık Yönetimi’nde aynı program / gün / doz / uygulama grubuna Toplu Yapıldı eklendi. Liste 25 satıra bölünse de tüm uygun grup seçilebilir.
+- Gerçek tarih bir kez girilir; hayvan seçimi arama / padokla süzülebilir. Seçilmeyenler beklemede kalır. Hayvan sayısı ve toplam maliyet sabit alt bölümde görünür.
+- Toplu işlem tek veritabanı işlemiyle kaydedilir; her hayvana ayrı sağlık / gider kaydı yazılır. Yinelenen gönderim ikinci kayıt veya gider oluşturmaz. Karışık doz, değişmiş takvim, pasif hayvan ve tamamlanmamış önceki uygulama denetlenir.
+- Yeni programların rapel ve dönemsel tekrarları gerçek uygulama tarihinden ilerler. Eski çoklu aşı programlarında da sonraki bekleyen dozlar gerçek tarihe göre yeniden hesaplanır.
+- Henüz tarihi gelmemiş veya önceki dozu yapılmamış adımlar toplu karta alınmaz. Senkronizasyon adımları kendi ayrıntılı kayıt akışını kullanır.
+- Mobil ana sayfada çoklu planın uzun hayvan listesi kısa özetle gösterilir; tüm hayvanlar uygulama ekranında korunur.
+- Yapı, önbellek ve Windows kurulum adı 2.0.37 olarak güncellendi. Önceki 2.0.36 senkronizasyon girişi ve 2.0.35 pencere düzeltmeleri dahildir.
+
 # App Edition 2.0.36 — Üreme Yönetimi Senkronizasyon Girişi
 
 24/10/2026

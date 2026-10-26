@@ -12,7 +12,7 @@ import home_layout
 import desktop_views
 import animal_actions
 
-BUILD = 'AppEdition2.0.36-ReproductionSync'
+BUILD = 'AppEdition2.0.37-BulkHealth'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -119,7 +119,7 @@ def shell_markup(title, path, username, profile=None):
     return header + nav + quick + menu + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css?v=2.0.36"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.36"><link rel="stylesheet" href="/app-assets/shared.css?v=2.0.36">'''
+HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css?v=2.0.37"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.37"><link rel="stylesheet" href="/app-assets/shared.css?v=2.0.37">'''
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
@@ -149,9 +149,9 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
     document = re.sub(r'<body([^>]*)>', body_tag, document, count=1)
     document = desktop_views.desktop_navigation(document, path, icon)
     document = document.replace('</head>', HEAD + '</head>', 1)
-    document = document.replace('</head>', '<script src="/app-assets/search.js?v=2.0.36"></script></head>', 1)
+    document = document.replace('</head>', '<script src="/app-assets/search.js?v=2.0.37"></script></head>', 1)
     if path == '/reproduction-center':
-        document = document.replace('</head>', '<link rel="stylesheet" href="/app-assets/reproduction.css?v=2.0.36"></head>', 1)
+        document = document.replace('</head>', '<link rel="stylesheet" href="/app-assets/reproduction.css?v=2.0.37"></head>', 1)
     # The smart form calls this existing UI controller before the footer script
     # defines it. Hoist its exact definition; no record or pregnancy rule changes.
     if 'id="smartAnimalForm"' in document:
@@ -159,7 +159,7 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user, (extra or {}).get('profile'))
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.36" defer></script><script src="/app-assets/shared.js?v=2.0.36" defer></script><script src="/app-assets/reference.js?v=2.0.36" defer></script>'
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.37" defer></script><script src="/app-assets/shared.js?v=2.0.37" defer></script><script src="/app-assets/reference.js?v=2.0.37" defer></script>'
     return document.replace('</body>', extra + '</body>', 1)
 
 

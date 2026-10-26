@@ -49,6 +49,12 @@ class UnifiedHealthTests(unittest.TestCase):
     def count(self,table):
         with server.db() as c:return c.execute('select count(*) from '+table).fetchone()[0]
 
+    def batch(self,tasks,actual='2026-10-22',**changes):
+        data={'action':'complete_batch','batch_ref':hc.batch_ref(tasks[0]),
+            'task_ids':json.dumps([t['id'] for t in tasks]),'actual_date':actual}
+        data.update(changes)
+        with server.db() as c:return hc.action(vars(server),c,data,'admin')
+
     def complete(self,tid,actual='2026-10-22'):
         with server.db() as c:return hc.action(vars(server),c,{'action':'complete','task_id':str(tid),'actual_date':actual},'admin')
 
@@ -70,6 +76,102 @@ class UnifiedHealthTests(unittest.TestCase):
         with server.db() as c:again=hc.save_program(vars(server),c,data,'admin')
         self.assertEqual(pid,again);self.assertEqual(len(self.tasks(pid)),4)
         self.assertEqual(self.count('health'),0);self.assertEqual(self.count('finance'),0)
+
+    def test_bulk_67_subjects_record_once_with_individual_cost_and_actual_date_rapel(self):
+        refs=list(self.refs)
+        with server.db() as c:
+            for n in range(65):
+                aid=c.execute("insert into animals(tag,gender,status) values(?,'Dişi','Aktif')",('BULK-'+str(n),)).lastrowid
+                refs.append('animal:'+str(aid))
+        pid=self.save(subjects_json=json.dumps(refs),start_date='2026-10-20')
+        first=[t for t in self.tasks(pid) if t['dose_no']==1]
+        self.assertEqual(len(first),67)
+        self.assertIn('67 hayvan',self.batch(first))
+        self.assertIn('zaten yapılmış',self.batch(first))
+        self.assertEqual(self.count('health'),67);self.assertEqual(self.count('finance'),67)
+        with server.db() as c:
+            self.assertAlmostEqual(c.execute('select sum(amount) from finance').fetchone()[0],827.45)
+            self.assertEqual({r[0] for r in c.execute('select applied_date from health')},{'2026-10-22'})
+        tasks=self.tasks(pid)
+        self.assertEqual({t['planned_date'] for t in tasks if t['cycle_no']==1 and t['dose_no']==2},{'2026-11-12'})
+        self.assertEqual({t['planned_date'] for t in tasks if t['cycle_no']==2 and t['dose_no']==1},{'2027-04-22'})
+
+    def test_bulk_partial_selection_and_moved_paddock_keep_unselected_animals_pending(self):
+        pid=self.save(start_date='2026-10-20')
+        first=[t for t in self.tasks(pid) if t['dose_no']==1]
+        with server.db() as c:
+            c.execute('update animals set paddock_id=null where id=?',(self.a,))
+            c.execute("insert into animals(tag,gender,status,paddock_id) values('NEW','Dişi','Aktif',?)",(self.pad,))
+        self.batch([first[0]],task_ids=json.dumps([first[0]['id'],first[0]['id']]))
+        tasks=self.tasks(pid)
+        self.assertEqual(self.count('health'),1);self.assertEqual(self.count('finance'),1)
+        self.assertEqual(next(t for t in tasks if t['id']==first[1]['id'])['status'],'Bekliyor')
+        self.assertEqual({(t['animal_id'],t['calf_id']) for t in tasks},{(self.a,None),(None,self.calf)})
+
+    def test_bulk_invalid_stale_or_mixed_stage_selection_is_atomic(self):
+        pid=self.save();tasks=self.tasks(pid);first=[t for t in tasks if t['dose_no']==1]
+        second=next(t for t in tasks if t['dose_no']==2)
+        other=self.save(product='Başka plan');foreign=self.tasks(other)[0]
+        for changes in [
+            {'task_ids':'[]'},{'task_ids':'broken'},{'task_ids':'[true]'},
+            {'task_ids':json.dumps([first[0]['id'],999999])},
+            {'task_ids':json.dumps([first[0]['id'],foreign['id']])},
+            {'task_ids':json.dumps([first[0]['id'],second['id']])},
+            {'actual_date':'2026-10-23'},{'batch_ref':hc.batch_ref(first[0]).replace('2026-10-22','2026-10-21')},
+        ]:
+            with self.subTest(changes=changes),self.assertRaises(ValueError):self.batch(first,**changes)
+        with self.assertRaises(ValueError):self.batch([second])
+        with server.db() as c:c.execute("update calves set status='Satıldı' where id=?",(self.calf,))
+        with self.assertRaises(ValueError):self.batch(first)
+        self.assertEqual(self.count('health'),0);self.assertEqual(self.count('finance'),0)
+        self.assertTrue(all(t['status']=='Bekliyor' for t in self.tasks(pid)))
+
+    def test_bulk_old_multi_animal_course_also_reanchors_next_dose(self):
+        with server.db() as c:
+            pid=c.execute("insert into health_courses(kind,product,scope_type,start_date,dose_count,interval_days,cost_per_application,created_at) values('Aşı','Eski şap','multi','2026-10-20',2,21,12.35,'2026-10-20')").lastrowid
+            server.create_health_course_tasks(c,pid,[(self.a,None,'TR001'),(None,self.calf,'CALF')],'Aşı','2026-10-20',12.35,'',dose_count=2,interval_days=21)
+        first=[t for t in self.tasks(pid) if t['dose_no']==1]
+        self.batch(first);self.batch(first)
+        self.assertEqual(self.count('health'),2);self.assertEqual(self.count('finance'),2)
+        self.assertEqual({t['planned_date'] for t in self.tasks(pid) if t['dose_no']==2},{'2026-11-12'})
+        with server.db() as c:self.assertIsNone(c.execute('select 1 from health_program_meta where course_id=?',(pid,)).fetchone())
+
+    def test_bulk_treatment_keeps_days_and_daily_applications_separate(self):
+        pid=self.save(category='treatment',schedule_mode='course',treatment_days='2',times_per_day='2')
+        tasks=self.tasks(pid)
+        slot=lambda day,app:[t for t in tasks if t['day_no']==day and t['application_no']==app]
+        with self.assertRaises(ValueError):self.batch(slot(1,2))
+        self.batch(slot(1,1))
+        with self.assertRaises(ValueError):self.batch(slot(1,2),actual='2026-10-21')
+        with self.assertRaises(ValueError):self.batch(slot(2,1))
+        self.batch(slot(1,2))
+        self.assertEqual(self.count('health'),4)
+        self.assertTrue(all(t['status']=='Bekliyor' for t in self.tasks(pid) if t['day_no']==2))
+
+    def test_bulk_parasite_and_vitamin_and_paused_program(self):
+        for category in ['parasite','vitamin']:
+            pid=self.save(category=category,rapel='no',repeat_value='0')
+            self.batch(self.tasks(pid))
+        self.assertEqual(self.count('health'),4)
+        pid=self.save();first=[t for t in self.tasks(pid) if t['dose_no']==1]
+        with server.db() as c:hc.action(vars(server),c,{'action':'pause','course_id':str(pid)},'admin')
+        with self.assertRaises(ValueError):self.batch(first)
+        self.assertEqual(self.count('health'),4)
+
+    def test_bulk_preview_contains_all_67_animals_beyond_paginated_rows(self):
+        refs=list(self.refs)
+        with server.db() as c:
+            for n in range(65):
+                aid=c.execute("insert into animals(tag,gender,status) values(?,'Dişi','Aktif')",('PREVIEW-'+str(n),)).lastrowid
+                refs.append('animal:'+str(aid))
+        pid=self.save(subjects_json=json.dumps(refs))
+        with server.db() as c:page=views.markup(vars(server),c,{'category':['vaccine'],'plan':[str(pid)]},'token')
+        payload=json.loads(re.search(r'<script type="application/json" id="hcBatchData">(.*?)</script>',page,re.S)[1])
+        self.assertEqual(len(payload),1)
+        self.assertEqual(len(next(iter(payload.values()))['members']),67)
+        self.assertEqual(page.count('<article class="hc-task"'),25)
+        self.assertIn('Toplu Yapıldı',page)
+        self.assertNotIn('<Deneme>',page)
 
     def test_all_categories_and_mixed_subject_types(self):
         for category,kind in hc.KINDS.items():
@@ -235,6 +337,16 @@ class UnifiedHealthTests(unittest.TestCase):
                 for _ in range(2):
                     with request('/health-center/program',form) as r:self.assertEqual(r.code,303)
                 self.assertEqual(self.count('health_courses'),1)
+                first=[t for t in self.tasks(1) if t['dose_no']==1]
+                bulk={'action':'complete_batch','batch_ref':hc.batch_ref(first[0]),
+                    'task_ids':json.dumps([t['id'] for t in first]),'actual_date':'2026-10-22'}
+                with request('/health-center/action',bulk,login=False) as r:self.assertEqual(r.headers['Location'],'/login')
+                with request('/health-center/action',bulk) as r:self.assertIn('Oturum',r.headers['Location'])
+                self.assertEqual(self.count('health'),0)
+                bulk['csrf']=token
+                for _ in range(2):
+                    with request('/health-center/action',bulk) as r:self.assertEqual(r.code,303)
+                self.assertEqual(self.count('health'),2);self.assertEqual(self.count('finance'),2)
                 for path in ['/health?category=sync','/health?view=calendar','/health?category=parasite&tab=done','/app-assets/health-center.css','/app-assets/health-center.js','/health-center/print?category=vaccine','/health-center/report.pdf?category=vaccine']:
                     with request(path) as r:self.assertEqual(r.code,200)
             with patch.object(server,'license_status',return_value=(False,{},'Lisans gerekli')):

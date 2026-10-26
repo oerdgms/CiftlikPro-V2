@@ -132,7 +132,11 @@ def home(ns, username, icon, task_url):
     tasks = ''
     for row in rows:
         kind = 'finance' if row.get('source')=='finance' else 'health'
-        tasks += f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" href="{esc(task_url(row))}"><span class="cp-ref-task-icon cp-tone-{ "orange" if kind=="finance" else "blue"}">{icon(kind)}</span><div><b>{esc(row["task"])}</b><span>{esc(row["subject"])}{(" · "+esc(row["detail"])) if row.get("detail") else ""}</span></div><small class="cp-ref-due cp-tone-{ "pink" if row["state"] in ("today","overdue") else "blue"}">{esc(row["status"])}</small></a>'
+        detail = row.get('detail') or ''
+        if row.get('source')=='course' and row.get('target_count',0)>3 and row.get('target_tags'):
+            tags = row['target_tags'].split(', ')
+            detail = detail.removesuffix(' · '+row['target_tags'])+' · '+', '.join(tags[:2])+f" ve {row['target_count']-2} diğer hayvan"
+        tasks += f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" href="{esc(task_url(row))}"><span class="cp-ref-task-icon cp-tone-{ "orange" if kind=="finance" else "blue"}">{icon(kind)}</span><div><b>{esc(row["task"])}</b><span>{esc(row["subject"])}{(" · "+esc(detail)) if detail else ""}</span></div><small class="cp-ref-due cp-tone-{ "pink" if row["state"] in ("today","overdue") else "blue"}">{esc(row["status"])}</small></a>'
     tabs = ''.join(f'<button type="button" data-cp-task-filter="{key}">{label}<span>{count}</span></button>' for key,label,count in [('all','Tümü',len(rows)),('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue'])])
     parts = {
         'business':f'<details class="cp-ref-business" data-cp-home-section="business"><summary><span class="cp-tone-blue">{glyph("identity")}</span><div><b>İşletme Bilgileri</b><small>Sürü, padok, yem, finans özeti</small></div>{glyph("down")}</summary><div class="cp-ref-business-links"><a href="/farm-profile">İşletme ayarları {glyph("chevron")}</a><a href="/paddocks">Padokları görüntüle {glyph("chevron")}</a><a href="/finance">Finans özeti {glyph("chevron")}</a></div></details>',
