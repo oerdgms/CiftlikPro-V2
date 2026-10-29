@@ -16464,7 +16464,7 @@ install_reproduction_sync(globals())
 from health_center import install as install_health_center
 install_health_center(globals())
 
-APP_EDITION_BUILD='AppEdition2.0.37-BulkHealth'
+from release_info import BUILD as APP_EDITION_BUILD
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

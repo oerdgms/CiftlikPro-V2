@@ -1,8 +1,16 @@
-# App Edition 2.0.10 — Ortak Enterprise mobil arayüzü
+# App Edition 2.0.42 — Mobil Pilot Hazırlık
 
 ## Temel
 
-AppEdition 2.0.9 paketi üzerine Rasyon Detayı ana bilimsel kartlarının küçük mobil hizalama düzeltmesi uygulanmıştır. Çekirdek sürüm 3.9.23 DEV4 Hotfix1.22cr olarak korunur. Güncel katmanın kimliği AppEdition2.0.10-RationBadgeAlignment’tır.
+Temel, kullanıcının stabil olarak bildirdiği AppEdition 2.0.41 tam kaynak paketidir. Çekirdek sürüm 3.9.23 DEV4 Hotfix1.22cr olarak korunur. Katman kimliği AppEdition2.0.42-MobilePilotPreparation’dır. Bu hazırlık sürümü yeni bir tasarım veya çevrimdışı kayıt sistemi eklemez.
+
+`app/release_info.py` çalışma zamanı sürümünün tek kaynağıdır. `scripts/sync_release.py`, servis çalışanı önbelleğini, Inno Setup çıktı adını, Windows iş akışı hedeflerini ve `RELEASE.json` dosyasını eşitler. `--check` hiçbir dosyayı değiştirmeden tutarlılığı kontrol eder; CI bu kontrol başarısızsa derlemeyi durdurur. HTML ile sunulan CSS/JS içindeki kaynak adresleri aynı sürüm anahtarına getirilir. Eski anahtar isteyen istemciye değişmiş kaynak kalıcı önbellek olarak sunulmaz.
+
+Bağlantı sorgusu `/app-build.json` salt okunurdur ve no-store kullanır. Çevrimdışı bağlantı sayfası 6 saniyelik sorgu sınırıyla bu adresi denetler; bağlantı gelince ilk istenen sayfa/filtreye döner. İş kayıtları çevrimdışı önbelleğe veya kuyruğa alınmaz. Güncelleme açık formları zorla yenilemez.
+
+Windows kaynak ve paketlenmiş EXE kontrolleri `RELEASE.json` ile HTTP sürüm kimliğini karşılaştırır; kaynak ve EXE üzerinde mobil kaynaklar, servis çalışanı ve bağlantı sayfası ayrıca denetlenir. Bu çalışma ortamında gerçek Windows EXE ve fiziksel telefonlar çalıştırılmadı.
+
+Aşağıdaki görünüm/geçmiş notları önceki sürümlerin geliştirmelerini açıklar. Güncel pilot planı [MOBIL_PILOT_KONTROL.md](MOBIL_PILOT_KONTROL.md) dosyasındadır.
 
 Normal giriş adresi aynı kalır: port 8953, kök adres /. Eski /mobile bağlantısı ortak uygulamaya yönlendirilir.
 

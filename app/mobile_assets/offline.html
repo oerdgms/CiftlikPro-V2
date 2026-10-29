@@ -1,1 +1,26 @@
-<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#063e2b"><title>ÇiftlikPro · Bağlantı</title><style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));background:#f3f8f5;color:#183e2b;font:16px/1.6 system-ui}main{max-width:390px;text-align:center;background:white;border:1px solid #e0ebe3;border-radius:24px;padding:30px}img{width:78px;border-radius:20px}h1{font-size:23px}p{font-size:14px;color:#738278}button{background:#086a46;color:white;border:0;border-radius:12px;padding:14px 22px;font:600 14px system-ui;cursor:pointer}</style></head><body><main><img src="/app-assets/icon-192.png" alt=""><h1>Çiftlik sunucusuna bağlanılamadı</h1><p>ÇiftlikPro bilgisayarının açık olduğunu ve aynı ağa veya VPN’e bağlı olduğunu kontrol et. Kayıtlar canlı sunucudan yüklenir.</p><button id="retry" onclick="retryServer()">Yeniden bağlan</button><div id="state" style="min-height:22px;margin-top:10px;font-size:12px;color:#738278"></div><script>async function retryServer(){const b=document.getElementById('retry'),s=document.getElementById('state');b.disabled=true;b.textContent='Bağlantı kontrol ediliyor…';s.textContent='';try{const r=await fetch('/mobile-api/ping?offline_retry=1',{cache:'no-store'});if(r.ok){location.href='/mobile';return}}catch(e){}try{const r=await fetch('/',{cache:'no-store'});if(r.ok){location.reload();return}}catch(e){}s.textContent='Sunucuya hâlâ ulaşılamıyor. Ağ / VPN bağlantısını kontrol et.';b.disabled=false;b.textContent='Yeniden bağlan'}</script></main></body></html>
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#063e2b"><title>ÇiftlikPro · Bağlantı</title>
+<style>*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));background:#f3f8f5;color:#183e2b;font:16px/1.6 system-ui}main{max-width:390px;text-align:center;background:white;border:1px solid #e0ebe3;border-radius:24px;padding:30px}img{width:78px;border-radius:20px}h1{font-size:23px}p{font-size:14px;color:#738278}button{background:#086a46;color:white;border:0;border-radius:12px;padding:14px 22px;font:600 14px system-ui;cursor:pointer}</style></head>
+<body><main><img src="/app-assets/icon-192.png" alt=""><h1>Çiftlik sunucusuna bağlanılamadı</h1><p>ÇiftlikPro bilgisayarının açık olduğunu ve aynı ağa veya VPN’e bağlı olduğunu kontrol et. Kayıtlar canlı sunucudan yüklenir.</p><button id="retry" type="button">Yeniden bağlan</button><div id="state" role="status" aria-live="polite" style="min-height:22px;margin-top:10px;font-size:12px;color:#738278"></div></main>
+<script>
+async function retryServer(){
+ const button=document.getElementById('retry'),state=document.getElementById('state');
+ if(button.disabled)return;
+ button.disabled=true;button.textContent='Bağlantı kontrol ediliyor…';state.textContent='';
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),6000);
+ try{
+  const response=await fetch('/app-build.json',{cache:'no-store',signal:controller.signal});
+  if(response.ok&&(await response.json()).app==='CiftlikPro'){
+   // The service worker fallback keeps the original URL.
+   if(location.pathname==='/app-assets/offline.html')location.assign('/');
+   else location.reload();
+   return;
+  }
+ }catch(error){}
+ finally{clearTimeout(timeout);}
+ state.textContent='Sunucuya hâlâ ulaşılamıyor. Ağ / VPN bağlantısını kontrol et.';
+ button.disabled=false;button.textContent='Yeniden bağlan';
+}
+document.getElementById('retry').addEventListener('click',retryServer);
+</script></body></html>

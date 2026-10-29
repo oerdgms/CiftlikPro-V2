@@ -12,7 +12,7 @@ import mobile_reference as ref
 
 esc=ref.esc
 MODULES = [
-    ('ration','Rasyon','/rations','blue'),('paddocks','Padoklar','/paddocks','blue'),
+    ('reports','Besi Performansı','/performance','orange'),('ration','Rasyon','/rations','blue'),('paddocks','Padoklar','/paddocks','blue'),
     ('shield','Sağlık Yönetimi','/health','green'),('heart','Üreme','/reproduction-center','pink'),
     ('finance','Finans','/finance','orange'),('feeds','Yem & Stok','/feeds','blue'),
     ('jobs','Görevler','/?app_view=tasks','green'),('reports','Raporlar','/reports','blue'),
@@ -100,10 +100,9 @@ def herd_markup(ns, request_url, username='admin'):
     rows=''
     for r in selected[(page-1)*size:page*size]:
         source=r['source'];sid=r['id'];url=('/animal' if source=='animal' else '/calf')+'?id='+str(sid)
-        management=f'<a class="cp-shared-state-link" data-cp-state-url href="/animal-events?source={source}&amp;id={sid}" aria-haspopup="dialog" aria-label="{esc(r["tag"])} için durum ekle"><span aria-hidden="true">＋</span> Durum Ekle</a>'
         identity=f'<div class="herd-animal-cardhead"><a class="herd-photo" href="{url}">{ref.photo(r["list_photo"],r["tag"],False)}</a><div class="herd-identity"><a class="animal-tag-btn" href="{url}">{esc(r["tag"])}</a><div class="herd-animal-name">{esc(r.get("nickname"))}</div></div></div>'
         actions=f'<div class="cp-shared-actions cp-shared-row-actions"><a class="btn alt" href="{url}">Görüntüle</a><a class="btn alt" href="/{source}-edit?id={sid}">Düzenle</a><form method="post" action="/{source}-delete" onsubmit="return confirm(\'Bu hayvan ve bağlı kayıtları kalıcı olarak silinsin mi?\')"><input type="hidden" name="id" value="{sid}"><button class="btn red">Sil</button></form></div>'
-        rows+=f'<tr><td data-label="Hayvan">{identity}</td><td data-label="Tür">{esc("Buzağı" if source=="calf" else r["gender"])}</td><td data-label="Irk">{esc(r.get("breed") or "—")}</td><td data-label="Padok">{esc(r.get("paddock") or "Padoksuz")}</td><td data-label="Yaş">{esc(ns["age_text"](r.get("birth_date")))}</td><td data-label="Durum"><div class="cp-shared-status" data-dairy-status="{esc(r["dairy_status"])}"><div class="cp-shared-badges">{ref.badges(r)}</div>{management}</div></td><td data-label="İşlemler">{actions}</td></tr>'
+        rows+=f'<tr><td data-label="Hayvan">{identity}</td><td data-label="Tür">{esc("Buzağı" if source=="calf" else r["gender"])}</td><td data-label="Irk">{esc(r.get("breed") or "—")}</td><td data-label="Padok">{esc(r.get("paddock") or "Padoksuz")}</td><td data-label="Yaş">{esc(ns["age_text"](r.get("birth_date")))}</td><td data-label="Durum"><div class="cp-shared-status" data-dairy-status="{esc(r["dairy_status"])}"><div class="cp-shared-badges">{ref.badges(r)}</div></div></td><td data-label="İşlemler">{actions}</td></tr>'
     rows=rows or '<tr><td colspan="7">Filtrelerine uygun hayvan bulunamadı.</td></tr>'
     pager=(f'<a class="btn alt" href="{esc(link(page=page-1))}">‹ Önceki</a>' if page>1 else '')+f'<span>Sayfa {page} / {view["pages"]}</span>'+(f'<a class="btn alt" href="{esc(link(page=page+1))}">Sonraki ›</a>' if page<view['pages'] else '')
     modes=''.join(f'<button type="button" data-herd-view-button="{key}" class="herd-view-button" aria-pressed="{str(ns["herd_view"](username)==key).lower()}">{label}</button>' for key,label in [('details','Ayrıntı'),('cards','Kart'),('compact','Kompakt')])
@@ -155,24 +154,40 @@ def milk_markup(ns, request_url):
         animals=c.execute("select * from animals a where gender='Dişi' and coalesce(status,'Aktif')='Aktif' and not exists(select 1 from animal_losses l where l.animal_id=a.id) order by tag").fetchall()
         statuses=dairy.status_rows(c)
         summaries=[(a,milk_summary(c,a,statuses)) for a in animals]
-        selected=[(a,sm) for a,sm in summaries if (group=='all' or sm['state']['status']==group) and search_matches(term, *(a[key] for key in ('tag','nickname','paddock','breed')))]
+        selected=[(a,sm) for a,sm in summaries if group=='all' or sm['state']['status']==group]
         today_rows={r['animal_id']:dict(r) for r in c.execute('select * from milk where measure_date=? order by id',(date.today().isoformat(),))}
     lactating=sum(sm['state']['status']=='lactating' for a,sm in summaries)
     unknown=sum(sm['state']['status']=='unknown' for a,sm in summaries)
     total=sum(sm['today'] for a,sm in summaries)
     options=''.join(f'<option value="{key}" {"selected" if group==key else ""}>{label}</option>' for key,label in [('lactating','Laktasyonda / Sağmal'),('all','Tüm aktif dişiler'),('dry','Kuru'),('heifer','Düve'),('unknown','Belirtilmedi'),('not_lactating','Laktasyonda değil')])
-    rows=''
+    def liters(value):
+        return f'{float(value):.1f}'.replace('.',',')+' L' if value is not None else '—'
+    cards='';matching=0
+    labels={'lactating':'Sağmal','dry':'Kuru','heifer':'Düve','unknown':'Belirtilmedi','not_lactating':'Sağılmıyor'}
     for animal,sm in selected:
         aid=animal['id'];state=sm['state'];entry=today_rows.get(aid,{})
-        cells=[f'<a href="/animal?id={aid}"><b>{esc(animal["tag"])}</b></a><small>{esc(animal["nickname"])}</small>',esc(animal['paddock'] or 'Padoksuz'),f'<a href="/dairy-status?animal={aid}">{esc(state["label"])}</a>',str(state['dim'])+' gün' if state['dim'] is not None else '—']
+        words=[animal[key] or '' for key in ('tag','nickname','paddock','breed')]
+        visible=search_matches(term,*words);matching+=int(visible)
+        meta=[animal['nickname'] or '',animal['paddock'] or 'Padoksuz',str(state['dim'])+' gün sağım' if state['dim'] is not None else 'Sağım günü —']
+        fields=''
         for field,label in [('morning','Sabah'),('evening','Akşam')]:
             value=entry.get(field+'_liters')
-            cells.append(f'<input class="milk-entry" type="number" min="0" step="0.1" name="{field}_{aid}" value="{esc(value) if value is not None else ""}" placeholder="0,0" aria-label="{esc(animal["tag"])} {label} litre">')
-        cells += [f'{sm["today"]:.1f} L',f'{sm["avg7"]:.1f} L',f'{sm["avg30"]:.1f} L',f'{sm["total"]:.1f} L' if sm['total'] is not None else '—']
-        labels=['Hayvan','Padok','Laktasyon Durumu','Sağım Günü','Sabah L','Akşam L','Bugün','7 Gün Ort.','30 Gün Ort.','Laktasyon Toplamı']
-        rows+='<tr>'+''.join(f'<td data-label="{label}">{cell}</td>' for label,cell in zip(labels,cells))+'</tr>'
-    rows=rows or '<tr><td colspan="10">Bu durumda hayvan yok. Laktasyon Belirle ile sağımdaki hayvanları seçebilir veya Tüm aktif dişiler filtresini açabilirsin.</td></tr>'
-    return f'''<section class="cp-shared-milk"><header class="cp-shared-head"><div><h1>Süt & Laktasyon</h1><p>Manuel laktasyon durumu ve günlük süt kayıtları.</p></div><a class="btn" href="/dairy-status">Laktasyon Belirle</a></header><div class="cp-milk-kpis"><article class="card"><small>Sağmal</small><b data-milk-lactating>{lactating}</b></article><article class="card"><small>Durumu Belirtilmedi</small><b>{unknown}</b></article><article class="card"><small>Bugünkü Süt · tüm dişiler</small><b>{total:.1f} L</b></article></div><form method="get" action="/milk-center" class="card cp-milk-filter"><label>Göster<select name="group">{options}</select></label><label>Hayvan ara<input type="search" name="q" value="{esc(term)}" placeholder="Küpe, ad veya padok"></label><button class="btn">Filtrele</button><b role="status">{len(selected)} hayvan</b></form><form method="post" action="/milk-center" class="card" data-submit-lock="1"><input type="hidden" name="measure_date" value="{date.today().isoformat()}"><div class="cp-milk-table-scroll"><table class="cp-milk-table"><thead><tr>{''.join('<th>'+label+'</th>' for label in ['Hayvan','Padok','Laktasyon Durumu','Sağım Günü','Sabah L','Akşam L','Bugün','7 Gün Ort.','30 Gün Ort.','Laktasyon Toplamı'])}</tr></thead><tbody>{rows}</tbody></table></div><div class="cp-shared-actions"><button class="btn" type="submit">Günlük Sütleri Kaydet</button></div></form><p class="mut cp-milk-note">Sağmal sayısı kaydettiğin manuel durumu kullanır. Başlangıç bilinmiyorsa sağım günü ve laktasyon toplamı boş kalır. 7 ve 30 günlük ortalamalar yalnız süt girilmiş günlerden hesaplanır. Yeni süt girişi laktasyon durumunu değiştirmez.</p></section>'''
+            fields+=f'<label class="cp-milk-reading"><span>{label} <small>(L)</small></span><span class="cp-milk-input"><input class="milk-entry" type="number" min="0" step="any" inputmode="decimal" enterkeyhint="next" name="{field}_{aid}" value="{esc(str(value)) if value is not None else ""}" placeholder="0,0" aria-label="{esc(animal["tag"])} {label} litre"><span aria-hidden="true">L</span></span></label>'
+        stats=[('7 gün ort.',sm['avg7']),('30 gün ort.',sm['avg30']),('Laktasyon toplamı',sm['total'])]
+        cards+=f'''<article class="cp-milk-animal" data-milk-animal="{aid}" data-search="{esc(' '.join(words))}" data-milk-saved-total="{sm['today']:.8f}" data-milk-has-entry="{int(aid in today_rows)}"{'' if visible else ' hidden'}>
+          <header class="cp-milk-identity"><div><a href="/animal?id={aid}"><b>{esc(animal['tag'])}</b></a><small>{esc(' · '.join(filter(None,meta)))}</small></div><a class="cp-milk-state cp-milk-state-{state['status']}" href="/dairy-status?animal={aid}" aria-label="{esc(animal['tag'])} laktasyon durumunu düzenle: {esc(state['label'])}">{esc(labels[state['status']])}</a></header>
+          <div class="cp-milk-readings">{fields}</div><div class="cp-milk-daily"><span data-milk-total-label>Günlük toplam</span><output data-milk-row-total>{liters(sm['today'])}</output><small data-milk-unsaved hidden>Kaydedilmedi</small></div>
+          <details class="cp-milk-details"><summary>Ortalamalar <span aria-hidden="true">⌄</span></summary><div class="cp-milk-statistics">{''.join('<div><small>'+label+'</small><b>'+liters(value)+'</b></div>' for label,value in stats)}</div><p>Kaydedilmiş süt kayıtları</p></details>
+          </article>'''
+    empty='<div class="cp-milk-empty" data-milk-empty'+(' hidden' if matching else '')+'><b>Bu listede hayvan bulunamadı.</b><p>Aramayı temizleyebilir, farklı bir durum seçebilir veya sağmal listesini düzenleyebilirsin.</p></div>'
+    selected_total=sum(sm['today'] for _,sm in selected)
+    return f'''<link rel="stylesheet" href="/app-assets/milk-entry.css?v=2.0.41"><section class="cp-shared-milk cp-milk-workspace"><header class="cp-shared-head"><div><h1>Günlük Süt Girişi</h1><p>Sabah ve akşam sağımını aynı yerden kaydet.</p></div><a class="btn alt" href="/dairy-status">Sağmal Listesi</a></header>
+      <div class="cp-milk-kpis"><article class="card"><small>Sağmal</small><b data-milk-lactating>{lactating}</b></article><article class="card"><small>Durumu belirtilmedi</small><b>{unknown}</b></article><article class="card"><small>Bugünkü süt · tüm dişiler</small><b>{liters(total)}</b></article></div>
+      <form method="get" action="/milk-center" class="card cp-milk-filter"><label class="cp-milk-search">Hayvan ara<input type="search" name="q" value="{esc(term)}" placeholder="Küpe, ad veya padok" autocomplete="off" data-milk-search></label><label class="cp-milk-group">Göster<select name="group">{options}</select></label><button class="btn alt" type="submit">Listele</button><b role="status" data-milk-visible-count>{matching} hayvan</b></form>
+      <form method="post" action="/milk-center" class="cp-milk-entry-form" data-milk-entry-form data-submit-lock="1"><input type="hidden" name="measure_date" value="{date.today().isoformat()}">
+      <div class="cp-milk-list-head"><h2>Sağım kayıtları</h2><time datetime="{date.today().isoformat()}">{esc(ns['fmt_date'](date.today().isoformat()))}</time></div><div class="cp-milk-animals">{cards}{empty}</div>
+      <footer class="cp-milk-savebar" data-milk-savebar{'' if selected else ' hidden'}><div><span>Liste toplamı <b data-milk-list-total>{liters(selected_total)}</b></span><small data-milk-save-status>{len(selected)} hayvanlık liste · Değişiklik yok</small></div><button class="btn" type="submit" data-milk-save>Sütleri Kaydet</button></footer></form>
+      <details class="cp-milk-help"><summary>Süt ve laktasyon bilgileri</summary><p>Sağmal sayısı kaydettiğin manuel durumu kullanır. Başlangıç bilinmiyorsa sağım günü ve laktasyon toplamı boş kalır. Ortalamalar yalnız süt girilmiş günlerden hesaplanır. Yeni süt girişi laktasyon durumunu değiştirmez.</p></details></section><script src="/app-assets/milk-entry.js?v=2.0.41" defer></script>'''
 
 
 def install(ns, icon):

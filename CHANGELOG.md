@@ -1,3 +1,35 @@
+# App Edition 2.0.40 — Kompakt Süt Girişi
+
+26/10/2026
+
+- Mobil süt girişindeki uzun tablo yerine hayvan kimliği, yan yana Sabah / Akşam alanları ve günlük toplam içeren kompakt kartlar kullanılır. Masaüstünde aynı form hizalı satırlar halinde gösterilir.
+- 7 / 30 gün ortalaması ve laktasyon toplamı açılır Ortalamalar bölümüne taşındı. Kaydetme çubuğu mobilde alt menünün ve masaüstünde durum çubuğunun üzerinde sabit kalır.
+- Giriş toplamları canlı hesaplanır. Küpe / ad / padok araması sayfayı yenilemeden çalışır; gizlenen kartlardaki yazılmış değerler korunur. Enter sonraki süt alanına geçirir.
+- Yalnız değiştirilmiş hayvanlar mevcut süt kaydetme yoluna gönderilir. Değişmeyen hayvanların kayıtları yeniden yazılmaz; mevcut bir günün iki alanını temizlemek açıkça sıfır kaydeder.
+- Listeyi değiştirmeden veya sayfadan ayrılmadan önce kaydedilmemiş giriş için uyarı gösterilir. Manuel laktasyon seçimi ve mevcut ortalama hesapları korunur.
+- Yapı, varlık önbelleği ve Windows kurulum adı 2.0.40 olarak güncellendi. 2.0.39 tam kaynak paketi ve önceki düzeltmeler dahildir.
+
+# App Edition 2.0.39 — Toplu Sağlık Giderlerinin Finans Görünümü
+
+26/10/2026
+
+- Mobil ve masaüstü Finans listesinde aynı sağlık programının aynı doz / gün / uygulama / dönem giderleri tek işlem satırında gösterilir. İşlemdeki hayvan sayısı ve toplam gider görünür.
+- Ayrıntı sayfası tam hayvan dağılımını, hayvan başına gideri ve sağlık kaydı bağlantısını sunar. Küpe / ad / padok araması dağılım içindeki satırları süzer.
+- Gruplama, sayfalamadan önce yapılır. Mevcut program / görev bağlantılı giderler de bu görünüme dahil olur. Ayrı programlar, dozlar, uygulama tarihleri veya ödeme koşulları birleştirilmez.
+- Hayvan başına sağlık / gider kayıtları, muhasebe toplamları, maliyetler ve ayrıntılı CSV çıktısı korunur. Yeni finans kaydı, veri taşıma veya tablo eklenmez.
+- Serbest finans kayıtları, yem faturası önizlemesi ve mevcut düzenleme / silme / ödeme yolları korunur. Yeni ayrıntı yolu oturum ve lisans denetimi uygular.
+- Yapı, önbellek ve Windows kurulum adı 2.0.39 olarak güncellendi. 2.0.38 rasyon yazdırma ve hayvan raporu düzeltmeleri dahildir.
+
+# App Edition 2.0.38 — Rasyon Yazdırma ve Hayvan Raporu
+
+26/10/2026
+
+- Masaüstünde iki eski işlem alanı gizlendiği için kaybolan rasyon yazdırma erişimi, Rasyondaki Yemler başlığının yanına taşındı. Bağlantı seçili rasyonun mevcut hazırlama raporunu açar.
+- Aktif hayvan raporuna satılmış buzağıların eklenmesi düzeltildi. Buzağılara sabit Aktif etiketi verilmez; durum filtresi yetişkin ve buzağılara birlikte uygulanır.
+- Zayiatı bulunan kayıtlar aktif sürüye alınmaz; yetişkine aktarılmış buzağılar mükerrer sayılmaz. Satıldı / Kesildi / Tümü seçimlerinde gerçek durumlar korunur.
+- Ekran, web önizleme, PDF ve Excel aynı düzeltilmiş rapor seçimini kullanır. Yeni rapor modülü Windows paketine eklenir.
+- Yapı, önbellek ve Windows kurulum adı 2.0.38 olarak güncellendi. 2.0.37 toplu sağlık ve rapel akışı dahildir.
+
 # App Edition 2.0.37 — Toplu Sağlık Uygulaması
 
 24/10/2026

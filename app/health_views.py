@@ -315,4 +315,4 @@ def markup(ns,c,query,token):
         if category=='general' and view!='calendar' and tab!='done':
             content+='<div class="hc-bottom-grid">'+cases_markup(ns,data,token,query,overview=True)+'<section class="hc-panel"><header class="hc-section-head"><h2>Son Uygulamalar</h2><a href="/health?tab=done">Tümünü gör ›</a></header>'+history_rows(ns,data['history'][:4],token,query)+'</section></div>'
     auto=' data-hc-add-auto' if value(query,'app_action')=='add' else ''
-    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.37"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.37" defer></script>'
+    return '<link rel="stylesheet" href="/app-assets/health-center.css?v=2.0.41"><section id="healthCenter" class="hc-workspace" data-category="'+category+'"'+auto+'>'+top+content+utilities+'</section>'+dialogs(c,data['subjects'],query,token)+record_dialog(c,query,token)+'<script src="/app-assets/health-center.js?v=2.0.41" defer></script>'

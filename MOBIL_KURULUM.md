@@ -1,4 +1,4 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.29
+# ÇiftlikPro Enterprise — App Edition 2.0.42 Mobil Pilot Hazırlık
 
 Bu paket mevcut Windows uygulamanızın iPhone, iPad ve Android için mobil görünümünü içerir. Bilgisayar ve telefon aynı işletme verisini kullanır.
 
@@ -6,10 +6,16 @@ Bu paket mevcut Windows uygulamanızın iPhone, iPad ve Android için mobil gör
 
 1. Paketin tamamını GitHub kaynaklarına yükleyin. app klasörü, CiftlikPro.spec ve installer.iss birlikte güncellenmelidir.
 2. Actions → CiftlikPro Windows Kurulum → Run workflow ile Windows kurulumunu oluşturun.
-3. Oluşan CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_29_Setup.exe dosyasını mevcut ÇiftlikPro bilgisayarına kurun.
+3. Oluşan CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_42_Setup.exe dosyasını mevcut ÇiftlikPro bilgisayarına kurun.
 4. ÇiftlikPro’yu bilgisayarda açın. Telefon aynı yerel ağa veya mevcut VPN bağlantınıza bağlı olsun.
 5. Telefonda normal ÇiftlikPro adresini açın. Yerel ağ örneği: http://10.0.0.60:8953. Bilgisayarınızın IP adresi değiştiyse uygulamanın Ağ adresindeki yeni IP’yi kullanın.
 6. Mevcut kullanıcı adınız ve şifrenizle giriş yapın.
+
+2.0.41 stabil paketini geri dönüş için saklayın. Güncellemeden önce uygulamanın mevcut yedekleme merkezinden yedek alın. Bu paket 2.0.41 tasarımını ve kayıt kurallarını koruyan pilot hazırlığıdır; gerçek cihaz/Windows kurulum onayı henüz tamamlanmış bir 2.1 kararlı sürüm değildir.
+
+Kurulumdan sonra aynı sunucudaki `/app-build.json` adresi `2.0.42` ve `AppEdition2.0.42-MobilePilotPreparation` değerlerini göstermelidir. Bu adresin içeriğinde işletme kaydı veya şifre bulunmaz. Telefonda kayıt formunu kapatıp sayfayı yeniden açınca yeni kaynak adresleri kullanılır; güncelleme açık bir formu zorla yenilemez.
+
+Pilot adımları ve sonuç sütunları: [MOBIL_PILOT_KONTROL.md](MOBIL_PILOT_KONTROL.md).
 
 Kaynak üzerinden çalıştırmak için mevcut KAYNAKTAN_CALISTIR.bat dosyası da kullanılabilir. Paket bir kaynak ve kurulum projesidir; hazır Windows EXE, Android APK veya iOS IPA içermez.
 

@@ -20,7 +20,7 @@
     if (button) button.hidden = false;
   });
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('/app-service-worker.js', {scope:'/'}).catch(() => {});
+    navigator.serviceWorker.register('/app-service-worker.js', {scope:'/',updateViaCache:'none'}).catch(() => {});
   }
   if (!mobile.matches) {
     mobile.addEventListener('change', () => location.reload(), {once:true});
@@ -592,7 +592,10 @@
     search.addEventListener('input',filter);
     const meta = config.ration_meta || {};
     cards.forEach(card => {
-      const id = new URL(card.href).searchParams.get('id');
+      const link = card.matches('a[href]') ? card : card.querySelector('a[href*="/ration-workbench"]');
+      const href = link?.getAttribute('href');
+      if (!href) return;
+      const id = new URL(href,location.href).searchParams.get('id');
       const item = meta[id];
       if (!item) return;
       const info = document.createElement('span');

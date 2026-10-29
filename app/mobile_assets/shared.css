@@ -287,6 +287,18 @@ main>.cp-state-content{max-width:720px!important;margin:20px auto!important;bord
   body.cp-app .cp-wide-herd .cp-shared-filter-actions{grid-column:span 2!important;justify-self:end!important}
  }
 }
+/* Desktop print access stays beside the feed heading, outside legacy actions. */
+@layer cp-reference {
+ body.cp-app .cp-ration-print{display:none!important}
+ @media screen and (min-width:901px){
+  body.cp-app #ration-workbench .workbench-head{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:8px!important}
+  body.cp-app #ration-workbench .workbench-head>div:first-child{min-width:0!important}
+  body.cp-app #ration-workbench .cp-ration-print{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;flex:none!important;width:auto!important;max-width:100%!important;min-height:36px!important;margin-left:auto!important;padding:8px 12px!important;border:1px solid #c8dcd0!important;border-radius:8px!important;background:#f3f8f5!important;color:#23634d!important;font-size:12px!important;font-weight:650!important;line-height:1.2!important;white-space:nowrap!important;text-decoration:none!important;box-shadow:none!important}
+  body.cp-app #ration-workbench .cp-ration-print svg{flex:none!important;width:18px!important;height:18px!important}
+  body.cp-app #ration-workbench .cp-ration-print:hover{background:#e8f3ed!important;border-color:#98bda9!important}
+  body.cp-app #ration-workbench .cp-ration-print:focus-visible{outline:3px solid #70b59a!important;outline-offset:2px!important}
+ }
+}
 /* Mobile windows own vertical scrolling; native controls must not widen them. */
 @layer cp-reference {
  @media(max-width:900px){
@@ -305,3 +317,19 @@ main>.cp-state-content{max-width:720px!important;margin:20px auto!important;bord
   body.cp-app :is(.cp-state-content,.hc-dialog,.sync-editor,.sheet-panel,.cp-sheet,.paddock-dialog,.section-drawer,.finance-drawer,.ration-drawer,.medicine-drawer) label:has(>input:is([type=date],[type=datetime-local])){grid-column:1/-1!important}
  }
 }
+
+@layer cp-reference { @media(min-width:901px){
+body.cp-app.cp-route-home .v122au-task-panel{container:cp-today / inline-size;min-width:0!important}
+body.cp-app.cp-route-home .v122au-task-panel .v117-task-copy strong,body.cp-app.cp-route-home .v122au-task-panel .v117-task-copy strong>a{display:block!important;white-space:normal!important;overflow-wrap:anywhere!important;line-height:1.5!important;max-width:100%!important}
+body.cp-app.cp-route-home .v122au-task-panel .v117-task-copy small{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;white-space:normal!important;overflow-wrap:anywhere!important;overflow:hidden!important;line-height:1.5!important}
+body.cp-app.cp-route-home .v122au-task-panel>.v117-panel-body{overflow-x:hidden!important;scrollbar-gutter:stable}
+body.cp-app.cp-route-home .v122au-task-panel>.v118-task-tabs{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;overflow:visible!important}
+body.cp-app.cp-route-home .v122au-task-panel .v118-task-tab{min-width:0!important;white-space:normal!important;padding:7px 4px!important;min-height:36px!important}
+@container cp-today (max-width:560px){
+body.cp-app.cp-route-home .v122au-task-panel .v117-task{grid-template-columns:minmax(0,1fr) auto!important;gap:7px!important;padding:11px 1px!important}
+body.cp-app.cp-route-home .v122au-task-panel .v117-task>b{grid-column:1!important;grid-row:1!important}
+body.cp-app.cp-route-home .v122au-task-panel .v117-task-copy{grid-column:1/-1!important;grid-row:2!important}
+body.cp-app.cp-route-home .v122au-task-panel .v117-task>.v117-chip,body.cp-app.cp-route-home .v122au-task-panel .v117-task>.v122bj-task-side{grid-column:2!important;grid-row:1!important;justify-self:end!important}
+}
+@container cp-today (max-width:370px){body.cp-app.cp-route-home .v122au-task-panel>.v118-task-tabs{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+}}

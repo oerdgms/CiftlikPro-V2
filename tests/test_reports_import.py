@@ -18,6 +18,7 @@ TEST_DATA = tempfile.TemporaryDirectory(prefix="ciftlikpro-report-test-")
 os.environ["CIFTLIKPRO_DATA_DIR"] = TEST_DATA.name
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 import server  # noqa: E402
+import release_info as release
 
 
 class ReportImportTests(unittest.TestCase):
@@ -140,8 +141,8 @@ class ReportImportTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         workflow=(root/".github"/"workflows"/"windows-installer.yml").read_text(encoding="utf-8")
         self.assertIn("assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22cr'",workflow)
-        self.assertIn("CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_37_Setup.exe",workflow)
-        self.assertIn("CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.37-Windows-Setup",workflow)
+        self.assertIn(release.SETUP_FILE,workflow)
+        self.assertIn(release.ARTIFACT_NAME,workflow)
         self.assertNotIn("Hotfix1_22au_Setup.exe",workflow)
         self.assertNotIn("Hotfix1.22bg-Windows-Setup",workflow)
         self.assertNotIn("assert server.APP_VERSION == '3.9.20'",workflow)

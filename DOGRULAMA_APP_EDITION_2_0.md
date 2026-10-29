@@ -1,4 +1,6 @@
-# App Edition 2.0.10 doğrulama — 20/10/2026
+# Önceki App Edition 2.0.10 doğrulama — 20/10/2026
+
+Bu belge geçmiş doğrulama kaydıdır. Güncel pilot hazırlığı sonucu: [DOGRULAMA_2_0_42.md](DOGRULAMA_2_0_42.md).
 
 ## 2.0.10 düzenlemesi
 

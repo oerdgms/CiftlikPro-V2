@@ -39,7 +39,7 @@
   }
   window.CPTextSearch = {normalize, matches, syncHerd};
   const states = new WeakMap(), focusKey = 'cp-live-search-focus';
-  const specialized = '#cpRefHerdForm,#archiveSearchForm,#feed-catalog-search-form,.herd-filter';
+  const specialized = '#cpRefHerdForm,#archiveSearchForm,#feed-catalog-search-form,.herd-filter,.cp-milk-filter';
   function queryInput(target) {
     if (!(target instanceof HTMLInputElement) || !['q','search','term'].includes(target.name)) return null;
     const form = target.form;

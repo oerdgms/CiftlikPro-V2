@@ -11,8 +11,10 @@ import dairy_management
 import home_layout
 import desktop_views
 import animal_actions
+import animal_reports
+import finance_groups
+from release_info import BUILD, VERSION, metadata as release_metadata, version_assets
 
-BUILD = 'AppEdition2.0.37-BulkHealth'
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
 
@@ -103,7 +105,7 @@ def home_markup(ns, username):
 
 
 def shell_markup(title, path, username, profile=None):
-    titles = {'/':'ÇiftlikPro','/all-animals':'Hayvanlar','/paddocks':'Padoklar','/finance':'Finans','/health':'Sağlık Yönetimi','/rations':'Rasyonlar','/ration-workbench':'Rasyon Detayı','/reproduction-center':'Üreme Yönetimi','/feeds':'Yem & Stok','/milk-center':'Süt & Laktasyon','/reports':'Raporlar','/farm-profile':'Ayarlar','/animal-add':'Yeni Hayvan Ekle','/dairy-status':'Laktasyon Durumu','/home-layout':'Ana Sayfa Düzeni','/modules':'Modüller','/synchronization':'Senkronizasyon'}
+    titles = {'/':'ÇiftlikPro','/all-animals':'Hayvanlar','/paddocks':'Padoklar','/finance':'Finans','/health':'Sağlık Yönetimi','/rations':'Rasyonlar','/ration-workbench':'Rasyon Detayı','/reproduction-center':'Üreme Yönetimi','/feeds':'Yem & Stok','/milk-center':'Süt & Laktasyon','/performance':'Besi Performansı','/reports':'Raporlar','/farm-profile':'Ayarlar','/animal-add':'Yeni Hayvan Ekle','/dairy-status':'Laktasyon Durumu','/home-layout':'Ana Sayfa Düzeni','/modules':'Modüller','/synchronization':'Senkronizasyon'}
     display_title = titles.get(path, title)
     header = '<header class="cp-app-header"><button type="button" class="cp-ref-menu-toggle" id="cpOpenMenu" aria-label="Menüyü aç" aria-expanded="false" aria-controls="cpRefMenu">'+reference.glyph('menu')+'</button><a class="cp-header-back" href="/all-animals" aria-label="Geri">'+icon('back')+'</a><div class="cp-header-title"><div><b id="cpScreenTitle">'+esc(display_title)+'</b><small id="cpScreenSubtitle">ÇiftlikPro Enterprise</small></div></div><a class="cp-notifications" href="/notifications" aria-label="İşler ve bildirimler">'+icon('bell')+'<i id="cpNotificationDot" hidden></i></a><button type="button" class="cp-ref-more" id="cpAnimalMore" aria-label="Hayvan işlemleri">'+reference.glyph('more')+'</button></header>'
     links = [('home','/','Ana Sayfa'),('animals','/all-animals','Hayvanlar')]
@@ -114,12 +116,12 @@ def shell_markup(title, path, username, profile=None):
     actions = [('animals','/animal-add?entry=adult','Hayvan ekle'),('animals','/animal-add?entry=calf','Buzağı ekle'),('health','/health?app_action=add','Sağlık planı'),('finance','/finance?app_action=add','Finans kaydı'),('paddocks','/paddocks?app_action=move','Padok taşıma'),('ration','/rations?app_action=add','Rasyon ekle'),('milk','/milk-center','Süt kaydı')]
     quick += ''.join(f'<a data-cp-quick="{kind}" href="{url}">{icon(kind)}<span>{label}</span></a>' for kind,url,label in actions) + '</div></section></div>'
     profile = profile or {'name':username, 'initials':username[:2].upper(), 'license_ok':False, 'license_note':'Lisans bilgilerini görüntüle'}
-    items = [('home','Ana Sayfa','/'),('animals','Hayvanlar','/all-animals'),('paddocks','Padoklar','/paddocks'),('reproduction','Üreme Yönetimi','/reproduction-center'),('health','Sağlık Yönetimi','/health'),('feeds','Yem & Rasyon','/rations'),('finance','Finans Yönetimi','/finance'),('jobs','Görev Yönetimi','/?app_view=tasks'),('milk','Süt & Laktasyon','/milk-center'),('farm','Tarım Yönetimi','/agriculture'),('reports','Raporlar','/reports'),('settings','Ayarlar','/farm-profile')]
+    items = [('home','Ana Sayfa','/'),('animals','Hayvanlar','/all-animals'),('paddocks','Padoklar','/paddocks'),('reports','Besi Performansı','/performance'),('reproduction','Üreme Yönetimi','/reproduction-center'),('health','Sağlık Yönetimi','/health'),('feeds','Yem & Rasyon','/rations'),('finance','Finans Yönetimi','/finance'),('jobs','Görev Yönetimi','/?app_view=tasks'),('milk','Süt & Laktasyon','/milk-center'),('farm','Tarım Yönetimi','/agriculture'),('reports','Raporlar','/reports'),('settings','Ayarlar','/farm-profile')]
     menu = '<div class="cp-ref-menu-backdrop" id="cpRefMenuBackdrop" hidden><aside class="cp-ref-menu" id="cpRefMenu" role="dialog" aria-modal="true" aria-labelledby="cpMenuName" tabindex="-1"><div class="cp-ref-account"><span class="cp-ref-avatar">'+esc(profile['initials'])+'</span><div><b id="cpMenuName">'+esc(profile['name'])+'</b><small>ÇiftlikPro Enterprise</small></div><button type="button" id="cpCloseMenu" aria-label="Menüyü kapat">'+icon('close')+'</button></div><a class="cp-ref-license" href="/license-info"><span>'+reference.glyph('check')+'</span><div><b>'+('Aktif Lisans' if profile['license_ok'] else 'Lisans Bilgileri')+'</b><small>'+esc(profile['license_note'])+'</small></div></a><nav aria-label="Tüm modüller">'+''.join('<a href="'+url+'"'+(' aria-current="page"' if path==url else '')+'>'+icon(kind)+'<span>'+label+'</span>'+reference.glyph('chevron')+'</a>' for kind,label,url in items)+'</nav><a class="cp-ref-business-link" href="/farm-profile">'+icon('settings')+'İşletme Bilgileri</a><a class="cp-ref-logout" href="/logout">Çıkış Yap '+reference.glyph('exit')+'</a></aside></div>'
     return header + nav + quick + menu + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = '''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css?v=2.0.37"><link rel="stylesheet" href="/app-assets/mobile.css?v=2.0.37"><link rel="stylesheet" href="/app-assets/shared.css?v=2.0.37">'''
+HEAD = version_assets('''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css"><link rel="stylesheet" href="/app-assets/mobile.css"><link rel="stylesheet" href="/app-assets/shared.css">''')
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
@@ -129,6 +131,14 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
     if path == '/reproduction-center':
         document = wrap_reproduction_tab_labels(document)
         document = compact_reproduction_identities(document)
+    if path in ('/rations', '/ration-workbench') and 'id="ration-workbench"' in document:
+        report = re.search(r'href="(/ration-prep-report\?id=\d+)"', document)
+        if report:
+            # The desktop layout hides both historical action containers.
+            # Keep printing beside the feed heading, outside those containers.
+            printer = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6zM18 12h.01"/></svg>'
+            button = '<a id="cpRationPrint" class="btn alt cp-ration-print" href="'+report.group(1)+'">'+printer+'<span>Rasyonu Yazdır</span></a>'
+            document = document.replace('<div class="workbench-actions">', button+'<div class="workbench-actions">', 1)
     viewport_pattern = re.compile(r'<meta\b(?=[^>]*\bname=(["\'])viewport\1)[^>]*>', re.I)
     viewport_tag = f'<meta name="viewport" content="{MOBILE_VIEWPORT}">'
     if viewport_pattern.search(document):
@@ -149,9 +159,9 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
     document = re.sub(r'<body([^>]*)>', body_tag, document, count=1)
     document = desktop_views.desktop_navigation(document, path, icon)
     document = document.replace('</head>', HEAD + '</head>', 1)
-    document = document.replace('</head>', '<script src="/app-assets/search.js?v=2.0.37"></script></head>', 1)
+    document = document.replace('</head>', '<script src="/app-assets/search.js"></script></head>', 1)
     if path == '/reproduction-center':
-        document = document.replace('</head>', '<link rel="stylesheet" href="/app-assets/reproduction.css?v=2.0.37"></head>', 1)
+        document = document.replace('</head>', '<link rel="stylesheet" href="/app-assets/reproduction.css"></head>', 1)
     # The smart form calls this existing UI controller before the footer script
     # defines it. Hoist its exact definition; no record or pregnancy rule changes.
     if 'id="smartAnimalForm"' in document:
@@ -159,13 +169,15 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
     extra = '' if login else shell_markup(title, path, user, (extra or {}).get('profile'))
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js?v=2.0.37" defer></script><script src="/app-assets/shared.js?v=2.0.37" defer></script><script src="/app-assets/reference.js?v=2.0.37" defer></script>'
-    return document.replace('</body>', extra + '</body>', 1)
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js" defer></script><script src="/app-assets/shared.js" defer></script><script src="/app-assets/reference.js" defer></script>'
+    return version_assets(document.replace('</body>', extra + '</body>', 1))
 
 
 def install(ns):
     dairy_management.install(ns)
     home_layout.install(ns)
+    animal_reports.install(ns)
+    finance_groups.install(ns)
     desktop_views.install(ns, icon)
     animal_actions.install(ns)
     # Decorate after all historical visual layers; never overwrite a record handler.
@@ -184,6 +196,8 @@ def install(ns):
                 body = body.replace('<script>(function(){const tabs=[...document.querySelectorAll', history_panel+'<script>(function(){const tabs=[...document.querySelectorAll', 1)
         if path == '/':
             body = home_markup(ns, user) + desktop_views.home_body(ns, body, user, icon)
+        if path == '/finance':
+            body = finance_groups.decorate(ns, body, finance_groups.REQUEST_URL.get())
         if path == '/farm-profile':
             body = body.replace('href="/?edit=1"','href="/home-layout"').replace('▦ Dashboard Düzeni','▦ Ana Sayfa Düzeni').replace('Ana ekran kartlarını düzenle','Mobil ve masaüstü sürü kartlarını düzenle')
         if path == '/rations':
@@ -243,6 +257,7 @@ def install(ns):
             config['request_url'] = self.path
             payload = json.dumps(config,ensure_ascii=False).replace('<','\\u003c')
             document = document[:match.start(2)]+payload+document[match.end(2):]
+        document = version_assets(document)
         # Compress negotiated responses, including authenticated pages; no page cache.
         if accepts_gzip(self) and len(document) > 1024:
             _cp_zip_t0 = time.perf_counter() if path == '/' else None
@@ -254,6 +269,8 @@ def install(ns):
         if path == '/': print(f'[PERF] Dashboard response yazma: {time.perf_counter()-_cp_send_t0:.3f} sn')
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/app-build.json':
+            return send_response_bytes(self, json.dumps(release_metadata(), ensure_ascii=False).encode(), 'application/json; charset=utf-8', headers=[('Cache-Control','no-store')])
         if path == '/notifications':
             allowed, _, message = ns['license_status']()
             if not allowed:
@@ -271,7 +288,7 @@ def install(ns):
             return send_bytes(self, (ASSETS/'service-worker.js').read_bytes(), 'application/javascript', [('Service-Worker-Allowed','/')])
         if path.startswith('/app-assets/'):
             filename = path.removeprefix('/app-assets/')
-            allowed = {'search.js':'application/javascript','reproduction.css':'text/css','synchronization.css':'text/css','synchronization.js':'application/javascript','reference.css':'text/css','reference.js':'application/javascript','dairy.js':'application/javascript','shared.css':'text/css','shared.js':'application/javascript','mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
+            allowed = {'milk-entry.css':'text/css','milk-entry.js':'application/javascript','finance-groups.css':'text/css','finance-groups.js':'application/javascript','search.js':'application/javascript','reproduction.css':'text/css','synchronization.css':'text/css','synchronization.js':'application/javascript','reference.css':'text/css','reference.js':'application/javascript','dairy.js':'application/javascript','shared.css':'text/css','shared.js':'application/javascript','mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
             if filename not in allowed or not (ASSETS/filename).is_file():
                 return original_send_html(self, 'Dosya bulunamadı', 404)
             return send_bytes(self, (ASSETS/filename).read_bytes(), allowed[filename])
@@ -364,11 +381,14 @@ def send_response_bytes(handler, data, mime, status=200, headers=()):
 
 
 def send_bytes(handler, data, mime, headers=()):
-    cache = 'public, max-age=31536000, immutable' if 'v=' in urlparse(handler.path).query else 'no-cache'
-    response_headers = [('Cache-Control',cache),*headers]
+    if mime in ('text/css','application/javascript'):
+        data = version_assets(data.decode('utf-8')).encode('utf-8')
+    query = parse_qs(urlparse(handler.path).query)
+    cache = 'public, max-age=31536000, immutable' if query.get('v') == [VERSION] and urlparse(handler.path).path.startswith('/app-assets/') else 'no-cache'
+    response_headers = [('Cache-Control',cache),('Vary','Accept-Encoding'),*headers]
     if mime in ('text/css', 'application/javascript', 'application/manifest+json') and accepts_gzip(handler):
         data = gzip.compress(data, compresslevel=5)
-        response_headers += [('Content-Encoding','gzip'),('Vary','Accept-Encoding')]
+        response_headers += [('Content-Encoding','gzip')]
     send_response_bytes(handler, data, mime, headers=response_headers)
 
 

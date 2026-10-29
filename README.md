@@ -1,4 +1,54 @@
-# ÇiftlikPro Enterprise — App Edition 2.0.37
+# AppEdition 2.0.44 – Hayvan Listesi Sadeleştirme
+
+Hayvan listesindeki Durum Ekle bağlantısı kaldırıldı. Mevcut durum rozetleri ve hayvan kartındaki Durum Ekle işlemi korundu. 2.0.43 Besi Performansı menü bağlantıları dahildir. Kaynaktan çalıştırma paketi.
+
+# AppEdition 2.0.43 – Besi Performansı Menü Bağlantısı
+
+Mobil yan menü ve Modüller ekranına Besi Performansı (/performance) eklendi. Mevcut performans hesapları, veri yapısı ve işlemler korundu. Kaynaktan çalıştırma paketi; EXE oluşturulmadı. Önceki sürüm notları aşağıdadır.
+
+# ÇiftlikPro Enterprise — App Edition 2.0.42 Mobil Pilot Hazırlık
+
+Stabil 2.0.41 görünümü ve iş kuralları korunur. Sürüm/önbellek/kurulum bilgileri tek kaynağa bağlandı; eski kaynak anahtarları, çevrimdışı yeniden bağlanma ve Windows derleme kimliği kontrolleri güçlendirildi. 2.1'e geçiş için gerçek cihaz pilotu beklenir.
+
+- Kurulum: [MOBIL_KURULUM.md](MOBIL_KURULUM.md)
+- Pilot adımları: [MOBIL_PILOT_KONTROL.md](MOBIL_PILOT_KONTROL.md)
+- Doğrulama: [DOGRULAMA_2_0_42.md](DOGRULAMA_2_0_42.md)
+- Sürüm eşitleme: `python scripts/sync_release.py`; salt okunur kontrol: `python scripts/sync_release.py --check`.
+
+Windows Setup GitHub Actions ile üretilir. Bu kaynak ZIP hazır EXE/APK/IPA içermez. 2.0.41 paketi geri dönüş için saklanmalıdır.
+
+## Devralınan 2.0.41
+
+Bugünün İşleri dar masaüstü kartlarına uyarlanmıştır. Ayrıntı: DUZELTME_NOTLARI_2_0_41.md
+
+# ÇiftlikPro Enterprise — App Edition 2.0.40
+
+Süt & Laktasyon ekranı, hızlı günlük giriş için yeniden düzenlendi. Telefonda hayvan kimliği üstte, **Sabah / Akşam** litre alanları yan yana ve günlük toplam hemen altta görünür. Masaüstünde aynı bilgiler kompakt, hizalı satırlardadır.
+
+- **7 / 30 gün ortalaması ve laktasyon toplamı**, hayvanın **Ortalamalar** bölümünden açılır.
+- Giriş yaparken hayvan ve liste toplamı hesaplanır. Kaydetme çubuğu mobilde alt menünün, masaüstünde durum çubuğunun üzerinde erişilebilir kalır.
+- Küpe / ad / padok araması yazılmış değerleri koruyarak listeyi süzer. Enter sonraki süt alanına geçirir.
+- **N Hayvanı Kaydet** yalnız değiştirilmiş hayvanları gönderir. Değiştirilmemiş hayvanların süt, kalite ve not kayıtları yeniden yazılmaz.
+- Sağmal / kuru / düve ve diğer manuel laktasyon seçimleri ile mevcut süt kaydetme yolu korunur. Önceki sürümlerin düzeltmeleri dahildir.
+
+## 2.0.39 toplu sağlık giderlerinin finans görünümü
+
+Toplu sağlık uygulamalarının giderleri mobil ve masaüstü Finans listesinde işlem bazında gruplanır. Örneğin hayvan başına 100 TL tutarındaki 67 aşı, **Şap Aşısı · 67 hayvan · ₺6.700,00** satırında görünür.
+
+- İşlem adına veya **Dağılımı gör** bağlantısına tıklanınca tüm hayvanlar ve ayrı gider payları açılır. Küpe, ad veya padokla arama yapılabilir.
+- Aynı program, doz / uygulama, tarih ve ödeme koşulları birlikte gösterilir. Aynı isimli farklı programlar veya rapeller birbirine karışmaz.
+- Program / görev bağlantısı olan mevcut sağlık giderleri de otomatik gruplanır. Toplam gider, hayvan maliyeti ve ayrıntılı dışa aktarımlar korunur.
+- Sayfalama gruplamadan sonra yapılır; 67 hayvanlık işlem 20 kayıtlık sayfalara bölünmez.
+
+## 2.0.38 rasyon yazdırma ve hayvan raporu
+
+Masaüstü rasyon yazdırma erişimi ve hayvan raporlarındaki aktif sürü seçimi düzeltildi.
+
+- Rasyon Çalışma Masası'nda **Rasyondaki Yemler → Rasyonu Yazdır** düğmesi görünür. Hayvan sayısı ve dönem seçilerek mevcut hazırlama raporu yazdırılabilir veya PDF olarak kaydedilebilir.
+- Hayvan Raporu'nda **Aktif** seçiliyken satılan / kesilen / zayiat buzağılar toplama katılmaz. **Satıldı** ve **Tümü** filtrelerinde gerçek durumlarıyla görünürler.
+- Ekran, web önizleme, PDF ve Excel aynı hayvan seçimini kullanır. Yetişkine aktarılmış buzağılar ikinci kez sayılmaz.
+
+## 2.0.37 toplu sağlık uygulaması
 
 Sağlık programlarında aynı doz / uygulama için **Toplu Yapıldı** eklendi. 67 hayvanın uygulama tarihini tek sefer girip seçilenleri kaydedebilirsiniz.
 
@@ -62,12 +112,12 @@ Mobil ve masaüstünde Aşı, Parazit, Vitamin / Mineral, Hastalık / Tedavi ve 
 
 1. ZIP içindeki kaynakların tamamıyla GitHub deposunu güncelleyin.
 2. Actions → CiftlikPro Windows Kurulum → Run workflow.
-3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_37_Setup.exe` dosyasını mevcut bilgisayara kurun.
+3. `CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_41_Setup.exe` dosyasını mevcut bilgisayara kurun.
 4. Telefon ve masaüstünde mevcut adresi yeniden açın. Masaüstünde ana sayfayı kontrol edin; diğer bölümler üst menüdeki **Modüller** rozetinden açılır.
 
 Bu ZIP tam kaynak / kurulum projesidir; hazır Windows EXE, APK veya IPA içermez. Yeni `app/animal_edit_ui.py` ve sağlık merkezi dosyaları pakete dahildir. Mevcut veritabanı yedekleme adımı korunur; yeni tablolar ilk açılışta mevcut kayıtlara eklenir. Veri klasörünüzü silmeyin.
 
-Ayrıntılar: [2.0.37 değişiklikler](DUZELTME_NOTLARI_2_0_37.md), [2.0.37 doğrulama](DOGRULAMA_APP_EDITION_2_0_37.md), [2.0.36 değişiklikler](DUZELTME_NOTLARI_2_0_36.md), [2.0.36 doğrulama](DOGRULAMA_APP_EDITION_2_0_36.md), [2.0.35 değişiklikler](DUZELTME_NOTLARI_2_0_35.md), [2.0.35 doğrulama](DOGRULAMA_APP_EDITION_2_0_35.md), [Hayvan düzenleme](DUZELTME_NOTLARI_2_0_34.md), [Canlı metin araması](DUZELTME_NOTLARI_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
+Ayrıntılar: [2.0.40 değişiklikler](DUZELTME_NOTLARI_2_0_40.md), [2.0.40 doğrulama](DOGRULAMA_APP_EDITION_2_0_40.md), [2.0.39 değişiklikler](DUZELTME_NOTLARI_2_0_39.md), [2.0.39 doğrulama](DOGRULAMA_APP_EDITION_2_0_39.md), [2.0.38 değişiklikler](DUZELTME_NOTLARI_2_0_38.md), [2.0.38 doğrulama](DOGRULAMA_APP_EDITION_2_0_38.md), [2.0.37 değişiklikler](DUZELTME_NOTLARI_2_0_37.md), [2.0.37 doğrulama](DOGRULAMA_APP_EDITION_2_0_37.md), [2.0.36 değişiklikler](DUZELTME_NOTLARI_2_0_36.md), [2.0.36 doğrulama](DOGRULAMA_APP_EDITION_2_0_36.md), [2.0.35 değişiklikler](DUZELTME_NOTLARI_2_0_35.md), [2.0.35 doğrulama](DOGRULAMA_APP_EDITION_2_0_35.md), [Hayvan düzenleme](DUZELTME_NOTLARI_2_0_34.md), [Canlı metin araması](DUZELTME_NOTLARI_2_0_33.md), [Masaüstü Ana Sayfa](DUZELTME_NOTLARI_2_0_32.md), [Kompakt Üreme Yönetimi](DUZELTME_NOTLARI_2_0_31.md), [Sağlık Yönetimi kullanımı](DUZELTME_NOTLARI_2_0_30.md), [Senkronizasyon kullanımı](DUZELTME_NOTLARI_2_0_28.md), [Mobil Kurulum](MOBIL_KURULUM.md).
 
 Aşağıdaki kayıtlar önceki Enterprise sürümlerinin geçmiş notlarıdır.
 

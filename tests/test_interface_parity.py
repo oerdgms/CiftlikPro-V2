@@ -64,10 +64,10 @@ class InterfaceParityTests(unittest.TestCase):
         self.assertNotIn('PARITY-10',desktop)
         self.assertIn('name="group"',desktop)
 
-    def test_module_directory_exposes_thirteen_tiles_with_a_unified_health_hub(self):
+    def test_module_directory_exposes_fourteen_tiles_with_a_unified_health_hub(self):
         text=wide.modules_markup(mobile_ui.icon)
-        self.assertEqual(text.count('class="cp-module-tile"'),13)
-        for url in ('/milk-center','/health','/agriculture','/archive/sold','/backups'):
+        self.assertEqual(text.count('class="cp-module-tile"'),14)
+        for url in ('/performance','/milk-center','/health','/agriculture','/archive/sold','/backups'):
             self.assertIn('href="'+url+'"',text)
         self.assertNotIn('<details',text)
         self.assertNotIn('Diğer Modüller',text)
@@ -165,7 +165,7 @@ class InterfaceParityTests(unittest.TestCase):
                 self.assertIn('href="/home-layout"',text)
                 self.assertIn('Ana Sayfayı Düzenle',text)
                 for path in ('/modules','/?app_view=modules'):
-                    text,_=request(path);self.assertEqual(text.count('class="cp-module-tile"'),13)
+                    text,_=request(path);self.assertEqual(text.count('class="cp-module-tile"'),14)
                 text,_=request('/milk-center');self.assertIn('data-milk-lactating>12<',text)
                 text,_=request('/all-animals?group=lactating');self.assertIn('class="cp-wide-herd cp-wide-only"',text)
                 text,_=request('/animal?id='+str(self.ids[0]));self.assertIn('cp-wide-dairy',text)
