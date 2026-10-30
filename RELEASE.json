@@ -1,11 +1,11 @@
 {
   "app": "CiftlikPro",
-  "version": "2.0.44",
-  "build": "AppEdition2.0.44-HerdListSimplification",
+  "version": "2.0.48",
+  "build": "AppEdition2.0.48-RecalculationUnderAnimalProfile",
   "channel": "pilot-preparation",
   "baseline": "2.0.41",
   "core_version": "3.9.23 DEV4 Hotfix1.22cr",
-  "cache_name": "ciftlikpro-app-edition-2.0.44",
-  "setup_file": "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_44_Setup.exe",
-  "artifact_name": "CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.44-Windows-Setup"
+  "cache_name": "ciftlikpro-app-edition-2.0.48",
+  "setup_file": "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_48_Setup.exe",
+  "artifact_name": "CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.48-Windows-Setup"
 }

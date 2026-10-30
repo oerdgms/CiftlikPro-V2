@@ -285,6 +285,8 @@ class AppEditionTests(unittest.TestCase):
         # ast.dump output can change between Python 3.12 (GitHub/Windows build)
         # and newer Python releases even when the source code is identical.
         # This keeps the Enterprise core regression gate deterministic.
+        # 2.0.45 snapshots include the explicitly requested selectable KM target
+        # and unified protein summary; new tests cover those changed behaviors.
         expected=json.loads((ROOT/'tests'/'enterprise_core_source_snapshot.json').read_text())
         source=(ROOT/'app'/'server.py').read_text()
         # Exclude only the added dashboard link; retain the original core hashes.

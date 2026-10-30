@@ -1,3 +1,21 @@
+# AppEdition 2.0.48 – Yeniden Hesaplama Alanı Hayvan Profilinde
+
+Canlı ağırlık, KM oranı, Kaydet ve Yeniden Hesapla alanları Rasyon Çalışma Masası'nda Hayvan Profili bölümünün altına taşındı. Mobilde de profil bilgilerinin altında yer alır. Aynı form taşındığı için hesaplama, önizleme, aynı rasyona uygulama ve kilitli yem davranışları korunur.
+
+# AppEdition 2.0.47 – Mevcut Rasyonu Yeniden Hesaplama
+
+Rasyon detayındaki canlı ağırlık ve KM yüzdesini değiştirip Yeniden Hesapla ile mevcut yemlerden yeni çözüm önizleyebilirsiniz. Aynı Rasyona Uygula aynı kaydı ve padok bağlantılarını korur; yeni rasyon oluşturmaz. Kilitli yemler sabit kalır. Önceki günlerin miktar geçmişi korunur. Ayrıntılar: MEVCUT_RASYON_2_0_47.md.
+
+# AppEdition 2.0.46 – Hazır Faz Rasyonlarının Silinmesi
+
+Faz 1–4 hazır rasyonları silindikten sonra yeniden oluşturulmaz. Uygulama açılışı düzenlenen miktarları ve hedefleri sıfırlamaz. Önceki veritabanında bulunmayan faz rasyonları güncellemede eklenmez. Sıfır kurulumda dört başlangıç rasyonu bir defa oluşturulur. Aktif padok ataması silmeyi engeller; geçmiş padok ilişkisi olan rasyon arşivlenir. KM oranı ve protein tutarlılığı düzeltmeleri dahildir.
+
+# AppEdition 2.0.45 – Seçilebilir KM Oranı ve Protein Tutarlılığı
+
+Besi rasyonunda varsayılan KM hedefi her canlı ağırlıkta %2,50. Rasyon detayındaki görünür KM oranı alanından değiştirilebilir. Kaydet yalnız hedefi günceller; Bu oranla çöz seçili oran ve mevcut yemlerle yeni rasyon çözüm ekranını açar. Mevcut yem miktarları otomatik değiştirilmez. Süt rasyonu motoru korunur.
+
+Ayrıntılar: [KM_ORANI_2_0_45.md](KM_ORANI_2_0_45.md). Önceki sürüm notları aşağıdadır.
+
 # AppEdition 2.0.44 – Hayvan Listesi Sadeleştirme
 
 Hayvan listesindeki Durum Ekle bağlantısı kaldırıldı. Mevcut durum rozetleri ve hayvan kartındaki Durum Ekle işlemi korundu. 2.0.43 Besi Performansı menü bağlantıları dahildir. Kaynaktan çalıştırma paketi.

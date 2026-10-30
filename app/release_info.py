@@ -1,8 +1,8 @@
 """Single release identity for runtime, cached assets and Windows packaging."""
 import re
 
-VERSION = '2.0.44'
-BUILD_LABEL = 'HerdListSimplification'
+VERSION = '2.0.48'
+BUILD_LABEL = 'RecalculationUnderAnimalProfile'
 BASELINE = '2.0.41'
 CHANNEL = 'pilot-preparation'
 CORE_VERSION = '3.9.23 DEV4 Hotfix1.22cr'

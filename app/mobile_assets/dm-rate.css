@@ -1,0 +1,13 @@
+.cp-dm-rate-bar{padding:12px;margin:10px 0;background:#f1f8f3;border:1px solid #d4e5d9;border-radius:12px;min-width:0}
+.cp-dm-rate-bar form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:0}
+.cp-dm-rate-bar label{display:grid;gap:5px;font-weight:700;font-size:13px;min-width:0}
+.cp-dm-rate-bar input{width:120px;max-width:100%;box-sizing:border-box;min-height:42px;padding:8px;border:1px solid #bdcfc3;border-radius:8px;background:white;font-size:16px}
+.cp-dm-rate-bar output{flex:1;min-width:0;align-self:center;font-size:14px;font-weight:700;overflow-wrap:anywhere;color:#234d36}
+.cp-dm-rate-actions{display:flex;gap:8px;flex-wrap:wrap}
+.cp-dm-rate-bar>small{display:block;margin-top:8px;color:#64766a;line-height:1.5;font-size:11px}
+#rationSolveDrawer [data-dm-preview]{display:block;font-size:12px;font-weight:600;line-height:1.5;overflow-wrap:anywhere;margin-top:5px}
+@media(max-width:650px){.cp-dm-rate-bar form{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}.cp-dm-rate-bar label{grid-template-columns:minmax(0,1fr) 90px;align-items:center}.cp-dm-rate-bar input{width:90px}.cp-dm-rate-actions{display:grid;grid-template-columns:1fr 1fr}.cp-dm-rate-actions .btn{width:100%;min-height:42px;box-sizing:border-box}}
+
+/* Keep recalculation in the animal profile, below its heading and summary. */
+body.wb2-desktop .wb2-desktop-profile{flex-wrap:wrap}
+.wb2-desktop-profile>.cp-dm-rate-bar,.wb2-mobile-profile>.cp-dm-rate-bar{flex:0 0 100%;width:100%;max-width:100%;box-sizing:border-box;margin:8px 0 0;order:10}
