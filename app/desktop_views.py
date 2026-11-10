@@ -23,7 +23,7 @@ MODULES = [
 
 def modules_markup(icon):
     tiles=''.join(f'<a href="{url}" class="cp-module-tile"><span class="cp-module-icon cp-module-{tone}">{ref.glyph(kind,icon)}</span><b>{label}</b></a>' for kind,label,url,tone in MODULES)
-    return '<section class="cp-module-directory cp-ref-modules" id="cpModuleDirectory"><header class="cp-shared-head"><div><h1>Modüller</h1><p>Tüm işlemler tek ekranda.</p></div></header><div class="cp-module-grid">'+tiles+'</div><button class="cp-ref-install" id="cpInstall" hidden>Ana ekrana yükle</button></section>'
+    return '<section class="cp-module-directory cp-ref-modules" id="cpModuleDirectory"><header class="cp-shared-head"><div><h1>Modüller</h1><p>Tüm işlemler tek ekranda.</p></div></header><div class="cp-module-grid">'+tiles+'</div><a class="cp-ref-install" id="cpInstall" href="/app-install" data-cp-pwa-open>Uygulama ve güncellemeler</a></section>'
 
 
 def summary(ns, username):
@@ -130,6 +130,19 @@ def dairy_card(ns, animal, summary, active=True):
     sid=str(animal['id'])
     actions='<div class="cp-shared-actions"><a class="btn" data-cp-state-url aria-haspopup="dialog" href="/animal-events?source=animal&amp;id='+sid+'">＋ Durum Ekle</a><a class="btn alt" data-cp-state-url aria-haspopup="dialog" href="/animal-events?source=animal&amp;id='+sid+'&amp;event=birth">Doğum Ekle</a></div>' if active else ''
     return '<section class="card cp-wide-only cp-wide-dairy"><header class="cp-shared-head"><h2>Laktasyon Durumu</h2>'+actions+'</header>'+ref.keyvalues(values)+'</section>'
+
+
+def residence_document(ns, document, source, sid):
+    """Decorate the retained desktop finance card, using the shared date rules."""
+    with ns['db']() as c:
+        table = 'calves' if source == 'calf' else 'animals'
+        record = c.execute(f'select * from {table} where id=?',(sid,)).fetchone()
+    if not record or 'cp-wide-residence' in document:
+        return document
+    block = '<div class="cp-wide-only cp-wide-residence">'+ref.residence_markup(dict(record))+'</div>'
+    pattern = (r'(<section\b[^>]*data-animal-panel="finance"[^>]*>.*?<h2>.*?</h2>)'
+               if source == 'animal' else r'(<h3>Finans Özeti</h3>)')
+    return re.sub(pattern, lambda match: match.group(1)+block, document, count=1, flags=re.S)
 
 
 def animal_document(ns, document, aid):

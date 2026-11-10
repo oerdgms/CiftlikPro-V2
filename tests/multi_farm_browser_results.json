@@ -1,0 +1,133 @@
+{
+  "views": [
+    {
+      "width": 320,
+      "route": "/farms?farm=primary"
+    },
+    {
+      "width": 320,
+      "route": "/all-animals?farm=primary"
+    },
+    {
+      "width": 320,
+      "route": "/animal?id=1&farm=primary"
+    },
+    {
+      "width": 320,
+      "route": "/ration-workbench?id=1&farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 320,
+      "route": "/finance?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 320,
+      "route": "/backups?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 390,
+      "route": "/farms?farm=primary"
+    },
+    {
+      "width": 390,
+      "route": "/all-animals?farm=primary"
+    },
+    {
+      "width": 390,
+      "route": "/animal?id=1&farm=primary"
+    },
+    {
+      "width": 390,
+      "route": "/ration-workbench?id=1&farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 390,
+      "route": "/finance?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 390,
+      "route": "/backups?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 412,
+      "route": "/farms?farm=primary"
+    },
+    {
+      "width": 412,
+      "route": "/all-animals?farm=primary"
+    },
+    {
+      "width": 412,
+      "route": "/animal?id=1&farm=primary"
+    },
+    {
+      "width": 412,
+      "route": "/ration-workbench?id=1&farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 412,
+      "route": "/finance?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 412,
+      "route": "/backups?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 820,
+      "route": "/farms?farm=primary"
+    },
+    {
+      "width": 820,
+      "route": "/all-animals?farm=primary"
+    },
+    {
+      "width": 820,
+      "route": "/animal?id=1&farm=primary"
+    },
+    {
+      "width": 820,
+      "route": "/ration-workbench?id=1&farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 820,
+      "route": "/finance?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 820,
+      "route": "/backups?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 1366,
+      "route": "/farms?farm=primary"
+    },
+    {
+      "width": 1366,
+      "route": "/all-animals?farm=primary"
+    },
+    {
+      "width": 1366,
+      "route": "/animal?id=1&farm=primary"
+    },
+    {
+      "width": 1366,
+      "route": "/ration-workbench?id=1&farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 1366,
+      "route": "/finance?farm=f_23bbf765ecc0c96d"
+    },
+    {
+      "width": 1366,
+      "route": "/backups?farm=f_23bbf765ecc0c96d"
+    }
+  ],
+  "flows": [
+    "create enterprise in real browser",
+    "old-tab profile POST preserved original enterprise after switch",
+    "AJAX scoped independently of session switch",
+    "Request-object POST remains scoped and CSRF checked",
+    "original animals/photos remain in primary",
+    "business switch also works with JavaScript disabled"
+  ],
+  "errors": []
+}

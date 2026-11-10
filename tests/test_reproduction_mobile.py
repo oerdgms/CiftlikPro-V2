@@ -43,7 +43,7 @@ class ReproductionMobileTests(unittest.TestCase):
             self.assertIn('data-repro-section="control"', html)
             self.assertIn('data-mobile-open="1"', html)
             self.assertIn('Tümünü Gör (4)', html)
-            self.assertIn('src="/uploads/repro-test.webp"', html)
+            self.assertIn('data-photo-original="/uploads/repro-test.webp"', html)
             self.assertIn('class="repro-photo"', html)
             self.assertIn('Kontrol Sonucu', html)
             self.assertIn("index>=3", html)

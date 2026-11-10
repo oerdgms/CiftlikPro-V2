@@ -1,0 +1,47 @@
+[
+  {
+    "width": 320,
+    "menu": [
+      "Ana Sayfa",
+      "Hayvanlar",
+      "İşler ve Hatırlatmalar",
+      "Padoklar",
+      "Tüm Modüller",
+      "Ayarlar"
+    ],
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "menu": [
+      "Ana Sayfa",
+      "Hayvanlar",
+      "İşler ve Hatırlatmalar",
+      "Padoklar",
+      "Tüm Modüller",
+      "Ayarlar"
+    ],
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "width": 820,
+    "menu": [
+      "Ana Sayfa",
+      "Hayvanlar",
+      "İşler ve Hatırlatmalar",
+      "Padoklar",
+      "Tüm Modüller",
+      "Ayarlar"
+    ],
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "width": 1366,
+    "menu": [],
+    "overflow": false,
+    "errors": []
+  }
+]

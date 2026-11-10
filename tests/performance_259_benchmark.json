@@ -1,0 +1,23 @@
+{
+  "2.0.58": {
+    "median_seconds": 0.0008561670000517552,
+    "sqlite_changed_rows_per_refresh": [
+      364,
+      364,
+      364,
+      364,
+      364
+    ]
+  },
+  "2.0.59": {
+    "median_seconds": 7.946899995658896e-05,
+    "sqlite_changed_rows_per_refresh": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "fixture": "Synthetic: 1 paddock, 1 feed, 181 stock-entry dates, unchanged same-day consumption. Not customer hardware or data."
+}

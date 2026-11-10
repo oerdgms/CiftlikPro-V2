@@ -20,6 +20,12 @@
     const isTasks = path === '/' && params.get('app_view') === 'tasks';
     const back = $('.cp-header-back');
     if (back) back.href = /^(\/animal|\/calf)(-edit)?$/.test(path) || ['/animal-add','/dairy-status'].includes(path) ? '/all-animals' : '/';
+    if (back && path === '/reports' && params.has('tab')) {
+      const reportHome = new URL('/reports', location.origin);
+      if (params.get('farm')) reportHome.searchParams.set('farm', params.get('farm'));
+      back.href = reportHome.pathname + reportHome.search;
+      back.setAttribute('aria-label', 'Raporlara dön');
+    }
     if (path === '/' && !isModules && !isTasks) { title.textContent = 'ÇiftlikPro'; subtitle.textContent = 'Enterprise'; }
     if (/^\/(animal|calf)$/.test(path)) title.textContent = 'Hayvan Detayı';
     if (path === '/animal-add') title.textContent = params.get('entry') === 'calf' ? 'Yeni Buzağı Ekle' : 'Yeni Hayvan Ekle';
@@ -53,7 +59,6 @@
     function home() {
       const root = $('.cp-ref-home');
       if (!root) return;
-      [...main.children].filter(x => x !== root && !['STYLE','SCRIPT'].includes(x.tagName) && !x.classList.contains('flash')).forEach(x => x.classList.add('cp-home-extra'));
       const rows = $$('[data-cp-state]', root), filters = $$('[data-cp-task-filter]', root);
       const empty = $('.cp-filter-empty', root), list = $('.cp-task-list', root);
       const dot = $('#cpNotificationDot');
@@ -61,16 +66,18 @@
       function filter(key) {
         let shown = 0;
         rows.forEach(row => {
-          const display = key === 'all' || row.dataset.cpState === key;
+          const display = key === 'all' || (key === 'birth' ? row.dataset.cpKind === 'birth' : row.dataset.cpState === key);
           row.hidden = !display || (!isTasks && shown >= Number(root.dataset.taskLimit || 3));
           if (display && !row.hidden) shown++;
         });
         filters.forEach(b => { const active = b.dataset.cpTaskFilter === key; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
+        empty.textContent = key === 'birth' ? 'Beklenen doğum bulunmuyor.' : 'Bu filtrede bekleyen iş veya hatırlatma yok.';
         empty.hidden = shown !== 0;
         list.hidden = shown === 0;
       }
       filters.forEach(b => b.addEventListener('click', () => filter(b.dataset.cpTaskFilter)));
-      filter(isTasks ? params.get('filter') || 'all' : 'all');
+      const requested = params.get('filter');
+      filter(isTasks && filters.some(b => b.dataset.cpTaskFilter === requested) ? requested : 'all');
       if (isTasks) {
         $('.cp-home-jobs', root).hidden = false;
         title.textContent = 'Görev Yönetimi';
@@ -83,7 +90,6 @@
       const hub = $('#cpModuleDirectory');
       if (!hub) return;
       title.textContent = 'Modüller';
-      $('#cpInstall',hub)?.addEventListener('click', () => { $('#cpQuickTitle').textContent = 'Ana ekrana yükle'; $('.cp-quick-grid').innerHTML = '<p>Tarayıcının paylaşım menüsünden “Ana Ekrana Ekle” seçeneğini kullanabilirsin.</p>';$('#cpGlobalAdd').click(); });
     }
 
     function herd() {
@@ -198,75 +204,33 @@
     function detail() {
       const root = $('.cp-ref-detail');if (!root) return;
       const source = root.dataset.refSource, sid = root.dataset.refId;
-      const sections = $$('[data-ref-section]',root), tabs = $$('[data-ref-tab]',root), overview = $('.cp-ref-overview',root);
-      const tabStrip = $('.cp-ref-detail-tabs',root), header = $('.cp-app-header');
-      // The fixed header owns the docked strip. A stable slot stays in the
-      // document, so docking cannot move the boundary that triggers docking.
-      const tabSlot = document.createElement('div');
-      tabSlot.className = 'cp-ref-tabs-slot';
-      tabStrip.before(tabSlot);tabSlot.append(tabStrip);
-      const marker = document.createElement('span');
-      marker.className = 'cp-ref-tabs-marker';marker.setAttribute('aria-hidden','true');
-      tabSlot.prepend(marker);
-      const mobileTabs = matchMedia('(max-width:900px)');
-      let tabObserver, headerHeight = 0, tabsDocked = false;
-      function dockTabs(docked) {
-        if (tabsDocked === docked) return;
-        tabsDocked = docked;
-        tabStrip.classList.toggle('cp-ref-tabs-docked',docked);
-        (docked ? header : tabSlot).append(tabStrip);
+      const sections = $$('.cp-ref-detail-sections > details[data-ref-section]',root);
+      function closeOtherSections(section) {
+        sections.forEach(other => { if (other !== section && other.open) other.open = false; });
       }
-      function syncTabs() {
-        dockTabs(mobileTabs.matches && tabSlot.getBoundingClientRect().top <= headerHeight);
-      }
-      function measureTabs() {
-        if (!mobileTabs.matches) {
-          dockTabs(false);tabObserver?.disconnect();tabObserver = null;
-          tabSlot.style.removeProperty('height');return;
-        }
-        const height = Math.ceil(tabStrip.getBoundingClientRect().height);
-        if (height && tabSlot.style.height !== height+'px') tabSlot.style.height = height+'px';
-        const nextHeaderHeight = Math.ceil(header.getBoundingClientRect().height);
-        if (!tabObserver || nextHeaderHeight !== headerHeight) {
-          headerHeight = nextHeaderHeight;
-          tabObserver?.disconnect();
-          tabObserver = new IntersectionObserver(syncTabs,{rootMargin:`-${headerHeight}px 0px 0px 0px`,threshold:0});
-          tabObserver.observe(marker);
-        }
-        syncTabs();
-      }
-      measureTabs();
-      // Resize is for geometry changes, never a per-scroll position rewrite.
-      window.addEventListener('resize',measureTabs,{passive:true});
-      window.addEventListener('pageshow',measureTabs);
-      new ResizeObserver(measureTabs).observe(header);
-      function select(name,scroll = true,focusView = scroll || name!=='general') {
+      sections.forEach(section => section.addEventListener('toggle', () => {
+        if (section.open) closeOtherSections(section);
+      }));
+      const formFor = path => $$('form[action]',main).find(form => new URL(form.action).pathname === path);
+      function select(name, scroll = true) {
         if (name==='state') return state();
-        overview.hidden = focusView;
-        document.body.classList.toggle('cp-ref-detail-focused',focusView);
-        const actual = ['paddock','ration'].includes(name) ? 'ration' : name;
-        tabs.forEach(tab => { const active = tab.dataset.refTab===actual;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',String(active)); });
-        sections.forEach(section => {
-          const display = name==='general' || section.dataset.refSection===name || name==='ration' && ['paddock','growth'].includes(section.dataset.refSection);
-          section.hidden = !display;
-          section.open = name==='general' ? section.dataset.refSection==='identity' : display;
-        });
-        syncTabs();
+        const section = sections.find(item => item.dataset.refSection === (name==='general' ? 'identity' : name));
+        if (!section) return;
+        closeOtherSections(section);
+        section.open = true;
         if (scroll) {
-          window.scrollTo({top:Math.max(0,tabSlot.getBoundingClientRect().top+window.scrollY-headerHeight),behavior:motion});
-          const active = tabs.find(tab=>tab.dataset.refTab===actual);
-          if (active) { const strip = active.parentElement;strip.scrollLeft = Math.max(0, active.offsetLeft-strip.clientWidth/2+active.clientWidth/2); }
+          const headerHeight = $('.cp-app-header')?.getBoundingClientRect().height || 0;
+          const top = section.getBoundingClientRect().top + window.scrollY - headerHeight - 8;
+          window.scrollTo({top:Math.max(0,top),behavior:motion});
+          history.replaceState(null,'',location.pathname+location.search+(name==='general' ? '' : '#'+name));
         }
-        if (name!=='general' || scroll) history.replaceState(null,'',location.pathname+location.search+'#'+name);
       }
-      window.showAnimalPanel = name => select(name==='operations' ? 'operations' : name);
-      tabs.forEach(tab => tab.addEventListener('click', () => select(tab.dataset.refTab)));
-      back?.addEventListener('click',e=>{
-        if (!overview.hidden) return;
-        e.preventDefault();select('general',false,false);history.replaceState(null,'',location.pathname+location.search);window.scrollTo({top:0,behavior:'auto'});
-      });
+      window.showAnimalPanel = name => select(name);
       root.addEventListener('click', e => { const action = e.target.closest('[data-ref-action]');if (action) select(action.dataset.refAction); });
       function movePanel(name) {
+        // Finance uses one complete, record-backed card list. Keep its desktop
+        // table out of the mobile accordion instead of showing duplicate totals.
+        if (name === 'finance') return;
         const target = $(`[data-ref-legacy="${name}"]`,root), panel = $(`.main>[data-animal-panel="${name}"]`);
         if (!target || !panel) return;
         const details = document.createElement('details');details.className = 'cp-ref-legacy-records';details.innerHTML = '<summary>Kayıt ayrıntıları ve işlemler</summary>';
@@ -277,13 +241,13 @@
       ['reproduction','health','growth','finance','history','operations'].forEach(movePanel);
       if (source==='calf') {
         const growth = $('[data-ref-legacy=growth]',root), finance = $('[data-ref-legacy=finance]',root);
-        ['form[action="/calf/weight"]','form[action="/calf-internal-cost/save"]','form[action="/animal/sale"]','form[action="/animal/loss"]'].forEach(selector => {
-          const form = $(selector,main);if (!form) return;
-          const target = selector.includes('cost') ? finance : selector.includes('weight') ? growth : $('[data-ref-legacy=operations]',root);
+        ['/calf/weight','/calf-internal-cost/save','/animal/sale','/animal/loss'].forEach(path => {
+          const form = formFor(path);if (!form) return;
+          const target = path.includes('cost') ? finance : path.includes('weight') ? growth : $('[data-ref-legacy=operations]',root);
           if (target) {
             const card = form.closest('.card');
             const block = document.createElement('div');block.className = 'cp-ref-legacy-panel';
-            if (card && selector.includes('cost')) block.append(card);else block.append(form);target.append(block);
+            if (card && path.includes('cost')) block.append(card);else block.append(form);target.append(block);
           }
         });
       }
@@ -293,7 +257,7 @@
         const operation=$('[data-ref-section=operations] .cp-ref-accordion-body',root);
         if (operation) {const link=document.createElement('a');link.className='cp-ref-bar';link.href='/finance?app_action=add';link.textContent='Buzağı satışını Finans ekranından kaydet';operation.prepend(link);}
       }
-      const upload = $(`form[action="/${source}/photo"]`,main), uploadTarget = $('[data-ref-upload]',root);
+      const upload = formFor(`/${source}/photo`), uploadTarget = $('[data-ref-upload]',root);
       if (upload && uploadTarget) {
         const box = document.createElement('details');box.className = 'cp-ref-upload';box.innerHTML='<summary>Fotoğraf seç ve yükle</summary>';box.append(upload);uploadTarget.append(box);
         upload.addEventListener('change', e => { if (e.target.type !== 'file') return;const label = $('summary',box);label.textContent = e.target.files.length ? e.target.files[0].name : 'Fotoğraf seç ve yükle'; });
@@ -319,16 +283,12 @@
         $('[data-ref-state-delete]',content).addEventListener('click',e=>{e.preventDefault();window.cpCloseAnimalPanel();select('operations');$('.cp-ref-delete',root).open=true;});
       }
       $('#cpAnimalMore')?.addEventListener('click',more);
-      window.addEventListener('hashchange',()=>{
-        const name=location.hash.slice(1);
-        if (!name) return select('general',false,false);
-        const target=['animalSale','animalLoss'].includes(name)?'operations':name;
-        if (target==='general' || sections.some(section=>section.dataset.refSection===target)) select(target,false,true);
-      });
-      let initial = location.hash.slice(1);
-      if (['animalSale','animalLoss'].includes(initial)) initial='operations';
-      if (initial && (initial==='general' || sections.some(section=>section.dataset.refSection===initial))) select(initial,false,true);
-      else select('general',false);
+      function openHash() {
+        const name = location.hash.slice(1);
+        if (name) select(['animalSale','animalLoss'].includes(name) ? 'operations' : name);
+      }
+      window.addEventListener('hashchange',openHash);
+      if (location.hash) requestAnimationFrame(openHash);
     }
     function healthTarget() {
       if (path !== '/health' || !params.get('subject')) return;

@@ -1,0 +1,86 @@
+[
+  {
+    "width": 320,
+    "metrics": {
+      "document": {
+        "client": 320,
+        "scroll": 320
+      },
+      "chart": {
+        "client": 270,
+        "scroll": 270
+      },
+      "table": {
+        "client": 270,
+        "scroll": 270
+      },
+      "months": 12,
+      "rows": 2
+    },
+    "navigation": true,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "metrics": {
+      "document": {
+        "client": 390,
+        "scroll": 390
+      },
+      "chart": {
+        "client": 336,
+        "scroll": 336
+      },
+      "table": {
+        "client": 336,
+        "scroll": 336
+      },
+      "months": 12,
+      "rows": 2
+    },
+    "navigation": true,
+    "errors": []
+  },
+  {
+    "width": 820,
+    "metrics": {
+      "document": {
+        "client": 820,
+        "scroll": 820
+      },
+      "chart": {
+        "client": 766,
+        "scroll": 766
+      },
+      "table": {
+        "client": 766,
+        "scroll": 766
+      },
+      "months": 12,
+      "rows": 2
+    },
+    "navigation": true,
+    "errors": []
+  },
+  {
+    "width": 1366,
+    "metrics": {
+      "document": {
+        "client": 1366,
+        "scroll": 1366
+      },
+      "chart": {
+        "client": 624,
+        "scroll": 660
+      },
+      "table": {
+        "client": 454,
+        "scroll": 520
+      },
+      "months": 12,
+      "rows": 2
+    },
+    "navigation": true,
+    "errors": []
+  }
+]

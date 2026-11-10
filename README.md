@@ -1,3 +1,73 @@
+# AppEdition 2.0.65 – Mobil Hayvan Kartında Tek Açık Bölüm
+
+Mobil hayvan ve buzağı detayında bir bölüm açıldığında önceki açık bölüm kapanır. Hızlı işlemler de aynı davranışı kullanır. Açık bölüme tekrar dokunarak tüm bölümler kapatılabilir. Masaüstü sekmeleri korunur.
+
+# AppEdition 2.0.64 – Mobil Hayvan Kartı Özeti
+
+Mobil hayvan ve buzağı detayındaki üst yaşam döngüsü özeti kaldırıldı. Alt bölümdeki Hayvan Yaşam Döngüsü kartı korunur. Temel Kimlik Bilgileri ilk açılışta kapalıdır. Masaüstü düzeni değişmedi.
+
+12 otomatik test ve dört Chromium ekran genişliğinde gezinme kontrolleri geçti.
+
+# AppEdition 2.0.63 – Mobil Hayvan Kartı
+
+Hayvan ve buzağı detayında yatay sekme menüsü kaldırıldı. İkonlu açılır kartlar bölüm gezinmesini sağlar. Hızlı işlemler ve bölüm bağlantıları ilgili kartı açıp oraya kaydırır; diğer bölümler ekranda kalır. İşletme parametresi bulunan tartım ve fotoğraf formları kendi kartlarına taşınır. Masaüstü hayvan kartı sekmeleri korunur.
+
+49 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde hayvan kartı kontrol edildi. Mobilde yetişkin ve buzağı tartım formu, fotoğraf alanı, Satış / Zayiat bağlantısı, işletme kapsamı ve yatay taşma kontrol edildi. Fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.62 – Raporlara Dön
+
+Raporlar listesindeki dokuz girişin açtığı ekranların üstüne görünür Raporlara Dön bağlantısı eklendi. Sağlık İş Planı ve diğer rapor önizlemelerinde bağlantı yazdırma ve PDF seçeneklerinin üstündedir. Aynı işletmeye dönülür. Yazdırma ve PDF indirme seçenekleri korunur, dönüş düğmesi çıktıya basılmaz. Yazdırma ekranında işletme değiştirme şeridi gösterilmez; işletme adı rapor başlığında kalır.
+
+22 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde dönüş bağlantıları, işletme kapsamı ve yazdırma görünümü doğrulandı; fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.61 – Mobil Raporlar ve İşletme Şeridi
+
+Mobilde rapor seçimi Raporlar listesindeki kartlardan yapılır. Yinelenen Hayvan Raporu, Finans Raporu ve İçe Aktarma sekmeleri gizlenir. Hayvan ve finans raporunun üstteki geri oku, seçili işletmeyi koruyarak Raporlar listesine döner. Mobilde aktif işletme şeridi yalnızca ana sayfada gösterilir; işletme değiştirme yan menüden de kullanılabilir. Masaüstündeki rapor sekmeleri ve işletme şeridi korunur.
+
+45 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde rapor geçişleri ve işletme bağlantıları doğrulandı. Fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.60 – Mobil Finans ve Üreme Raporları
+
+Finans raporu mobil ekrana sığar; kategori özeti kartlar hâlinde gösterilir. Üreme raporuna Ana Sayfa/Raporlara Dön/Üreme Merkezine Dön bağlantıları eklendi. Rapor sekmeleri işletme ve filtre parametrelerini korur. Ayrıntılar: [RAPORLAR_2_0_60.md](RAPORLAR_2_0_60.md).
+
+# AppEdition 2.0.59 – Giriş ve stok hızı, sade mobil menü
+
+Son giriş zamanından kaynaklanan gereksiz işletme hesabı eşitlemesi ve değişmeyen padok tüketiminde stok/maliyet geçmişinin yeniden yazılması giderildi. Mobil yan menü altı ana bağlantıya indirildi; tüm işlevler Modüller üzerinden erişilebilir. Ayrıntılar ve güncelleme: [HIZ_VE_MOBIL_2_0_59.md](HIZ_VE_MOBIL_2_0_59.md). Kontroller: [DOGRULAMA_2_0_59.md](DOGRULAMA_2_0_59.md).
+
+# AppEdition 2.0.58 – Giriş ve Bağlantı Düzenlemeleri
+
+İkinci işletmeye girişte yinelenen şifre doğrulaması kaldırıldı. Ortak kullanıcı kopyası değişmedikçe yeniden okunmaz/yazılmaz; fotoğraf istekleri kullanıcı eşitlemesi başlatmaz. İşletme izinleri her istekte güncel ana hesaplardan kontrol edilir. Giriş hatası mesajla forma döner; sayfa açılış hataları yeniden deneme ekranı gösterir.
+
+Mobil girişte işletme/kullanıcı/şifre alanları 44 px, kurulum/güncelleme bağlantısı küçük bir düğmedir. Fotoğrafın merkezi açık kalır. Mobil klavye sayfa açılır açılmaz tetiklenmez. Hatalı Ayarlara Dön yolu ve menü/rapordaki yinelenen kısayollar düzenlendi.
+
+Mevcut veri klasörünüzü koruyarak yeni kaynakları kullanın. EXE bu pakette derlenmemiştir. Ayrıntılar: [GIRIS_BAGLANTILAR_2_0_58.md](GIRIS_BAGLANTILAR_2_0_58.md).
+
+# AppEdition 2.0.57 – İçe Aktarma Akışı
+
+Veri Aktarımı ve raporlardaki hayvan içe aktarma ortak dosya seçme ekranını açar. Yükleme/hata mesajları aynı uygulama penceresinde görünür; geçerli dosyalar önce önizlenip ayrı onayla seçili işletmeye aktarılır.
+
+Ayrıntılar: [ICE_AKTARMA_2_0_57.md](ICE_AKTARMA_2_0_57.md). Taranmış PDF için OCR gerekir; bu sürüm OCR içermez.
+
+# AppEdition 2.0.56 – Girişte İşletme Seçimi
+
+Giriş ekranında işletme seçilir; doğru şifre ve işletme izniyle doğrudan açılır. Son başarılı seçim hatırlanır. Mobil giriş fotoğrafı erken yüklenir ve tam fotoğraf gelene kadar aynı fotoğrafın küçük önizlemesi görünür.
+
+Ayrıntılar: [GIRIS_2_0_56.md](GIRIS_2_0_56.md). Çoklu işletme ve önceki düzeltmeler dahildir.
+
+# AppEdition 2.0.55 – Birden Fazla İşletme
+
+Üstteki aktif işletme alanından ve mobil yan menüden işletme oluşturup değiştirebilirsiniz. Mevcut kayıtlar ilk işletmede korunur; ek işletmeler ayrı veritabanı, fotoğraf ve yedek klasörleriyle açılır. Hesaplar ortaktır; yöneticiler ek işletmelere personel erişimi verebilir.
+
+Kurulum, erişim ve yedekleme: [COKLU_ISLETME_2_0_55.md](COKLU_ISLETME_2_0_55.md). 2.0.54 ve önceki düzeltmeler dahildir.
+
+# AppEdition 2.0.54 – Hedef Kartı Rozet Hizası
+
+Mobil KM, GCAA, HP ve NDF kartlarının durum rozetleri 3 px yukarı ve 3 px sola alındı. Yatay iç boşluk azaltıldı; uzun etiketler kesilmeden, dar ekranlarda gerektiğinde iki satırda görünür. 2.0.53 fotoğraf önizlemeleri ve önceki hızlandırmalar dahildir.
+
+# AppEdition 2.0.53 – Küçük Fotoğraf Önizlemeleri
+
+Liste/kart/galeri fotoğrafları küçük önizlemelerle yüklenir, dokununca aslı açılır. Geçici yükleme hataları iki kez otomatik denenir. 2.0.52 hızlandırmaları dahildir. Ayrıntılar: FOTOGRAF_2_0_53.md.
+
 # AppEdition 2.0.48 – Yeniden Hesaplama Alanı Hayvan Profilinde
 
 Canlı ağırlık, KM oranı, Kaydet ve Yeniden Hesapla alanları Rasyon Çalışma Masası'nda Hayvan Profili bölümünün altına taşındı. Mobilde de profil bilgilerinin altında yer alır. Aynı form taşındığı için hesaplama, önizleme, aynı rasyona uygulama ve kilitli yem davranışları korunur.

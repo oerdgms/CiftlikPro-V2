@@ -1,0 +1,40 @@
+{
+  "views": [
+    {
+      "width": 320,
+      "dataEntry": true,
+      "reportEntry": true,
+      "reportHubEntry": true
+    },
+    {
+      "width": 390,
+      "dataEntry": true,
+      "reportEntry": true,
+      "reportHubEntry": true
+    },
+    {
+      "width": 412,
+      "dataEntry": true,
+      "reportEntry": true,
+      "reportHubEntry": true
+    },
+    {
+      "width": 820,
+      "dataEntry": true,
+      "reportEntry": true,
+      "reportHubEntry": true
+    },
+    {
+      "width": 1366,
+      "dataEntry": true,
+      "reportEntry": true,
+      "reportHubEntry": false
+    }
+  ],
+  "flows": [
+    "attached scanned PDF returns visible OCR explanation, chosen file kept, retry enabled, no popup",
+    "CSV preview -> explicit confirmation -> only selected enterprise receives two records",
+    "without JavaScript, unsupported PDF still returns an in-app retry page"
+  ],
+  "errors": []
+}

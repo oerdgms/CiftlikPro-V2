@@ -42,9 +42,9 @@ class ReleaseIdentityTests(unittest.TestCase):
     def test_service_worker_never_caches_business_records(self):
         source=(ROOT/'app/mobile_assets/service-worker.js').read_text()
         self.assertIn("event.request.method !== 'GET'",source)
-        self.assertIn("fetch(event.request).catch",source)
+        self.assertIn("fetch(event.request, {signal:controller.signal})",source)
         self.assertNotIn('cache.put(',source)
-        self.assertIn("updateViaCache:'none'",(ROOT/'app/mobile_assets/mobile.js').read_text())
+        self.assertIn("updateViaCache:'none'",(ROOT/'app/mobile_assets/pwa.js').read_text())
 
     def test_offline_retry_has_timeout_and_preserves_requested_page(self):
         source=(ROOT/'app/mobile_assets/offline.html').read_text()

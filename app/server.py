@@ -1,7 +1,9 @@
 import os, sqlite3, hashlib, secrets, urllib.parse, json, csv, io, shutil, socket, threading, webbrowser, zipfile, tempfile, hmac, time, gc, base64, uuid, smtplib, ssl, random, re, unicodedata, sys
 from text_search import normalize as search_normalize, matches as search_matches
 import ration_recalculation
+import performance_speed
 import animal_edit_ui
+import weight_estimates
 import agriculture as agri
 from email.parser import BytesParser
 from email.message import EmailMessage
@@ -546,14 +548,16 @@ def recalculate_calf_exit_status(con, calf_id):
         )
 
 _ARCHIVE_SCHEMA_READY=False
+_ARCHIVE_SCHEMA_DATABASES=set()
 _ARCHIVE_SCHEMA_LOCK=threading.Lock()
 def ensure_archive_schema():
     """Şema kontrolünü süreç başına bir kez yap. Önceki DEV'de her GET isteğinde
     PRAGMA/UPDATE çalışması login -> dashboard geçişini gereksiz yere yavaşlatıyordu."""
     global _ARCHIVE_SCHEMA_READY
-    if _ARCHIVE_SCHEMA_READY:return
+    schema_key=str(Path(DB).resolve())
+    if _ARCHIVE_SCHEMA_READY and schema_key in _ARCHIVE_SCHEMA_DATABASES:return
     with _ARCHIVE_SCHEMA_LOCK:
-        if _ARCHIVE_SCHEMA_READY:return
+        if _ARCHIVE_SCHEMA_READY and schema_key in _ARCHIVE_SCHEMA_DATABASES:return
         with db() as c:
             cols={r[1] for r in c.execute("pragma table_info(animals)").fetchall()}
             for col,typ in [
@@ -566,6 +570,7 @@ def ensure_archive_schema():
             fcols={r[1] for r in c.execute("pragma table_info(finance)").fetchall()}
             if "animal_status_action" not in fcols:c.execute("ALTER TABLE finance ADD COLUMN animal_status_action TEXT DEFAULT ''")
             c.execute("update animals set status='Aktif' where status is null or trim(status)=''")
+        _ARCHIVE_SCHEMA_DATABASES.add(schema_key)
         _ARCHIVE_SCHEMA_READY=True
 
 
@@ -1022,6 +1027,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS finance(id INTEGER PRIMARY KEY, tx_date TEXT NOT NULL, tx_type TEXT NOT NULL, category TEXT NOT NULL, amount REAL NOT NULL, description TEXT, payment_method TEXT, animal_id INTEGER, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS backups(id INTEGER PRIMARY KEY, filename TEXT, created_at TEXT, size_bytes INTEGER);
         CREATE TABLE IF NOT EXISTS weights(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL, weight REAL NOT NULL, notes TEXT);
+        CREATE TABLE IF NOT EXISTS weight_estimates(
+            id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL,
+            girth_cm REAL NOT NULL, length_cm REAL NOT NULL, estimated_kg REAL NOT NULL,
+            method TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '', UNIQUE(animal_id,measure_date));
         CREATE TABLE IF NOT EXISTS milk(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, measure_date TEXT NOT NULL, liters REAL NOT NULL, notes TEXT);
         CREATE TABLE IF NOT EXISTS animal_photos(id INTEGER PRIMARY KEY, animal_id INTEGER NOT NULL, filename TEXT NOT NULL, created_at TEXT NOT NULL, caption TEXT);
         CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY, username TEXT, action TEXT, detail TEXT, created_at TEXT, ip_address TEXT);
@@ -5126,12 +5135,22 @@ def sync_daily_paddock_feed_stock(con=None, on_date=None):
                   f"{item['animal_count']} baş × {item['kg_per_head_day']:.3f} kg/baş/gün")
             previous=existing.pop(key,None)
             tx_id=int(previous['stock_tx_id'] or 0) if previous else 0
-            tx=c.execute('select id from feed_stock_transactions where id=?',(tx_id,)).fetchone() if tx_id else None
+            tx=c.execute('select * from feed_stock_transactions where id=?',(tx_id,)).fetchone() if tx_id else None
             if tx:
                 changed=(int(previous['ration_id'])!=item['ration_id'] or
                          int(previous['animal_count'] or 0)!=item['animal_count'] or
                          abs(float(previous['kg_per_head_day'] or 0)-item['kg_per_head_day'])>1e-9 or
                          abs(float(previous['quantity_kg'] or 0)-item['quantity_kg'])>1e-9)
+                # An unchanged page view must not rewrite stock or its complete cost history.
+                # Still inspect the actual transaction so edited/broken links are repaired.
+                tx_changed=(int(tx['feed_id'])!=item['feed_id'] or tx['tx_date']!=day or
+                            tx['tx_type']!='Tüketim' or float(tx['unit_price'] or 0)!=0 or
+                            abs(float(tx['quantity_kg'] or 0)-item['quantity_kg'])>1e-9 or
+                            (tx['notes'] or '')!=note)
+                if not changed and not tx_changed:
+                    stats['quantity_kg']+=item['quantity_kg']
+                    continue
+                touched.add(int(tx['feed_id']))
                 c.execute('''update feed_stock_transactions set feed_id=?,tx_date=?,tx_type='Tüketim',
                              quantity_kg=?,unit_price=0,notes=? where id=?''',
                           (item['feed_id'],day,item['quantity_kg'],note,tx_id))
@@ -5414,7 +5433,7 @@ def male_weight_performance(animal_id, con=None):
     own=con is None
     c=con or db()
     try:
-        rows=c.execute('select measure_date,weight,notes from weights where animal_id=? order by measure_date,id',(animal_id,)).fetchall()
+        rows=performance_speed.weight_rows(c,animal_id)
         if len(rows)<2:
             return {'rows':rows,'gain':None,'days':0,'daily':None,'monthly':None,'status':'none'}
         prev,last=rows[-2],rows[-1]
@@ -6798,7 +6817,7 @@ def create_backup(label='manuel'):
     try:src.backup(out)
     finally:out.close();src.close()
     manifest={'product':APP_NAME,'version':APP_VERSION,'created_at':datetime.now().isoformat(timespec='seconds'),
-              'database':'ciftlik.db','includes_uploads':True,'label':label,'backup_directory':str(target_dir)}
+              'database':'ciftlik.db','farm_id':multi_farm.current_id(),'includes_uploads':True,'label':label,'backup_directory':str(target_dir)}
     try:
         with zipfile.ZipFile(temp_zip,'w',zipfile.ZIP_DEFLATED) as z:
             z.write(temp_db,'ciftlik.db')
@@ -7103,7 +7122,10 @@ def health_course_export_rows(task_filter='all', search=''):
 def simple_table_print(title, subtitle, columns, rows, pdf_href):
     th=''.join('<th>'+h(c[0])+'</th>' for c in columns)
     trs=''.join('<tr>'+''.join('<td>'+h(str(r.get(c[1],'')))+'</td>' for c in columns)+'</tr>' for r in rows) or '<tr><td colspan="'+str(len(columns))+'">Kayıt bulunamadı.</td></tr>'
-    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>body{{font:13px Arial,sans-serif;color:#203b2c;max-width:1120px;margin:24px auto;padding:12px}}h1{{color:#176b3a;margin-bottom:4px}}.mut{{color:#627569}}table{{width:100%;border-collapse:collapse;margin-top:16px}}th,td{{border:1px solid #ccdacf;padding:8px;vertical-align:top;overflow-wrap:anywhere}}th{{background:#edf5ef;text-align:left}}thead{{display:table-header-group}}tr{{break-inside:avoid}}.actions{{display:flex;gap:8px;flex-wrap:wrap}}button,a{{padding:10px 13px;border:1px solid #bdd1c2;border-radius:8px;background:#fff;color:#176b3a;text-decoration:none;font-weight:700}}@page{{size:A4 landscape;margin:10mm}}@media print{{.actions{{display:none}}body{{max-width:none;margin:0;padding:0;font-size:9pt}}}}</style></head><body><div class="actions"><button onclick="window.print()">🖨 Yazdır / PDF olarak kaydet</button><a href="{h(pdf_href)}">📄 PDF indir</a></div><h1>{h(farm_display_name(farm_profile()))}</h1><h2>{h(title)}</h2><p class="mut">{h(subtitle)}</p><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></body></html>"""
+    navigation='<a href="/">Ana Sayfa</a><a href="/reports">Raporlara Dön</a>'
+    if pdf_href.startswith('/reproduction-center.pdf'):
+        navigation+='<a href="'+h(pdf_href.replace('/reproduction-center.pdf','/reproduction-center',1))+'">Üreme Merkezine Dön</a>'
+    return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{h(title)}</title><style>body{{font:13px Arial,sans-serif;color:#203b2c;max-width:1120px;margin:24px auto;padding:12px}}h1{{color:#176b3a;margin-bottom:4px}}.mut{{color:#627569}}table{{width:100%;border-collapse:collapse;margin-top:16px}}th,td{{border:1px solid #ccdacf;padding:8px;vertical-align:top;overflow-wrap:anywhere}}th{{background:#edf5ef;text-align:left}}thead{{display:table-header-group}}tr{{break-inside:avoid}}.actions{{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;background:#fff;padding:8px 0;z-index:2}}.report-print-table{{max-width:100%;overflow-x:auto}}button,a{{padding:10px 13px;border:1px solid #bdd1c2;border-radius:8px;background:#fff;color:#176b3a;text-decoration:none;font-weight:700}}@page{{size:A4 landscape;margin:10mm}}@media print{{.actions{{display:none}}.report-print-table{{overflow:visible}}body{{max-width:none;margin:0;padding:0;font-size:9pt}}}}</style></head><body><div class="actions" aria-label="Rapor işlemleri">{navigation}<button onclick="window.print()">🖨 Yazdır / PDF olarak kaydet</button><a href="{h(pdf_href)}">📄 PDF indir</a></div><h1>{h(farm_display_name(farm_profile()))}</h1><h2>{h(title)}</h2><p class="mut">{h(subtitle)}</p><div class="report-print-table"><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div></body></html>"""
 
 def simple_table_pdf(title, subtitle, columns, rows):
     from reportlab.lib import colors
@@ -7932,6 +7954,7 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
         if path in ('/','/feeds','/paddocks'):
             try:sync_daily_paddock_feed_stock()
             except Exception as exc:print('[WARN] Günlük yem stok tüketimi işlenemedi:',exc)
+        performance_speed.activate()
         if path=='/':
             _dash_t0=time.perf_counter()
             profile=farm_profile()
@@ -8601,7 +8624,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 for ar in rows:
                     st=str(ar['status'] or 'Aktif');completed=st in ('Kesildi','Satıldı');hay=(str(ar['tag'] or '')+' '+str(ar['nickname'] or '')+' '+str(ar['breed'] or '')+' '+str(ar['paddock'] or '')).casefold()
                     perf=male_weight_performance(ar['id'],c)
-                    wr=c.execute('select measure_date,weight,notes from weights where animal_id=? order by measure_date,id',(ar['id'],)).fetchall();last=wr[-1] if wr else None
+                    wr=perf['rows'];last=wr[-1] if wr else None
                     last_date=str(last['measure_date'] or '') if last else ''
                     try:days_since_weight=(today-date.fromisoformat(last_date)).days if last_date else 99999
                     except Exception:days_since_weight=99999
@@ -8984,6 +9007,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
                 health=c.execute('select * from health where animal_id=? order by applied_date desc',(aid,)).fetchall()
                 fin=c.execute('select * from finance where animal_id=? order by tx_date desc',(aid,)).fetchall()
                 weights=c.execute('select * from weights where animal_id=? order by measure_date desc',(aid,)).fetchall()
+                estimates=c.execute('select * from weight_estimates where animal_id=? order by measure_date desc',(aid,)).fetchall()
                 milk=c.execute('select * from milk where animal_id=? order by measure_date desc',(aid,)).fetchall()
                 calves=c.execute('select * from calves where mother_id=? order by birth_date desc',(aid,)).fetchall()
                 photos=c.execute('select * from animal_photos where animal_id=? order by created_at desc',(aid,)).fetchall()
@@ -9076,18 +9100,20 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             overview_timeline=''.join(f'''<div class="animal-360-event"><b>{fmt_date(d)}</b> · {title}<small>{detail}</small></div>''' for d,title,detail in timeline_events[:8]) or '<div class="workspace-empty">Geçmiş kaydı yok.</div>'
             gender_icon='♀' if a['gender']=='Dişi' else '♂';preg_badge='<span class="pill">● Gebe</span>' if active_preg else ''
             weight_panel=f'''<div class="card panel-card"><h2>{'Aylık Tartım ve Besi Performansı' if a['gender']=='Erkek' else 'Kilo Geçmişi'}</h2>{performance_box}<form method="post" action="/animal/weight" class="actions weight-entry-form" data-submit-lock="1"><input type="hidden" name="animal_id" value="{aid}"><input type="date" name="measure_date" required value="{date.today().isoformat()}"><input type="number" step="0.1" name="weight" placeholder="kg" required><input name="notes" placeholder="Not"><button class="btn">Tartım Ekle</button></form>{chart_html}<div class="panel-table-wrap weight-history-wrap"><table class="weight-history-table" style="margin-top:12px"><thead><tr><th>Tarih</th><th>Kilo</th><th>Fark</th><th>Günlük Artış</th><th>30 Günlük</th><th>Not</th></tr></thead><tbody>{wtr}</tbody></table></div></div>'''
+            estimate_panel=weight_estimates.panel(a['id'],estimates,a['status']=='Aktif',
+                multi_farm.csrf_token(self),date.today().isoformat(),fmt_date)
             milk_panel=(f"""<div class='card panel-card'><div class='filter-title'><div><h2>🥛 Süt & Laktasyon</h2><p class='mut'>DIM ve performans doğum/süt kayıtlarından otomatik hesaplanır.</p></div><a class='btn alt' href='/milk-center'>Süt Merkezini Aç</a></div><div class='quick-metrics'><span class='pill'>Laktasyon Günü<br><b>{milk_summary['dim'] if milk_summary and milk_summary['dim'] else '—'} DIM</b></span><span class='pill'>Bugün<br><b>{milk_summary['today']:.1f} L</b></span><span class='pill'>7 Gün Ort.<br><b>{milk_summary['avg7']:.1f} L</b></span><span class='pill'>Laktasyon Toplamı<br><b>{milk_summary['total']:.0f} L</b></span><span class='pill'>305 Gün Tahmini<br><b>{milk_summary['projected305']:.0f} L</b></span></div>{('<p class="gender-note" style="margin-top:10px">⚠ '+h(milk_summary['alert'])+'</p>') if milk_summary and milk_summary['alert'] else ''}<form method='post' action='/animal/milk' class='form' data-submit-lock='1'><input type='hidden' name='animal_id' value='{aid}'><label>Tarih<input type='date' name='measure_date' required value='{date.today().isoformat()}'></label><label>Sabah (L)<input type='number' min='0' step='0.1' name='morning_liters' placeholder='0,0'></label><label>Akşam (L)<input type='number' min='0' step='0.1' name='evening_liters' placeholder='0,0'></label><label>Süt Yağı %<input type='number' min='0' step='0.1' name='fat_pct' placeholder='opsiyonel'></label><label>Süt Proteini %<input type='number' min='0' step='0.1' name='protein_pct' placeholder='opsiyonel'></label><label>SCC<input type='number' min='0' step='1' name='scc' placeholder='opsiyonel'></label><label class='full'>Not<input name='notes'></label><div class='full'><button class='btn'>🥛 Süt Kaydını Ekle / Güncelle</button></div></form><div class='panel-table-wrap'><table><tr><th>Tarih</th><th>Sabah</th><th>Akşam</th><th>Toplam</th><th>Yağ</th><th>SCC</th><th>Not</th></tr>{mtr}</table></div></div>""" if a['gender']=='Dişi' else '')
             reproduction_tab='<button class="animal-card-tab" data-animal-tab="reproduction">Üreme</button>' if a['gender']=='Dişi' else ''
             reproduction_panel=f'''<section class="animal-card-panel" data-animal-panel="reproduction"><div class="panel-grid"><div class="card panel-card"><h2>Tohumlama ve Gebelik</h2>{pregnancy_panel}{pregnancy_line}<div class="panel-table-wrap"><table><tr><th>Deneme</th><th>Tarih</th><th>Sonuç</th><th>Tahmini Doğum</th></tr>{itr}</table></div><div class="actions"><a class="btn" href="/inseminations?animal={aid}">Tohumlama İşlemleri</a></div></div><div class="card panel-card"><h2>Buzağıları</h2><div class="panel-table-wrap"><table><tr><th>Küpe</th><th>Doğum</th><th>Cinsiyet</th></tr>{ctr}</table></div></div></div></section>''' if a['gender']=='Dişi' else ''
             body=f'''<div class="actions" style="justify-content:flex-end"><a class="btn alt" href="/all-animals">← Listeye Dön</a><a class="btn alt" href="/animal/print?id={aid}">Yazdır</a></div><header class="card animal-profile-head">{photo}<div><h1>{gender_icon} {h(a['tag'])}</h1><h2>{h(a['nickname']) or 'Takma ad yok'}</h2><span class="pill">{h(a['gender'])}</span><span class="pill">● {h(a['status'])}</span>{preg_badge}<p class="mut">{h(a['breed']) or 'Irk belirtilmedi'} · {h(a['paddock']) or 'Padok yok'} · {age_text(a['birth_date'])} · {(str(latest_weight)+' kg') if latest_weight is not None else 'Kilo yok'}</p></div><div class="animal-quick-actions"><a class="btn" href="{edit_url}">✎ Düzenle</a><a class="btn alt" href="/paddocks">⇄ Padok Değiştir</a></div></header>
             <nav class="animal-card-tabs"><button class="animal-card-tab active" data-animal-tab="general">⌂ Genel</button>{reproduction_tab}<button class="animal-card-tab" data-animal-tab="health">♡ Sağlık</button><button class="animal-card-tab" data-animal-tab="growth">▥ {'Besi & Kilo' if a['gender']=='Erkek' else 'Süt & Kilo'}</button><button class="animal-card-tab" data-animal-tab="finance">₺ Finans</button><button class="animal-card-tab" data-animal-tab="photos">▧ Fotoğraflar</button><button class="animal-card-tab" data-animal-tab="history">↶ Geçmiş</button></nav>
             <section class="animal-card-panel active" data-animal-panel="general"><section class="v117-kpis"><div class="card v117-kpi"><span class="ico">⚖️</span><div><span>Canlı Ağırlık</span><b>{(str(latest_weight)+' kg') if latest_weight is not None else '—'}</b></div><em class="v117-chip">Son</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebelik</span><b>{pregnancy_month if a['gender']=='Dişi' else '—'}</b></div><em class="v117-chip">{h(preg)}</em></div><div class="card v117-kpi"><span class="ico">₺</span><div><span>Günlük Maliyet</span><b>{money(daily_cost)}</b></div><em class="v117-chip">Günlük</em></div><div class="card v117-kpi"><span class="ico">▣</span><div><span>Toplam Maliyet</span><b>{money(current_cost)}</b></div><em class="v117-chip">Anlık</em></div></section><div class="animal-360-grid">{overview_preg}<div class="card animal-360-card"><div class="v117-panel-head"><h2>✚ Son Sağlık İşlemleri</h2><button class="btn alt" onclick="showAnimalPanel('health')">Tümünü Gör</button></div><div class="v117-panel-body">{overview_health}</div></div><div class="card animal-360-card animal-360-timeline"><div class="v117-panel-head"><h2>↶ Hayvan Geçmişi</h2></div><div class="v117-panel-body">{overview_timeline}</div></div><div class="card animal-360-card mini-weight-chart"><div class="v117-panel-head"><h2>▥ Kilo Değişimi</h2><button class="btn alt" onclick="showAnimalPanel('growth')">Detay</button></div><div class="v117-panel-body">{overview_chart or '<div class="workspace-empty">Grafik için tartım verisi gerekli.</div>'}</div></div><div class="card animal-360-card"><div class="v117-panel-head"><h2>₺ Finans Özeti</h2><button class="btn alt" onclick="showAnimalPanel('finance')">Detay</button></div><div class="v117-panel-body"><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(total_cost)}</b></span><span class="pill">Net<br><b>{money(net_value)}</b></span></div></div></div></div><div class="card animal-360-fast"><b>⚡ Hızlı İşlemler</b><button class="btn" onclick="showAnimalPanel('growth')">⚖ Tartım Ekle</button><button class="btn alt" onclick="showAnimalPanel('health')">＋ Sağlık Kaydı</button><a class="btn alt" href="/inseminations?animal={aid}">💉 Tohumlama</a><button class="btn alt" onclick="showAnimalPanel('finance')">₺ Finans İşlemi</button><button class="btn alt" onclick="showAnimalPanel('photos')">▧ Fotoğraf Ekle</button></div></section>
-            {reproduction_panel}<section class="animal-card-panel" data-animal-panel="growth"><div class="panel-grid">{weight_panel}{milk_panel}</div></section>
+            {reproduction_panel}<section class="animal-card-panel" data-animal-panel="growth"><div class="panel-grid">{weight_panel}{milk_panel}{estimate_panel}</div></section>
             <section class="animal-card-panel" data-animal-panel="health"><div class="card"><div class="filter-title"><div><h2>Sağlık Geçmişi</h2><p class="mut">Aşı, ilaç ve uygulamalar</p></div><a class="btn" href="/health">Sağlık Merkezine Git</a></div><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div></div></section>
             <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(finance_expense_total)}</b></span><span class="pill">Maliyet<br><b>{money(accumulated_cost)}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(net_value)}</b></span></div><p class="mut">Gider kırılımı: alış {money(purchase_cost)} · sağlık ve diğer bağlı giderler {money(other_cost)}. Maliyet, işletmeye girişten çıkış tarihine kadar rasyon + bakımdır. Net = gelir − gider − maliyet; alış finans satırı ikinci kez eklenmez.</p><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
             <section class="animal-card-panel" data-animal-panel="photos"><div class="card"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox" data-smart-photo-form="1"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button></form><div class="gallery" style="margin-top:14px">{gallery}</div></div></section>
             <section class="animal-card-panel" data-animal-panel="history">{sale_box}{loss_box or '<div class="card"><p class="gender-note">Bu hayvan aktif sürüde olmadığı için yeni satış veya zayiat işlemi açılamaz.</p></div>'}</section>
-            <script>(function(){{const tabs=[...document.querySelectorAll('[data-animal-tab]')],panels=[...document.querySelectorAll('[data-animal-panel]')];window.showAnimalPanel=function(name){{tabs.forEach(x=>x.classList.toggle('active',x.dataset.animalTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.animalPanel===name));const active=panels.find(x=>x.dataset.animalPanel===name);if(active)active.scrollIntoView({{behavior:'smooth',block:'start'}})}};tabs.forEach(x=>x.addEventListener('click',()=>showAnimalPanel(x.dataset.animalTab)));if(location.hash==='#animalSale'||location.hash==='#animalLoss')showAnimalPanel('history');}})();</script>'''
+            <script>(function(){{const tabs=[...document.querySelectorAll('[data-animal-tab]')],panels=[...document.querySelectorAll('[data-animal-panel]')];window.showAnimalPanel=function(name){{tabs.forEach(x=>x.classList.toggle('active',x.dataset.animalTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.animalPanel===name));const active=panels.find(x=>x.dataset.animalPanel===name);if(active)active.scrollIntoView({{behavior:'smooth',block:'start'}})}};tabs.forEach(x=>x.addEventListener('click',()=>showAnimalPanel(x.dataset.animalTab)));if(location.hash==='#animalSale'||location.hash==='#animalLoss')showAnimalPanel('history');else if(location.hash==='#growth')showAnimalPanel('growth');}})();</script>'''
             return self.send_html(page('Hayvan Kartı',body,'/animals',u,msg))
         if path=='/animal/print':
             aid=q.get('id',[''])[0]
@@ -10180,7 +10206,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
             body=body.replace('<form class="finance-report-filter">', '<form class="finance-report-filter"><input type="hidden" name="tab" value="finance">',1)
             body=body.replace('<form class="finance-toolbar-modern" style="margin-top:14px">','<form class="finance-toolbar-modern" style="margin-top:14px"><input type="hidden" name="tab" value="animals">',1)
             body=body.replace('href="#animal-import"','href="/reports?tab=import"').replace('href="#animal-report"','href="/reports?tab=animals"')
-            body+=f'''<script>(function(){{let active={json.dumps(report_tab)};const tabs=[...document.querySelectorAll('[data-report-tab]')],panels=[...document.querySelectorAll('[data-report-panel]')];function show(name){{active=name;tabs.forEach(x=>x.classList.toggle('active',x.dataset.reportTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.reportPanel===name));history.replaceState(null,'','/reports?tab='+encodeURIComponent(name));}}tabs.forEach(x=>x.addEventListener('click',()=>show(x.dataset.reportTab)));show(active);}})();</script>'''
+            body+=f'''<script>(function(){{let active={json.dumps(report_tab)};const tabs=[...document.querySelectorAll('[data-report-tab]')],panels=[...document.querySelectorAll('[data-report-panel]')];function show(name){{active=name;tabs.forEach(x=>x.classList.toggle('active',x.dataset.reportTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.reportPanel===name));const reportURL=new URL(location.href);reportURL.searchParams.set('tab',name);history.replaceState(null,'',reportURL.pathname+reportURL.search+reportURL.hash);}}tabs.forEach(x=>x.addEventListener('click',()=>show(x.dataset.reportTab)));show(active);}})();</script>'''
             return self.send_html(page('Raporlar',body,'/reports',u,msg))
         if path=='/reports/animals.xlsx':
             profile=farm_profile();group=q.get('animal_group',['all'])[0];status=q.get('animal_status',['Aktif'])[0];search=q.get('animal_search',[''])[0];paddock=q.get('animal_paddock',[''])[0]
@@ -10721,6 +10747,29 @@ setTimeout(()=>setFinanceDrawer(false),0);
             self.send_response(303);self.send_header('Set-Cookie',f'sid={sid}; HttpOnly; SameSite=Lax; Path=/');self.send_header('Location','/');self.end_headers();return
         if not self.require():return
         current=self.user();username=current['username']
+        if path in ('/animal/estimate-weight','/animal/estimate-weight/delete'):
+            token=multi_farm.csrf_token(self)
+            submitted=f.get('csrf','')
+            if not token or not isinstance(submitted,str) or not hmac.compare_digest(token.encode(),submitted.encode()):
+                return self.send_html('Oturum doğrulanamadı. Hayvan kartını yeniden açın.',403)
+            try:
+                aid=weight_estimates.identifier(f.get('animal_id'))
+            except ValueError as exc:
+                return self.redirect('/all-animals',str(exc))
+            back=f'/animal?id={aid}#growth'
+            try:
+                with db() as c:
+                    if path.endswith('/delete'):
+                        rid=weight_estimates.identifier(f.get('estimate_id'))
+                        deleted=c.execute('delete from weight_estimates where id=? and animal_id=?',(rid,aid)).rowcount
+                        msg='Tahmini ağırlık silindi.' if deleted else 'Tahmini ağırlık kaydı bulunamadı.'
+                    else:
+                        estimate=weight_estimates.save(c,aid,f,date.today())
+                        msg='Tahmini ağırlık kaydedildi: ≈ '+str(estimate).replace('.',',')+' kg.'
+            except ValueError as exc:
+                return self.redirect(back,str(exc))
+            return self.redirect(back,msg)
+
         # Dashboard görünümü yalnız kullanıcı tercihini günceller; yeni bir iş kaydı
         # oluşturmaz. Mobil Safari aynı formu ağ seviyesinde tekrar gönderse bile
         # işlem güvenli/idempotent biçimde uygulanır ve genel mükerrer kayıt kapısına girmez.
@@ -11506,7 +11555,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                     rec=c.execute('select tag,gender from animals where id=?',(aid,)).fetchone()
                     if not rec:return self.redirect('/','Hayvan kaydı bulunamadı.')
                     photo_rows=c.execute('select filename from animal_photos where animal_id=?',(aid,)).fetchall()
-                    for table in ('inseminations','health','finance','weights','milk','animal_photos'):
+                    for table in ('inseminations','health','finance','weights','weight_estimates','milk','animal_photos'):
                         c.execute(f'delete from {table} where animal_id=?',(aid,))
                     c.execute('delete from calves where mother_id=?',(aid,))
                     c.execute('delete from animals where id=?',(aid,))
@@ -15700,7 +15749,7 @@ document.addEventListener('DOMContentLoaded',function(){
  const box=document.createElement('div');box.className='photo-lightbox';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','Büyütülmüş hayvan fotoğrafı');
  box.innerHTML='<div class="photo-lightbox-panel"><button type="button" class="photo-lightbox-close" aria-label="Fotoğrafı kapat">×</button><img class="photo-lightbox-image" alt=""><div class="photo-lightbox-caption"></div></div>';
  document.body.appendChild(box);const image=box.querySelector('.photo-lightbox-image'),caption=box.querySelector('.photo-lightbox-caption'),closeButton=box.querySelector('.photo-lightbox-close');let previous=null;
- function openPhoto(photo){previous=photo;image.src=photo.currentSrc||photo.src;image.alt=photo.alt||'Hayvan fotoğrafı';caption.textContent=photo.dataset.photoCaption||photo.alt||'';box.classList.add('open');document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';closeButton.focus({preventScroll:true});}
+ function openPhoto(photo){previous=photo;image.src=photo.dataset.photoOriginal||photo.currentSrc||photo.src;image.alt=photo.alt||'Hayvan fotoğrafı';caption.textContent=photo.dataset.photoCaption||photo.alt||'';box.classList.add('open');document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';closeButton.focus({preventScroll:true});}
  function closePhoto(){if(!box.classList.contains('open'))return;box.classList.remove('open');image.removeAttribute('src');document.documentElement.style.overflow='';document.body.style.overflow='';if(previous)previous.focus({preventScroll:true});}
  photos.forEach(function(photo){photo.tabIndex=0;photo.setAttribute('role','button');photo.setAttribute('aria-label',(photo.alt||'Hayvan fotoğrafı')+' büyüt');photo.addEventListener('click',function(){openPhoto(photo)});photo.addEventListener('keydown',function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();openPhoto(photo)}})});
  closeButton.addEventListener('click',closePhoto);box.addEventListener('click',function(event){if(event.target===box)closePhoto()});document.addEventListener('keydown',function(event){if(event.key==='Escape')closePhoto()});
@@ -16546,6 +16595,16 @@ from health_center import install as install_health_center
 install_health_center(globals())
 
 from release_info import BUILD as APP_EDITION_BUILD
+performance_speed.install(globals())
+import photo_delivery
+photo_delivery.install(globals())
+import import_workflow
+import_workflow.install(globals())
+import multi_farm
+multi_farm.install(globals())
+
+import request_diagnostics
+request_diagnostics.install(globals())
 
 if __name__=='__main__':
     init_db(); ensure_archive_schema(); promote_mature_calves(); sync_daily_paddock_feed_stock(); daily_backup(); print(f'Yerel: http://127.0.0.1:{PORT}/login');print(f'Ağ: http://{local_ip()}:{PORT}/login');QuietThreadingHTTPServer(('0.0.0.0',PORT),App).serve_forever()

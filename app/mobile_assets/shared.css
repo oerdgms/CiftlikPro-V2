@@ -333,3 +333,4 @@ body.cp-app.cp-route-home .v122au-task-panel .v117-task>.v117-chip,body.cp-app.c
 }
 @container cp-today (max-width:370px){body.cp-app.cp-route-home .v122au-task-panel>.v118-task-tabs{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 }}
+.cp-wide-residence .cp-ref-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:12px 0 20px;padding:15px;background:#f5faf7;border:1px solid #dfebe3;border-radius:12px}.cp-wide-residence dt{color:#718277;font-size:13px;margin-bottom:4px}.cp-wide-residence dd{margin:0;font-weight:700;font-size:17px;overflow-wrap:anywhere}

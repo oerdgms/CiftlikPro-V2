@@ -91,6 +91,8 @@ def compact_reproduction_identities(document):
 
 
 def task_url(row):
+    if row.get('source') == 'birth':
+        return '/animal?' + urlencode({'id':row['animal_id']}) + '#reproduction'
     if row.get('source') == 'synchronization':
         return row['url']
     if row.get('source') == 'finance':
@@ -116,18 +118,42 @@ def shell_markup(title, path, username, profile=None):
     actions = [('animals','/animal-add?entry=adult','Hayvan ekle'),('animals','/animal-add?entry=calf','Buzağı ekle'),('health','/health?app_action=add','Sağlık planı'),('finance','/finance?app_action=add','Finans kaydı'),('paddocks','/paddocks?app_action=move','Padok taşıma'),('ration','/rations?app_action=add','Rasyon ekle'),('milk','/milk-center','Süt kaydı')]
     quick += ''.join(f'<a data-cp-quick="{kind}" href="{url}">{icon(kind)}<span>{label}</span></a>' for kind,url,label in actions) + '</div></section></div>'
     profile = profile or {'name':username, 'initials':username[:2].upper(), 'license_ok':False, 'license_note':'Lisans bilgilerini görüntüle'}
-    items = [('home','Ana Sayfa','/'),('animals','Hayvanlar','/all-animals'),('paddocks','Padoklar','/paddocks'),('reports','Besi Performansı','/performance'),('reproduction','Üreme Yönetimi','/reproduction-center'),('health','Sağlık Yönetimi','/health'),('feeds','Yem & Rasyon','/rations'),('finance','Finans Yönetimi','/finance'),('jobs','Görev Yönetimi','/?app_view=tasks'),('milk','Süt & Laktasyon','/milk-center'),('farm','Tarım Yönetimi','/agriculture'),('reports','Raporlar','/reports'),('settings','Ayarlar','/farm-profile')]
+    items = [('home','Ana Sayfa','/'),('animals','Hayvanlar','/all-animals'),('jobs','İşler ve Hatırlatmalar','/?app_view=tasks'),('paddocks','Padoklar','/paddocks'),('modules','Tüm Modüller','/?app_view=modules'),('settings','Ayarlar','/farm-profile')]
     menu = '<div class="cp-ref-menu-backdrop" id="cpRefMenuBackdrop" hidden><aside class="cp-ref-menu" id="cpRefMenu" role="dialog" aria-modal="true" aria-labelledby="cpMenuName" tabindex="-1"><div class="cp-ref-account"><span class="cp-ref-avatar">'+esc(profile['initials'])+'</span><div><b id="cpMenuName">'+esc(profile['name'])+'</b><small>ÇiftlikPro Enterprise</small></div><button type="button" id="cpCloseMenu" aria-label="Menüyü kapat">'+icon('close')+'</button></div><a class="cp-ref-license" href="/license-info"><span>'+reference.glyph('check')+'</span><div><b>'+('Aktif Lisans' if profile['license_ok'] else 'Lisans Bilgileri')+'</b><small>'+esc(profile['license_note'])+'</small></div></a><nav aria-label="Tüm modüller">'+''.join('<a href="'+url+'"'+(' aria-current="page"' if path==url else '')+'>'+icon(kind)+'<span>'+label+'</span>'+reference.glyph('chevron')+'</a>' for kind,label,url in items)+'</nav><a class="cp-ref-business-link" href="/farm-profile">'+icon('settings')+'İşletme Bilgileri</a><a class="cp-ref-logout" href="/logout">Çıkış Yap '+reference.glyph('exit')+'</a></aside></div>'
     return header + nav + quick + menu + '<div class="cp-network-status" role="status" hidden>Bağlantı yok. Kaydetmek için çiftlik sunucusuna bağlanın.</div>'
 
 
-HEAD = version_assets('''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/icon-192.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css"><link rel="stylesheet" href="/app-assets/mobile.css"><link rel="stylesheet" href="/app-assets/shared.css">''')
+HEAD = version_assets('''<meta name="theme-color" content="#063e2b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ÇiftlikPro"><link rel="manifest" href="/app-manifest.json"><link rel="apple-touch-icon" href="/app-assets/apple-touch-icon.png"><link rel="icon" href="/app-assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/app-assets/reference.css"><link rel="stylesheet" href="/app-assets/mobile.css"><link rel="stylesheet" href="/app-assets/shared.css"><link rel="stylesheet" href="/app-assets/pwa.css">''')
+
+
+PWA_ENTRY = '<a href="/app-install" class="cp-pwa-entry" data-cp-pwa-open>Uygulama ve güncellemeler</a>'
+
+
+def installation_document():
+    config = json.dumps({'build':BUILD,'path':'/app-install','login':False})
+    return version_assets('<!doctype html><html lang="tr"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
+        '<title>ÇiftlikPro · Uygulama ve güncellemeler</title>'+HEAD+'</head>'
+        '<body class="cp-app cp-install-page"><main class="cp-install-guide"><h1>ÇiftlikPro uygulaması</h1>'
+        '<p>Ana ekrana ekleme ve sürüm kontrolü.</p>'+PWA_ENTRY+
+        '<p>iPhone / iPad: Safari → Paylaş → Ana Ekrana Ekle.</p>'
+        '<p>Android: Chrome menüsü → Uygulamayı yükle / Ana ekrana ekle.</p>'
+        '<p>Tam PWA desteği için HTTPS adresini kullanın. Kayıtları açmak ve kaydetmek için çiftlik sunucusuna bağlantı gerekir.</p>'
+        '<p>Önce yeni sürümü çiftlik bilgisayarında çalıştırın; sonra yukarıdaki düğmeden '
+        'Güncellemeyi kontrol et → Yeni sürümü aç seçin.</p><a href="/">ÇiftlikPro’ya dön</a></main>'
+        '<script type="application/json" id="cpAppConfig">'+config+'</script>'
+        '<script src="/app-assets/pwa.js" defer></script></body></html>')
 
 
 def enhance(document, title='', path='/', user='admin', login=False, extra=None):
     if 'id="cpAppConfig"' in document:
         return document
     document = document.replace('href="/#approaching-estrus"', 'href="/notifications"')
+    document = document.replace('href="/settings"', 'href="/farm-profile"')
+    if path == '/reports':
+        # The report section already has the same PDF export beside Excel and
+        # preview. Drop its duplicate top shortcut; keep the export itself.
+        document = re.sub(r'<a\b(?=[^>]*href="/reports/animals\.pdf\?)[^>]*>\s*Hızlı PDF\s*</a>', '', document, count=1)
     if path == '/reproduction-center':
         document = wrap_reproduction_tab_labels(document)
         document = compact_reproduction_identities(document)
@@ -168,8 +194,13 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         controller = re.search(r'(function toggleEntryPregnancy\(\)\s*\{.*?\n\})', document, re.S)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
+    if login:
+        entry = PWA_ENTRY.replace('class="cp-pwa-entry"','class="cp-pwa-entry cp-pwa-login"')
+        document = document.replace('</form></section>', '</form>'+entry+'</section>', 1)
     extra = '' if login else shell_markup(title, path, user, (extra or {}).get('profile'))
-    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js" defer></script><script src="/app-assets/shared.js" defer></script><script src="/app-assets/reference.js" defer></script>'
+    if not login:
+        extra = extra.replace('<a class="cp-ref-business-link"', PWA_ENTRY+'<a class="cp-ref-business-link"', 1)
+    extra += f'<script type="application/json" id="cpAppConfig">{config}</script><script src="/app-assets/mobile.js" defer></script><script src="/app-assets/shared.js" defer></script><script src="/app-assets/reference.js" defer></script><script src="/app-assets/pwa.js" defer></script>'
     return version_assets(document.replace('</body>', extra + '</body>', 1))
 
 
@@ -195,7 +226,8 @@ def install(ns):
                 history_panel = '<section class="animal-card-panel" data-animal-panel="history">'+animal_history_markup(ns, int(subject.group(1)))+'</section>'
                 body = body.replace('<script>(function(){const tabs=[...document.querySelectorAll', history_panel+'<script>(function(){const tabs=[...document.querySelectorAll', 1)
         if path == '/':
-            body = home_markup(ns, user) + desktop_views.home_body(ns, body, user, icon)
+            desktop = desktop_views.home_body(ns, body, user, icon)
+            body = home_markup(ns, user) + '<div class="cp-desktop-dashboard">'+desktop+'</div>'
         if path == '/finance':
             body = finance_groups.decorate(ns, body, finance_groups.REQUEST_URL.get())
         if path == '/farm-profile':
@@ -237,6 +269,9 @@ def install(ns):
         if 'id="cpAppConfig"' in document and path == '/animal':
             aid=(parse_qs(urlparse(self.path).query).get('id') or [''])[0]
             if aid.isdigit():document=desktop_views.animal_document(ns,document,int(aid))
+        if 'id="cpAppConfig"' in document and path in ('/animal','/calf'):
+            sid=(parse_qs(urlparse(self.path).query).get('id') or [''])[0]
+            if sid.isdigit():document=desktop_views.residence_document(ns,document,'calf' if path=='/calf' else 'animal',int(sid))
         if 'id="cpAppConfig"' in document and path in ('/all-animals', '/animal', '/calf'):
             markup = reference.list_markup(ns, self.path, icon) if path == '/all-animals' else reference.detail_markup(ns, self.path, icon)
             if markup:
@@ -248,7 +283,10 @@ def install(ns):
         match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
         if match:
             # Light headers need dark status text in iOS standalone mode.
-            is_home = path=='/' and (parse_qs(urlparse(self.path).query).get('app_view') or [''])[0] not in ('modules','tasks')
+            view = (parse_qs(urlparse(self.path).query).get('app_view') or [''])[0]
+            is_home = path=='/' and view not in ('modules','tasks')
+            if path == '/' and view == 'tasks':
+                document = document.replace('cp-reference cp-route-home"', 'cp-reference cp-route-home cp-tasks-route"', 1)
             if path!='/login' and not is_home:
                 document = document.replace('<meta name="theme-color" content="#063e2b">', '<meta name="theme-color" content="#fbfcfd">', 1)
                 document = document.replace('name="apple-mobile-web-app-status-bar-style" content="black-translucent"', 'name="apple-mobile-web-app-status-bar-style" content="default"', 1)
@@ -257,6 +295,12 @@ def install(ns):
             config['request_url'] = self.path
             payload = json.dumps(config,ensure_ascii=False).replace('<','\\u003c')
             document = document[:match.start(2)]+payload+document[match.end(2):]
+        from photo_delivery import enhance_photos
+        document = enhance_photos(document, ns['UPLOADS'])
+        from import_workflow import enhance as enhance_import
+        document = enhance_import(document, self)
+        from multi_farm import enhance_document
+        document = enhance_document(document, self, ns)
         document = version_assets(document)
         # Compress negotiated responses, including authenticated pages; no page cache.
         if accepts_gzip(self) and len(document) > 1024:
@@ -269,6 +313,8 @@ def install(ns):
         if path == '/': print(f'[PERF] Dashboard response yazma: {time.perf_counter()-_cp_send_t0:.3f} sn')
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == '/app-install':
+            return self.send_html(installation_document())
         if path == '/app-build.json':
             return send_response_bytes(self, json.dumps(release_metadata(), ensure_ascii=False).encode(), 'application/json; charset=utf-8', headers=[('Cache-Control','no-store')])
         if path == '/notifications':
@@ -282,13 +328,13 @@ def install(ns):
         if path in ('/mobile','/mobile/'):
             return self.redirect('/')
         if path == '/app-manifest.json':
-            manifest = {'id':'/','name':'ÇiftlikPro Enterprise','short_name':'ÇiftlikPro','lang':'tr','start_url':'/','scope':'/','display':'standalone','background_color':'#f5f8f6','theme_color':'#063e2b','icons':[{'src':'/app-assets/icon-192.png','sizes':'192x192','type':'image/png','purpose':'any maskable'},{'src':'/app-assets/icon-512.png','sizes':'512x512','type':'image/png','purpose':'any maskable'}]}
+            manifest = {'id':'/','name':'ÇiftlikPro Enterprise','short_name':'ÇiftlikPro','lang':'tr','description':'Sürü, sağlık, rasyon ve çiftlik yönetimi.','start_url':'/','scope':'/','display':'standalone','background_color':'#f5f8f6','theme_color':'#063e2b','icons':[{'src':'/app-assets/icon-192.png','sizes':'192x192','type':'image/png','purpose':'any'},{'src':'/app-assets/icon-512.png','sizes':'512x512','type':'image/png','purpose':'any'},{'src':'/app-assets/icon-maskable-512.png','sizes':'512x512','type':'image/png','purpose':'maskable'}],'shortcuts':[{'name':'Hayvanlar','url':'/all-animals'},{'name':'Modüller','url':'/modules'}]}
             return send_bytes(self, json.dumps(manifest, ensure_ascii=False).encode(), 'application/manifest+json')
         if path == '/app-service-worker.js':
             return send_bytes(self, (ASSETS/'service-worker.js').read_bytes(), 'application/javascript', [('Service-Worker-Allowed','/')])
         if path.startswith('/app-assets/'):
             filename = path.removeprefix('/app-assets/')
-            allowed = {'dm-rate.css':'text/css','dm-rate.js':'application/javascript','milk-entry.css':'text/css','milk-entry.js':'application/javascript','finance-groups.css':'text/css','finance-groups.js':'application/javascript','search.js':'application/javascript','reproduction.css':'text/css','synchronization.css':'text/css','synchronization.js':'application/javascript','reference.css':'text/css','reference.js':'application/javascript','dairy.js':'application/javascript','shared.css':'text/css','shared.js':'application/javascript','mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
+            allowed = {'import.js':'application/javascript','import.css':'text/css','login-preview.jpg':'image/jpeg','farms.js':'application/javascript','farms.css':'text/css','photo-retry.js':'application/javascript','pwa.css':'text/css','pwa.js':'application/javascript','apple-touch-icon.png':'image/png','icon-maskable-512.png':'image/png','dm-rate.css':'text/css','dm-rate.js':'application/javascript','milk-entry.css':'text/css','milk-entry.js':'application/javascript','finance-groups.css':'text/css','finance-groups.js':'application/javascript','search.js':'application/javascript','reproduction.css':'text/css','synchronization.css':'text/css','synchronization.js':'application/javascript','reference.css':'text/css','reference.js':'application/javascript','dairy.js':'application/javascript','shared.css':'text/css','shared.js':'application/javascript','mobile.css':'text/css','mobile.js':'application/javascript','icon.svg':'image/svg+xml','icon-192.png':'image/png','icon-512.png':'image/png','login.jpg':'image/jpeg','offline.html':'text/html; charset=utf-8'}
             if filename not in allowed or not (ASSETS/filename).is_file():
                 return original_send_html(self, 'Dosya bulunamadı', 404)
             return send_bytes(self, (ASSETS/filename).read_bytes(), allowed[filename])
@@ -407,14 +453,9 @@ def notifications_markup(ns):
             cycle = ns['next_estrus_cycle'](c, row, today)
             if cycle and cycle['end'] >= today and cycle['start'] <= today+ns['timedelta'](days=30):
                 reproductive.append((cycle['center'], '/reproduction-center?stage=estrus&animal='+str(row['animal_id']), row['tag']+' · Kızgınlık takibi', ns['fmt_date'](cycle['start'].isoformat())+' – '+ns['fmt_date'](cycle['end'].isoformat())))
-        for aid, row in pregnancies.items():
-            try:
-                due = ns['date'].fromisoformat(row['due_date'])
-            except (ValueError,TypeError):
-                continue
-            if today <= due <= today+ns['timedelta'](days=60):
-                animal = c.execute('select tag from animals where id=?',(aid,)).fetchone()
-                reproductive.append((due, '/reproduction-center?stage=birth&animal='+str(aid), animal['tag']+' · Yaklaşan doğum', ns['fmt_date'](due.isoformat())))
+        for row in reference.birth_reminders(ns,c,horizon_days=60,today=today):
+            reproductive.append((ns['date'].fromisoformat(row['date']), task_url(row),
+                row['subject']+' · '+row['task'], row['detail']+' · '+row['status']))
     reproductive.sort(key=lambda item:item[0])
     reproductive_cards = ''.join(f'<a class="cp-notification-item card" href="{esc(url)}"><b>{esc(label)}</b><span>{esc(detail)}</span></a>' for _,url,label,detail in reproductive)
     return '<h1>🔔 Bildirimler</h1><p>Sağlık görevleri ve bekleyen ödemeler</p><div class="cp-notification-list">'+(cards or '<div class="card">Bekleyen sağlık görevi veya ödeme yok.</div>')+'</div><div class="card cp-notification-links"><h2>Üreme bildirimleri</h2><div class="cp-notification-list">'+(reproductive_cards or '<p>Yaklaşan kızgınlık veya doğum bildirimi yok.</p>')+'</div><a class="btn alt" href="/estrus">Kızgınlık takibi</a> <a class="btn alt" href="/reproduction-center?stage=birth">Yaklaşan doğumlar</a></div>'

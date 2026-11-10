@@ -1,0 +1,29 @@
+@layer cp-reference {
+ .cp-import-screen{max-width:960px!important;margin:0 auto!important}
+ .cp-import-card{margin:14px 0!important;padding:18px!important;min-width:0!important}
+ .cp-import-screen h1{font-size:25px!important;line-height:1.2!important;margin:12px 0!important}
+ .cp-import-screen h2{font-size:19px!important;margin:0 0 12px!important}
+ .cp-import-screen input[type=file]{width:100%!important;max-width:100%!important;min-width:0!important;font-size:14px!important;box-sizing:border-box!important}
+ .cp-import-notice,.cp-import-progress{white-space:normal!important;overflow-wrap:anywhere!important;line-height:1.5!important;color:#7e381f!important}
+ .cp-import-notice{padding:13px!important;border-radius:12px!important;background:#fff1e7!important;border:1px solid #edcdbb!important}
+ .cp-import-progress:empty{display:none!important}
+ .cp-import-links{display:flex!important;gap:10px!important;flex-wrap:wrap!important}
+ @media(max-width:900px){
+  .cp-import-screen .form{display:block!important}
+  .cp-import-screen label{display:block!important;margin-bottom:12px!important}
+  .cp-import-screen .btn{width:100%!important;min-height:46px!important;text-align:center!important}
+  .cp-import-screen .mut{font-size:13px!important;line-height:1.5!important}
+  .cp-import-links>a{flex:1 1 140px!important}
+  .import-preview-table{font-size:12px!important}
+ }
+}
+
+@layer cp-reference {
+ .cp-import-rows{display:grid!important;gap:9px!important;margin:14px 0!important}
+ .cp-import-row{background:#fff!important;border:1px solid #d8e5dd!important;border-radius:12px!important;padding:12px!important;min-width:0!important}
+ .cp-import-row header{display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:8px!important}
+ .cp-import-row b{overflow-wrap:anywhere!important}
+ .cp-import-row span{font-size:12px!important;color:#326a4a!important}
+ .cp-import-row p{margin:6px 0 0!important;font-size:13px!important;overflow-wrap:anywhere!important}
+ .cp-import-issues{color:#954c23!important}
+}

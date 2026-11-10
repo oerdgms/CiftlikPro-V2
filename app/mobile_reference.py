@@ -115,10 +115,43 @@ def summary_cards(counts, records):
         for label,count,key,tone,kind in cards]
 
 
+def birth_reminders(ns, connection, animals=None, *, horizon_days=45, today=None):
+    """Expected births from the same active pregnancy records used by the herd."""
+    today = today or ns['date'].today()
+    pregnancies = ns['active_pregnancy_records'](connection)
+    due = {}
+    for aid, pregnancy in pregnancies.items():
+        try:
+            due_day = date.fromisoformat(pregnancy['due_date'])
+        except (TypeError, ValueError):
+            continue
+        days = (due_day-today).days
+        if days <= horizon_days:
+            due[aid] = (due_day, days)
+    if not due:
+        return []
+    if animals is None:
+        animals = connection.execute("select id,tag,nickname from animals where gender='Dişi'")
+    rows = []
+    for animal in animals:
+        if animal['id'] not in due:
+            continue
+        due_day, days = due[animal['id']]
+        subject = ' · '.join(v for v in (animal['tag'], animal['nickname']) if v)
+        rows.append({
+            'source':'birth', 'animal_id':animal['id'], 'date':due_day.isoformat(), 'subject':subject,
+            'task':'Beklenen Doğum', 'detail':'Tahmini tarih: '+ns['fmt_date'](due_day.isoformat()),
+            'state':'overdue' if days<0 else 'today' if days==0 else 'upcoming',
+            'status':f'Tarih {abs(days)} gün önce geçti' if days<0 else 'Bugün' if days==0 else f'{days} gün kaldı',
+        })
+    return sorted(rows, key=lambda row:(row['date'],row['subject'],row['animal_id']))
+
+
 def home(ns, username, icon, task_url):
     with ns['db']() as c:
         counts = ns['dashboard_herd_counts'](c)
         records = herd_records(ns,c)
+        births = birth_reminders(ns,c,(r for r in records if r['source']=='animal'))
     config = home_layout.load(ns, username)
     card_map = {card['key']:card for card in summary_cards(counts,records)}
     cards = [card_map[key] for key in config['cards']]
@@ -127,21 +160,23 @@ def home(ns, username, icon, task_url):
         label,count,tone,kind,url = (card[k] for k in ('label','count','tone','kind','url'))
         art = icon('paddocks') if kind!='cow' else cow()
         summary += f'<a class="cp-ref-stat cp-bg-{tone}" href="{esc(url)}"><span>{art}</span><small>{label}</small><b>{count}</b></a>'
-    rows = ns['dashboard_export_tasks']('all')
+    rows = sorted([*ns['dashboard_export_tasks']('all'),*births], key=lambda row:(row['date'],str(row['subject'])))
     states = {key:sum(row['state']==key for row in rows) for key in ('today','upcoming','overdue')}
     tasks = ''
-    for row in rows:
-        kind = 'finance' if row.get('source')=='finance' else 'health'
+    for index, row in enumerate(rows):
+        preview_overflow = ' data-cp-home-preview-overflow' if index >= config['task_limit'] else ''
+        kind = row['source'] if row.get('source') in ('birth','finance') else 'health'
+        tone = {'birth':'purple','finance':'orange','health':'blue'}[kind]
         detail = row.get('detail') or ''
         if row.get('source')=='course' and row.get('target_count',0)>3 and row.get('target_tags'):
             tags = row['target_tags'].split(', ')
             detail = detail.removesuffix(' · '+row['target_tags'])+' · '+', '.join(tags[:2])+f" ve {row['target_count']-2} diğer hayvan"
-        tasks += f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" href="{esc(task_url(row))}"><span class="cp-ref-task-icon cp-tone-{ "orange" if kind=="finance" else "blue"}">{icon(kind)}</span><div><b>{esc(row["task"])}</b><span>{esc(row["subject"])}{(" · "+esc(detail)) if detail else ""}</span></div><small class="cp-ref-due cp-tone-{ "pink" if row["state"] in ("today","overdue") else "blue"}">{esc(row["status"])}</small></a>'
-    tabs = ''.join(f'<button type="button" data-cp-task-filter="{key}">{label}<span>{count}</span></button>' for key,label,count in [('all','Tümü',len(rows)),('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue'])])
+        tasks += f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" data-cp-kind="{kind}"{preview_overflow} href="{esc(task_url(row))}"><span class="cp-ref-task-icon cp-tone-{tone}">{glyph(kind,icon)}</span><div><b>{esc(row["task"])}</b><span>{esc(row["subject"])}{(" · "+esc(detail)) if detail else ""}</span></div><small class="cp-ref-due cp-tone-{ "pink" if row["state"] in ("today","overdue") else "blue"}">{esc(row["status"])}</small></a>'
+    tabs = ''.join(f'<button type="button" data-cp-task-filter="{key}">{label}<span>{count}</span></button>' for key,label,count in [('all','Tümü',len(rows)),('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue']),('birth','Doğumlar',len(births))])
     parts = {
-        'business':f'<details class="cp-ref-business" data-cp-home-section="business"><summary><span class="cp-tone-blue">{glyph("identity")}</span><div><b>İşletme Bilgileri</b><small>Sürü, padok, yem, finans özeti</small></div>{glyph("down")}</summary><div class="cp-ref-business-links"><a href="/farm-profile">İşletme ayarları {glyph("chevron")}</a><a href="/paddocks">Padokları görüntüle {glyph("chevron")}</a><a href="/finance">Finans özeti {glyph("chevron")}</a></div></details>',
-        'summary':f'<section data-cp-home-section="summary"><div class="cp-ref-heading"><h2>Sürü Özeti</h2><a href="/all-animals">Tümü ›</a></div><div class="cp-ref-summary">{summary}</div></section>',
-        'tasks':f'<section class="cp-home-jobs" data-cp-home-section="tasks"><div class="cp-ref-heading cp-section-head"><h2>Yaklaşan İşlemler</h2><span class="cp-total" hidden>{len(rows)}</span><a href="/?app_view=tasks">Tümü ›</a></div><div class="cp-task-tabs cp-ref-task-tabs">{tabs}</div><div class="cp-ref-task-list cp-task-list">{tasks}</div><div class="cp-empty cp-filter-empty" hidden>Planlanan iş veya bekleyen ödeme yok.</div></section>'
+        'business':f'<details class="cp-ref-business" data-cp-home-section="business"><summary><span class="cp-tone-blue">{glyph("identity")}</span><div><b>İşletme Kısayolları</b><small>Ayarlar, padoklar ve finans kısayolları</small></div>{glyph("down")}</summary><div class="cp-ref-business-links"><a href="/farm-profile">İşletme ayarları {glyph("chevron")}</a><a href="/paddocks">Padokları görüntüle {glyph("chevron")}</a><a href="/finance">Finans özeti {glyph("chevron")}</a></div></details>',
+        'summary':f'<section data-cp-home-section="summary"><div class="cp-ref-heading"><h2>Sürü Özeti</h2><a href="/all-animals">Tüm hayvanlar ›</a></div><div class="cp-ref-summary">{summary}</div></section>',
+        'tasks':f'<section class="cp-home-jobs" data-cp-home-section="tasks"><div class="cp-ref-heading cp-section-head"><h2>İşler ve Hatırlatmalar</h2><span class="cp-total" hidden>{len(rows)}</span><a href="/?app_view=tasks">Tüm işler ›</a></div><div class="cp-task-tabs cp-ref-task-tabs">{tabs}</div><div class="cp-ref-task-list cp-task-list">{tasks}</div><div class="cp-empty cp-filter-empty" hidden>Planlanan iş veya bekleyen ödeme yok.</div></section>'
     }
     ordered = config['sections']+[key for key in home_layout.SECTIONS if key not in config['sections']]
     content = ''.join(parts[key] if key in config['sections'] else parts[key].replace('data-cp-home-section="'+key+'"','data-cp-home-section="'+key+'" hidden',1) for key in ordered)
@@ -199,6 +234,52 @@ def list_markup(ns, request_url, icon):
 
 def keyvalues(items):
     return '<dl class="cp-ref-kv">'+''.join(f'<div><dt>{esc(label)}</dt><dd>{esc(value) if value not in (None,"") else "—"}</dd></div>' for label,value in items)+'</dl>'
+
+
+def residence_markup(record, today=None):
+    """Show recorded residence dates, never inferred cost/paddock/birth dates."""
+    today = today or date.today()
+    start = day(record.get('entry_date') or record.get('purchase_date'))
+    if start is None:
+        rows = [('İşletmeye Giriş', 'Giriş tarihi girilmemiş'), ('Bizde Kalma', '—')]
+    else:
+        end = today
+        duration = None
+        if start > today:
+            duration = 'Giriş tarihi ileride'
+        elif record.get('status', 'Aktif') != 'Aktif':
+            exit_day = day(record.get('exit_date'))
+            if exit_day is None:
+                duration = 'Çıkış tarihi girilmemiş'
+            elif exit_day < start or exit_day > today:
+                duration = 'Giriş / çıkış tarihlerini kontrol edin'
+            else:
+                end = exit_day
+        rows = [('İşletmeye Giriş', start.strftime('%d/%m/%Y')),
+                ('Bizde Kalma', duration if duration is not None else str((end-start).days)+' gün')]
+    return '<div class="cp-ref-residence">'+keyvalues(rows)+'</div>'
+
+
+def finance_records_markup(ns, financial):
+    """Full ledger detail without a narrow table or repeated summary totals."""
+    records = financial['finance_rows']
+    cards = ''
+    for row in records:
+        kind = row['tx_type']
+        tone = 'income' if kind == 'Gelir' else 'expense'
+        cards += (f'<details class="cp-ref-finance-record cp-ref-finance-{tone}" data-finance-record="{int(row["id"])}">'
+                  f'<summary><span><b>{esc(row["category"] or kind)}</b>'
+                  f'<small>{esc(ns["fmt_date"](row["tx_date"]))} · {esc(kind)}</small></span>'
+                  f'<strong>{esc(ns["money"](row["amount"]))}</strong></summary>'
+                  '<div class="cp-ref-finance-record-body">'+keyvalues([
+                      ('Açıklama', row.get('description') or '—'),
+                      ('Ödeme', row.get('payment_method') or '—'),
+                      ('Vade', ns['fmt_date'](row.get('due_date')) if row.get('due_date') else '—')])+
+                  f'<a class="cp-ref-bar" href="/finance/edit?id={int(row["id"])}">Finans kaydını aç / düzenle ›</a></div></details>')
+    if not cards:
+        cards = '<p class="cp-ref-note">Bağlı finans kaydı yok.</p>'
+    return ('<details class="cp-ref-finance-ledger"><summary>Kayıt ayrıntıları ve işlemler'
+            f' <span>({len(records)})</span></summary><div>{cards}</div></details>')
 
 
 def accordion(name,title,body,icon,opened=False):
@@ -266,10 +347,9 @@ def detail_markup(ns, request_url, icon):
     since = str(moves[0]['moved_at'])[:10] if moves else a.get('entry_date') or a.get('purchase_date')
     paddock = keyvalues([('Mevcut Padok',pad['name'] if pad else a.get('paddock')),('Padokta Süre',str(max(0,(date.today()-day(since)).days))+' gün' if day(since) else ''),('Son Taşıma',fmt(since))])+f'<a class="cp-ref-bar" href="{purl}">Padok bilgilerini gör ›</a>'
     finance = '<div class="cp-ref-money-grid">'+keyvalues([('Gelir',money(financial['income'])),('Gider',money(financial['expense']))])+f'<div class="cp-ref-net {"negative" if financial["net_profit"]<0 else ""}"><span>Net</span><b>{esc(money(financial["net_profit"]))}</b></div>'+keyvalues([('Günlük Maliyet',money(financial['daily'])),('Toplam Maliyet',money(financial['total_cost']))])+'</div><p class="cp-ref-note">Net = gelir − gider − rasyon ve bakım maliyeti.</p><div data-ref-legacy="finance"></div>'
-    frows = '<div class="cp-ref-subhead"><b>İşlem Geçmişi</b></div><div class="cp-ref-rows">'
-    for r in financial['finance_rows'][:5]:
-        frows+=f'<a href="/finance/edit?id={r["id"]}"><span>{esc(fmt(r["tx_date"]))}</span><span>{esc(r["category"])}</span><b>{esc(money(r["amount"]))}</b></a>'
-    frows+=('<p class="cp-ref-note">Bağlı finans kaydı yok.</p>' if not financial['finance_rows'] else '')+'</div>'
+    frows = '<details class="cp-ref-finance-breakdown"><summary>Maliyet ayrıntıları</summary>'+keyvalues([
+        ('Alış / Başlangıç',money(financial['purchase'])),('Sağlık ve diğer giderler',money(financial['other_expense'])),
+        ('Rasyon, bakım ve iç üretim',money(financial['operating']))])+'</details>'+finance_records_markup(ns,financial)
     gallery='<div class="cp-ref-gallery">'+''.join(f'<figure><img src="/uploads/{esc(r["filename"])}" alt="{esc(r["caption"] or a["tag"])}" loading="lazy" data-photo-zoom data-photo-caption="{esc(r["caption"] or a["tag"])}"><figcaption>{esc(r["caption"])}</figcaption></figure>' for r in photos)+f'<button type="button" data-ref-photo-add>{icon("plus")}<span>Fotoğraf Ekle</span></button></div><div data-ref-upload="{source}"></div>'
     events=[]
     events += [(r['effective_date'],'Laktasyon: '+dairy.LABELS[r['status']],r['notes'] or 'Manuel durum kaydı','green') for r in dairy_history]
@@ -293,7 +373,7 @@ def detail_markup(ns, request_url, icon):
         tag='a' if url else 'button';attrs=f'href="{esc(url)}"'+(' data-cp-state-url aria-haspopup="dialog"' if action=='birth' else '') if url else f'type="button" data-ref-action="{action}"'
         if not active and action in ('state','birth','paddock','health'):continue
         actions+=f'<{tag} {attrs}><span class="cp-ref-action-icon cp-tone-{tone}">{glyph(kind,icon)}</span><small>{label}</small></{tag}>'
-    accordions=accordion('identity','Temel Kimlik Bilgileri',identity,glyph('identity'),True)
+    accordions=accordion('identity','Temel Kimlik Bilgileri',identity,glyph('identity'))
     if source=='animal' and a['gender']=='Dişi':
         if active:
             reproduction+=f'<a class="cp-ref-bar" href="/synchronization?new=1&amp;animal={sid}">↻ Senkronizasyon Tanımla ›</a>'
@@ -301,10 +381,8 @@ def detail_markup(ns, request_url, icon):
     accordions+=accordion('health','Sağlık Bilgileri',hstats+hrows,glyph('heart'))
     accordions+=accordion('ration','Rasyon & Beslenme',ration,icon('feeds'))+accordion('paddock','Padok Bilgileri',paddock,icon('paddocks'))
     accordions+=accordion('growth','Süt & Kilo Bilgileri' if milk else 'Kilo & Gelişim',dairy_info+keyvalues([('Son Canlı Ağırlık',str(weight['weight'])+' kg' if weight else ''),('Son Tartım',fmt(weight['measure_date']) if weight else '')])+ '<div data-ref-legacy="growth"></div>',icon('reports'))
-    accordions+=accordion('finance','Finansal Bilgiler',finance+frows,icon('finance'))+accordion('photos','Fotoğraflar',gallery,glyph('camera'))
+    accordions+=accordion('finance','Finansal Bilgiler',residence_markup(a)+finance+frows,icon('finance'))+accordion('photos','Fotoğraflar',gallery,glyph('camera'))
     accordions+=accordion('history','Hayvan Yaşam Döngüsü',timeline(100)+'<div data-ref-legacy="history"></div>',glyph('history'))
     delete_form = f'''<details class="cp-ref-delete"><summary>Kaydı Sil</summary><p class="cp-ref-note">Hayvan ve bağlı kayıtları kalıcı olarak silinir.</p><form method="post" action="/{source}-delete" onsubmit="return confirm('Bu hayvan ve bağlı kayıtları kalıcı olarak silinsin mi?')"><input type="hidden" name="id" value="{sid}"><button type="submit" class="btn red">Hayvan Kaydını Sil</button></form></details>'''
     accordions+=accordion('operations','Satış / Zayiat','<div data-ref-legacy="operations"></div>'+delete_form,icon('finance'))
-    tabs=[('general','Genel')]+([('reproduction','Üreme')] if source=='animal' and a['gender']=='Dişi' else [])+[('health','Sağlık'),('ration','Rasyon'),('growth','Süt / Kilo' if milk else 'Kilo'),('finance','Finans'),('photos','Fotoğraflar'),('history','Geçmiş')]
-    tabhtml=''.join(f'<button type="button" role="tab" data-ref-tab="{key}" aria-selected="{str(key=="general").lower()}" class="{"active" if key=="general" else ""}">{label}</button>' for key,label in tabs)
-    return f'''<section class="cp-ref cp-ref-detail" data-ref-source="{source}" data-ref-id="{sid}"><div class="cp-ref-overview"><header class="cp-ref-profile"><span class="cp-ref-profile-photo">{photo(pic,a['tag'])}</span><div><h1>{esc(a['tag'])}</h1><p>{esc(ns['age_text'](a.get('birth_date')))} · {esc(a['gender'])} · {esc(a.get('breed') or 'Irk belirtilmedi')}</p><div class="cp-ref-badges"><span class="cp-ref-badge cp-tone-pink">{esc(life_type)}</span><span class="cp-ref-badge cp-tone-blue">{esc(a.get('status') or 'Aktif')}</span>{'<span class="cp-ref-badge cp-tone-green">Gebe</span>' if pregnant else ''}</div></div></header><div class="cp-ref-vitals"><div><small>{'Son Süt' if milk else 'Son Kilo'}</small><b>{str(round(milk['daily'][max(milk['daily'])],1))+' L' if milk and milk['daily'] else '—' if milk else str(weight['weight'])+' kg' if weight else '—'}</b></div><div><small>Gebelik D.</small><b>{'Gebe' if pregnant else '—'}</b></div><div><small>{'Sağım Günü' if milk else 'Yaş'}</small><b>{str(dairy_state['dim'])+' gün' if milk and dairy_state and dairy_state['dim'] is not None else '—' if milk else esc(ns['age_text'](a.get('birth_date')))}</b></div></div><div class="cp-ref-heading"><h2>Hızlı İşlemler</h2></div><div class="cp-ref-actions">{actions}</div><section class="cp-ref-life"><div class="cp-ref-heading"><h2>Hayvan Yaşam Döngüsü</h2></div>{timeline(3)}<button type="button" class="cp-ref-bar" data-ref-action="history">Tüm yaşam döngüsünü gör ›</button></section></div><nav class="cp-ref-detail-tabs" role="tablist" aria-label="Hayvan bilgileri">{tabhtml}</nav><div class="cp-ref-detail-sections">{accordions}</div></section>'''
+    return f'''<section class="cp-ref cp-ref-detail" data-ref-source="{source}" data-ref-id="{sid}"><div class="cp-ref-overview"><header class="cp-ref-profile"><span class="cp-ref-profile-photo">{photo(pic,a['tag'])}</span><div><h1>{esc(a['tag'])}</h1><p>{esc(ns['age_text'](a.get('birth_date')))} · {esc(a['gender'])} · {esc(a.get('breed') or 'Irk belirtilmedi')}</p><div class="cp-ref-badges"><span class="cp-ref-badge cp-tone-pink">{esc(life_type)}</span><span class="cp-ref-badge cp-tone-blue">{esc(a.get('status') or 'Aktif')}</span>{'<span class="cp-ref-badge cp-tone-green">Gebe</span>' if pregnant else ''}</div></div></header><div class="cp-ref-vitals"><div><small>{'Son Süt' if milk else 'Son Kilo'}</small><b>{str(round(milk['daily'][max(milk['daily'])],1))+' L' if milk and milk['daily'] else '—' if milk else str(weight['weight'])+' kg' if weight else '—'}</b></div><div><small>Gebelik D.</small><b>{'Gebe' if pregnant else '—'}</b></div><div><small>{'Sağım Günü' if milk else 'Yaş'}</small><b>{str(dairy_state['dim'])+' gün' if milk and dairy_state and dairy_state['dim'] is not None else '—' if milk else esc(ns['age_text'](a.get('birth_date')))}</b></div></div><div class="cp-ref-heading"><h2>Hızlı İşlemler</h2></div><div class="cp-ref-actions">{actions}</div></div><div class="cp-ref-detail-sections">{accordions}</div></section>'''

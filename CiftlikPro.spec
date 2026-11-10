@@ -6,6 +6,7 @@ project_root = Path(SPECPATH)
 app_root = project_root / "app"
 
 datas = [(str(app_root / "mobile_assets"), "mobile_assets")]
+datas += [(str(project_root / "PWA_KURULUM.md"), ".")]
 datas += collect_data_files("reportlab", includes=["fonts/Vera*.ttf"])
 for optional_name in ("README.txt", "KURULUM.txt", "FEATURES.md", "feed_catalog.json", "official_medicine_catalog.json"):
     optional_file = app_root / optional_name
@@ -17,7 +18,7 @@ a = Analysis(
     pathex=[str(app_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=["release_info", "ration_recalculation", "animal_edit_ui", "animal_reports", "finance_groups", "text_search", "health_center", "health_views", "reproduction_sync", "mobile_ui", "mobile_reference", "dairy_management", "home_layout", "desktop_views", "animal_actions", "dashboard_performance", "agriculture", "openpyxl", "pypdf", "reportlab", "zxingcpp"],
+    hiddenimports=["import_workflow", "login_experience", "multi_farm", "photo_delivery", "performance_speed", "release_info", "ration_recalculation", "animal_edit_ui", "animal_reports", "finance_groups", "text_search", "health_center", "health_views", "reproduction_sync", "mobile_ui", "mobile_reference", "dairy_management", "home_layout", "desktop_views", "animal_actions", "dashboard_performance", "agriculture", "openpyxl", "pypdf", "reportlab", "zxingcpp"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

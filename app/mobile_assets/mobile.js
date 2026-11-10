@@ -12,16 +12,6 @@
   const path = location.pathname;
   const params = new URL(config.request_url || location.href,location.origin).searchParams;
   const main = $('main.main');
-  let installPrompt = null;
-  window.addEventListener('beforeinstallprompt', event => {
-    event.preventDefault();
-    installPrompt = event;
-    const button = $('#cpInstall');
-    if (button) button.hidden = false;
-  });
-  if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('/app-service-worker.js', {scope:'/',updateViaCache:'none'}).catch(() => {});
-  }
   if (!mobile.matches) {
     mobile.addEventListener('change', () => location.reload(), {once:true});
     return;
@@ -178,15 +168,7 @@
     title.textContent = 'Modüller';
     subtitle.textContent = config.user;
     $('#cpOpenQuick',hub).addEventListener('click', () => setQuick(true));
-    const install = $('#cpInstall',hub);
-    install.hidden = !installPrompt;
-    install.addEventListener('click',async () => {
-      if (!installPrompt) return;
-      await installPrompt.prompt();
-      await installPrompt.userChoice;
-      installPrompt = null;
-      install.hidden = true;
-    });
+
   }
 
   function animalEntry() {
@@ -643,13 +625,14 @@
     const index = !params.has('tab');
     const tiles = [
       ['🐄','Sürü Raporları','Aktif, satılan, kesilen ve yaş grubu','/reports?tab=animals'],
-      ['▦','Padok Özeti','Padok bazında hayvan ve rasyon','/paddocks'],
+      ['▦','Padok Özeti','Padok bazında hayvan ve rasyon','/paddocks?from_reports=1'],
       ['♡','Sağlık Raporları','Aşı, tedavi ve bekleyen işler','/health/tasks/print?filter=all'],
       ['♀','Üreme Raporları','Tohumlama, gebelik ve doğum','/reproduction-center/print?stage=all'],
       ['₺','Finans Raporları','Gelir, gider, net ve vadeli ödemeler','/reports?tab=finance'],
-      ['🌾','Yem & Stok Özeti','Stok, günlük tüketim ve yeterlilik','/feeds'],
-      ['▱','Süt & Laktasyon','Günlük süt ve laktasyon verileri','/milk-center'],
-      ['▥','Tarım Raporları','Tarla, ekim, hasat ve gelir-gider','/agriculture/reports']
+      ['🌾','Yem & Stok Özeti','Stok, günlük tüketim ve yeterlilik','/feeds?from_reports=1'],
+      ['▱','Süt & Laktasyon','Günlük süt ve laktasyon verileri','/milk-center?from_reports=1'],
+      ['▥','Tarım Raporları','Tarla, ekim, hasat ve gelir-gider','/agriculture/reports'],
+      ['📥','Hayvan İçe Aktarma','Excel, CSV veya metin içeren PDF','/animals/import']
     ];
     const hub = document.createElement('section');hub.className = 'cp-report-hub';
     hub.innerHTML = tiles.map(([symbol,name,detail,url]) => '<a class="cp-report-tile" href="'+url+'"><span style="font-size:24px;width:28px;text-align:center">'+symbol+'</span><div><b>'+name+'</b><small>'+detail+'</small></div><span>›</span></a>').join('');

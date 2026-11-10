@@ -58,7 +58,7 @@ class HerdToolbarTests(unittest.TestCase):
             self.assertIn('class="herd-sort active"',html)
             self.assertIn('sort=age',html)
             self.assertIn('class="herd-photo"',html)
-            self.assertIn('src="/uploads/herd-test.webp"',html)
+            self.assertIn('data-photo-original="/uploads/herd-test.webp"',html)
             self.assertIn('class="herd-animal-summary"',html)
             self.assertIn('Boncuk',html)
             self.assertIn('return confirm(',html)

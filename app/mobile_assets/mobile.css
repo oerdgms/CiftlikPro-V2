@@ -533,8 +533,9 @@
  body.cp-app.cp-route-reports .layout,body.cp-app.cp-route-reports .main{overflow:visible!important}
  body.cp-app.cp-route-reports .workspace-hero,body.cp-app.cp-route-reports .workspace-hero>div,body.cp-app.cp-route-reports .module-panel,body.cp-app.cp-route-reports .module-panel>.card{width:100%!important;min-width:0!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;transform:none!important}
  body.cp-app.cp-route-reports .workspace-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;min-width:0!important}
- body.cp-app.cp-route-reports .module-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important;min-width:0!important;max-width:100%!important}
- body.cp-app.cp-route-reports .module-tab:last-child{grid-column:1/-1!important}
+ /* On phones, the report hub is the single place for choosing a report. */
+ body.cp-app.cp-route-reports .module-tabs,
+ body.cp-app.cp-route-reports .workspace-hero{display:none!important}
  body.cp-app.cp-route-reports .finance-report-filter{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px 8px!important;width:100%!important;min-width:0!important;max-width:100%!important;align-items:end!important}
  body.cp-app.cp-route-reports .finance-report-filter label{display:block!important;grid-column:1/-1!important;width:100%!important;min-width:0!important;max-width:100%!important;font-size:12px!important}
  body.cp-app.cp-route-reports .finance-report-filter .btn{width:100%!important;min-width:0!important;min-height:44px!important}
@@ -604,8 +605,8 @@ body.cp-app .animal-card-panel[data-animal-panel="photos"] .gallery>p{grid-colum
 @media(max-width:900px){
  html body.cp-app [hidden],html body.cp-app .cp-overlay[hidden],html body.cp-app .cp-network-status[hidden]{display:none!important}
  html body.cp-app [style*="display: none"],html body.cp-app [style*="display:none"]{display:none!important}
- /* Rasyon ayrıntısındaki dört ana bilimsel kartın durum rozetleri başlıktan 3 px yukarı alınır. */
- body.cp-app:has(.workbench-shell) .wb2-kpi:is([data-key="dm"],[data-key="adg"],[data-key="cp"],[data-key="ndf"]) .wb2-kpi-status{top:5px!important}
+ /* 2.0.54: Durum rozetleri 3 px yukarı, 3 px sola; uzun metin için ek alan. */
+ body.cp-app:has(.workbench-shell) .wb2-kpi:is([data-key="dm"],[data-key="adg"],[data-key="cp"],[data-key="ndf"]) .wb2-kpi-status{top:2px!important;right:11px!important;max-width:calc(100% - 37px)!important;padding:3px 2px!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:normal!important}
 }
 }
 
@@ -665,3 +666,48 @@ body.cp-app .animal-card-panel[data-animal-panel="photos"] .gallery>p{grid-colum
  }
  body.cp-app .cp-bottom-nav > button.cp-nav-plus .cp-icon{width:27px!important;height:27px!important;color:#fff!important;}
 }
+
+/* 2.0.60: finance reports fit the screen; tables become labelled cards. */
+@layer ciftlikpro-mobile {
+ @media screen and (max-width:900px){
+  body.cp-app.cp-route-reports #finance-report,
+  body.cp-app.cp-route-reports .finance-report-panels,
+  body.cp-app.cp-route-reports .finance-report-panel{min-width:0!important;max-width:100%!important}
+  body.cp-app.cp-route-reports .finance-report-chart,
+  body.cp-app.cp-route-reports .finance-report-table-wrap{overflow-x:clip!important;width:100%!important;max-width:100%!important;min-width:0!important}
+  body.cp-app.cp-route-reports .finance-report-chart .chart{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:32px 10px!important;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important;padding:35px 0 28px!important}
+  body.cp-app.cp-route-reports .finance-report-chart .chart>div{position:relative!important;min-width:0!important;max-width:100%!important}
+  body.cp-app.cp-route-reports .finance-report-chart .bar{min-width:0!important}
+  body.cp-app.cp-route-reports .finance-report-chart .bar i{font-size:9px!important;line-height:1.2!important;top:auto!important;bottom:100%!important;overflow-wrap:anywhere!important}
+  body.cp-app.cp-route-reports .finance-report-chart .chart>div>small{left:0!important;bottom:-22px!important;margin:0!important;width:100%!important;text-align:center!important;font-size:10px!important;white-space:nowrap!important}
+  body.cp-app.cp-route-reports .finance-report-table,
+  body.cp-app.cp-route-reports .finance-report-table tbody{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important}
+  body.cp-app.cp-route-reports .finance-report-table tr:has(th){display:none!important}
+  body.cp-app.cp-route-reports .finance-report-table tr:has(td){display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;border:1px solid #dbe7df!important;border-radius:12px!important;padding:12px!important;margin-bottom:10px!important}
+  body.cp-app.cp-route-reports .finance-report-table td{display:block!important;width:auto!important;min-width:0!important;max-width:100%!important;padding:0!important;border:0!important;white-space:normal!important;overflow-wrap:anywhere!important;text-align:left!important}
+  body.cp-app.cp-route-reports .finance-report-table td::before{display:block!important;font-size:11px!important;font-weight:400!important;color:#687b70!important;margin-bottom:3px!important}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(1)::before{content:'Tür'}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(2){grid-column:1/-1!important;grid-row:1!important;font-weight:700!important}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(2)::before{content:'Kategori'}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(3)::before{content:'Adet'}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(4){grid-column:1/-1!important;font-weight:700!important}
+  body.cp-app.cp-route-reports .finance-report-table td:nth-child(4)::before{content:'Toplam'}
+ }
+}
+@layer ciftlikpro-mobile {
+ @media screen and (max-width:500px){
+  body.cp-app.cp-route-reports .finance-report-chart .chart{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ }
+}
+
+/* Tape estimates on the desktop tab and the mobile animal card. */
+.weight-estimates{min-width:0;overflow-wrap:anywhere}
+.weight-estimate-entry>summary{cursor:pointer;font-weight:750;padding:.6rem 0}
+.weight-estimates .form{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
+.weight-estimates .form label,.weight-estimates input:not([type=hidden]){min-width:0;max-width:100%}
+.weight-estimate-preview:not([hidden]){display:block;font-weight:750;margin-bottom:.45rem}
+.weight-estimate-list{list-style:none;margin:.75rem 0 0;padding:0}
+.weight-estimate-list li{display:flex;align-items:center;justify-content:space-between;gap:.75rem;border-top:1px solid #dfe9e2;padding:.65rem 0}
+.weight-estimate-list li>div{min-width:0}
+.weight-estimate-list small{display:block}
+.weight-estimate-list form{margin:0;flex:none}

@@ -110,9 +110,12 @@ body.cp-reference .cp-ref-stat .cp-icon{width:32px!important;height:32px!importa
 body.cp-reference .cp-ref-stat small{font-size:12px!important;font-weight:500!important;margin-top:3px!important;line-height:1.2!important}
 body.cp-reference .cp-ref-stat b{font-size:23px!important;font-weight:750!important;line-height:1.2!important;letter-spacing:-.5px!important}
 body.cp-reference .cp-bg-green{background:#e4f5ee!important}body.cp-reference .cp-bg-peach{background:#fff0e2!important}body.cp-reference .cp-bg-pink{background:#fde7f1!important}body.cp-reference .cp-bg-mint{background:#e9f7ef!important}body.cp-reference .cp-bg-lavender{background:#edeafd!important}body.cp-reference .cp-bg-rose{background:#fce6f0!important}
+/* Keep both dashboard variants separate, even before scripts run. */
+body.cp-reference.cp-route-home .cp-desktop-dashboard,
+body.cp-reference.cp-route-home:not(.cp-tasks-route) .cp-ref-home [data-cp-home-preview-overflow]{display:none!important}
 body.cp-reference .cp-home-jobs{background:transparent!important;padding:0!important;border:0!important;box-shadow:none!important;border-radius:0!important;margin-top:16px!important}
 body.cp-reference .cp-ref-task-tabs{display:none!important}
-body.cp-reference.cp-tasks-route .cp-ref-task-tabs{display:flex!important;margin:8px 0 12px!important;overflow:auto!important}
+body.cp-reference.cp-tasks-route .cp-ref-task-tabs{display:flex!important;flex-wrap:wrap!important;margin:8px 0 12px!important}
 body.cp-reference.cp-tasks-route .cp-ref-home>.cp-ref-business,body.cp-reference.cp-tasks-route .cp-ref-home>.cp-ref-summary,body.cp-reference.cp-tasks-route .cp-ref-home>.cp-ref-heading{display:none!important}
 body.cp-reference .cp-ref-task-list{background:#fff!important;border:1px solid #e6ecee!important;border-radius:11px!important;overflow:hidden!important;padding:0!important;display:block!important}
 body.cp-reference .cp-ref-task-list .cp-task{display:flex!important;align-items:center!important;gap:10px!important;min-height:78px!important;padding:11px 12px!important;border:0!important;border-bottom:1px solid #edf0f3!important;border-radius:0!important;background:#fff!important;color:#111b31!important;box-shadow:none!important;margin:0!important}
@@ -196,8 +199,6 @@ body.cp-reference .cp-ref-actions>a,body.cp-reference .cp-ref-actions>button{dis
 body.cp-reference .cp-ref-action-icon{width:57px!important;height:57px!important;border-radius:12px!important;display:grid!important;place-items:center!important}
 body.cp-reference .cp-ref-action-icon>.cp-icon{width:30px!important;height:30px!important;stroke-width:2.2!important}
 body.cp-reference .cp-ref-actions small{font-size:11px!important;line-height:1.35!important;max-width:65px!important;min-height:28px!important;text-align:center!important}
-body.cp-reference .cp-ref-life{background:white!important;border:1px solid #e9eef0!important;border-radius:11px!important;overflow:hidden!important;margin-bottom:14px!important}
-body.cp-reference .cp-ref-life .cp-ref-heading{padding:10px 10px 8px!important;margin:0!important;border-bottom:1px solid #edf1f2!important}
 body.cp-reference .cp-ref-timeline{list-style:none!important;margin:0!important;padding:12px 14px 2px!important}
 body.cp-reference .cp-ref-timeline li{display:flex!important;gap:12px!important;position:relative!important;background:transparent!important;padding:0 0 18px!important;min-height:67px!important;color:#17233a!important}
 body.cp-reference .cp-ref-timeline li:before{content:""!important;position:absolute!important;top:25px!important;bottom:0!important;left:12px!important;width:1px!important;background:#cfe6df!important}
@@ -211,13 +212,6 @@ body.cp-reference .cp-ref-timeline time{font-size:12px!important;color:#46617a!i
 body.cp-reference .cp-ref-timeline small{font-size:11px!important;color:#80908b!important;overflow-wrap:anywhere!important}
 body.cp-reference .cp-ref-bar{display:flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;width:100%!important;min-height:37px!important;padding:9px!important;margin:8px 0 0!important;font-size:12px!important;color:#0084cb!important;background:#eaf7ff!important;border:0!important;border-radius:7px!important;text-align:center!important;cursor:pointer!important;font-family:inherit!important}
 body.cp-reference .cp-ref-bar .cp-icon{width:16px!important;height:16px!important}
-body.cp-reference .cp-ref-life>.cp-ref-bar{margin:0!important;border-radius:0!important}
-body.cp-reference .cp-ref-tabs-slot{position:relative!important;margin:0 0 4px!important;min-width:0!important}
-body.cp-reference .cp-ref-tabs-marker{position:absolute!important;top:0!important;left:0!important;width:1px!important;height:1px!important;pointer-events:none!important}
-body.cp-reference .cp-ref-detail-tabs{display:flex!important;gap:5px!important;position:static!important;z-index:1090!important;padding:8px 0!important;background:#f5f9f8!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;margin:0!important;scroll-behavior:auto!important;transition:none!important}
-body.cp-reference .cp-app-header>.cp-ref-detail-tabs.cp-ref-tabs-docked{position:absolute!important;top:var(--cp-head)!important;left:12px!important;right:12px!important;width:auto!important;max-width:none!important;min-width:0!important;box-sizing:border-box!important;grid-column:auto!important;grid-row:auto!important;margin:0!important;transform:translateZ(0)!important;backface-visibility:hidden!important}
-body.cp-reference .cp-ref-detail-tabs>button{padding:9px 13px!important;background:#fff!important;color:#6b778a!important;flex:none!important;border:1px solid #edf0f3!important;border-radius:10px!important;font-size:12px!important;min-height:35px!important;cursor:pointer!important;line-height:1.2!important}
-body.cp-reference .cp-ref-detail-tabs>button.active{background:#d9f5e4!important;color:#12663d!important;border-color:#d9f5e4!important;font-weight:700!important}
 body.cp-reference .cp-ref-accordion{margin:0 0 8px!important;border:1px solid #e7edef!important;border-radius:10px!important;background:white!important;overflow:hidden!important}
 body.cp-reference .cp-ref-accordion>summary{display:flex!important;align-items:center!important;gap:9px!important;padding:12px 11px!important;min-height:47px!important;list-style:none!important;cursor:pointer!important;font-size:13px!important}
 body.cp-reference .cp-ref-accordion>summary>span{display:grid!important;place-items:center!important;background:transparent!important}
@@ -323,7 +317,6 @@ body.cp-reference .cp-ref a:focus-visible,body.cp-reference .cp-ref button:focus
 body.cp-reference .cp-ref-reduced-only{display:none!important}
 html body.cp-app.cp-reference [hidden]{display:none!important}
 @media(max-width:360px){
- body.cp-reference .cp-app-header>.cp-ref-detail-tabs.cp-ref-tabs-docked{left:10px!important;right:10px!important}
  body.cp-reference .main{padding-left:10px!important;padding-right:10px!important}
  body.cp-reference .cp-ref-stat{min-height:101px!important}
  body.cp-reference .cp-ref-animal-open{grid-template-columns:72px minmax(0,1fr) 14px!important;gap:8px!important;min-height:103px!important}
@@ -337,4 +330,25 @@ html body.cp-app.cp-reference [hidden]{display:none!important}
 }
 @media(prefers-reduced-motion:reduce){body.cp-reference *{scroll-behavior:auto!important;transition:none!important}}
 }
+}
+@layer cp-reference {
+@media(max-width:900px){
+body.cp-reference .cp-ref-finance-ledger,body.cp-reference .cp-ref-finance-breakdown{min-width:0;margin:12px 0;border:1px solid #e1e9e5;border-radius:12px;overflow:hidden}
+body.cp-reference .cp-ref-finance-ledger>summary,body.cp-reference .cp-ref-finance-breakdown>summary{padding:13px 12px;min-height:44px;font-size:13px;font-weight:650;color:#176746;background:#f5f9f6;cursor:pointer;overflow-wrap:anywhere}
+body.cp-reference .cp-ref-finance-ledger>div{padding:0 10px}
+body.cp-reference .cp-ref-finance-record{border:0;border-bottom:1px solid #e6ede8;border-radius:0;margin:0;min-width:0;max-width:100%}
+body.cp-reference .cp-ref-finance-record:last-child{border-bottom:0}
+body.cp-reference .cp-ref-finance-record>summary{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center;gap:8px;padding:13px 0!important;cursor:pointer;list-style:none!important}
+body.cp-reference .cp-ref-finance-record>summary::-webkit-details-marker{display:none}
+body.cp-reference .cp-ref-finance-record>summary span{min-width:0}body.cp-reference .cp-ref-finance-record>summary b{display:block;font-size:13px;overflow-wrap:anywhere}
+body.cp-reference .cp-ref-finance-record>summary small{display:block;margin-top:4px;color:#7d8899;font-size:11px}
+body.cp-reference .cp-ref-finance-record>summary strong{font-size:13px;white-space:nowrap;color:#c65b48}
+body.cp-reference .cp-ref-finance-income>summary strong{color:#16824c}
+body.cp-reference .cp-ref-finance-record-body{padding:3px 0 12px;min-width:0}
+body.cp-reference .cp-ref-finance-record-body .cp-ref-kv{grid-template-columns:minmax(0,1fr)!important;gap:10px!important}
+body.cp-reference .cp-ref-finance-record-body dd{font-weight:400!important;line-height:1.5!important;overflow-wrap:anywhere!important}
+body.cp-reference .cp-ref-finance-record-body .cp-ref-bar{margin-top:10px!important}
+body.cp-reference .cp-ref-finance-breakdown>.cp-ref-kv{padding:12px!important}
+}
+
 }

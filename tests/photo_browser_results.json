@@ -1,0 +1,149 @@
+{
+  "views": [
+    {
+      "width": 320,
+      "route": "/all-animals",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "route": "/animal?id=1",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=640",
+          "width": 640
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/all-animals",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/animal?id=1",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=640",
+          "width": 640
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "route": "/all-animals",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        }
+      ]
+    },
+    {
+      "width": 412,
+      "route": "/animal?id=1",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=640",
+          "width": 640
+        }
+      ]
+    },
+    {
+      "width": 820,
+      "route": "/all-animals",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        }
+      ]
+    },
+    {
+      "width": 820,
+      "route": "/animal?id=1",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=640",
+          "width": 640
+        }
+      ]
+    },
+    {
+      "width": 1366,
+      "route": "/all-animals",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        },
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=320",
+          "width": 320
+        }
+      ]
+    },
+    {
+      "width": 1366,
+      "route": "/animal?id=1",
+      "sizes": [
+        {
+          "src": "/photo-preview?name=qa-cow.jpg&size=640",
+          "width": 640
+        }
+      ]
+    }
+  ],
+  "retry": [
+    "first request aborted, recovered without page reload",
+    "persistent failure stopped after initial request + 2 retries"
+  ],
+  "errors": []
+}

@@ -18,8 +18,8 @@ class AppEdition210LayoutTests(unittest.TestCase):
         self.assertIn('/app-assets/mobile.js?v='+release.VERSION, mobile_ui.enhance('<html><head></head><body></body></html>'))
         self.assertIn(release.CACHE_NAME, (ROOT / 'app' / 'mobile_assets' / 'service-worker.js').read_text(encoding='utf-8'))
 
-    def test_primary_ration_status_badges_move_up_three_pixels(self):
-        selector = 'body.cp-app:has(.workbench-shell) .wb2-kpi:is([data-key="dm"],[data-key="adg"],[data-key="cp"],[data-key="ndf"]) .wb2-kpi-status{top:5px!important}'
+    def test_primary_ration_status_badges_use_current_alignment(self):
+        selector = 'body.cp-app:has(.workbench-shell) .wb2-kpi:is([data-key="dm"],[data-key="adg"],[data-key="cp"],[data-key="ndf"]) .wb2-kpi-status{top:2px!important;right:11px!important;'
         self.assertIn(selector, CSS)
         for key in ('dm', 'adg', 'cp', 'ndf'):
             self.assertIn(f'[data-key="{key}"]', selector)

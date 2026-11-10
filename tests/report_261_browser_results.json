@@ -1,0 +1,26 @@
+[
+  {
+    "width": 320,
+    "report_navigation": true,
+    "enterprise_controls": true,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "report_navigation": true,
+    "enterprise_controls": true,
+    "errors": []
+  },
+  {
+    "width": 820,
+    "report_navigation": true,
+    "enterprise_controls": true,
+    "errors": []
+  },
+  {
+    "width": 1366,
+    "report_navigation": true,
+    "enterprise_controls": true,
+    "errors": []
+  }
+]

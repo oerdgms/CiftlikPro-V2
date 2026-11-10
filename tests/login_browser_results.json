@@ -1,0 +1,54 @@
+{
+  "views": [
+    {
+      "width": 320,
+      "selectWithinScreen": true,
+      "passwordToggle": true,
+      "pwaEntry": true
+    },
+    {
+      "width": 390,
+      "selectWithinScreen": true,
+      "passwordToggle": true,
+      "pwaEntry": true
+    },
+    {
+      "width": 412,
+      "selectWithinScreen": true,
+      "passwordToggle": true,
+      "pwaEntry": true
+    },
+    {
+      "width": 820,
+      "selectWithinScreen": true,
+      "passwordToggle": true,
+      "pwaEntry": true
+    },
+    {
+      "width": 1366,
+      "selectWithinScreen": true,
+      "passwordToggle": true,
+      "pwaEntry": true
+    }
+  ],
+  "flows": [
+    {
+      "flow": "cold load preview shown while full photo was held; form usable",
+      "photoRequests": [
+        "http://127.0.0.1:8686/app-assets/login.jpg?v=2.0.56"
+      ],
+      "timing": [
+        {
+          "name": "http://127.0.0.1:8686/app-assets/login.jpg?v=2.0.56",
+          "type": "link",
+          "start": 15
+        }
+      ]
+    },
+    "login opens selected enterprise directly",
+    "last successful enterprise remembered",
+    "valid password for unauthorized enterprise creates no session",
+    "allowed staff login with JavaScript disabled"
+  ],
+  "errors": []
+}

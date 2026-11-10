@@ -1,3 +1,93 @@
+# AppEdition 2.0.68 – Mobil Ana Sayfa Görünümü
+
+Masaüstü panosu ve Modern/Klasik seçici mobilde ilk çizimden itibaren gizlenir. Ana sayfa hatırlatmaları ayarlanan sayıyla sınırlı kalır; Görev Yönetimi ve Doğumlar filtresi tam listeyi açar. Masaüstü pano seçimi korunur.
+
+# AppEdition 2.0.67 – Mobil Doğum Hatırlatmaları
+
+Görev Yönetimi ve mobil ana sayfa, aktif gebeliklerin tahmini doğum tarihini gösterir. Önümüzdeki 45 gün, bugün ve tarihi geçmiş açık gebelikler listelenir. Doğumlar filtresi diğer işleri ayırır; satır hayvanın Üreme bölümünü açar. Doğum kaydıyla kapanan gebelikler listeden çıkar.
+
+# AppEdition 2.0.66 – Mezuradan Canlı Ağırlık Tahmini
+
+Hayvan kartındaki kilo bölümüne mezurayla tahmin ekleme, düzeltme ve silme eklendi. Göğüs çevresi ve gövde uzunluğu santimetre olarak girilir; kayıtlar tartımdan ayrı saklanır ve besi performansı hesaplarına katılmaz. Fotoğraf tahmini ve ±%5 doğruluk bu sürümün kapsamına girmez.
+
+# AppEdition 2.0.65 – Mobil Hayvan Kartında Tek Açık Bölüm
+
+Mobil hayvan ve buzağı detayında bir bölüm açıldığında önceki açık bölüm kapanır. Hızlı işlemler de aynı davranışı kullanır. Açık bölüme tekrar dokunarak tüm bölümler kapatılabilir. Masaüstü sekmeleri korunur.
+
+# AppEdition 2.0.64 – Mobil Hayvan Kartı Özeti
+
+Mobil hayvan ve buzağı detayındaki üst yaşam döngüsü özeti kaldırıldı. Alt bölümdeki Hayvan Yaşam Döngüsü kartı korunur. Temel Kimlik Bilgileri ilk açılışta kapalıdır. Masaüstü düzeni değişmedi.
+
+12 otomatik test ve dört Chromium ekran genişliğinde gezinme kontrolleri geçti.
+
+# AppEdition 2.0.63 – Mobil Hayvan Kartı
+
+Hayvan ve buzağı detayında yatay sekme menüsü kaldırıldı. İkonlu açılır kartlar bölüm gezinmesini sağlar. Hızlı işlemler ve bölüm bağlantıları ilgili kartı açıp oraya kaydırır; diğer bölümler ekranda kalır. İşletme parametresi bulunan tartım ve fotoğraf formları kendi kartlarına taşınır. Masaüstü hayvan kartı sekmeleri korunur.
+
+49 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde hayvan kartı kontrol edildi. Mobilde yetişkin ve buzağı tartım formu, fotoğraf alanı, Satış / Zayiat bağlantısı, işletme kapsamı ve yatay taşma kontrol edildi. Fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.62 – Raporlara Dön
+
+Raporlar listesindeki dokuz girişin açtığı ekranların üstüne görünür Raporlara Dön bağlantısı eklendi. Sağlık İş Planı ve diğer rapor önizlemelerinde bağlantı yazdırma ve PDF seçeneklerinin üstündedir. Aynı işletmeye dönülür. Yazdırma ve PDF indirme seçenekleri korunur, dönüş düğmesi çıktıya basılmaz. Yazdırma ekranında işletme değiştirme şeridi gösterilmez; işletme adı rapor başlığında kalır.
+
+22 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde dönüş bağlantıları, işletme kapsamı ve yazdırma görünümü doğrulandı; fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.61 – Mobil Raporlar ve İşletme Şeridi
+
+Mobilde rapor seçimi Raporlar listesindeki kartlardan yapılır. Yinelenen Hayvan Raporu, Finans Raporu ve İçe Aktarma sekmeleri gizlenir. Hayvan ve finans raporunun üstteki geri oku, seçili işletmeyi koruyarak Raporlar listesine döner. Mobilde aktif işletme şeridi yalnızca ana sayfada gösterilir; işletme değiştirme yan menüden de kullanılabilir. Masaüstündeki rapor sekmeleri ve işletme şeridi korunur.
+
+45 ilgili otomatik test geçti. Chromium'da 320, 390, 820 ve 1366 px genişliklerde rapor geçişleri ve işletme bağlantıları doğrulandı. Fiziksel iPhone testi yapılmadı.
+
+# AppEdition 2.0.60 – Mobil Finans ve Üreme Raporları
+
+Finans raporu mobil ekrana sığar; kategori özeti kartlar hâlinde gösterilir. Üreme raporuna Ana Sayfa/Raporlara Dön/Üreme Merkezine Dön bağlantıları eklendi. Rapor sekmeleri işletme ve filtre parametrelerini korur. Ayrıntılar: [RAPORLAR_2_0_60.md](RAPORLAR_2_0_60.md).
+
+# AppEdition 2.0.59 – Giriş ve stok hızı, sade mobil menü
+
+Son giriş zamanından kaynaklanan gereksiz işletme hesabı eşitlemesi ve değişmeyen padok tüketiminde stok/maliyet geçmişinin yeniden yazılması giderildi. Mobil yan menü altı ana bağlantıya indirildi; tüm işlevler Modüller üzerinden erişilebilir. Ayrıntılar ve güncelleme: [HIZ_VE_MOBIL_2_0_59.md](HIZ_VE_MOBIL_2_0_59.md). Kontroller: [DOGRULAMA_2_0_59.md](DOGRULAMA_2_0_59.md).
+
+# App Edition 2.0.58 — Giriş ve bağlantı düzenlemeleri
+
+01/11/2026
+
+- İzinli girişte tek şifre doğrulaması, ortak hesap kopyasının değişiklikle eşitlenmesi ve fotoğraf isteklerinde eşitlemenin kaldırılması.
+- Giriş hatasında mesajlı forma dönüş, GET hatalarında yeniden deneme ekranı.
+- Fotoğrafı daha az kapatan mobil giriş alanları ve küçük güncelleme bağlantısı.
+- İşlem günlüğü Ayarlara Dön hedefi ve yinelenen menü/PDF kısayolları düzeltildi.
+
+# App Edition 2.0.57 — İçe aktarma
+
+01/11/2026
+
+- Ortak hayvan içe aktarma ekranı, rapor bağlantılarının düzeltilmesi.
+- Aynı pencere yükleme/hata/yeniden deneme; ayrı önizleme ve onay.
+- Taranmış PDF için açık açıklama; işletme ve oturum ayrımının korunması.
+
+# App Edition 2.0.56 — Giriş işletmesi / fotoğraf
+
+01/11/2026
+
+- İşletme seçimi, sunucuda giriş izni kontrolü, son başarılı seçim ve hatada seçim koruma.
+- Mobil giriş fotoğrafı için erken yükleme ve satır içi küçük önizleme.
+
+# App Edition 2.0.55 — Çoklu işletme
+
+31/10/2026
+
+- İşletme ekleme/değiştirme ve aktif işletme alanı.
+- İşletmeye özel veritabanı, fotoğraf ve yedek yolları; ilk işletmenin dosyaları yerinde korunur.
+- Ortak kullanıcı hesapları, ek işletmelere personel izni.
+- Sekme/form/AJAX/önizleme/fotoğraf bağlamı ve eşzamanlı istek ayrımı.
+- Yedeklerde işletme kimliği ve yanlış işletmeye geri yükleme kontrolü.
+
+# App Edition 2.0.53 — Fotoğraf yükleme
+
+31/10/2026
+
+- Küçük önizlemeler, sunucu önizleme tekrar kullanımı ve ETag doğrulaması.
+- Fotoğrafa dokununca asıl dosya; geçici hatalarda iki otomatik yeniden deneme.
+- Veritabanı ve asıl fotoğraflar korunur; 2.0.52 performans geliştirmeleri dahildir.
+
 # App Edition 2.0.40 — Kompakt Süt Girişi
 
 26/10/2026
@@ -1446,3 +1536,34 @@ Fotoğraflı sürü listesi, yeni kayıtta TR sabit küpe ve kamera/galeri, buza
 - Alış tarihi/fiyatı/ödeme/vade ve Finansa dahil et eklendi.
 - Bağlı Hayvan Alımı kaydı mükerrer oluşturmadan güncelleniyor; finans seçeneği kapatılırsa bağlı kayıt kaldırılıyor.
 - TR sabit küpe girişi ve mevcut numaranın düzenlemede doldurulması korunuyor.
+# AppEdition 2.0.49 — PWA
+
+- 2.0.48 üzerine ana ekrana ekleme rehberi: giriş, Modüller ve mobil yan menü.
+- Android yükleme isteği, iOS yönergeleri, standalone ve HTTP/HTTPS durumları.
+- Ayrı Android maskable ve 180×180 Apple simgeleri; mevcut uygulama kimliği korunur.
+- Kullanıcı başlatmalı sürüm kontrolü; açık formlar otomatik yenilenmez.
+- Bağlantı kesilince adresi koruyan ekran; kayıtlar çevrimdışı önbelleğe alınmaz.
+- PWA_KURULUM.md içinde mevcut Tailscale ağına HTTPS ekleme adımları.
+- Solver, veritabanı ve iş kayıtları 2.0.48 ile aynıdır.
+
+# AppEdition 2.0.50 — Finans bölümünde işletmede kalma
+
+- Mobil hayvan ve buzağı kartında Finansal Bilgiler'in başına giriş tarihi ve
+  Bizde Kalma gün sayısı eklendi; eksik tarih için süre tahmin edilmez.
+- Arşivde kalma süresi çıkış tarihinde durur; tarih tutarsızlıkları gösterilir.
+- PWA 2.0.49 → 2.0.50 güncelleme akışı kontrol edildi.
+
+# AppEdition 2.0.51 — Finans ayrıntıları ve uygulama erişimi
+
+- Uygulama ve güncellemeler bağlantısı giriş/menü/Modüller'de kalıcı ve yönerge
+  sayfasına bağlı; JavaScript olmadan da kurulum açıklaması açılır.
+- Masaüstü hayvan ve buzağı finansında ortak giriş tarihi / Bizde Kalma görünümü.
+- Mobilde tekrarlanan finans tablosu yerine bütün kayıtlar için okunabilir,
+  açılabilir ayrıntı kartları ve ayrı maliyet kırılımı.
+# AppEdition 2.0.52 — Ana modüllerde hızlandırma
+
+- Besi'de tartımlar toplu okunur ve aynı tartım sorgusu tekrarlanmaz.
+- Aynı ekran isteğinde padok/rasyon maliyeti, ayarlar, gebelik ve yem okumaları
+  tekrar kullanılır; sonraki isteğe eski sonuç taşınmaz.
+- Geçmiş kayıt sorguları için 12 indeks; 15 ana ekranda ölçüm ve masaüstü/mobil kontrol.
+- Mevcut hesap, filtre ve kayıt işleyicileri korunur.
