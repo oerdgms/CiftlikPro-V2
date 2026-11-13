@@ -1,11 +1,11 @@
 {
   "app": "CiftlikPro",
-  "version": "2.0.68",
-  "build": "AppEdition2.0.68-MobileHomeLayout",
+  "version": "2.0.73",
+  "build": "AppEdition2.0.73-MobileTasksToday",
   "channel": "pilot-preparation",
   "baseline": "2.0.41",
   "core_version": "3.9.23 DEV4 Hotfix1.22cr",
-  "cache_name": "ciftlikpro-app-edition-2.0.68",
-  "setup_file": "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_68_Setup.exe",
-  "artifact_name": "CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.68-Windows-Setup"
+  "cache_name": "ciftlikpro-app-edition-2.0.73",
+  "setup_file": "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_73_Setup.exe",
+  "artifact_name": "CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.73-Windows-Setup"
 }

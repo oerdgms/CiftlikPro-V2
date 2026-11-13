@@ -163,7 +163,7 @@
     const extras = available.filter(x => !primaryUrls.has(x.url) && x.url !== '/');
     const hub = document.createElement('section');
     hub.className = 'cp-module-hub';
-    hub.innerHTML = '<p class="cp-module-title">Çiftliğinin tüm işlemleri tek yerde</p><div class="cp-module-list">' + modules.map(([type,name,description,url]) => '<a href="'+url+'"><span class="cp-module-glyph">'+glyph(type)+'</span><div><b>'+name+'</b><small>'+description+'</small></div><span class="cp-chevron">›</span></a>').join('') + '</div><details class="cp-module-tools"><summary>Diğer ekranlar ve sistem araçları</summary>'+extras.map(item => '<a href="'+escape(item.url)+'">'+escape(item.text)+'</a>').join('')+'</details><div class="cp-module-footer"><button type="button" id="cpOpenQuick">Hızlı işlem +</button><a href="/logout">Çıkış yap</a></div><div class="cp-module-footer"><button type="button" id="cpInstall" hidden>Ana ekrana yükle</button></div>';
+    hub.innerHTML = '<p class="cp-module-title">Çiftliğinin tüm işlemleri tek yerde</p><div class="cp-module-list">' + modules.map(([type,name,description,url]) => '<a href="'+url+'"><span class="cp-module-glyph">'+glyph(type)+'</span><div><b>'+name+'</b><small>'+description+'</small></div><span class="cp-chevron">›</span></a>').join('') + '</div><details class="cp-module-tools"><summary>Diğer ekranlar ve sistem araçları</summary>'+extras.map(item => '<a href="'+escape(item.url)+'">'+escape(item.text)+'</a>').join('')+'</details><div class="cp-module-footer"><button type="button" id="cpOpenQuick">Hızlı işlem +</button><a href="/logout">Çıkış yap</a></div>';
     main.prepend(hub);
     title.textContent = 'Modüller';
     subtitle.textContent = config.user;

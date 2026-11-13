@@ -233,9 +233,8 @@ def enhance_document(document,handler,ns):
                        or (path=='/reports' and 'tab' in request_query)
                        or (path in {'/paddocks','/feeds','/milk-center'} and request_query.get('from_reports')==['1']))
     marker=''
-    if not print_report:
-        bar_class='cp-enterprise-bar'+(' cp-enterprise-bar--home' if is_home else '')
-        marker='<div id="cpEnterpriseBar" class="'+bar_class+'"><a href="/farms?farm='+fid+'"><small>Aktif işletme</small><strong>'+escape(farm['name'])+'</strong><span>Değiştir ›</span></a></div>'
+    if not print_report and not is_home:
+        marker='<div id="cpEnterpriseBar" class="cp-enterprise-bar"><a href="/farms?farm='+fid+'"><small>Aktif işletme</small><strong>'+escape(farm['name'])+'</strong><span>Değiştir ›</span></a></div>'
     if return_to_reports:
         # Replace existing print-page return links with one common top action.
         if print_report:

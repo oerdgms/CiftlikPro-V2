@@ -16,8 +16,11 @@ class BirthRows(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if tag == 'a' and attrs.get('data-cp-kind') == 'birth':
+        if tag == 'div' and attrs.get('data-cp-kind') == 'birth':
             self.rows.append(attrs)
+        if tag == 'a' and attrs.get('class') == 'cp-task-action' and attrs.get('href','').endswith('#reproduction'):
+            if self.rows:
+                self.rows[-1].setdefault('href',attrs['href'])
 
 
 class MobileBirthReminderTests(unittest.TestCase):
@@ -60,6 +63,25 @@ class MobileBirthReminderTests(unittest.TestCase):
             c.execute("update inseminations set pregnancy_result='Doğum' where animal_id=?",(ids['BUGÜN'],))
         html = self.get('/?app_view=tasks')[2].decode()
         self.assertEqual([r['data-cp-state'] for r in BirthRows(html).rows],['overdue','upcoming'])
+
+    def test_tasks_show_today_completions_and_link_to_animal(self):
+        today = server.date.today()
+        with server.db() as c:
+            animal = c.execute("insert into animals(tag,gender,status) values('TEST-KÜPE','Dişi','Aktif')").lastrowid
+            c.execute("insert into health(animal_id,kind,product,applied_date) values(?,'Aşı','BUGÜN-AŞI',?)",(animal,today.isoformat()))
+            c.execute("insert into health(animal_id,kind,product,applied_date) values(?,'Aşı','DÜN-AŞI',?)",(animal,(today-timedelta(days=1)).isoformat()))
+            c.execute("insert into health(animal_id,kind,product,next_date) values(?,'Aşı','BEKLEYEN-AŞI',?)",(animal,today.isoformat()))
+        jobs = self.get('/?app_view=tasks&filter=done')[2].decode()
+        self.assertIn('data-cp-task-filter="done">Bugün Yapılanlar<span>1</span>',jobs)
+        self.assertIn('>BUGÜN-AŞI</a>',jobs)
+        self.assertNotIn('>DÜN-AŞI</a>',jobs)
+        self.assertIn(f'class="cp-task-animal" href="/animal?id={animal}">TEST-KÜPE</a>',jobs)
+        home = self.get('/')[2].decode()
+        self.assertNotIn('>BUGÜN-AŞI</a>',home)
+        self.assertNotIn('cp-ref-home-foot',home)
+        health = self.get('/health?from_tasks=1')[2].decode()
+        self.assertIn('Görevlere dön</a>',health)
+        self.assertIn(f'class="cp-task-animal" href="/animal?id={animal}">TEST-KÜPE</a>',health)
 
     def test_bell_lists_birth_once_and_keeps_its_60_day_window(self):
         ids = self.seed_births()

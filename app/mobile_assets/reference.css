@@ -126,9 +126,6 @@ body.cp-reference .cp-ref-task-list .cp-task>div{flex:1!important;min-width:0!im
 body.cp-reference .cp-ref-task-list .cp-task b{font-size:13px!important;display:block!important;font-weight:700!important;line-height:1.35!important;overflow-wrap:anywhere!important}
 body.cp-reference .cp-ref-task-list .cp-task div>span{font-size:11px!important;color:#667287!important;display:block!important;line-height:1.35!important;margin-top:2px!important}
 body.cp-reference .cp-ref-task-list .cp-ref-due{background:transparent!important;flex:0 0 auto!important;font-size:11px!important;max-width:67px!important;text-align:right!important;line-height:1.35!important;font-weight:700!important;padding:0!important}
-body.cp-reference .cp-ref-home-foot{display:flex!important;justify-content:space-between!important;gap:10px!important;font-size:10px!important;color:#84918e!important;margin:17px 2px 0!important}
-body.cp-reference .cp-ref-home-foot a{display:flex!important;align-items:center!important;gap:4px!important;color:#568d80!important}
-body.cp-reference .cp-ref-home-foot .cp-icon{width:14px!important;height:14px!important}
 body.cp-reference .cp-ref-empty{padding:30px 12px!important;text-align:center!important;background:white!important;border:1px solid #e6ecee!important;border-radius:10px!important;color:#677385!important;font-size:13px!important}
 body.cp-reference .cp-ref-empty a{display:block!important;margin-top:12px!important;color:#008ad6!important}
 body.cp-reference .cp-ref-menu-backdrop{display:block!important;position:fixed!important;inset:0!important;background:#12282d66!important;z-index:7000!important;backdrop-filter:blur(2px)!important}
@@ -270,7 +267,6 @@ body.cp-reference .cp-ref-module-more{margin:16px 0 0!important;background:white
 body.cp-reference .cp-ref-module-more summary{cursor:pointer!important;font-weight:650!important}
 body.cp-reference .cp-ref-module-more a{display:flex!important;align-items:center!important;gap:10px!important;padding:13px 2px!important;border-bottom:1px solid #edf0f3!important;color:#2a6586!important}
 body.cp-reference .cp-ref-module-more a:last-child{border:0!important}
-body.cp-reference .cp-ref-install{border:0!important;background:transparent!important;color:#0086c7!important;padding:14px!important;display:block!important;width:100%!important;min-height:44px!important;font-size:12px!important;cursor:pointer!important}
 body.cp-reference.cp-modules-route .main>:not(.cp-ref-modules):not(style):not(script):not(.flash){display:none!important}
 body.cp-reference .smart-animal-head,body.cp-reference .cp-entry-kind{display:none!important}
 body.cp-reference.cp-route-animal-add .smart-card{padding:0!important;margin:0!important;background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important}
@@ -352,3 +348,13 @@ body.cp-reference .cp-ref-finance-breakdown>.cp-ref-kv{padding:12px!important}
 }
 
 }
+
+.cp-insemination-details{margin:12px 0 0;scroll-margin-top:80px}
+.cp-insemination-details>summary,.cp-insemination-record>summary{padding:12px;min-height:44px;cursor:pointer;font-weight:700}
+.cp-insemination-record{margin:6px 8px;border:1px solid #dce6e0;border-radius:9px;background:#fff}
+.cp-insemination-record .cp-ref-kv{padding:0 10px 10px;overflow-wrap:anywhere}
+
+.cp-task-animal{color:#00664f!important;text-decoration:underline!important;text-underline-offset:3px;font-weight:750}
+.cp-task-action{color:inherit!important;text-decoration:none!important;display:inline-block}
+.cp-task-return{margin:0 0 10px}
+@media(min-width:901px){.hc-workspace>.cp-task-return{display:none!important}}

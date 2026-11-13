@@ -72,9 +72,12 @@ def task_rows(ns,rows,token,query,all_rows=None):
             menu='<a class="hc-small-link" href="'+esc(r['edit_url'])+'">Düzenle</a>'
         else:
             control='<form class="hc-inline" method="post" action="/pregnancy-vaccine/done">'+hidden('animal_id',r['animal_id'])+hidden('insemination_id',r['id'])+hidden('month',r['month'])+hidden('return_to',link(query))+'<button class="hc-done" type="submit">Bugün yapıldı</button></form>';menu=''
+        route = 'animal' if r.get('animal_id') else 'calf'
+        ident = r.get('animal_id') or r.get('calf_id')
+        subject = f'<a class="cp-task-animal" href="/{route}?id={int(ident)}">{esc(r["subject"])}</a>' if ident else esc(r['subject'])
         content+=f'''<article class="hc-task" id="health-task-{r['id']}" data-hc-task data-health-course="{r.get('course_id','')}" data-health-plan-ref="{esc(r.get('plan_ref',''))}" data-category="{category}" data-date="{esc(r['date'])}">
           <div class="hc-task-main"><span class="hc-icon hc-{tone}">{hc.icon(ico)}</span><div><b>{esc(r['title'])}</b><small>{esc(label)} · {esc(r['detail'])}</small></div></div>
-          <div class="hc-task-subject"><b>{esc(r['subject'])}</b><small>{esc(r.get('nickname') or r.get('paddock') or 'Padoksuz')}</small></div>
+          <div class="hc-task-subject"><b>{subject}</b><small>{esc(r.get('nickname') or r.get('paddock') or 'Padoksuz')}</small></div>
           <div class="hc-task-date">{esc(date_text)}</div><div class="hc-task-status">{status_badge(r['state'])}</div><div class="hc-task-actions">{control}{menu}</div></article>'''
     return batch_cards(ns,rows if all_rows is None else all_rows,rows)+'<div class="hc-task-head"><span>İşlem</span><span>Hayvan / Grup</span><span>Tarih</span><span>Durum</span><span>İşlem</span></div><div class="hc-task-list">'+content+'</div>' if rows else empty('Bu görünümde planlı işlem yok.','Yeni bir sağlık işlemi ekleyebilir veya filtreleri değiştirebilirsin.')
 
@@ -285,6 +288,7 @@ def markup(ns,c,query,token):
     category_nav='<nav class="hc-categories" aria-label="Sağlık kategorileri">'+tiles+'</nav>'
     top=f'''<header class="hc-heading"><div><small>ÇİFTLİKPRO ENTERPRISE</small><h1>Sağlık Yönetimi</h1><p>Sürünün sağlığı tek ekranda.</p></div><button class="hc-primary hc-main-add" type="button" data-hc-open="hcChooser"><span>+</span> Sağlık İşlemi Ekle</button></header>
       <div class="hc-overview-link"><a href="/health" class="{'active' if category=='general' else ''}">Genel Bakış</a><span>{esc(ns['fmt_date'](hc.today().isoformat()))}</span></div><section class="hc-kpis" aria-label="Sağlık özeti">{kpis}</section>{category_nav}'''
+    top = '<a class="btn alt cp-task-return" href="/?app_view=tasks">‹ Görevlere dön</a>'+top
     utilities='<nav class="hc-utilities" aria-label="Sağlık araçları"><a href="/medicines">'+hc.icon('box')+'<span>İlaç Stoku ve Tedaviler</span><b>›</b></a><a href="/medicines?tab=visits">'+hc.icon('person')+'<span>Veteriner Kayıtları</span><b>›</b></a><a href="'+esc(link(query,view='calendar'))+'">'+hc.icon('calendar')+'<span>Sağlık Takvimi</span><b>›</b></a></nav>'
     content=''
     if category=='sync' and view!='calendar':

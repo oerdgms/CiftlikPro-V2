@@ -23,7 +23,7 @@ MODULES = [
 
 def modules_markup(icon):
     tiles=''.join(f'<a href="{url}" class="cp-module-tile"><span class="cp-module-icon cp-module-{tone}">{ref.glyph(kind,icon)}</span><b>{label}</b></a>' for kind,label,url,tone in MODULES)
-    return '<section class="cp-module-directory cp-ref-modules" id="cpModuleDirectory"><header class="cp-shared-head"><div><h1>Modüller</h1><p>Tüm işlemler tek ekranda.</p></div></header><div class="cp-module-grid">'+tiles+'</div><a class="cp-ref-install" id="cpInstall" href="/app-install" data-cp-pwa-open>Uygulama ve güncellemeler</a></section>'
+    return '<section class="cp-module-directory cp-ref-modules" id="cpModuleDirectory"><header class="cp-shared-head"><div><h1>Modüller</h1><p>Tüm işlemler tek ekranda.</p></div></header><div class="cp-module-grid">'+tiles+'</div></section>'
 
 
 def summary(ns, username):

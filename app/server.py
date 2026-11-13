@@ -3946,7 +3946,7 @@ def smart_ration_score(m,t,lim):
     if m['p_g']>mw['p_hard']: score+=70*(m['p_g']-mw['p_hard'])/max(mw['p_hard'],1)
     return score+0.002*m['cost']
 
-def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik', dm_pct_bw=2.5, fixed_quantities=None):
+def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', age_months=0, phase_override='Otomatik', dm_pct_bw=2.5, fixed_quantities=None, reference_quantities=None):
     """DEV4.19 - seçili yemleri bilimsel min/max içinde kullanan kapanış optimizerı.
 
     Excel dosyasindaki gercek Solver modeli incelendi: yem miktarlari karar degiskenidir,
@@ -3963,7 +3963,7 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     raylarıdır. Güvensiz veya birden çok ana hedefi ciddi kaçıran aday kaydedilmez;
     kullanıcıya çözümü sınırlayan kısıtlar bildirilir.
     """
-    import random as _random, time as _time
+    import math as _math, random as _random, time as _time
     t=ration_requirement_targets(weight_kg,target_adg,animal_type,age_months,phase_override,dm_pct_bw)
     incompatible=incompatible_feeds_for_profile(feeds,age_months,phase_override,'Besi')
     if incompatible:
@@ -3974,6 +3974,23 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     lim['grain_max']={'Besi Başlangıç':24.0,'Besi Geliştirme':30.0,'Besi Bitirme':34.0}.get(lim['phase'],30.0)
     n=len(feeds)
     if n<2:return None,t,'En az 2 yem seçin.'
+
+    # Normal "Akıllı Çözüm" yeni bir reçete kurar. Aynı rasyonun hedefi
+    # güncellendiğinde ise mevcut kg değerleri referans olarak verilir; bilimsel
+    # ve güvenlik hedefleri kapandıktan sonra toplam değişim ile değişen yem
+    # sayısı maliyetten önce küçültülür. Böylece 270 -> 300 kg gibi bir güncelleme
+    # rasyonu sil baştan kurmaz.
+    reference=None
+    if reference_quantities is not None:
+        try:
+            if hasattr(reference_quantities,'items'):
+                reference=[float(reference_quantities.get(int(_rowval(f,'id',0)),_rowval(f,'kg_per_head_day',0)) or 0) for f in feeds]
+            else:
+                reference=[float(x) for x in reference_quantities]
+        except (TypeError,ValueError):
+            return None,t,'Mevcut rasyon miktarları okunamadı; kayıt değiştirilmedi.'
+        if len(reference)!=n or any(not _math.isfinite(x) or x<0 for x in reference):
+            return None,t,'Mevcut rasyon miktarları geçersiz; kayıt değiştirilmedi.'
 
     bounds=[smart_feed_bounds(f,t['weight_kg'],t['dmi_kg'],target_adg,age_months,phase_override) for f in feeds]
     # Besi için uygun ticari yem seçilmişse süt yemini matematiksel kestirme olarak
@@ -4026,6 +4043,24 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
 
     def achieved_adg(m):
         return _achievable_adg(m,t)
+
+    def change_vector(q):
+        """Mevcut reçeteden sapmayı saha anlamlılığında ölç.
+
+        10–20 gramlık sayısal oynama normal yem satırını değişmiş saymaz. Toplam
+        KM hareketi önce, değişen satır sayısı ve büyük tekil sıçramalar sonra
+        karşılaştırılır. Referans yoksa standart Akıllı Çözüm sıralaması aynıdır.
+        """
+        if reference is None:return (0.0,0,0.0)
+        deltas=[]; changed=0
+        for i,(value,base) in enumerate(zip(q,reference)):
+            delta=abs(float(value)-float(base))
+            threshold=.005 if feed_group(feeds[i])=='Katkı' else .04
+            if delta>=threshold:changed+=1
+            deltas.append(delta*dmfrac[i])
+        total=sum(deltas)/max(target_dm,.01)
+        largest=max(deltas,default=0.0)/max(target_dm,.01)
+        return total,changed,largest
 
     def safety_vector(m):
         # İzleme/gösterim rayları. Küçük bir NDF veya rumen-risk sapması dört ana besin
@@ -4136,8 +4171,11 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
         wheat_share=wheat_dm/max(grain_dm,.01) if grain_dm>.05 else 0.0
         wheat_soft=max(0.0,(wheat_share-.30)/.10)
         profile_soft=_commercial_profile_penalty(feeds,q,animal_type,target_dm)
+        stability=change_vector(q)
         # Önce ciddi güvenlik, sonra KM/HP/ME/kaba fizibilitesi. Hafif NDF/eNDF/rumen-risk
-        # sapmaları ancak ana hedeflerden sonra karşılaştırılır; maliyet en son gelir.
+        # sapmaları ancak ana hedeflerden sonra karşılaştırılır. Aynı rasyon yeniden
+        # hesaplanıyorsa bilimsel olarak eşdeğer adaylar arasında mevcut reçeteye en
+        # az müdahale seçilir; maliyet en son gelir.
         key=(hard_safety_count,
              round(max(hsv) if hsv else 0.0,10),
              round(growth_priority,10),
@@ -4155,6 +4193,9 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
              # Aynı fizibilite seviyesinde önce uygulanabilirlik/kalite, sonra milimetrik kart farkı.
              # Bu sıra 0.01 kg gibi matematiksel ama saha dışı kalemleri ve ucuz yem dominansını azaltır.
              round(_feed_quality_penalty(feeds,q,target_dm),8),
+             stability[1],
+             round(stability[0],8),
+             round(stability[2],8),
              round(dm+cp+me+adg+rough/100.0,10),
              round(m['cost'],6))
         return key,m
@@ -4233,7 +4274,18 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     for pp in (-10,-7,-4,-2,0,2,4,7,10):
         sh=max(lim['roughage_min'],min(lim['roughage_max'],target_rough+pp))/100.0
         if all(abs(sh-x)>.005 for x in shares): shares.append(sh)
-    seeds=[]
+    seeds=[]; reference_starts=[]
+    if reference is not None:
+        current=clip(reference)
+        reference_starts.append(current)
+        # Mevcut oranları bozmadan KM hedefine yaklaşan ikinci başlangıç. Kilitli
+        # yemler sabit kalır; yerel arama yalnız gerektiği kadar besin takası yapar.
+        locked_dm=sum(current[i]*dmfrac[i] for i in range(n) if fixed[i])
+        movable_dm=sum(current[i]*dmfrac[i] for i in movable)
+        ratio=max(0.0,(target_dm-locked_dm)/max(movable_dm,.01))
+        scaled=current[:]
+        for i in movable:scaled[i]=current[i]*ratio
+        reference_starts.append(clip(scaled))
     for sh in shares:
         for mode in ('balanced','energy','energy_low_cp','protein','commercial','commercial_anchor','cost'):
             for _ in range(2):seeds.append(make_seed(sh,mode))
@@ -4248,13 +4300,13 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     for q in seeds:
         k,m=rank(q); scored.append((k,q))
     scored.sort(key=lambda x:x[0])
-    starts=[q for k,q in scored[:40]]
+    starts=reference_starts+[q for k,q in scored[:40]]
 
-    def local_opt(q,deadline):
+    def local_opt(q,deadline,steps=None):
         q=clip(q); k,_=rank(q)
         # Excel Solver'in karar degiskeni mantigina yakin: iki yem arasinda ayni KM'yi takas et,
         # sonra tek yem koordinatinda toplam KM'yi ince ayarla. Buyuk adimdan kucuge iner.
-        for dmstep in (.80,.55,.35,.22,.14,.09,.055,.035,.020,.010):
+        for dmstep in (steps or (.80,.55,.35,.22,.14,.09,.055,.035,.020,.010)):
             improved=True; rounds=0
             while improved and rounds<8 and _time.perf_counter()<deadline:
                 improved=False; rounds+=1; bestq=q; bestk=k
@@ -4289,11 +4341,79 @@ def solve_smart_ration(feeds, weight_kg, target_adg, animal_type='Besi Erkek', a
     if polishedk<bestk:best,bestk=polished,polishedk
     # Kullanici sectigi normal yemleri kaybetmesin; katkilar kendi doz sinirinda kalir.
     best=[bounds[i][0] if fixed[i] else round(max(bounds[i][0],min(bounds[i][1],x)),3 if feed_group(feeds[i])=='Katkı' else 2) for i,x in enumerate(best)]
+    if reference is not None:
+        # Yuvarlamadan kalan anlamsız küçük oynamaları gerçekten geri al; bunları
+        # arayüzde "korundu" deyip veritabanında değiştirmeyiz. Ardından yalnız
+        # 5–35 gram KM adımlarıyla değişmiş satırlar üzerinde kısa bir kapanış yap.
+        snapped=best[:]
+        for i in movable:
+            threshold=.005 if feed_group(feeds[i])=='Katkı' else .04
+            if (bounds[i][0]-1e-9)<=reference[i]<=(bounds[i][1]+1e-9) and abs(snapped[i]-reference[i])<threshold:
+                snapped[i]=round(reference[i],3 if feed_group(feeds[i])=='Katkı' else 2)
+        best,_=local_opt(snapped,_time.perf_counter()+1.0,steps=(.035,.020,.010,.005))
+        best=[bounds[i][0] if fixed[i] else round(max(bounds[i][0],min(bounds[i][1],x)),3 if feed_group(feeds[i])=='Katkı' else 2) for i,x in enumerate(best)]
+        for i in movable:
+            threshold=.005 if feed_group(feeds[i])=='Katkı' else .04
+            if (bounds[i][0]-1e-9)<=reference[i]<=(bounds[i][1]+1e-9) and abs(best[i]-reference[i])<threshold:
+                best[i]=round(reference[i],3 if feed_group(feeds[i])=='Katkı' else 2)
+        # Sürekli aramanın ardından iki ondalığa yuvarlama GCAA gibi bir kartı
+        # 1,80'den 1,79'a düşürmesin. Veritabanında gerçekten saklanacak 10 g
+        # (katkıda 1 g) adımlarla deterministik son kontrol yapılır.
+        discrete=best[:]; discrete_key=rank(discrete)[0]
+        for _ in range(16):
+            candidate_best=None; candidate_key=discrete_key
+            for i in movable:
+                step=.001 if feed_group(feeds[i])=='Katkı' else .01
+                for sign in (-1,1):
+                    cand=discrete[:]
+                    cand[i]=round(cand[i]+sign*step,3 if feed_group(feeds[i])=='Katkı' else 2)
+                    cand=clip(cand)
+                    ck=rank(cand)[0]
+                    if ck<candidate_key:candidate_best,candidate_key=cand,ck
+            if candidate_best is None:break
+            discrete,discrete_key=candidate_best,candidate_key
+        best=discrete
+        for i in movable:
+            threshold=.005 if feed_group(feeds[i])=='Katkı' else .04
+            if (bounds[i][0]-1e-9)<=reference[i]<=(bounds[i][1]+1e-9) and abs(best[i]-reference[i])<threshold:
+                best[i]=round(reference[i],3 if feed_group(feeds[i])=='Katkı' else 2)
+        # Son yuvarlama GCAA kapasitesini hedefin hemen altına indirdiyse yeni bir
+        # yem satırını oynatmak yerine zaten değişmiş bir satırı mevcut değerine
+        # doğru en küçük adımla geri getir. Aday yine tüm güvenlik kapılarından geçer.
+        rounded_metrics=smart_ration_metrics(feeds,best)
+        rounded_metrics['achievable_adg_kg']=achieved_adg(rounded_metrics)
+        adg_goal=max(float(target_adg or 0),0.0)
+        if adg_goal>0 and rounded_metrics['achievable_adg_kg']<adg_goal-.0005:
+            repair=[]
+            for i in movable:
+                threshold=.005 if feed_group(feeds[i])=='Katkı' else .04
+                if abs(best[i]-reference[i])<threshold:continue
+                unit=.001 if feed_group(feeds[i])=='Katkı' else .01
+                direction=1 if reference[i]>best[i] else -1
+                for count in range(1,11):
+                    cand=best[:]
+                    cand[i]=round(cand[i]+direction*unit*count,3 if feed_group(feeds[i])=='Katkı' else 2)
+                    cand=clip(cand)
+                    cm=smart_ration_metrics(feeds,cand);cm['achievable_adg_kg']=achieved_adg(cm)
+                    if cm['achievable_adg_kg']<adg_goal-.0005:continue
+                    if abs(cm['dm_kg']-target_dm)/max(target_dm,.01)>.035:continue
+                    report=_solver_feasibility_report(cm,t,lim)
+                    if report['status'] in ('unsafe','infeasible'):continue
+                    repair.append(((0 if report['status']=='feasible' else 1,
+                                    len(report['warnings'])+len(report['blockers']),
+                                    round(change_vector(cand)[0],8),
+                                    abs(cm['dm_kg']-target_dm),count),cand))
+                    break
+            if repair:best=min(repair,key=lambda item:item[0])[1]
     finalk,bm=rank(best)
     bm['predicted_dmi_kg']=_predicted_dmi_for_metrics(bm,t)
     bm['achievable_adg_kg']=achieved_adg(bm)
     bm['solver_seconds']=_time.perf_counter()-started
-    bm['solver_engine']='v3.9.20 Solver DEV4.19.6 · enerji/HP takası→bilimsel nişasta bantları→NASEM/INRA→KM/GCAA→güvenlik→maliyet'
+    bm['solver_engine']='v3.9.20 Solver DEV4.19.6 · enerji/HP takası→bilimsel nişasta bantları→NASEM/INRA→KM/GCAA→güvenlik'+('→mevcut rasyona en az müdahale' if reference is not None else '')+'→maliyet'
+    if reference is not None:
+        bm['recalc_changed_feed_count']=change_vector(best)[1]
+        bm['recalc_total_change_kg']=sum(abs(float(q)-float(base)) for q,base in zip(best,reference))
+        bm['recalc_total_dm_change_kg']=sum(abs(float(q)-float(base))*dmfrac[i] for i,(q,base) in enumerate(zip(best,reference)))
     bm['roughage_target_pct']=target_rough
     bm['rumen_risk']=_rumen_risk_assessment(bm,lim)
     bm['scientific_coverage']=_scientific_feed_coverage(feeds,best)

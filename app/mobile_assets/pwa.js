@@ -23,7 +23,7 @@
     guide.textContent = added ? 'Çiftlik sunucusu açık ve ağ / VPN bağlantısı etkin olmalıdır.'
       : ios() ? 'iPhone / iPad: Safari’de Paylaş → Ana Ekrana Ekle. Sunuluyorsa “Web Uygulaması Olarak Aç” seçeneğini açık tutun.'
       : 'Android: Chrome menüsü → Uygulamayı yükle / Ana ekrana ekle. Bilgisayarda tarayıcının yükleme simgesini kullanabilirsiniz.';
-    document.querySelectorAll('[data-cp-pwa-open],#cpInstall').forEach(button => {
+    document.querySelectorAll('[data-cp-pwa-open]').forEach(button => {
       button.hidden = false;
       button.textContent = added ? 'Uygulama ve güncellemeler' : 'Ana ekrana ekle';
     });
@@ -38,12 +38,6 @@
     dialog.innerHTML = '<div class="cp-pwa-heading"><img src="/app-assets/icon-192.png" width="48" height="48" alt=""><div><h2 id="cpPwaTitle">ÇiftlikPro uygulaması</h2><small>Ana ekrandan hızlı erişim</small></div><button type="button" id="cpPwaClose" aria-label="Kapat">×</button></div><p id="cpPwaStatus" role="status"></p><p id="cpPwaGuide"></p><button type="button" id="cpPwaInstall" hidden>Uygulamayı yükle</button><details id="cpPwaHttps"><summary>HTTPS bağlantısını hazırlama</summary><p>Çiftlik bilgisayarında Tailscale Serve ile HTTPS adresi oluşturabilirsiniz. Kurulum paketindeki PWA_KURULUM.md dosyasını izleyin. Telefonda bu yeni adresi kullanın; Tailscale bağlantısı açık kalmalı.</p></details><p class="cp-pwa-note">Bağlantı kesildiğinde yeniden bağlanma ekranı gösterilir. Kayıtları görüntülemek ve kaydetmek için çiftlik sunucusuna bağlantı gerekir.</p><div class="cp-pwa-update"><button type="button" id="cpPwaCheck">Güncellemeyi kontrol et</button><button type="button" id="cpPwaReload" hidden>Yeni sürümü aç</button><p id="cpPwaUpdateStatus" role="status" aria-live="polite"></p></div><small id="cpPwaBuild"></small>';
     document.body.append(dialog);
     document.querySelector('#cpPwaBuild').textContent = build;
-    const login = document.querySelector('.login-panel');
-    if (login && !login.querySelector('[data-cp-pwa-open]')) {
-      const button = document.createElement('button'); button.type = 'button';
-      button.className = 'cp-pwa-entry cp-pwa-login'; button.dataset.cpPwaOpen = '';
-      login.append(button);
-    }
     const menu = document.querySelector('#cpRefMenu');
     if (menu && !menu.querySelector('[data-cp-pwa-open]')) {
       const button = document.createElement('button'); button.type = 'button';
@@ -51,7 +45,7 @@
       menu.insertBefore(button,menu.querySelector('.cp-ref-logout'));
     }
     document.addEventListener('click', event => {
-      if (!event.target.closest('[data-cp-pwa-open],#cpInstall')) return;
+      if (!event.target.closest('[data-cp-pwa-open]')) return;
       event.preventDefault(); previousFocus = document.activeElement;
       if (menu?.contains(previousFocus)) {
         document.querySelector('#cpCloseMenu')?.click();

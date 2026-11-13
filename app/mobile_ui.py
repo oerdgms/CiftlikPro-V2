@@ -5,6 +5,7 @@ import re
 import gzip
 import time
 from pathlib import Path
+from contextvars import ContextVar
 from urllib.parse import urlparse, urlencode, parse_qs
 import mobile_reference as reference
 import dairy_management
@@ -14,6 +15,8 @@ import animal_actions
 import animal_reports
 import finance_groups
 from release_info import BUILD, VERSION, metadata as release_metadata, version_assets
+
+HOME_TASK_VIEW = ContextVar('home_task_view', default=False)
 
 ASSETS = Path(__file__).resolve().parent / 'mobile_assets'
 MOBILE_VIEWPORT = 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'
@@ -91,6 +94,8 @@ def compact_reproduction_identities(document):
 
 
 def task_url(row):
+    if row.get('source') == 'health_done':
+        return '/health?tab=done&from_tasks=1'
     if row.get('source') == 'birth':
         return '/animal?' + urlencode({'id':row['animal_id']}) + '#reproduction'
     if row.get('source') == 'synchronization':
@@ -98,12 +103,12 @@ def task_url(row):
     if row.get('source') == 'finance':
         return '/finance/edit?' + urlencode({'id': row['finance_id']}) + '#payment-status'
     if row.get('course_id'):
-        return '/health?' + urlencode({'filter': row['state'], 'plan': row['course_id'], 'task': row.get('plan_ref', '')})
-    return '/health?' + urlencode({'filter': row.get('state', 'all'), 'search': row.get('subject', '')})
+        return '/health?' + urlencode({'filter': row['state'], 'plan': row['course_id'], 'task': row.get('plan_ref', ''), 'from_tasks': 1})
+    return '/health?' + urlencode({'filter': row.get('state', 'all'), 'search': row.get('subject', ''), 'from_tasks': 1})
 
 
 def home_markup(ns, username):
-    return reference.home(ns, username, icon, task_url)
+    return reference.home(ns, username, icon, task_url, task_view=HOME_TASK_VIEW.get())
 
 
 def shell_markup(title, path, username, profile=None):
@@ -194,9 +199,6 @@ def enhance(document, title='', path='/', user='admin', login=False, extra=None)
         controller = re.search(r'(function toggleEntryPregnancy\(\)\s*\{.*?\n\})', document, re.S)
         if controller:
             document = document.replace('</head>', '<script id="cpEarlyPregnancyUI">'+controller.group(1)+'</script></head>',1)
-    if login:
-        entry = PWA_ENTRY.replace('class="cp-pwa-entry"','class="cp-pwa-entry cp-pwa-login"')
-        document = document.replace('</form></section>', '</form>'+entry+'</section>', 1)
     extra = '' if login else shell_markup(title, path, user, (extra or {}).get('profile'))
     if not login:
         extra = extra.replace('<a class="cp-ref-business-link"', PWA_ENTRY+'<a class="cp-ref-business-link"', 1)
@@ -338,6 +340,12 @@ def install(ns):
             if filename not in allowed or not (ASSETS/filename).is_file():
                 return original_send_html(self, 'Dosya bulunamadı', 404)
             return send_bytes(self, (ASSETS/filename).read_bytes(), allowed[filename])
+        if path == '/':
+            token = HOME_TASK_VIEW.set(parse_qs(urlparse(self.path).query).get('app_view') == ['tasks'])
+            try:
+                return original_get(self)
+            finally:
+                HOME_TASK_VIEW.reset(token)
         return original_get(self)
     app.send_html = send_html
     app.do_GET = do_GET

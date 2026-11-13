@@ -499,7 +499,7 @@ def workspace_data(ns,c):
         if r['kind']=='İlaç' and (not r['category'] or r['day_total']>1 or r['applications_per_day']>1):detail=f'{r["day_no"]} / {r["day_total"]}. gün · {r["application_no"]} / {r["applications_per_day"]}'
         pending.append({'date':r['planned_date'],'category':category,'title':r['product'],'subject':a['tag'],
             'nickname':a['nickname'],'paddock':a['paddock'],'detail':detail,'source':'course','id':r['id'],
-            'course_id':r['course_id'],'plan_ref':f"{r['course_id']}:{r['planned_date']}:{r['dose_no']}:{r['day_no']}:{r['application_no']}",'url':'/health?'+urlencode({'category':category,'plan':r['course_id']}),
+            'animal_id':r['animal_id'],'calf_id':r['calf_id'],'course_id':r['course_id'],'plan_ref':f"{r['course_id']}:{r['planned_date']}:{r['dose_no']}:{r['day_no']}:{r['application_no']}",'url':'/health?'+urlencode({'category':category,'plan':r['course_id']}),
             'batch_ref':batch_ref(r),'batch_ready':tuple(r[k] for k in ('cycle_no','dose_no','day_no','application_no'))==frontiers.get((r['course_id'],r['animal_id'],r['calf_id'])),
             'cost_cents':cents(r['cost']),
             'edit_url':('/health?'+urlencode({'category':category,'edit':r['course_id']})) if r['category'] else '/health-plan-edit?id='+str(r['course_id'])})
@@ -509,7 +509,7 @@ def workspace_data(ns,c):
         a=active[ref]
         pending.append({'date':r['next_date'],'category':category_for(r['kind'] or '',r['product']),
             'title':r['product'] or r['kind'],'subject':a['tag'],'nickname':a['nickname'],'paddock':a['paddock'],
-            'detail':'Önceki kayıttan plan','source':'legacy','id':r['id'],'url':'/health-edit?id='+str(r['id']),
+            'detail':'Önceki kayıttan plan','animal_id':r['animal_id'],'calf_id':r['calf_id'],'source':'legacy','id':r['id'],'url':'/health-edit?id='+str(r['id']),
             'edit_url':'/health-edit?id='+str(r['id'])})
     for r in ns['pregnancy_vaccine_tasks'](c,horizon_days=370):
         ref='animal:'+str(r['animal_id'])
@@ -522,7 +522,7 @@ def workspace_data(ns,c):
         a=active.get('animal:'+str(r['animal_id']),{})
         pending.append({'date':r['date'],'time':r['planned_at'][11:16],'category':'sync','title':r['task'].replace('Senkronizasyon · ',''),
             'subject':r['subject'],'nickname':a.get('nickname',''),'paddock':a.get('paddock',''),
-            'detail':r['detail'],'source':'sync','id':r['sync_step_id'],'state':r['state'],
+            'detail':r['detail'],'animal_id':r['animal_id'],'source':'sync','id':r['sync_step_id'],'state':r['state'],
             'url':'/health?'+urlencode({'category':'sync','plan':r['sync_plan_id'],'animal':r['animal_id']})+'#sync-step-'+str(r['sync_step_id'])})
     for r in pending:
         r.setdefault('state','overdue' if r['date']<today().isoformat() else 'today' if r['date']==today().isoformat() else 'upcoming')

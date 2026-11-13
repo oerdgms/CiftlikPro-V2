@@ -14,12 +14,13 @@ class FinancePWAAccessTests(unittest.TestCase):
     get = app_tests.AppEditionTests.get
     seed = app_tests.AppEditionTests.seed
 
-    def test_login_and_modules_have_server_rendered_update_entry_and_public_fallback(self):
+    def test_signed_in_pages_have_update_entry_and_public_fallback_remains(self):
         login = self.get('/login',False)[2].decode()
-        self.assertIn('class="cp-pwa-entry cp-pwa-login" data-cp-pwa-open',login)
-        for route in ('/login','/modules','/'):
+        self.assertNotIn('href="/app-install"',login)
+        for route in ('/modules','/'):
             html = self.get(route)[2].decode()
-            self.assertIn('href="/app-install"',html,route)
+            self.assertEqual(html.count('href="/app-install"'),1,route)
+            self.assertNotIn('id="cpInstall"',html,route)
         status, _, body, _ = self.get('/app-install',False)
         self.assertEqual(status,200)
         html = body.decode()

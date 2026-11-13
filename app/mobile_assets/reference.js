@@ -2,7 +2,6 @@
 (() => {
   'use strict';
   function start() {
-    if (!matchMedia('(max-width:900px)').matches) return;
     const configNode = document.getElementById('cpAppConfig');
     if (!configNode) return;
     const config = JSON.parse(configNode.textContent);
@@ -11,6 +10,29 @@
     const $$ = (s, root = document) => [...root.querySelectorAll(s)];
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const path = location.pathname, params = new URL(config.request_url || location.href, location.origin).searchParams;
+    if (path === '/reproduction-center') {
+      const links = $$('.repro-card-top > a.repro-photo, .repro-card-identity > a');
+      const compact = matchMedia('(max-width:900px)');
+      const routes = links.flatMap(link => {
+        const original = link.getAttribute('href');
+        if (!original || !original.startsWith('/reproduction-center?')) return [];
+        const selection = new URL(original, location.origin);
+        const id = selection.searchParams.get('animal');
+        if (!id || !/^\d+$/.test(id)) return [];
+        const detail = new URLSearchParams({id});
+        if (selection.searchParams.has('farm')) detail.set('farm', selection.searchParams.get('farm'));
+        return [{link, original, detail: '/animal?'+detail+'#reproduction', label: link.getAttribute('aria-label')}];
+      });
+      const updateLinks = () => routes.forEach(({link, original, detail, label}) => {
+        link.setAttribute('href', compact.matches ? detail : original);
+        if (link.matches('.repro-photo') && compact.matches) link.setAttribute('aria-label','Hayvan kartını aç');
+        else if (label !== null) link.setAttribute('aria-label',label);
+        else link.removeAttribute('aria-label');
+      });
+      updateLinks();
+      compact.addEventListener('change', updateLinks);
+    }
+    if (!matchMedia('(max-width:900px)').matches) return;
     const main = $('main.main'), title = $('#cpScreenTitle'), subtitle = $('#cpScreenSubtitle');
     const glyph = name => config.ref_icons?.[name] || $(`.cp-bottom-nav [data-cp-nav="${name}"] svg`)?.outerHTML || $('.cp-bottom-nav svg')?.outerHTML || '';
     const icon = name => config.ref_icons?.[name] || glyph(name);
@@ -20,6 +42,10 @@
     const isTasks = path === '/' && params.get('app_view') === 'tasks';
     const back = $('.cp-header-back');
     if (back) back.href = /^(\/animal|\/calf)(-edit)?$/.test(path) || ['/animal-add','/dairy-status'].includes(path) ? '/all-animals' : '/';
+    if (back && path === '/health' && params.get('from_tasks') === '1') {
+      back.href = '/?app_view=tasks';
+      back.setAttribute('aria-label','Görevlere dön');
+    }
     if (back && path === '/reports' && params.has('tab')) {
       const reportHome = new URL('/reports', location.origin);
       if (params.get('farm')) reportHome.searchParams.set('farm', params.get('farm'));
@@ -71,7 +97,7 @@
           if (display && !row.hidden) shown++;
         });
         filters.forEach(b => { const active = b.dataset.cpTaskFilter === key; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
-        empty.textContent = key === 'birth' ? 'Beklenen doğum bulunmuyor.' : 'Bu filtrede bekleyen iş veya hatırlatma yok.';
+        empty.textContent = key === 'done' ? 'Bugün tamamlanan iş yok.' : key === 'birth' ? 'Beklenen doğum bulunmuyor.' : 'Bu filtrede bekleyen iş veya hatırlatma yok.';
         empty.hidden = shown !== 0;
         list.hidden = shown === 0;
       }
@@ -81,7 +107,7 @@
       if (isTasks) {
         $('.cp-home-jobs', root).hidden = false;
         title.textContent = 'Görev Yönetimi';
-        $('.cp-section-head h2', root).textContent = 'Yapılacak İşler';
+        $('.cp-section-head h2', root).textContent = 'Tüm İşler';
         $('.cp-section-head>a', root).hidden = true;
       }
     }
@@ -232,10 +258,34 @@
         // table out of the mobile accordion instead of showing duplicate totals.
         if (name === 'finance') return;
         const target = $(`[data-ref-legacy="${name}"]`,root), panel = $(`.main>[data-animal-panel="${name}"]`);
-        if (!target || !panel) return;
-        const details = document.createElement('details');details.className = 'cp-ref-legacy-records';details.innerHTML = '<summary>Kayıt ayrıntıları ve işlemler</summary>';
+        if (!target) return;
+        const inlineHistory = name === 'reproduction' ? $('#cpInseminationDetails', target) : null;
+        if (!panel) return;
+        const details = inlineHistory?.parentElement || document.createElement('details');
+        if (!inlineHistory) {
+          details.className = 'cp-ref-legacy-records';
+          details.innerHTML = '<summary>Kayıt ayrıntıları ve işlemler</summary>';
+        }
         panel.classList.remove('animal-card-panel');panel.classList.add('cp-ref-legacy-panel');
-        details.append(panel);target.append(details);
+        if (inlineHistory) {
+          const link = $('a[href^="/inseminations?"]',panel);
+          if (link) {
+            link.href = '#cpInseminationDetails';
+            link.textContent = 'Tohumlama Detayları';
+            link.addEventListener('click', event => {
+              event.preventDefault();
+              inlineHistory.open = true;
+              const first = $('.cp-insemination-record', inlineHistory);
+              if (first && !$('.cp-insemination-record[open]', inlineHistory)) first.open = true;
+              $('summary', inlineHistory).focus({preventScroll:true});
+              inlineHistory.scrollIntoView({block:'start',behavior:motion});
+            });
+          }
+          details.insertBefore(panel, inlineHistory);
+        } else {
+          details.append(panel);
+          target.append(details);
+        }
         if (name==='growth' || name==='operations') details.open = true;
       }
       ['reproduction','health','growth','finance','history','operations'].forEach(movePanel);

@@ -3,7 +3,7 @@ import html
 import json
 from urllib.parse import parse_qs, urlparse
 
-SECTIONS = {'business':'İşletme Bilgileri', 'summary':'Sürü Özeti', 'tasks':'Yaklaşan İşlemler'}
+SECTIONS = {'summary':'Sürü Özeti', 'tasks':'Yaklaşan İşlemler'}
 CARDS = {'all':'Genel', 'lactating':'Sağmal', 'dry':'Kuru', 'calf':'Buzağı', 'heifer':'Düve', 'male':'Erkek'}
 DEFAULT = {'sections':list(SECTIONS), 'cards':list(CARDS), 'task_limit':3}
 
@@ -31,7 +31,11 @@ def load(ns, username):
     with ns['db']() as c:
         row=c.execute('select setting_value from settings where setting_key=?',('reference_home_'+username,)).fetchone()
     if row:
-        try:return validate(json.loads(row['setting_value']))
+        try:
+            config=json.loads(row['setting_value'])
+            if isinstance(config,dict) and isinstance(config.get('sections'),list) and 'business' in config['sections']:
+                config['sections']=[key for key in config['sections'] if key!='business'] or list(SECTIONS)
+            return validate(config)
         except (ValueError,TypeError):pass
     return defaults()
 

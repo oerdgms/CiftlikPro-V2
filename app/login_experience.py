@@ -43,16 +43,16 @@ def document(html,handler,registry):
      html.cp-login-stage body.cp-app.cp-login .login-logo{font-size:29px!important}
      html.cp-login-stage body.cp-app.cp-login .login-visual p{margin:14px 0 0!important}
      html.cp-login-stage body.cp-app.cp-login .login-panel{padding-top:clamp(160px,24svh,240px)!important;margin-top:auto!important}
-     html.cp-login-stage body.cp-app.cp-login .login-form label{margin:7px 0 3px!important;font-size:11px!important}
-     html.cp-login-stage body.cp-app.cp-login .login-form input,html.cp-login-stage body.cp-app.cp-login #cpLoginFarm{height:44px!important;min-height:44px!important;padding:9px 12px!important;font-size:16px!important}
-     html.cp-login-stage body.cp-app.cp-login .password-wrap #loginPassword{height:44px!important;min-height:44px!important;padding:9px 88px 9px 12px!important}
-     html.cp-login-stage body.cp-app.cp-login .password-toggle{width:80px!important;height:44px!important;min-height:44px!important}
-     html.cp-login-stage body.cp-app.cp-login .login-submit{margin-top:12px!important;min-height:44px!important;height:44px!important}
-     html.cp-login-stage body.cp-app.cp-login .forgot{margin-top:7px!important;min-height:32px!important;display:flex!important;align-items:center!important;justify-content:center!important}
-     html.cp-login-stage body.cp-app.cp-login .cp-pwa-login{width:auto!important;align-self:center!important;min-height:36px!important;margin:5px auto 0!important;padding:6px 14px!important;font-size:11px!important;border-radius:9px!important;background:#ffffffdb!important}
+     html.cp-login-stage body.cp-app.cp-login .login-form{width:100%!important;max-width:320px!important;margin-inline:auto!important}
+     html.cp-login-stage body.cp-app.cp-login .login-form label{margin:6px 0 3px!important;font-size:11px!important}
+     html.cp-login-stage body.cp-app.cp-login .login-form input,html.cp-login-stage body.cp-app.cp-login #cpLoginFarm{height:44px!important;min-height:44px!important;padding:7px 11px!important;font-size:16px!important;box-sizing:border-box!important}
+     html.cp-login-stage body.cp-app.cp-login .password-wrap #loginPassword{height:44px!important;min-height:44px!important;padding:7px 78px 7px 11px!important}
+     html.cp-login-stage body.cp-app.cp-login .password-toggle{width:72px!important;height:44px!important;min-height:44px!important}
+     html.cp-login-stage body.cp-app.cp-login .login-submit{margin-top:10px!important;min-height:44px!important;height:44px!important;padding:6px 12px!important}
+     html.cp-login-stage body.cp-app.cp-login .forgot{margin-top:6px!important;min-height:32px!important;display:flex!important;align-items:center!important;justify-content:center!important}
      html.cp-login-stage body.cp-app.cp-login .login-version{margin-top:8px!important;font-size:9px!important}
      @media(max-height:650px){html.cp-login-stage body.cp-app.cp-login .login-shell{padding-top:18px!important}html.cp-login-stage body.cp-app.cp-login .login-panel{padding-top:90px!important}}
-     html body.cp-app.cp-login #cpLoginFarm{font-size:16px!important;min-height:47px!important;width:100%!important;max-width:100%!important;margin:0!important;padding:11px 12px!important;background:#fffffff0!important;border:1px solid #ffffffa0!important;border-radius:10px!important;color:#193a2b!important}
+     html body.cp-app.cp-login #cpLoginFarm{width:100%!important;max-width:100%!important;margin:0!important;background:#fffffff0!important;border:1px solid #ffffffa0!important;border-radius:10px!important;color:#193a2b!important}
     }}
     </style>'''.replace('PREVIEW',preview_data())
     def html_tag(match):

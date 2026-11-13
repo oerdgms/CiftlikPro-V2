@@ -26,9 +26,10 @@ class RationRecalculationTests(unittest.TestCase):
             c.execute('insert into paddock_rations(paddock_id,ration_id,start_date,active) values(?,?,?,1)', (pid, rid, yesterday))
         return rid
 
-    def fake_solve(self, feeds, weight, adg, animal, age, phase, percent, fixed_quantities=None):
+    def fake_solve(self, feeds, weight, adg, animal, age, phase, percent, fixed_quantities=None, reference_quantities=None):
         quantities = [float(f['kg_per_head_day']) if f['locked'] else float(f['kg_per_head_day'])+.1 for f in feeds]
         self.assertEqual(fixed_quantities, {int(f['id']):float(f['kg_per_head_day']) for f in feeds if f['locked']})
+        self.assertEqual(reference_quantities, [float(f['kg_per_head_day']) for f in feeds])
         metrics = server.smart_ration_metrics(feeds, quantities)
         return (quantities, metrics, []), server.ration_requirement_targets(weight, adg, animal, age, phase, percent), ''
 
@@ -101,14 +102,36 @@ class RationRecalculationTests(unittest.TestCase):
 
     def test_http_preview_and_apply_return_to_same_ration(self):
         rid=self.seed()
+        old_name = 'Akıllı Çözüm 270kg 1.80 GCAA 1211-103000'
+        new_name = 'Akıllı Çözüm 450kg 1.80 GCAA 1211-103000'
+        with server.db() as c:
+            c.execute('update rations set name=?, target_weight_kg=270 where id=?', (old_name,rid))
         with patch.object(server,'solve_smart_ration',side_effect=self.fake_solve):
             text,url=self.post('/ration/recalculate',{'ration_id':rid,'target_weight_kg':450,'target_dm_pct_bw':2.5})
         self.assertIn('/ration/recalculate-preview?',url)
         self.assertIn('Aynı Rasyona Uygula',text)
+        self.assertIn('Yeni rasyon adı: <strong>'+new_name+'</strong>',text)
+        with server.db() as c:
+            self.assertEqual(c.execute('select name from rations where id=?',(rid,)).fetchone()[0], old_name)
         token=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['token'][0]
         _,url=self.post('/ration/recalculate-apply',{'token':token})
         self.assertIn('/ration-workbench?id='+str(rid),url)
+        with server.db() as c:
+            self.assertEqual(c.execute('select name from rations where id=?',(rid,)).fetchone()[0], new_name)
         self.assertEqual(self.get('/ration/recalculate-preview?token='+token,False)[3].split('?')[0],self.base+'/login')
+
+    def test_duplicate_proposed_name_is_disambiguated_without_overwriting(self):
+        rid = self.seed()
+        with server.db() as c:
+            c.execute("update rations set name='Padok A 270–350 kg', target_weight_kg=270 where id=?", (rid,))
+            other = c.execute("insert into rations(name,created_at) values('Padok A 270–350 kg · Hedef 450 kg',datetime('now'))").lastrowid
+        token = self.prepare(rid)
+        recalc.apply(vars(server),token,'admin')
+        with server.db() as c:
+            self.assertEqual(c.execute('select name from rations where id=?',(rid,)).fetchone()[0],
+                             'Padok A 270–350 kg · Hedef 450 kg (2)')
+            self.assertEqual(c.execute('select name from rations where id=?',(other,)).fetchone()[0],
+                             'Padok A 270–350 kg · Hedef 450 kg')
 
     def test_real_solver_preserves_locked_precision_and_rejects_out_of_bounds(self):
         names=['ARPA SAMANI','ARPA EZMESİ','BUĞDAY EZMESİ',"YONCA KURU OTU, KM'de %17-19 HP, %40-44 NDF",'MISIR SİLAJI, %29-33 KM','SUNAR 15.26 GELİŞTİRME BESİ YEMİ']
@@ -120,6 +143,31 @@ class RationRecalculationTests(unittest.TestCase):
         solved,_,message=server.solve_smart_ration(feeds,400,1.3,'Besi Erkek',14,'Otomatik',2.5,fixed_quantities={feeds[-1]['id']:99})
         self.assertIsNone(solved)
         self.assertIn('Kilitli yem',message)
+
+    def test_recalculation_prefers_small_changes_for_270_to_300_kg_example(self):
+        names=['ARPA EZMESİ','ARPA SAMANI','BUĞDAY EZMESİ','MISIR PULU (FLAKED)',
+               'MISIR SİLAJI, %29-33 KM','SUNAR 15.26 GELİŞTİRME BESİ YEMİ',
+               'SUNAR BUZAĞI BÜYÜTME ÖZEL DÖNEM YEMİ',
+               "YONCA KURU OTU, KM'de %19-21 HP, %37-40 NDF"]
+        current=[.68,.50,.66,.52,2.91,.41,4.16,2.20]
+        with server.db() as c:
+            feeds=[c.execute('select * from feed_catalog where name=?',(name,)).fetchone() for name in names]
+        self.assertTrue(all(feeds))
+        solved,targets,message=server.solve_smart_ration(
+            feeds,300,1.80,'Besi Erkek',0,'Otomatik',2.75,
+            reference_quantities=current)
+        self.assertIsNotNone(solved,message)
+        quantities,metrics,_=solved
+        changed=sum(abs(a-b)>=.04 for a,b in zip(quantities,current))
+        total_change=sum(abs(a-b) for a,b in zip(quantities,current))
+        self.assertLessEqual(changed,4,quantities)
+        self.assertGreaterEqual(sum(abs(a-b)<1e-9 for a,b in zip(quantities,current)),4,quantities)
+        self.assertLess(total_change,4.0,quantities)
+        self.assertAlmostEqual(metrics['dm_kg'],targets['dmi_kg'],delta=targets['dmi_kg']*.035)
+        self.assertGreaterEqual(metrics['achievable_adg_kg'],1.7995)
+        self.assertGreaterEqual(metrics['roughage_pct_dm'],targets['roughage_min']-.05)
+        self.assertLessEqual(metrics['roughage_pct_dm'],targets['roughage_max']+.05)
+        self.assertIn('mevcut rasyona en az müdahale',metrics['solver_engine'])
 
 
 if __name__=='__main__':unittest.main()

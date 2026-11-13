@@ -28,7 +28,7 @@
 @layer cp-reference {
  #cpEnterpriseBar{display:block!important}
  @media screen and (max-width:900px){
-  #cpEnterpriseBar:not(.cp-enterprise-bar--home){display:none!important}
+  #cpEnterpriseBar{display:none!important}
  }
 }
 

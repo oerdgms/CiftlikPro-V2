@@ -1,3 +1,30 @@
+# AppEdition 2.0.73 – Mobil Görevler
+
+Sağlık ekranı ve hayvanın sağlık kartından görevlere dönüş eklendi. Tüm İşler ekranı bugünkü sağlık uygulamalarını ve tamamlanan vadeli ödemeleri gösterir. Tek hayvan görevlerinde küpe, hayvan kartını açar. Mobil ana sayfanın alt bağlantıları kaldırıldı.
+
+# AppEdition 2.0.72 – Hayvan Kartında Tohumlama Detayları
+
+Mobil hayvan kartında tohumlama geçmişi kart içinde açılır. Her denemenin tarihi, boğa ve uygulayıcı bilgileri, gebelik sonucu ve tahmini doğum tarihi görülebilir.
+
+# AppEdition 2.0.71 – Rasyon Adı ve Modüller
+
+- Mevcut besi rasyonu yeni canlı ağırlıkla yeniden hesaplanınca önerilen ad önizlemede gösterilir. Onaylandığında aynı rasyon adı ve ağırlığı birlikte güncellenir; padok bağlantıları korunur.
+- Modüller ekranının altındaki güncelleme kısayolu kaldırıldı. Uygulama ve güncellemeler sol menüde kalır.
+- Mobil ana sayfadan İşletme Kısayolları kutusu kaldırıldı; kayıtlı sürü kartı ve hatırlatma tercihleri korunur.
+
+# AppEdition 2.0.70 – Mobil Üreme ve Giriş
+
+- Mobil hayvan kartında gebelik yaşı gün ve yaklaşık ay olarak birlikte gösterilir.
+- Üreme Merkezi'nde hayvanın küpesine, adına veya fotoğrafına dokunmak mobilde doğrudan hayvan kartının Üreme bölümünü açar. Masaüstündeki seçim ve sonuç işlemleri korunur.
+- Mobil giriş formu daraltıldı. İşletme, kullanıcı adı, şifre ve giriş düğmesi 44 piksel dokunma yüksekliğini korur.
+- Uygulama ve güncellemeler kısayolu giriş ekranından, aktif işletme bandı ana sayfadan kaldırıldı. Her iki işlem oturum açıldıktan sonra sol menüden erişilebilir.
+
+# AppEdition 2.0.69 – Rasyonda En Az Değişiklik
+
+Kayıtlı bir besi rasyonunda canlı ağırlık veya KM hedefi güncellendiğinde mevcut reçete artık solverın başlangıç ve koruma referansıdır. Güvenlik, KM, HP, GCAA ve faz hedefleri karşılandıktan sonra önce değişen yem sayısı, sonra toplam miktar hareketi küçültülür; maliyet en son değerlendirilir. Kilitli yemler aynen kalır ve 40 gramdan küçük normal yem sapmaları kayıt değişikliği sayılmaz.
+
+270 kg / 1,80 GCAA olarak kaydedilmiş örneğin 300 kg ve KM %2,75 hedefiyle yeniden hesaplama regresyonu eklendi. Sekiz yemin en az dördü aynen korunur, en fazla dört satır değiştirilir; sonuç KM bandında, fazın kaba/kesif koridorunda ve yuvarlama sonrasında en az 1,80 kg/gün GCAA kapasitesindedir. Önizleme değişen/korunan yem sayılarını ve toplam miktar hareketini gösterir.
+
 # AppEdition 2.0.68 – Mobil Ana Sayfa Görünümü
 
 Masaüstü panosu ve Modern/Klasik seçici mobilde ilk çizimden itibaren gizlenir. Ana sayfa hatırlatmaları ayarlanan sayıyla sınırlı kalır; Görev Yönetimi ve Doğumlar filtresi tam listeyi açar. Masaüstü pano seçimi korunur.

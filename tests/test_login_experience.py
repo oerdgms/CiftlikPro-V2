@@ -24,7 +24,7 @@ class LoginExperienceTests(unittest.TestCase):
   self.assertIn('rel="preload" as="image" href="/app-assets/login.jpg?v='+release_info.VERSION+'"',text)
   self.assertIn('data:image/jpeg;base64,',text)
   self.assertLess(text.index('rel="preload"'),text.index('<style>'))
-  self.assertIn('name="password"',text);self.assertIn('/forgot-password',text);self.assertIn('data-cp-pwa-open',text)
+  self.assertIn('name="password"',text);self.assertIn('/forgot-password',text);self.assertNotIn('data-cp-pwa-open',text)
  def test_login_selected_farm_sets_session_and_remember_cookie(self):
   a=self.create();status,headers,_=self.login(a['id'])
   self.assertEqual(status,303);self.assertEqual(parse_qs(urlsplit(headers['Location']).query)['farm'],[a['id']])

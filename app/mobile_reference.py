@@ -147,11 +147,47 @@ def birth_reminders(ns, connection, animals=None, *, horizon_days=45, today=None
     return sorted(rows, key=lambda row:(row['date'],row['subject'],row['animal_id']))
 
 
-def home(ns, username, icon, task_url):
+def completed_today(ns, c):
+    today = date.today().isoformat()
+    rows = []
+    for record in c.execute("""select h.id, h.animal_id, h.calf_id, h.kind, h.product,
+            a.tag adult_tag, ca.tag calf_tag from health h
+            left join animals a on a.id=h.animal_id left join calves ca on ca.id=h.calf_id
+            where h.applied_date=? order by h.id desc""", (today,)):
+        rows.append(dict(date=today, source='health_done', state='done', status='Yapıldı',
+                         task=record['product'] or record['kind'] or 'Sağlık işlemi',
+                         subject=record['adult_tag'] or record['calf_tag'] or 'Arşiv kaydı',
+                         animal_id=record['animal_id'], calf_id=record['calf_id']))
+    for record in c.execute("""select id, supplier, category, amount from finance where
+            payment_method='Vadeli' and payment_status='Ödendi' and paid_date=? order by id desc""", (today,)):
+        rows.append(dict(date=today, source='finance', state='done', status='Ödendi',
+                         finance_id=record['id'], task='Vadeli ödeme',
+                         subject=record['supplier'] or record['category'] or 'Vadeli ödeme',
+                         detail=ns['money'](record['amount'])))
+    return rows
+
+
+def task_animal_url(row, by_tag):
+    if row.get('source') in ('birth', 'health_done', 'synchronization'):
+        route = 'animal' if row.get('animal_id') else 'calf'
+        ident = row.get('animal_id') or row.get('calf_id')
+        return f'/{route}?id={int(ident)}' if ident else ''
+    if row.get('source') in ('legacy', 'pregnancy', 'course') and row.get('scope_type') not in ('multi', 'paddock'):
+        return by_tag.get(row['subject'], '')
+    return ''
+
+
+def home(ns, username, icon, task_url, *, task_view=False):
     with ns['db']() as c:
         counts = ns['dashboard_herd_counts'](c)
         records = herd_records(ns,c)
         births = birth_reminders(ns,c,(r for r in records if r['source']=='animal'))
+        completed = completed_today(ns,c) if task_view else []
+        by_tag = {}
+        for record in records:
+            tag = record['tag']
+            by_tag[tag] = '' if tag in by_tag else f'/{record["source"]}?id={int(record["id"])}'
+
     config = home_layout.load(ns, username)
     card_map = {card['key']:card for card in summary_cards(counts,records)}
     cards = [card_map[key] for key in config['cards']]
@@ -161,6 +197,7 @@ def home(ns, username, icon, task_url):
         art = icon('paddocks') if kind!='cow' else cow()
         summary += f'<a class="cp-ref-stat cp-bg-{tone}" href="{esc(url)}"><span>{art}</span><small>{label}</small><b>{count}</b></a>'
     rows = sorted([*ns['dashboard_export_tasks']('all'),*births], key=lambda row:(row['date'],str(row['subject'])))
+    rows += completed
     states = {key:sum(row['state']==key for row in rows) for key in ('today','upcoming','overdue')}
     tasks = ''
     for index, row in enumerate(rows):
@@ -171,16 +208,27 @@ def home(ns, username, icon, task_url):
         if row.get('source')=='course' and row.get('target_count',0)>3 and row.get('target_tags'):
             tags = row['target_tags'].split(', ')
             detail = detail.removesuffix(' · '+row['target_tags'])+' · '+', '.join(tags[:2])+f" ve {row['target_count']-2} diğer hayvan"
-        tasks += f'<a class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" data-cp-kind="{kind}"{preview_overflow} href="{esc(task_url(row))}"><span class="cp-ref-task-icon cp-tone-{tone}">{glyph(kind,icon)}</span><div><b>{esc(row["task"])}</b><span>{esc(row["subject"])}{(" · "+esc(detail)) if detail else ""}</span></div><small class="cp-ref-due cp-tone-{ "pink" if row["state"] in ("today","overdue") else "blue"}">{esc(row["status"])}</small></a>'
-    tabs = ''.join(f'<button type="button" data-cp-task-filter="{key}">{label}<span>{count}</span></button>' for key,label,count in [('all','Tümü',len(rows)),('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue']),('birth','Doğumlar',len(births))])
+        card_url = task_animal_url(row, by_tag)
+        status_tone = 'green' if row['state']=='done' else 'pink' if row['state'] in ('today','overdue') else 'blue'
+        href = card_url+'#health' if row['source']=='health_done' and card_url else task_url(row)
+        subject = (f'<a class="cp-task-animal" href="{esc(card_url)}">{esc(row["subject"])}</a>'
+                   if card_url else esc(row['subject']))
+        tasks += (f'<div class="cp-task cp-{kind}" data-cp-state="{esc(row["state"])}" data-cp-kind="{kind}"{preview_overflow}>'
+                  f'<span class="cp-ref-task-icon cp-tone-{tone}">{glyph(kind,icon)}</span>'
+                  f'<div><b><a class="cp-task-action" href="{esc(href)}">{esc(row["task"])}</a></b>'
+                  f'<span>{subject}{(" · "+esc(detail)) if detail else ""}</span></div>'
+                  f'<small class="cp-ref-due cp-tone-{status_tone}">{esc(row["status"])}</small></div>')
+    filters = [('all','Tümü',len(rows)),('today','Bugün',states['today']),('upcoming','Yaklaşan',states['upcoming']),('overdue','Geciken',states['overdue']),('birth','Doğumlar',len(births))]
+    if task_view:
+        filters.append(('done','Bugün Yapılanlar',len(completed)))
+    tabs = ''.join(f'<button type="button" data-cp-task-filter="{key}">{label}<span>{count}</span></button>' for key,label,count in filters)
     parts = {
-        'business':f'<details class="cp-ref-business" data-cp-home-section="business"><summary><span class="cp-tone-blue">{glyph("identity")}</span><div><b>İşletme Kısayolları</b><small>Ayarlar, padoklar ve finans kısayolları</small></div>{glyph("down")}</summary><div class="cp-ref-business-links"><a href="/farm-profile">İşletme ayarları {glyph("chevron")}</a><a href="/paddocks">Padokları görüntüle {glyph("chevron")}</a><a href="/finance">Finans özeti {glyph("chevron")}</a></div></details>',
         'summary':f'<section data-cp-home-section="summary"><div class="cp-ref-heading"><h2>Sürü Özeti</h2><a href="/all-animals">Tüm hayvanlar ›</a></div><div class="cp-ref-summary">{summary}</div></section>',
         'tasks':f'<section class="cp-home-jobs" data-cp-home-section="tasks"><div class="cp-ref-heading cp-section-head"><h2>İşler ve Hatırlatmalar</h2><span class="cp-total" hidden>{len(rows)}</span><a href="/?app_view=tasks">Tüm işler ›</a></div><div class="cp-task-tabs cp-ref-task-tabs">{tabs}</div><div class="cp-ref-task-list cp-task-list">{tasks}</div><div class="cp-empty cp-filter-empty" hidden>Planlanan iş veya bekleyen ödeme yok.</div></section>'
     }
     ordered = config['sections']+[key for key in home_layout.SECTIONS if key not in config['sections']]
     content = ''.join(parts[key] if key in config['sections'] else parts[key].replace('data-cp-home-section="'+key+'"','data-cp-home-section="'+key+'" hidden',1) for key in ordered)
-    return f'<section class="cp-ref cp-ref-home cp-home cp-mobile-only" data-task-limit="{config["task_limit"]}">{content}<div class="cp-ref-home-foot"><a href="/home-layout">Ana sayfayı düzenle</a><a href="/notifications">Bildirimler {icon("bell")}</a></div></section>'
+    return f'<section class="cp-ref cp-ref-home cp-home cp-mobile-only" data-task-limit="{config["task_limit"]}">{content}</section>'
 
 
 def herd_selection(ns, request_url):
@@ -286,6 +334,25 @@ def accordion(name,title,body,icon,opened=False):
     return f'<details class="cp-ref-accordion" data-ref-section="{name}" {"open" if opened else ""}><summary><span class="cp-tone-{ "pink" if name in ("health","reproduction") else "orange" if name=="finance" else "blue"}">{icon}</span><b>{esc(title)}</b>{glyph("down")}</summary><div class="cp-ref-accordion-body">{body}</div></details>'
 
 
+def insemination_details(records, animal_id, fmt):
+    rows = []
+    for record in records:
+        when = fmt(record['insemination_date'])
+        fields = keyvalues([
+            ('Tohumlama Tarihi', when),
+            ('Boğa Küpe No', record['bull_tag']),
+            ('Boğa Adı', record['bull_name']),
+            ('Tohumlayan', record['inseminator']),
+            ('Gebelik Sonucu', record['pregnancy_result']),
+            ('Tahmini Doğum', fmt(record['due_date'])),
+        ])
+        rows.append(f'<details class="cp-insemination-record"><summary><strong>{esc(record["attempt"])}. deneme</strong> · {esc(when)}</summary>{fields}</details>')
+    history = ''.join(rows) or '<p class="cp-ref-note">Henüz tohumlama kaydı yok.</p>'
+    return (f'<details id="cpInseminationDetails" class="cp-insemination-details">'
+            f'<summary>Tohumlama Detayları ({len(records)})</summary>{history}'
+            f'<a class="cp-ref-bar" href="/inseminations?animal={animal_id}">+ Yeni tohumlama kaydı</a></details>')
+
+
 def detail_markup(ns, request_url, icon):
     parsed = urlparse(request_url);source = 'calf' if parsed.path=='/calf' else 'animal'
     raw_id = (parse_qs(parsed.query).get('id') or [''])[0]
@@ -316,7 +383,8 @@ def detail_markup(ns, request_url, icon):
     active = a.get('status','Aktif')=='Aktif' and not loss and not a.get('promoted_animal_id')
     fmt = ns['fmt_date'];money=ns['money'];due = (pregnant['due_date'] or '') if pregnant else ''
     start = day(pregnant['insemination_date']) if pregnant else None
-    gestation = f'{max(0,(date.today()-start).days)/30.4:.1f} ay' if start else '—'
+    gestation_days = max(0, (date.today() - start).days) if start else None
+    gestation = f'{gestation_days} gün · {gestation_days/30.4:.1f} ay'.replace('.', ',') if gestation_days is not None else '—'
     life_type = 'Buzağı' if source=='calf' else 'Sağmal' if dairy_state and dairy_state['status']=='lactating' else dairy_state['label'] if dairy_state else 'Erkek'
     route = '/calf' if source=='calf' else '/animal';edit=('/calf-edit' if source=='calf' else '/animal-edit')+'?id='+str(sid)
     purl='/paddocks'+('?selected='+str(a['paddock_id']) if a.get('paddock_id') else '')
@@ -330,13 +398,13 @@ def detail_markup(ns, request_url, icon):
         identity += dairy_info
     reproduction = keyvalues([('Gebelik Durumu','Gebe' if pregnant else 'Aktif gebelik yok'),('Gebelik Yaşı',gestation),('Tohumlama Tarihi',fmt(pregnant['insemination_date']) if pregnant else ''),('Beklenen Doğum',fmt(due)),('Son Kızgınlık',fmt(estrus[0]['estrus_date']) if estrus else ''),('Kızgınlık Periyodu',str(cycle.get('cycle_days'))+' gün' if cycle.get('cycle_days') else '')])
     if source=='animal':
-        reproduction += '<div class="cp-ref-subhead"><b>Tohumlama Kayıtları</b><a href="/inseminations?animal='+str(sid)+'">+ Ekle</a></div><div class="cp-ref-rows">'
-        for r in ins[:5]:
-            reproduction += f'<a href="/inseminations?animal={sid}"><span>{esc(fmt(r["insemination_date"]))}</span><span>{r["attempt"]}. deneme</span><span class="cp-ref-badge cp-tone-{ "green" if ns["is_pregnant_value"](r["pregnancy_result"]) else "pink"}">{esc(r["pregnancy_result"])}</span></a>'
-        reproduction += ('<p class="cp-ref-note">Henüz tohumlama kaydı yok.</p>' if not ins else '')+'</div>'
-        reproduction += f'<a class="cp-ref-bar" href="/reproduction-center?animal={sid}">Tüm üreme bilgilerini gör ›</a><div data-ref-legacy="reproduction"></div>'
+        reproduction += (f'<a class="cp-ref-bar" href="/reproduction-center?animal={sid}">Tüm üreme bilgilerini gör ›</a>'
+                         '<div data-ref-legacy="reproduction"><details class="cp-ref-legacy-records">'
+                         '<summary>Kayıt ayrıntıları ve işlemler</summary>'
+                         + insemination_details(ins, sid, fmt) + '</details></div>')
+    task_return = '<a class="cp-ref-bar cp-task-return" href="/?app_view=tasks">‹ Görevlere dön</a>'
     hstats = f'<div class="cp-ref-health-stats"><div class="cp-tone-green">{glyph("shield")}<small>Yaklaşan Aşı</small><b>{sum(r["kind"]=="Aşı" for r in pending)}</b></div><div class="cp-tone-blue">{glyph("shield")}<small>Aktif Tedavi</small><b>{treatments}</b></div><div class="cp-tone-orange">{glyph("shield")}<small>Geçmiş Kayıt</small><b>{len(health)}</b></div></div>'
-    hrows = '<div class="cp-ref-rows">'
+    hrows = task_return + '<div class="cp-ref-rows">'
     for r in pending[:5]:
         hrows += f'<a href="/health?{esc(urlencode({"search":a["tag"],"plan":r["course_id"],"filter":"all"}))}"><span class="cp-tone-blue">{icon("health")}</span><div><b>{esc(r["product"])}</b><small>{esc(fmt(r["planned_date"]))} · {r["dose_no"]}. doz</small></div><span class="cp-ref-badge cp-tone-orange">{ "Gecikti" if str(r["planned_date"])<date.today().isoformat() else "Bugün" if str(r["planned_date"])==date.today().isoformat() else "Planlandı"}</span></a>'
     for r in health[:3]:

@@ -116,6 +116,15 @@ class InterfaceParityTests(unittest.TestCase):
         with server.db() as c:c.execute('insert into settings(setting_key,setting_value) values(?,?)',('reference_home_broken','not json'))
         self.assertEqual(home_layout.load(vars(server),'broken'),home_layout.defaults())
 
+    def test_removed_business_shortcuts_preserve_saved_preferences(self):
+        config={'sections':['tasks','business'],'cards':['male'],'task_limit':5}
+        with server.db() as c:
+            c.execute('insert into settings(setting_key,setting_value) values(?,?)',
+                      ('reference_home_legacy',json.dumps(config)))
+        config['sections']=['tasks']
+        self.assertEqual(home_layout.load(vars(server),'legacy'),config)
+        self.assertNotIn('value="business"',home_layout.editor(vars(server),'legacy'))
+
     def test_layout_order_visibility_and_count_persist_per_user(self):
         config={'sections':['tasks','summary'],'cards':['male','lactating','all'],'task_limit':5}
         home_layout.save(vars(server),'admin',config)
@@ -124,7 +133,7 @@ class InterfaceParityTests(unittest.TestCase):
         mobile=ref.home(vars(server),'admin',mobile_ui.icon,mobile_ui.task_url)
         desktop=wide.summary(vars(server),'admin')
         self.assertIn('data-task-limit="5"',mobile)
-        self.assertIn('data-cp-home-section="business" hidden',mobile)
+        self.assertNotIn('data-cp-home-section="business"',mobile)
         self.assertLess(mobile.index('data-cp-home-section="tasks"'),mobile.index('data-cp-home-section="summary"'))
         self.assertLess(mobile.index('<small>Erkek</small>'),mobile.index('<small>Sağmal</small>'))
         self.assertLess(desktop.index('<span>Erkek</span>'),desktop.index('<span>Sağmal</span>'))

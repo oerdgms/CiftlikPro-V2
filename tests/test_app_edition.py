@@ -287,6 +287,8 @@ class AppEditionTests(unittest.TestCase):
         # This keeps the Enterprise core regression gate deterministic.
         # 2.0.45 snapshots include the explicitly requested selectable KM target
         # and unified protein summary; new tests cover those changed behaviors.
+        # 2.0.69 updates only solve_smart_ration for reference-aware, minimum-change
+        # recalculation; tests/test_ration_recalculation.py pins that new behavior.
         expected=json.loads((ROOT/'tests'/'enterprise_core_source_snapshot.json').read_text())
         source=(ROOT/'app'/'server.py').read_text()
         # Exclude only the added dashboard link; retain the original core hashes.
