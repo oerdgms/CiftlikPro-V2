@@ -284,14 +284,16 @@ def install(ns):
             document = enhance(document, 'Giriş', path, '', login=True)
         match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
         if match:
-            # Light headers need dark status text in iOS standalone mode.
+            # Keep the iOS standalone status bar separate from the app header.
             view = (parse_qs(urlparse(self.path).query).get('app_view') or [''])[0]
             is_home = path=='/' and view not in ('modules','tasks')
             if path == '/' and view == 'tasks':
                 document = document.replace('cp-reference cp-route-home"', 'cp-reference cp-route-home cp-tasks-route"', 1)
             if path!='/login' and not is_home:
                 document = document.replace('<meta name="theme-color" content="#063e2b">', '<meta name="theme-color" content="#fbfcfd">', 1)
+            if path != '/login':
                 document = document.replace('name="apple-mobile-web-app-status-bar-style" content="black-translucent"', 'name="apple-mobile-web-app-status-bar-style" content="default"', 1)
+
                 match = re.search(r'(<script type="application/json" id="cpAppConfig">)(.*?)(</script>)',document,re.S)
             config = json.loads(match.group(2))
             config['request_url'] = self.path

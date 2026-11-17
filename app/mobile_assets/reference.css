@@ -52,6 +52,13 @@ body.cp-reference .main{padding:12px 12px var(--cp-content-bottom)!important}
 body.cp-reference a{text-decoration:none!important}
 body.cp-reference button,body.cp-reference input,body.cp-reference select{font-family:inherit!important}
 body.cp-reference .cp-app-header{background:#fbfcfd!important;color:#111b31!important;border-bottom:1px solid #e6ecec!important;box-shadow:none!important;display:grid!important;grid-template-columns:38px minmax(0,1fr) 38px!important;gap:6px!important;padding:env(safe-area-inset-top) 10px 0!important;height:var(--cp-head)!important;align-items:center!important}
+/* Keep the header controls clear of the iOS standalone status-bar material. */
+@media (display-mode: standalone){
+ @supports (-webkit-touch-callout: none){
+  html:has(body.cp-reference:not(.cp-login)){--cp-head:calc(68px + env(safe-area-inset-top))!important}
+  body.cp-reference:not(.cp-login) .cp-app-header{padding-top:calc(env(safe-area-inset-top) + 14px)!important}
+ }
+}
 body.cp-reference .cp-header-title{display:block!important;text-align:center!important;grid-column:2!important;grid-row:1!important}
 body.cp-reference .cp-header-title b{font-size:17px!important;font-weight:750!important;line-height:1.3!important;letter-spacing:-.45px!important}
 body.cp-reference .cp-header-title small{display:none!important}
@@ -156,8 +163,8 @@ body.cp-reference .cp-ref-search input::placeholder{font-size:12px!important;col
 body.cp-reference .cp-ref-search button{width:29px!important;height:33px!important;padding:5px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:#578372!important}
 body.cp-reference .cp-ref-search button .cp-icon{width:17px!important;height:17px!important}
 body.cp-reference .cp-ref-filter-row{display:flex!important;align-items:center!important;gap:8px!important;margin:8px 0!important}
-body.cp-reference .cp-ref-chips{display:flex!important;gap:5px!important;overflow-x:auto!important;min-width:0!important;flex:1!important;scrollbar-width:none!important}
-body.cp-reference .cp-ref-chips a{flex:none!important;font-size:12px!important;line-height:1.2!important;padding:9px 11px!important;border-radius:9px!important;background:#fff!important;color:#506078!important;white-space:nowrap!important;min-height:34px!important}
+body.cp-reference .cp-ref-chips{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important;min-width:0!important;flex:1!important}
+body.cp-reference .cp-ref-chips a{text-align:center!important;font-size:12px!important;line-height:1.2!important;padding:9px 2px!important;border-radius:9px!important;background:#fff!important;color:#506078!important;white-space:nowrap!important;min-height:34px!important}
 body.cp-reference .cp-ref-chips a.active{background:#dcf6e5!important;color:#0b6837!important;font-weight:700!important}
 body.cp-reference .cp-ref-filter-button{width:38px!important;height:36px!important;padding:8px!important;flex:none!important;border:1px solid #e4e9ee!important;border-radius:9px!important;background:#fff!important;color:#3e536d!important}
 body.cp-reference .cp-ref-filter-button .cp-icon{width:21px!important;height:21px!important}
@@ -358,3 +365,9 @@ body.cp-reference .cp-ref-finance-breakdown>.cp-ref-kv{padding:12px!important}
 .cp-task-action{color:inherit!important;text-decoration:none!important;display:inline-block}
 .cp-task-return{margin:0 0 10px}
 @media(min-width:901px){.hc-workspace>.cp-task-return{display:none!important}}
+
+/* Stretch the task link over the row, with the ear tag on top as its own link. */
+.cp-ref-task-list .cp-task{position:relative;isolation:isolate}
+.cp-ref-task-list .cp-task-action::after{content:"";position:absolute;inset:0;z-index:1}
+.cp-ref-task-list .cp-task-animal{position:relative;z-index:2;display:inline-flex;align-items:center;min-height:32px;padding-inline:4px;margin-inline:-4px}
+.cp-ref-task-list .cp-task-action:focus-visible::after{outline:2px solid #00664f;outline-offset:-3px}

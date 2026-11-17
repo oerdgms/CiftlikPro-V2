@@ -1061,6 +1061,7 @@ def init_db():
             stock_tx_id INTEGER,notes TEXT,created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_calf_internal_costs_calf_date
             ON calf_internal_costs(calf_id,cost_date,id);
+        CREATE INDEX IF NOT EXISTS idx_calves_mother ON calves(mother_id);
         CREATE TABLE IF NOT EXISTS paddock_feed_consumptions(
             id INTEGER PRIMARY KEY,consumption_date TEXT NOT NULL,paddock_id INTEGER NOT NULL,
             ration_id INTEGER NOT NULL,feed_id INTEGER NOT NULL,animal_count INTEGER DEFAULT 0,
@@ -1415,12 +1416,21 @@ def init_db():
             c.execute('insert or ignore into paddocks(name,code,type,capacity,notes,active,created_at) values(?,?,?,?,?,?,?)',(name,'','Genel',0,'V3.8.x serbest metin padok kaydından aktarıldı',1,datetime.now().isoformat(timespec='seconds')))
         c.execute("update animals set paddock_id=(select id from paddocks where paddocks.name=trim(animals.paddock)) where paddock_id is null and trim(coalesce(paddock,''))<>''")
         c.execute("update calves set paddock_id=(select id from paddocks where paddocks.name=trim(calves.paddock)) where paddock_id is null and trim(coalesce(paddock,''))<>''")
-        # Besi_V5.02.xlsm'den yalnız besin referans verilerini ilk kurulumda yükle; fiyatlar özellikle taşınmaz.
-        if c.execute('select count(*) from feed_catalog').fetchone()[0]==0:
+        # İlk kurulumda tam katalog, yükseltmede yalnız yeni referans kayıtları.
+        # INSERT OR IGNORE daha önce girilmiş aynı adlı kayıtları korur.
+        fresh_catalog=c.execute('select count(*) from feed_catalog').fetchone()[0]==0
+        reference_migrations={
+            'YAŞ ŞEKER PANCARI KÜSPESİ':'feed_catalog_wet_beet_pulp_2075',
+            'YAŞ ŞEKER PANCARI KÜSPESİ (PRESLENMEMİŞ)':'feed_catalog_unpressed_beet_pulp_2076',
+        }
+        pending_references={name:key for name,key in reference_migrations.items()
+                            if not c.execute('select 1 from settings where setting_key=?',(key,)).fetchone()}
+        if fresh_catalog or pending_references:
             catalog_file=PROGRAM_DIR/'feed_catalog.json'
             if catalog_file.exists():
                 try:
                     for x in json.loads(catalog_file.read_text(encoding='utf-8')):
+                        if not fresh_catalog and x.get('name') not in pending_references: continue
                         c.execute('''insert or ignore into feed_catalog(
                             name,category,dm_pct,ndf_pct,effective_ndf_pct,cp_pct,tdn_pct,
                             me_mcal_kg,nem_mcal_kg,neg_mcal_kg,starch_pct,fat_pct,ash_pct,
@@ -1432,6 +1442,9 @@ def init_db():
                         ) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)''',
                                   (x.get('name',''),x.get('category',''),x.get('dm_pct',0),x.get('ndf_pct',0),x.get('effective_ndf_pct',0),x.get('cp_pct',0),x.get('tdn_pct',0),x.get('me_mcal_kg',0),x.get('nem_mcal_kg',0),x.get('neg_mcal_kg',0),x.get('starch_pct',0),x.get('fat_pct',0),x.get('ash_pct',0),x.get('ca_pct',0),x.get('p_pct',0),x.get('mg_pct',0),x.get('k_pct',0),x.get('na_pct',0),x.get('s_pct',0),
                                    x.get('processing_method') or '',x.get('label_cp_pct_as_fed',0),x.get('label_me_kcal_kg_as_fed',0),x.get('label_crude_fiber_pct_as_fed',0),x.get('label_fat_pct_as_fed',0),x.get('label_ash_pct_as_fed',0),x.get('label_sodium_pct_as_fed',0),x.get('solver_min_kg_day',0),x.get('solver_max_kg_day',0),x.get('constraint_source') or '',x.get('source','')))
+                    for name,key in pending_references.items():
+                        if c.execute('select 1 from feed_catalog where name=?',(name,)).fetchone():
+                            c.execute("insert or ignore into settings(setting_key,setting_value) values(?,'1')",(key,))
                 except Exception as exc:
                     print('Yem kataloğu yüklenemedi:',exc)
         # V3.9.16: NASEM ile birebir eşleştirilebilen temel yemleri mevcut kurulumlarda da güncelle.
@@ -2649,6 +2662,18 @@ def financial_cents(value):
     return int((Decimal(str(value or 0))*100).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
 
 
+CALF_BIRTH_COST = 'Doğum Maliyeti'
+CALF_BIRTH_CONTRIBUTION = 'Buzağı Üretim Katkısı'
+
+
+def calf_birth_contribution_markup(summary):
+    rows=summary['birth_contributions']
+    if not rows:return ''
+    items=''.join(f'<li><a href="/calf?id={r["calf_id"]}">{h(r["tag"])}</a> · {fmt_date(r["cost_date"])} · <b>{money(r["amount"])}</b></li>' for r in rows)
+    return (f'<details class="cp-ref-finance-breakdown"><summary>{CALF_BIRTH_CONTRIBUTION} · {money(summary["birth_contribution"])}</summary>'
+            f'<ul>{items}</ul><p class="mut">İşletme içi aktarım. Satış ve kasa toplamlarına girmez.</p></details>')
+
+
 def animal_financial_summary(c, rec, source='animal'):
     """Kart/arşiv/besi için aynı maliyet ve gelir özeti; bağlı giderleri bir kez sayar."""
     sid=int(rec['id']);column='animal_id' if source=='animal' else 'calf_id'
@@ -2694,10 +2719,19 @@ def animal_financial_summary(c, rec, source='animal'):
     has_sale=any(x['category'] in ('Hayvan Satışı','Kesim Geliri','Buzağı Satışı') and x['tx_type']=='Gelir' for x in linked)
     if not has_sale and str(rec['status'] or '') in ('Satıldı','Kesildi'):
         income+=financial_cents(rec['sold_price'])
+    birth_rows=[]
+    if source=='animal' and rec['gender']=='Dişi':
+        birth_rows=c.execute("""select ca.id calf_id,ca.tag,cic.cost_date,cic.amount
+            from calves ca join calf_internal_costs cic on cic.calf_id=ca.id
+            where ca.mother_id=? and cic.cost_type=? and cic.cost_date<=?
+            order by cic.cost_date desc,cic.id desc""",(sid,CALF_BIRTH_COST,end_date)).fetchall()
+    birth_contribution=sum(financial_cents(x['amount']) for x in birth_rows)
     expense=purchase+other;total=expense+operating
     return {'days':days,'daily':daily,'purchase':purchase/100,'other_expense':other/100,
             'operating':operating/100,'expense':expense/100,'income':income/100,
-            'total_cost':total/100,'net_profit':(income-total)/100,'finance_rows':linked}
+            'total_cost':total/100,'net_profit':(income-total)/100,'finance_rows':linked,
+            'birth_contribution':birth_contribution/100,'birth_contributions':birth_rows,
+            'card_net_profit':(income+birth_contribution-total)/100}
 
 
 def render_animal_financial_metrics(summary):
@@ -5874,8 +5908,8 @@ WORKBENCH2_MOBILE_UI = r"""
 (()=>{const init=()=>{if(!window.matchMedia('(max-width:900px)').matches)return;const shell=document.querySelector('.workbench-shell'),rail=document.querySelector('.wb2-decision-rail'),target=document.querySelector('.science-target-grid'),workspace=document.querySelector('.target-workspace'),form=document.getElementById('ration-bulk-form');if(!shell||!rail||!target||!workspace||!form||document.querySelector('.wb2-kpi-dashboard'))return;
  const context=document.querySelector('.target-context')?.textContent?.trim()||'Besi rasyonu';const pieces=context.split('·').map(x=>x.trim()).filter(Boolean);const profile=document.createElement('div');profile.className='wb2-mobile-profile';const profileData=['🐂 Besi',...pieces.slice(0,3),document.querySelectorAll('.ration-row').length+' yem'];profileData.forEach(v=>{const s=document.createElement('span');s.className='wb2-profile-pill';s.textContent=v;profile.append(s)});rail.parentNode.insertBefore(profile,rail);
  const head=rail.querySelector('.wb2-head'),count=document.createElement('span'),open=document.createElement('button');count.className='wb2-mobile-count';open.className='wb2-mobile-open';open.type='button';open.textContent='Neden?';head.insertBefore(count,head.lastElementChild);head.append(open);const toggle=()=>{rail.classList.toggle('wb2-mobile-expanded');open.setAttribute('aria-expanded',rail.classList.contains('wb2-mobile-expanded')?'true':'false')};open.onclick=e=>{e.stopPropagation();toggle()};head.onclick=e=>{if(!e.target.closest('.wb2-current'))toggle()};
- const dash=document.createElement('section');dash.className='wb2-kpi-dashboard';dash.innerHTML='<div class="wb2-kpi-grid"></div><div class="wb2-kpi-secondary"><div><span>Nişasta</span><b id="wb2-mobile-starch">—</b></div><div><span>Kaba / Kesif</span><b id="wb2-mobile-rc">—</b></div><div><span>Maliyet</span><b id="wb2-mobile-cost">—</b></div></div><button type="button" class="wb2-science-toggle">Tüm bilimsel değerleri göster</button>';workspace.parentNode.insertBefore(dash,workspace);const grid=dash.querySelector('.wb2-kpi-grid'),defs=[['dm','KM'],['adg','GCAA'],['cp','HP'],['ndf','NDF']];defs.forEach(([id,label])=>{const c=document.createElement('article');c.className='wb2-kpi';c.dataset.key=id;c.innerHTML='<div class="wb2-kpi-top"><span class="wb2-kpi-name">'+label+'</span><span class="wb2-kpi-status">—</span></div><div class="wb2-kpi-values"><span><small>Hedef</small><b class="wb2-kpi-target">—</b></span><span><small>Rasyon</small><b class="wb2-kpi-current">—</b></span></div>';grid.append(c)});const science=workspace.querySelector('.target-compare-sticky'),scienceBtn=dash.querySelector('.wb2-science-toggle');scienceBtn.onclick=()=>{const show=!science.classList.contains('wb2-show-science');science.classList.toggle('wb2-show-science',show);scienceBtn.textContent=show?'Bilimsel değerleri kapat':'Tüm bilimsel değerleri göster';if(show)science.scrollIntoView({behavior:'smooth',block:'start'})};
- const workTitle=document.querySelector('#ration-workbench .workbench-head h3');if(workTitle)workTitle.textContent='🌾 Rasyondaki Yemler';const dock=document.createElement('div');dock.className='wb2-mobile-dock';dock.innerHTML='<button type="button" class="btn alt wb2-dock-add">＋ Yem Ekle</button><button type="button" class="btn wb2-dock-save">💾 Kaydet</button>';document.body.append(dock);dock.querySelector('.wb2-dock-add').onclick=()=>{const box=document.getElementById('quick-feed-add');if(box){box.open=true;box.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),250)}};const originalSave=document.getElementById('ration-save'),dockSave=dock.querySelector('.wb2-dock-save');dockSave.onclick=()=>{if(!dockSave.disabled)form.requestSubmit(originalSave)};
+ const dash=document.createElement('section');dash.className='wb2-kpi-dashboard';dash.innerHTML='<div class="wb2-kpi-grid"></div><div class="wb2-kpi-secondary"><div><span>Nişasta</span><b id="wb2-mobile-starch">—</b></div><div><span>Kaba / Kesif</span><b id="wb2-mobile-rc">—</b></div><div><span>Maliyet</span><b id="wb2-mobile-cost">—</b></div></div><details class="wb2-mobile-science"><summary class="wb2-science-toggle"><span> Tüm bilimsel değerleri göster</span><span>Bilimsel değerleri kapat</span></summary></details>';workspace.parentNode.insertBefore(dash,workspace);const grid=dash.querySelector('.wb2-kpi-grid'),defs=[['dm','KM'],['adg','GCAA'],['cp','HP'],['ndf','NDF']];defs.forEach(([id,label])=>{const c=document.createElement('article');c.className='wb2-kpi';c.dataset.key=id;c.innerHTML='<div class="wb2-kpi-top"><span class="wb2-kpi-name">'+label+'</span><span class="wb2-kpi-status">—</span></div><div class="wb2-kpi-values"><span><small>Hedef</small><b class="wb2-kpi-target">—</b></span><span><small>Rasyon</small><b class="wb2-kpi-current">—</b></span></div>';grid.append(c)});const science=workspace.querySelector('.target-compare-sticky'),disclosure=dash.querySelector('.wb2-mobile-science');if(science){science.id='wb2-mobile-science-values';science.classList.add('wb2-show-science');disclosure.append(science)}else{disclosure.remove()}
+ const workTitle=document.querySelector('#ration-workbench .workbench-head h3');if(workTitle)workTitle.textContent='🌾 Rasyondaki Yemler';const dock=document.createElement('div');dock.className='wb2-mobile-dock';dock.innerHTML='<button type="button" class="btn alt wb2-dock-add">＋ Yem Ekle</button><button type="button" class="btn wb2-dock-save">💾 Kaydet</button>';document.getElementById('ration-workbench').append(dock);dock.querySelector('.wb2-dock-add').onclick=()=>{const box=document.getElementById('quick-feed-add');if(box){box.open=true;box.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('quick-feed-search')?.focus(),250)}};const originalSave=document.getElementById('ration-save'),dockSave=dock.querySelector('.wb2-dock-save');dockSave.onclick=()=>{if(!dockSave.disabled)form.requestSubmit(originalSave)};
  let queued=false;const sync=()=>{queued=false;defs.forEach(([id])=>{const src=document.getElementById('target-mini-'+id),card=grid.querySelector('[data-key="'+id+'"]');if(!src||!card)return;card.classList.remove('warn','bad');if(src.classList.contains('bad'))card.classList.add('bad');else if(src.classList.contains('warn'))card.classList.add('warn');card.querySelector('.wb2-kpi-target').textContent=document.getElementById('target-mini-'+id+'-target')?.textContent||'—';card.querySelector('.wb2-kpi-current').textContent=document.getElementById('target-mini-'+id+'-current')?.textContent||'—';card.querySelector('.wb2-kpi-status').textContent=document.getElementById('target-mini-'+id+'-status')?.textContent?.replace(/[✅⚠️🔴ℹ️]/g,'').trim()||'—'});document.getElementById('wb2-mobile-starch').textContent=document.getElementById('target-mini-starch-current')?.textContent||'—';document.getElementById('wb2-mobile-rc').textContent=document.getElementById('target-mini-rc-current')?.textContent||'—';document.getElementById('wb2-mobile-cost').textContent=document.getElementById('target-mini-cost-current')?.textContent||'—';const issues=[...target.querySelectorAll('.science-target-row.warn,.science-target-row.bad')].filter(x=>!x.id.endsWith('-cost')).length,solverSolved=target.dataset.solverResult==='solved'&&(originalSave?.disabled??true);count.textContent=issues?(solverSolved?issues+' ince ayar':issues+' değer dikkat istiyor'):'Değerler uygun';dockSave.disabled=!!originalSave?.disabled;dockSave.textContent=dockSave.disabled?'✓ Kaydedildi':'💾 Kaydet'};const schedule=()=>{if(!queued){queued=true;requestAnimationFrame(sync)}};new MutationObserver(schedule).observe(target,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});if(originalSave)new MutationObserver(schedule).observe(originalSave,{attributes:true,attributeFilter:['disabled']});sync();};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init()})();
 </script>
 """
@@ -9169,7 +9203,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             daily_gain=(weight_gain/perf_days) if weight_gain is not None and perf_days>0 else None
             latest_milk=milk[0]['liters'] if milk else None
             total_income=sum(r['amount'] for r in fin if normalize_finance_type(r['category'],r['tx_type'])=='Gelir')
-            total_income=financial['income'];net_value=financial['net_profit']
+            total_income=financial['income'];net_value=financial['card_net_profit']
             feed_ctx=animal_current_feed_context(a)
             target_profit=float(a['target_sale_price'] or 0)-current_cost if float(a['target_sale_price'] or 0)>0 else None
             period_perf=male_weight_performance(aid) if a['gender']=='Erkek' else None
@@ -9230,7 +9264,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             <section class="animal-card-panel active" data-animal-panel="general"><section class="v117-kpis"><div class="card v117-kpi"><span class="ico">⚖️</span><div><span>Canlı Ağırlık</span><b>{(str(latest_weight)+' kg') if latest_weight is not None else '—'}</b></div><em class="v117-chip">Son</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebelik</span><b>{pregnancy_month if a['gender']=='Dişi' else '—'}</b></div><em class="v117-chip">{h(preg)}</em></div><div class="card v117-kpi"><span class="ico">₺</span><div><span>Günlük Maliyet</span><b>{money(daily_cost)}</b></div><em class="v117-chip">Günlük</em></div><div class="card v117-kpi"><span class="ico">▣</span><div><span>Toplam Maliyet</span><b>{money(current_cost)}</b></div><em class="v117-chip">Anlık</em></div></section><div class="animal-360-grid">{overview_preg}<div class="card animal-360-card"><div class="v117-panel-head"><h2>✚ Son Sağlık İşlemleri</h2><button class="btn alt" onclick="showAnimalPanel('health')">Tümünü Gör</button></div><div class="v117-panel-body">{overview_health}</div></div><div class="card animal-360-card animal-360-timeline"><div class="v117-panel-head"><h2>↶ Hayvan Geçmişi</h2></div><div class="v117-panel-body">{overview_timeline}</div></div><div class="card animal-360-card mini-weight-chart"><div class="v117-panel-head"><h2>▥ Kilo Değişimi</h2><button class="btn alt" onclick="showAnimalPanel('growth')">Detay</button></div><div class="v117-panel-body">{overview_chart or '<div class="workspace-empty">Grafik için tartım verisi gerekli.</div>'}</div></div><div class="card animal-360-card"><div class="v117-panel-head"><h2>₺ Finans Özeti</h2><button class="btn alt" onclick="showAnimalPanel('finance')">Detay</button></div><div class="v117-panel-body"><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(total_cost)}</b></span><span class="pill">Net<br><b>{money(net_value)}</b></span></div></div></div></div><div class="card animal-360-fast"><b>⚡ Hızlı İşlemler</b><button class="btn" onclick="showAnimalPanel('growth')">⚖ Tartım Ekle</button><button class="btn alt" onclick="showAnimalPanel('health')">＋ Sağlık Kaydı</button><a class="btn alt" href="/inseminations?animal={aid}">💉 Tohumlama</a><button class="btn alt" onclick="showAnimalPanel('finance')">₺ Finans İşlemi</button><button class="btn alt" onclick="showAnimalPanel('photos')">▧ Fotoğraf Ekle</button></div></section>
             {reproduction_panel}<section class="animal-card-panel" data-animal-panel="growth"><div class="panel-grid">{weight_panel}{milk_panel}{estimate_panel}</div></section>
             <section class="animal-card-panel" data-animal-panel="health"><div class="card"><div class="filter-title"><div><h2>Sağlık Geçmişi</h2><p class="mut">Aşı, ilaç ve uygulamalar</p></div><a class="btn" href="/health">Sağlık Merkezine Git</a></div><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div></div></section>
-            <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(finance_expense_total)}</b></span><span class="pill">Maliyet<br><b>{money(accumulated_cost)}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(net_value)}</b></span></div><p class="mut">Gider kırılımı: alış {money(purchase_cost)} · sağlık ve diğer bağlı giderler {money(other_cost)}. Maliyet, işletmeye girişten çıkış tarihine kadar rasyon + bakımdır. Net = gelir − gider − maliyet; alış finans satırı ikinci kez eklenmez.</p><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
+            <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(finance_expense_total)}</b></span><span class="pill">Maliyet<br><b>{money(accumulated_cost)}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(net_value)}</b></span></div><p class="mut">Gider kırılımı: alış {money(purchase_cost)} · sağlık ve diğer bağlı giderler {money(other_cost)}. Maliyet, işletmeye girişten çıkış tarihine kadar rasyon + bakımdır. Net = gelir + buzağı üretim katkısı − gider − maliyet; alış finans satırı ikinci kez eklenmez.</p>{calf_birth_contribution_markup(financial)}<div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
             <section class="animal-card-panel" data-animal-panel="photos"><div class="card"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox" data-smart-photo-form="1"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button></form><div class="gallery" style="margin-top:14px">{gallery}</div></div></section>
             <section class="animal-card-panel" data-animal-panel="history">{sale_box}{loss_box or '<div class="card"><p class="gender-note">Bu hayvan aktif sürüde olmadığı için yeni satış veya zayiat işlemi açılamaz.</p></div>'}</section>
             <script>(function(){{const tabs=[...document.querySelectorAll('[data-animal-tab]')],panels=[...document.querySelectorAll('[data-animal-panel]')];window.showAnimalPanel=function(name){{tabs.forEach(x=>x.classList.toggle('active',x.dataset.animalTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.animalPanel===name));const active=panels.find(x=>x.dataset.animalPanel===name);if(active)active.scrollIntoView({{behavior:'smooth',block:'start'}})}};tabs.forEach(x=>x.addEventListener('click',()=>showAnimalPanel(x.dataset.animalTab)));if(location.hash==='#animalSale'||location.hash==='#animalLoss')showAnimalPanel('history');else if(location.hash==='#growth')showAnimalPanel('growth');}})();</script>'''
@@ -9321,8 +9355,11 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
                 initial_cost_label='Alış / Başlangıç';origin_line=f'<p>Alış: <b>{fmt_date(calf["purchase_date"]) or "-"}</b> · <b>{money(calf["purchase_price"])}</b></p>'
             calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">{h(initial_cost_label)}<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">İç Üretim<br><b>{money(internal_total)}</b></span><span class="pill">Rasyon + Bakım + İç Üretim<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}. İç üretim maliyeti nakit gideri ikinci kez yazmaz; buzağının maliyetine dağıtılır.</p></div>'''
             feed_opts_internal=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in calf_feeds)
+            birth_entry=next((x for x in internal_rows if x['cost_type']==CALF_BIRTH_COST),None)
+            birth_option=f'<option value="{CALF_BIRTH_COST}">{CALF_BIRTH_COST}</option>' if calf['mother_tag'] else ''
+            birth_edit=(f'<p class="mut">Doğum maliyetini değiştirmek için tür olarak Doğum Maliyeti seçip yeni toplamı girin. Kayıt güncellenir.</p>' if birth_entry else '')
             internal_table=''.join(f'''<tr><td>{fmt_date(x['cost_date'])}</td><td>{h(x['cost_type'])}</td><td>{h(x['feed_name'] or x['notes'] or '-')}</td><td>{float(x['quantity'] or 0):g} {h(x['unit'] or '')}</td><td>{money(x['unit_cost'])}</td><td><b>{money(x['amount'])}</b></td><td><form method="post" action="/calf-internal-cost/delete" onsubmit="return confirm('Bu iç üretim maliyeti silinsin mi?')"><input type="hidden" name="id" value="{x['id']}"><input type="hidden" name="calf_id" value="{cid}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in internal_rows) or '<tr><td colspan="7">Henüz iç üretim maliyeti kaydı yok.</td></tr>'
-            internal_cost_box=f'''<div class="card" style="margin-top:14px"><div class="filter-title"><div><h2>🍼 İç Üretim Maliyeti</h2><p class="mut">Süt, buzağı başlangıç/büyütme yemi, ot, yonca ve diğer büyütme maliyetlerini küpeye dağıtır. Nakit gideri ikinci kez oluşturmaz.</p></div><span class="pill">Toplam {money(internal_total)}</span></div><form method="post" action="/calf-internal-cost/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="cost_date" value="{date.today().isoformat()}" required></label><label>Tür<select name="cost_type" id="calfInternalCostType"><option>Süt</option><option>Yem</option><option>Bakım</option><option>Diğer</option></select></label><label id="calfInternalFeedLabel">Yem<select name="feed_id" id="calfInternalFeed"><option value="">Yem seçin…</option>{feed_opts_internal}</select></label><label>Miktar<input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label><label>Birim<select name="unit"><option value="L">Litre</option><option value="kg">kg</option><option value="adet">adet</option></select></label><label>Birim Maliyet (₺)<input type="number" name="unit_cost" min="0" step="0.01" value="0"><small class="mut">Yem seçilirse 0 bırakınca stok ortalama maliyeti kullanılır.</small></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah sütü / yonca / buzağı başlangıç yemi"></label><label class="full"><input type="checkbox" name="deduct_stock" value="1" checked> Yem türünde stoktan düş</label><div class="full"><button class="btn">Maliyete Ekle</button></div></form><div class="tablewrap" style="margin-top:12px"><table><tr><th>Tarih</th><th>Tür</th><th>Yem / Açıklama</th><th>Miktar</th><th>Birim Maliyet</th><th>Toplam</th><th></th></tr>{internal_table}</table></div><script>(function(){{const t=document.getElementById('calfInternalCostType'),l=document.getElementById('calfInternalFeedLabel'),f=document.getElementById('calfInternalFeed');if(!t)return;function s(){{const y=t.value==='Yem';l.style.display=y?'block':'none';f.required=y}}t.addEventListener('change',s);s()}})();</script></div>'''
+            internal_cost_box=f'''<div class="card" style="margin-top:14px"><div class="filter-title"><div><h2>🍼 İç Üretim Maliyeti</h2><p class="mut">Süt, buzağı başlangıç/büyütme yemi, ot, yonca ve diğer büyütme maliyetlerini küpeye dağıtır. Nakit gideri ikinci kez oluşturmaz. Doğum Maliyeti, anne kartında üretim katkısı olarak görünür.</p></div><span class="pill">Toplam {money(internal_total)}</span></div>{birth_edit}<form method="post" action="/calf-internal-cost/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="cost_date" value="{date.today().isoformat()}" required></label><label>Tür<select name="cost_type" id="calfInternalCostType"><option>Süt</option><option>Yem</option><option>Bakım</option><option>Diğer</option>{birth_option}</select></label><label id="calfInternalFeedLabel">Yem<select name="feed_id" id="calfInternalFeed"><option value="">Yem seçin…</option>{feed_opts_internal}</select></label><label>Miktar<input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label><label>Birim<select name="unit"><option value="L">Litre</option><option value="kg">kg</option><option value="adet">adet</option></select></label><label><span id="calfInternalCostLabel">Birim Maliyet (₺)</span><input type="number" name="unit_cost" min="0" step="0.01" value="0"><small class="mut">Yem seçilirse 0 bırakınca stok ortalama maliyeti kullanılır.</small></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah sütü / yonca / buzağı başlangıç yemi"></label><label class="full"><input type="checkbox" name="deduct_stock" value="1" checked> Yem türünde stoktan düş</label><div class="full"><button class="btn">Maliyete Ekle</button></div></form><div class="tablewrap" style="margin-top:12px"><table><tr><th>Tarih</th><th>Tür</th><th>Yem / Açıklama</th><th>Miktar</th><th>Birim Maliyet</th><th>Toplam</th><th></th></tr>{internal_table}</table></div><script>(function(){{const t=document.getElementById('calfInternalCostType'),l=document.getElementById('calfInternalFeedLabel'),f=document.getElementById('calfInternalFeed');if(!t)return;function s(){{const y=t.value==='Yem';l.style.display=y?'block':'none';f.required=y;const birth=t.value==='Doğum Maliyeti';const label=document.getElementById('calfInternalCostLabel');if(label)label.textContent=birth?'Toplam Doğum Maliyeti (₺)':'Birim Maliyet (₺)'}}t.addEventListener('change',s);s()}})();</script></div>'''
             calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
             health_html=''.join(f'<tr><td>{fmt_date(r["applied_date"])}</td><td>{h(r["kind"])}</td><td>{h(r["product"])}</td><td>{fmt_date(r["next_date"])}</td><td>{h(r["notes"])}</td></tr>' for r in health_rows) or '<tr><td colspan="5">Henüz sağlık/tedavi kaydı yok.</td></tr>'
             weight_html=''.join(f'<tr><td>{fmt_date(r["measure_date"])}</td><td><b>{float(r["weight"]):.1f} kg</b></td><td>{h(r["notes"])}</td></tr>' for r in weight_rows) or '<tr><td colspan="3">Henüz tartım kaydı yok.</td></tr>'
@@ -11972,8 +12009,20 @@ setTimeout(()=>setFinanceDrawer(false),0);
             unit=(f.get('unit') or '').strip();notes=(f.get('notes') or '').strip();stock_tx_id=None
             if cid<=0 or qty<=0:return self.redirect('/calves','Buzağı ve miktar zorunludur.')
             with db() as c:
-                calf=c.execute('select id,tag from calves where id=?',(cid,)).fetchone()
+                if cost_type==CALF_BIRTH_COST:c.execute('begin immediate')
+                calf=c.execute('select * from calves where id=?',(cid,)).fetchone()
                 if not calf:return self.redirect('/calves','Buzağı bulunamadı.')
+                if cost_type==CALF_BIRTH_COST:
+                    mother=c.execute("select 1 from animals where id=? and gender='Dişi'",(calf['mother_id'],)).fetchone()
+                    if not mother:return self.redirect('/calf?id='+str(cid),'Doğum maliyeti için anne kaydı gerekli.')
+                    try:birth=date.fromisoformat(calf['birth_date'] or '')
+                    except ValueError:return self.redirect('/calf?id='+str(cid),'Geçerli doğum tarihi gerekli.')
+                    if birth>date.today() or not (0<unit_cost<float('inf')):
+                        return self.redirect('/calf?id='+str(cid),'Doğum tarihi ve toplam maliyeti kontrol edin.')
+                    cost_date=birth.isoformat();qty=1;unit='adet';fid=0
+                    existing=c.execute('select id from calf_internal_costs where calf_id=? and cost_type=? order by id limit 1',(cid,CALF_BIRTH_COST)).fetchone()
+                else:
+                    existing=None
                 if cost_type=='Yem':
                     feed=c.execute('select id,name from feed_catalog where id=? and active=1',(fid,)).fetchone()
                     if not feed:return self.redirect('/calf?id='+str(cid),'Yem seçin.')
@@ -11983,9 +12032,18 @@ setTimeout(()=>setFinanceDrawer(false),0);
                             values(?,?,'Tüketim',?,0,?)''',(fid,cost_date,round(qty,6),f'Buzağı iç üretim maliyeti | {calf["tag"]} | {feed["name"]}'))
                         stock_tx_id=int(cur.lastrowid);rebuild_feed_cost_history(c,fid)
                 amount=round(qty*unit_cost,2)
-                c.execute('''insert into calf_internal_costs(calf_id,cost_date,cost_type,feed_id,quantity,unit,unit_cost,amount,stock_tx_id,notes,created_at)
-                    values(?,?,?,?,?,?,?,?,?,?,?)''',(cid,cost_date,cost_type,fid or None,qty,unit,unit_cost,amount,stock_tx_id,notes,datetime.now().isoformat(timespec='seconds')))
+                if existing:
+                    c.execute('update calf_internal_costs set cost_date=?,quantity=?,unit=?,unit_cost=?,amount=?,notes=? where id=?',
+                              (cost_date,qty,unit,unit_cost,amount,notes,existing['id']))
+                else:
+                    c.execute('''insert into calf_internal_costs(calf_id,cost_date,cost_type,feed_id,quantity,unit,unit_cost,amount,stock_tx_id,notes,created_at)
+                        values(?,?,?,?,?,?,?,?,?,?,?)''',(cid,cost_date,cost_type,fid or None,qty,unit,unit_cost,amount,stock_tx_id,notes,datetime.now().isoformat(timespec='seconds')))
+                if calf['promoted_animal_id']:
+                    c.execute('update animals set internal_production_cost=? where id=?',
+                              (calf_internal_cost_total(c,cid),calf['promoted_animal_id']))
             audit(username,'Buzağı iç üretim maliyeti ekledi',f'{cid} · {cost_type} · {money(amount)}',self.client_ip())
+            if cost_type==CALF_BIRTH_COST:
+                return self.redirect('/calf?id='+str(cid),'Doğum maliyeti kaydedildi ve anne kartına üretim katkısı olarak yansıdı.')
             return self.redirect('/calf?id='+str(cid),'İç üretim maliyeti buzağı maliyetine eklendi. Nakit gider ikinci kez oluşturulmadı.')
         if path=='/calf-internal-cost/delete':
             try:rid=int(f.get('id') or 0);cid=int(f.get('calf_id') or 0)
@@ -11997,6 +12055,10 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('delete from feed_stock_transactions where id=?',(row['stock_tx_id'],))
                         if row['feed_id']:rebuild_feed_cost_history(c,int(row['feed_id']))
                     c.execute('delete from calf_internal_costs where id=?',(rid,))
+                    calf=c.execute('select promoted_animal_id from calves where id=?',(cid,)).fetchone()
+                    if calf and calf['promoted_animal_id']:
+                        c.execute('update animals set internal_production_cost=? where id=?',
+                                  (calf_internal_cost_total(c,cid),calf['promoted_animal_id']))
             audit(username,'Buzağı iç üretim maliyetini sildi',f'#{rid}',self.client_ip())
             return self.redirect('/calf?id='+str(cid),'İç üretim maliyeti silindi; bağlı stok tüketimi geri alındı.')
         if path=='/calf/photo':
@@ -13911,6 +13973,12 @@ HOTFIX122E_MOBILE_TARGET_UI = r'''
   body:has(.workbench-shell) .wb2-kpi-secondary{gap:5px!important;margin-top:6px!important}
   body:has(.workbench-shell) .wb2-kpi-secondary>div{padding:6px 4px!important;border-radius:9px!important;background:#f7faf8!important}
   body:has(.workbench-shell) .wb2-science-toggle{margin-top:6px!important;padding:7px!important;border-radius:9px!important;background:#f8fbf9!important}
+  body:has(.workbench-shell) .wb2-mobile-science{border:0!important;margin:0!important;padding:0!important;background:transparent!important}
+  body:has(.workbench-shell) summary.wb2-science-toggle{display:block!important;box-sizing:border-box;min-height:44px!important;text-align:center;align-content:center;list-style:none;cursor:pointer}
+  summary.wb2-science-toggle::-webkit-details-marker{display:none}
+  .wb2-mobile-science:not([open]) .wb2-science-toggle span:last-child,.wb2-mobile-science[open] .wb2-science-toggle span:first-child{display:none}
+  body:has(.workbench-shell) .wb2-mobile-science:not([open]) #wb2-mobile-science-values{display:none!important}
+
 
   /* Alt dock görünür kalır, fakat içerik için ayrılmış güvenli boşluğun üzerinde durur. */
   body:has(.workbench-shell) .wb2-mobile-dock{bottom:42px!important;z-index:190!important}
@@ -16025,6 +16093,21 @@ HOTFIX122BN_OUTPUT=r"""
    const wrap=document.createElement('span');wrap.className='bn-output-actions';
    wrap.innerHTML='<a id="bnReproPdf" class="btn alt" target="_blank">📄 PDF</a><a id="bnReproPrint" class="btn alt" target="_blank">🖨 Yazdır</a>';host.appendChild(wrap);
    function sync(){const u=new URL(location.href),q=new URLSearchParams();q.set('stage',u.searchParams.get('stage')||'all');const s=document.getElementById('reproSearch'),p=document.getElementById('reproPaddock');if(s&&s.value.trim())q.set('search',s.value.trim());if(p&&p.value)q.set('paddock',p.value);document.getElementById('bnReproPdf').href='/reproduction-center.pdf?'+q;document.getElementById('bnReproPrint').href='/reproduction-center/print?'+q;}
+   const mobile=matchMedia('(max-width:900px)'),menu=document.createElement('details');
+   menu.className='cp-repro-more';
+   menu.innerHTML='<summary>Diğer işlemler</summary><div class="cp-repro-more-links"></div>';
+   const secondary=[...host.children].filter(el=>el===wrap || el.matches('a.cp-repro-sync,a[href^="/reproduction-settings"]'));
+   const slots=secondary.map(el=>{const slot=document.createComment('repro-action');el.before(slot);return slot;});
+   function layout(){
+    if(mobile.matches){
+     host.classList.add('cp-repro-actions-compact');host.append(menu);
+     menu.lastElementChild.append(...secondary);
+    }else{
+     secondary.forEach((el,i)=>slots[i].after(el));menu.remove();menu.open=false;
+     host.classList.remove('cp-repro-actions-compact');
+    }
+   }
+   mobile.addEventListener('change',layout);layout();
    document.addEventListener('click',e=>{if(e.target.closest('[data-repro-filter]'))setTimeout(sync,0)});document.getElementById('reproSearch')?.addEventListener('input',sync);document.getElementById('reproPaddock')?.addEventListener('change',sync);sync();
   }
  }
@@ -16679,16 +16762,22 @@ APP_EDITION_2020K_SCIENCE_PANEL = r"""
     parent.insertBefore(toggle,anchor);
     parent.insertBefore(science,anchor);
   }
+  function setSummaryOpen(open){
+    science.classList.toggle('cp-science-collapsed',!open);
+    toggle.setAttribute('aria-expanded',String(open));
+    if(control){
+      if(open)control.style.removeProperty('display');
+      else control.style.setProperty('display','none','important');
+    }
+  }
   if(!science.dataset.cp20kReady){
-    science.dataset.cp20kReady='1';science.classList.add('cp-science-collapsed');toggle.setAttribute('aria-expanded','false');
+    science.dataset.cp20kReady='1';setSummaryOpen(false);
   }
   if(!toggle.dataset.cp20kBound){
     toggle.dataset.cp20kBound='1';
     toggle.addEventListener('click',function(ev){
       ev.preventDefault();ev.stopImmediatePropagation();
-      var willOpen=science.classList.contains('cp-science-collapsed');
-      science.classList.toggle('cp-science-collapsed',!willOpen);
-      toggle.setAttribute('aria-expanded',willOpen?'true':'false');
+      setSummaryOpen(science.classList.contains('cp-science-collapsed'));
     },true);
   }
  }

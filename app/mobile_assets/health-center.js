@@ -100,15 +100,15 @@
     });
     filter();
   });
-  all('[data-hc-complete]').forEach(button => button.addEventListener('click', () => {
+  workspace.addEventListener('click', event => {
+    const button=event.target.closest('[data-hc-complete]');if(!button)return;
     const dialog = document.getElementById('hcComplete');
     dialog.querySelector('[name=task_id]').value = button.dataset.hcComplete;
     dialog.querySelector('.hc-complete-label').textContent = button.dataset.hcTitle + '\n' + button.dataset.hcSubject;
     open('hcComplete');
-  }));
+  });
   const batchDialog = document.getElementById('hcBatchComplete');
   const batchForm = document.getElementById('hcBatchForm');
-  const batchGroups = JSON.parse(document.getElementById('hcBatchData')?.textContent || '{}');
   if (batchForm) {
     const options = batchForm.querySelector('[data-hc-batch-options]');
     const search = batchForm.querySelector('[data-hc-batch-search]');
@@ -131,8 +131,9 @@
       rows().forEach(row => { row.hidden = !((!term || CPTextSearch.matches(row.dataset.search,term)) && (!paddock.value || row.dataset.paddock === paddock.value)); });
       batchForm.querySelector('[data-hc-batch-empty]').hidden = rows().some(row => !row.hidden);
     }
-    all('[data-hc-batch]').forEach(button => button.addEventListener('click', () => {
-      const group = batchGroups[button.dataset.hcBatch]; if (!group) return;
+    workspace.addEventListener('click', event => {
+      const button=event.target.closest('[data-hc-batch]');if(!button)return;
+      const group = JSON.parse(document.getElementById('hcBatchData')?.textContent || '{}')[button.dataset.hcBatch]; if (!group) return;
       batchForm.reset(); options.replaceChildren();
       batchForm.querySelector('[name=batch_ref]').value = button.dataset.hcBatch;
       batchForm.querySelector('[data-hc-batch-title]').textContent = group.title + '\n' + group.detail + ' · Planlanan ' + group.date;
@@ -144,7 +145,7 @@
         const identity=document.createElement('span'),tag=document.createElement('b'),detail=document.createElement('small');tag.textContent=member.tag;detail.textContent=member.detail;identity.append(tag,detail);row.append(input,identity);options.append(row);
       });
       filterBatch(); updateBatch(); open(batchDialog.id);
-    }));
+    });
     search.addEventListener('input',filterBatch);paddock.addEventListener('change',filterBatch);
     search.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();filterBatch();}});
     batchForm.querySelector('[data-hc-batch-all]').addEventListener('click',()=>{rows().forEach(row=>row.querySelector('input').checked=true);updateBatch();});
@@ -155,15 +156,14 @@
       if (save.disabled) {event.preventDefault();error.textContent='En az bir hayvan seçin.';error.hidden=false;}
     });
   }
-  all('[data-hc-confirm]').forEach(form => form.addEventListener('submit', event => {
-    if (!window.confirm(form.dataset.hcConfirm)) event.preventDefault();
-  }));
-  // Confirmations and selection validation run before the submission lock.
-  all('form', workspace).concat(all('.hc-dialog form')).forEach(form => form.addEventListener('submit', event => {
-    if (event.defaultPrevented || form.method.toLowerCase() !== 'post') return;
+  // Delegation also covers rows refreshed by live search.
+  document.addEventListener('submit', event => {
+    const form=event.target;
+    if (!form.closest('#healthCenter,.hc-dialog') || event.defaultPrevented || form.method.toLowerCase() !== 'post') return;
+    if (form.hasAttribute('data-hc-confirm') && !window.confirm(form.dataset.hcConfirm)) {event.preventDefault();return;}
     const button = form.querySelector('button[type=submit]');
     if (button) { button.disabled = true; button.dataset.hcOriginal = button.textContent; button.textContent = 'Kaydediliyor…'; }
-  }));
+  });
   document.addEventListener('click', event => { all('.hc-more[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; }); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') all('.hc-more[open]').forEach(menu => { menu.open = false; }); });
   window.addEventListener('pageshow', () => { all('[data-hc-original]').forEach(button => { button.disabled = false; button.textContent = button.dataset.hcOriginal; }); });

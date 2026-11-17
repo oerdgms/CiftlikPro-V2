@@ -1,8 +1,8 @@
 """Single release identity for runtime, cached assets and Windows packaging."""
 import re
 
-VERSION = '2.0.73'
-BUILD_LABEL = 'MobileTasksToday'
+VERSION = '2.0.85'
+BUILD_LABEL = 'IOSHeaderClarity'
 BASELINE = '2.0.41'
 CHANNEL = 'pilot-preparation'
 CORE_VERSION = '3.9.23 DEV4 Hotfix1.22cr'

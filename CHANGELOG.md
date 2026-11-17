@@ -1,3 +1,51 @@
+## 2.0.85
+
+- iOS ana ekrana kurulu uygulamada durum çubuğu ayrıldı ve mobil üst başlık içeriği için ek güvenli boşluk bırakıldı.
+
+## 2.0.84
+
+- Mobil Üreme Merkezi başlığında iki temel kayıt işlemi görünür, diğer işlemler tek menüde toplanır.
+
+## 2.0.83
+
+- Sağlık canlı araması yazı alanını ve klavye odağını koruyarak sonuçları yeniler. Genel arama yazarken sayfa geçişini tetiklemez.
+
+## 2.0.82
+
+- Mobil Rasyon Detayı: Yem Ekle ve Kaydet çubuğu yem listesinin sonunda yer alır.
+
+## 2.0.81
+
+- Mobil bilimsel değerler paneli kendi başlığının altında açılır ve üst özetin durumuna bağlı değildir.
+
+## 2.0.80
+
+- Mobil rasyonda yem işlemleri yem listesinin içinde kalır; padok atama düğmelerini kapatmaz. Yem kartları daha kompakt.
+
+## 2.0.79
+
+- Mobil Rasyon Detayı: bilimsel değerler, Bilimsel Hedef Özeti kapalıyken de açılıp kapanır.
+
+## 2.0.78
+
+- Mobil Hayvanlar ekranında Tümü, Dişi, Erkek ve Buzağı kısayolları; diğer durumlar filtre menüsünde.
+
+## 2.0.77
+
+- Buzağının doğum maliyeti anne kartına üretim katkısı olarak yansır. İşletme içi aktarım satış ve kasa toplamlarına girmez.
+
+## 2.0.76
+
+- Preslenmemiş yaş pancar küspesi için %12 KM varsayımıyla ayrı katalog profili. Preslenmiş küspe ve mevcut kullanıcı kayıtları korunur.
+
+## 2.0.75
+
+- Yem kataloğuna preslenmiş yaş şeker pancarı küspesi için kaynaklı referans profil eklendi. Mevcut işletme kayıtları korunur.
+
+# AppEdition 2.0.74 – Mobil Görev Dokunma Alanı
+
+Görev satırının tamamı işlemi açar. Küpe bağlantısı hayvan kartına gider.
+
 # AppEdition 2.0.73 – Mobil Görevler
 
 Sağlık ekranı ve hayvanın sağlık kartından görevlere dönüş eklendi. Tüm İşler ekranı bugünkü sağlık uygulamalarını ve tamamlanan vadeli ödemeleri gösterir. Tek hayvan görevlerinde küpe, hayvan kartını açar. Mobil ana sayfanın alt bağlantıları kaldırıldı.

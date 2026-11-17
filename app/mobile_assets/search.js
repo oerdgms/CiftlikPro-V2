@@ -75,14 +75,38 @@
       syncHerd(doc);
       history.replaceState(history.state,'',url.pathname+url.search);
     } catch(error) {
-      if (error.name!=='AbortError' && serial===current.serial) {remember(input);location.assign(url);}
+      if (error.name!=='AbortError' && serial===current.serial && document.activeElement!==input) location.assign(url);
     } finally {if (serial===current.serial) input.removeAttribute('aria-busy');}
+  }
+  const isHealth = form => form.matches('.hc-search') && new URL(form.action).pathname==='/health';
+  async function healthSearch(input,current) {
+    const form=input.form, serial=current.serial, url=formURL(form), agenda=form.closest('.hc-agenda');
+    const request=new AbortController();current.request=request;input.setAttribute('aria-busy','true');
+    try {
+      const response=await fetch(url,{signal:request.signal,headers:{'X-Requested-With':'CiftlikPro-LiveSearch'}});
+      if (!response.ok || response.redirected) return;
+      const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+      if (serial!==current.serial || request.signal.aborted) return;
+      const fresh=doc.querySelector('.hc-agenda'), freshForm=fresh?.querySelector('.hc-search');
+      if (!agenda || !freshForm) return;
+      const nextClear=freshForm.querySelector('a'), currentClear=form.querySelector('a');
+      currentClear?.remove();if(nextClear)form.append(nextClear);
+      // Leave the form attached to the document so mobile keyboards keep focus.
+      [...agenda.children].filter(node=>node!==form).forEach(node=>node.remove());
+      [...fresh.children].forEach(node=>{if(node!==freshForm){if(node.matches('.hc-section-head'))agenda.insertBefore(node,form);else agenda.append(node);}});
+      for(const dialog of document.querySelectorAll('.hc-dialog')) {
+        const oldReturn=dialog.querySelector('input[name=return_to]');
+        const nextReturn=doc.getElementById(dialog.id)?.querySelector('input[name=return_to]');
+        if(oldReturn && nextReturn)oldReturn.value=nextReturn.value;
+      }
+      history.replaceState(history.state,'',url.pathname+url.search);
+    } catch {} finally {if(serial===current.serial)input.removeAttribute('aria-busy');}
   }
   function run(input) {
     const form=input.form,current=state(form);clearTimeout(current.timer);
     if (current.composing || !form.checkValidity()) return;
     if (form.matches('.cp-shared-filter') && new URL(form.action).pathname==='/all-animals') return herdSearch(input,current);
-    remember(input);form.requestSubmit();
+    if (isHealth(form)) return healthSearch(input,current);
   }
   function schedule(event) {
     const input=queryInput(event.target);if (!input) return;
@@ -104,6 +128,7 @@
     const input=[...form.elements].find(el=>queryInput(el));if (!input)return;
     const current=state(form);clearTimeout(current.timer);++current.serial;current.request?.abort();
     if (form.matches('.cp-shared-filter') && new URL(form.action).pathname==='/all-animals') {event.preventDefault();herdSearch(input,current);}
+    else if (isHealth(form)) {event.preventDefault();healthSearch(input,current);}
     else if (document.activeElement===input) remember(input);
   },true);
   document.addEventListener('DOMContentLoaded',()=>requestAnimationFrame(()=>{
