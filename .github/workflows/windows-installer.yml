@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: "utf-8"
@@ -41,13 +41,23 @@ jobs:
           python -c "import sys; sys.path.insert(0, 'app'); import server; assert server.APP_VERSION == '3.9.23 DEV4 Hotfix1.22cr'; print('VERSION_OK:', server.APP_VERSION)"
 
       - name: Regresyon testleri
+        timeout-minutes: 45
         shell: pwsh
         run: |
           # Sadece test sırasında SQLite context bağlantılarını kapat.
           # EXE/runtime bu değişkene sahip değildir.
           $env:CIFTLIKPRO_TEST_AUTOCLOSE_DB = "1"
-          python -m unittest discover -s tests -v
+          python -u scripts/run_regression.py
           Remove-Item Env:CIFTLIKPRO_TEST_AUTOCLOSE_DB -ErrorAction SilentlyContinue
+
+      - name: Test sure raporunu yukle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-test-timings
+          path: test-timings.json
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Kaynak sunucu smoke testi
         shell: pwsh
@@ -163,23 +173,23 @@ jobs:
             choco install innosetup --yes --no-progress
           }
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer.iss
-          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_86_Setup.exe")) {
+          if (!(Test-Path "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_87_Setup.exe")) {
             throw "Kurulum EXE dosyasi olusturulamadi."
           }
 
       - name: SHA-256 ozeti olustur
         shell: pwsh
         run: |
-          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_86_Setup.exe"
+          $setup = "release\CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_87_Setup.exe"
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
-          "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_86_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
+          "CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_87_Setup.exe  SHA256: $hash" | Out-File "release\SHA256.txt" -Encoding utf8
 
       - name: Windows kurulum paketini yukle
         uses: actions/upload-artifact@v4
         with:
-          name: CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.86-Windows-Setup
+          name: CiftlikPro-Enterprise-V3.9.23-DEV4-AppEdition-2.0.87-Windows-Setup
           path: |
-            release/CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_86_Setup.exe
+            release/CiftlikPro_Enterprise_V3_9_23_DEV4_AppEdition_2_0_87_Setup.exe
             release/SHA256.txt
           if-no-files-found: error
           retention-days: 30

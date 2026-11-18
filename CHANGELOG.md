@@ -1,3 +1,8 @@
+## 2.0.87
+
+- Windows CI: geçici test veritabanlarında disk eşitleme beklemesi azaltıldı; uygulama veritabanı ayarları korunur.
+- Test başına süre raporu ve uzun beklemeler için thread izleri eklendi. İş sınırı 60, test adımı sınırı 45 dakikadır.
+
 ## 2.0.86
 
 - Üç regresyon testi güncel finans açıklaması, mobil filtre düzeni ve Türkiye saatindeki sağlık tarihiyle uyumlu hale getirildi.
