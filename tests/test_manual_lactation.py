@@ -74,7 +74,12 @@ class ManualLactationTests(unittest.TestCase):
         listing=ref.list_markup(vars(server),'/all-animals?kind=male',mobile_ui.icon)
         self.assertIn('>MALE<',listing)
         self.assertNotIn('>CALF<',listing)
-        self.assertIn('group=heat',ref.list_markup(vars(server),'/all-animals',mobile_ui.icon))
+        # Kızgınlık is now selected in the expanded filters, not a shortcut.
+        default_list = ref.list_markup(vars(server),'/all-animals',mobile_ui.icon)
+        self.assertIn('<select name="group">', default_list)
+        self.assertIn('<option value="heat"', default_list)
+        filtered = ref.list_markup(vars(server),'/all-animals?group=heat',mobile_ui.icon)
+        self.assertIn('<option value="heat" selected>', filtered)
 
     def test_manual_lactation_has_no_305_or_30_day_expiry(self):
         start=(server.date.today()-timedelta(days=500)).isoformat()

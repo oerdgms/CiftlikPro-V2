@@ -94,7 +94,7 @@ class Hotfix122CHTests(unittest.TestCase):
         self.assertIn('Gider<br><b>₺45.000,00</b>', html)
         self.assertIn('Maliyet<br><b>₺4.000,00</b>', html)
         self.assertIn('Net Kâr/Zarar<br><b>₺16.000,00</b>', html)
-        self.assertIn('Net = gelir − gider − maliyet', html)
+        self.assertIn('Net = gelir + buzağı üretim katkısı − gider − maliyet', html)
         self.assertIn('<td>Gider</td><td>Hayvan Alımı</td>', html)
 
     def test_version(self):

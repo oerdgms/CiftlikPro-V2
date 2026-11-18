@@ -1,3 +1,8 @@
+## 2.0.86
+
+- Üç regresyon testi güncel finans açıklaması, mobil filtre düzeni ve Türkiye saatindeki sağlık tarihiyle uyumlu hale getirildi.
+- CI test çıktısı başarısız test adlarını açıkça gösterir.
+
 ## 2.0.85
 
 - iOS ana ekrana kurulu uygulamada durum çubuğu ayrıldı ve mobil üst başlık içeriği için ek güvenli boşluk bırakıldı.

@@ -3,11 +3,12 @@ import threading
 import unittest
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from test_reports_import import server
+import reproduction_sync as sync
 
 
 class Hotfix122CDTests(unittest.TestCase):
@@ -16,6 +17,11 @@ class Hotfix122CDTests(unittest.TestCase):
         self.db_patch = patch.object(server, 'DB', Path(self.temp.name) / 'test.db')
         self.db_patch.start()
         server.init_db()
+        # The HTTP health view uses Türkiye farm time; keep its clock aligned
+        # with this fixture even when the Windows runner is still on yesterday.
+        self.clock_patch = patch.object(sync, 'now', return_value=datetime.combine(date.today(), datetime.min.time()).replace(hour=12))
+        self.clock_patch.start()
+        self.addCleanup(self.clock_patch.stop)
         today = date.today().isoformat()
         with server.db() as connection:
             self.animal_ids = [

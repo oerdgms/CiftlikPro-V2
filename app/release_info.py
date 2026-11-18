@@ -1,8 +1,8 @@
 """Single release identity for runtime, cached assets and Windows packaging."""
 import re
 
-VERSION = '2.0.85'
-BUILD_LABEL = 'IOSHeaderClarity'
+VERSION = '2.0.86'
+BUILD_LABEL = 'CIRegressionCompatibility'
 BASELINE = '2.0.41'
 CHANNEL = 'pilot-preparation'
 CORE_VERSION = '3.9.23 DEV4 Hotfix1.22cr'
