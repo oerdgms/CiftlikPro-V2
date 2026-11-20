@@ -289,6 +289,13 @@ class AppEditionTests(unittest.TestCase):
         # and unified protein summary; new tests cover those changed behaviors.
         # 2.0.69 updates only solve_smart_ration for reference-aware, minimum-change
         # recalculation; tests/test_ration_recalculation.py pins that new behavior.
+        # 2.0.88 updates App for legacy calf birth costs and age_text for exact days.
+        # tests/test_calf_birth_contribution.py covers both requested behaviors.
+        # 2.0.89 adds remaining cost display; the multi-year no-cash-transfer
+        # regression in test_calf_birth_contribution pins the derived balance.
+        # 2.0.90 authorizes only the newborn optional value form and atomic
+        # animal-add transfer, covered by test_calf_birth_contribution.
+        # 2.0.91 changes only stock reconciliation reads; stock tests pin writes.
         expected=json.loads((ROOT/'tests'/'enterprise_core_source_snapshot.json').read_text())
         source=(ROOT/'app'/'server.py').read_text()
         # Exclude only the added dashboard link; retain the original core hashes.

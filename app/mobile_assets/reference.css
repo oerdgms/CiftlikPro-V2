@@ -371,3 +371,5 @@ body.cp-reference .cp-ref-finance-breakdown>.cp-ref-kv{padding:12px!important}
 .cp-ref-task-list .cp-task-action::after{content:"";position:absolute;inset:0;z-index:1}
 .cp-ref-task-list .cp-task-animal{position:relative;z-index:2;display:inline-flex;align-items:center;min-height:32px;padding-inline:4px;margin-inline:-4px}
 .cp-ref-task-list .cp-task-action:focus-visible::after{outline:2px solid #00664f;outline-offset:-3px}
+
+@layer cp-reference { @media(max-width:900px){body.cp-reference .cp-ref-family-link{display:inline-flex!important;align-items:center!important;min-height:44px!important;color:#00654f!important;text-decoration:underline!important;overflow-wrap:anywhere!important}} }

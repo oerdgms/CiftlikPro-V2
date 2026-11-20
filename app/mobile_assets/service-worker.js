@@ -1,5 +1,5 @@
 'use strict';
-const CACHE = 'ciftlikpro-app-edition-2.0.87';
+const CACHE = 'ciftlikpro-app-edition-2.0.91';
 const STATIC = ['/app-assets/offline.html','/app-assets/icon-192.png','/app-assets/icon-512.png','/app-assets/apple-touch-icon.png','/app-assets/icon-maskable-512.png'];
 self.addEventListener('install',event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)).then(() => self.skipWaiting()));

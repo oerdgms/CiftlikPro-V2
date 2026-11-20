@@ -35,6 +35,7 @@ def document(html,handler,registry):
     # This tiny same-photo background is decoded with the document. The full image
     # remains a separate cacheable request and is never awaited by the login form.
     css='''<style id="cpLoginFirstPaint">
+    .login-form{width:100%;max-width:320px;margin-inline:auto;box-sizing:border-box}
     .login-form #cpLoginFarm{display:block;width:100%;max-width:100%;min-width:0;min-height:46px;padding:11px 12px;border:1px solid #ccd9d0;border-radius:11px;background:#fff;color:#193a2b;font:inherit;font-size:16px;box-sizing:border-box}
     @layer ciftlikpro-mobile {@media(max-width:900px){
      html.cp-login-stage{background:#153e2a url("PREVIEW") center/cover fixed!important}
@@ -43,7 +44,7 @@ def document(html,handler,registry):
      html.cp-login-stage body.cp-app.cp-login .login-logo{font-size:29px!important}
      html.cp-login-stage body.cp-app.cp-login .login-visual p{margin:14px 0 0!important}
      html.cp-login-stage body.cp-app.cp-login .login-panel{padding-top:clamp(160px,24svh,240px)!important;margin-top:auto!important}
-     html.cp-login-stage body.cp-app.cp-login .login-form{width:100%!important;max-width:320px!important;margin-inline:auto!important}
+     html.cp-login-stage body.cp-app.cp-login .login-form{width:100%!important;max-width:280px!important;margin-inline:auto!important}
      html.cp-login-stage body.cp-app.cp-login .login-form label{margin:6px 0 3px!important;font-size:11px!important}
      html.cp-login-stage body.cp-app.cp-login .login-form input,html.cp-login-stage body.cp-app.cp-login #cpLoginFarm{height:44px!important;min-height:44px!important;padding:7px 11px!important;font-size:16px!important;box-sizing:border-box!important}
      html.cp-login-stage body.cp-app.cp-login .password-wrap #loginPassword{height:44px!important;min-height:44px!important;padding:7px 78px 7px 11px!important}

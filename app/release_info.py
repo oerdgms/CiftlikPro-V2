@@ -1,8 +1,8 @@
 """Single release identity for runtime, cached assets and Windows packaging."""
 import re
 
-VERSION = '2.0.87'
-BUILD_LABEL = 'CITestTiming'
+VERSION = '2.0.91'
+BUILD_LABEL = 'PhotoConnectionStockReads'
 BASELINE = '2.0.41'
 CHANNEL = 'pilot-preparation'
 CORE_VERSION = '3.9.23 DEV4 Hotfix1.22cr'

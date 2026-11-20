@@ -413,7 +413,7 @@ def install(ns):
         self._farm_response_started=False
         self.__dict__.pop('_farm_account',None)
         try:return request(self,old_get)
-        except (BrokenPipeError,ConnectionResetError):return
+        except (BrokenPipeError,ConnectionResetError,ConnectionAbortedError):return
         except Exception as exc:
             logging.exception('ÇiftlikPro GET failed: %s',urlsplit(self.path).path)
             if self._farm_response_started:return
@@ -434,7 +434,7 @@ def install(ns):
         self.__dict__.pop('_farm_account',None)
         if urlsplit(self.path).path!='/login':return request(self,old_post)
         try:return request(self,old_post)
-        except (BrokenPipeError,ConnectionResetError):return
+        except (BrokenPipeError,ConnectionResetError,ConnectionAbortedError):return
         except Exception as exc:
             logging.exception('ÇiftlikPro sign-in failed')
             if self._farm_response_started:return

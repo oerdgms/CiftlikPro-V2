@@ -1,3 +1,26 @@
+## 2.0.91
+
+- Windows bağlantı iptali (ConnectionAbortedError / WinError 10053) GET ve POST sınırlarında beklenen istemci bağlantı kesilmesi olarak ele alınır. Gerçek uygulama hataları kayıtlarda görünmeye devam eder.
+- Günlük stok eşitlemesi hayvan nüfusu ve mevcut tüketim hareketlerini toplu okur; ortak rasyonlar aynı çağrıda tekrar sorgulanmaz. Yeni sayfa açılışı güncel veriyi okumaya devam eder; istekler arasında sonuç önbelleği yoktur.
+- Yedek kopyasındaki değişmeyen gün kontrolünde 237 SQL sorgusu 10 sorguya düştü; stok sonucu ve kayıtlar korundu.
+
+## 2.0.90
+
+- Doğum Yaptı ve Yeni Hayvan > Çiftlikte Doğdu ekranlarına isteğe bağlı Doğum / İç Üretim Değeri (₺) eklendi.
+- Tutar buzağı kaydıyla aynı işlemde başlangıç maliyetine yazılır; annede üretim katkısı olarak kalan net maliyeti azaltır. Kasa/finans hareketi oluşturmaz.
+- Boş tutar sonradan karttan eklenebilir. Mevcut doğum maliyeti düzenlemesi aynı kaydı günceller; eski kayıtlar korunur.
+
+## 2.0.89
+
+- Anne kartında Kalan Net Maliyet gösterilir: toplam maliyet eksi kayıtlı gelirler ve tüm buzağılardan biriken üretim katkısı. Kasa geliri oluşturulmaz.
+- Maliyet karşılandığında kalan tutar sıfır ve üzerindeki katkı ayrıca gösterilir.
+
+## 2.0.88
+
+- Giriş formu daraltılıp ortalandı; hayvan yaşında toplam gün bilgisi gösterilir.
+- Buzağı temel kimliğinde anne küpesi hayvan kartına bağlanır.
+- Anne bağlantısı eksik eski buzağılarda doğum maliyeti girilebilir; anne üretim katkısı bağlantı tamamlanınca görünür.
+
 ## 2.0.87
 
 - Windows CI: geçici test veritabanlarında disk eşitleme beklemesi azaltıldı; uygulama veritabanı ayarları korunur.

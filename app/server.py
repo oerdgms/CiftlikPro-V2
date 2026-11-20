@@ -2371,9 +2371,10 @@ def age_text(d):
     if not d:return '-'
     try:
         b=date.fromisoformat(d); days=(date.today()-b).days
+        if days<0:return '-'
         if days<60:return f'{days} gün'
-        if days<730:return f'{days//30} ay'
-        return f'{days//365} yıl {(days%365)//30} ay'
+        if days<730:return f'{days//30} ay ({days} gün)'
+        return f'{days//365} yıl {(days%365)//30} ay ({days} gün)'
     except:return '-'
 
 def months_old(d):
@@ -2663,6 +2664,7 @@ def financial_cents(value):
 
 
 CALF_BIRTH_COST = 'Doğum Maliyeti'
+CALF_BIRTH_LABEL = 'Doğum / İç Üretim Değeri'
 CALF_BIRTH_CONTRIBUTION = 'Buzağı Üretim Katkısı'
 
 
@@ -2671,7 +2673,7 @@ def calf_birth_contribution_markup(summary):
     if not rows:return ''
     items=''.join(f'<li><a href="/calf?id={r["calf_id"]}">{h(r["tag"])}</a> · {fmt_date(r["cost_date"])} · <b>{money(r["amount"])}</b></li>' for r in rows)
     return (f'<details class="cp-ref-finance-breakdown"><summary>{CALF_BIRTH_CONTRIBUTION} · {money(summary["birth_contribution"])}</summary>'
-            f'<ul>{items}</ul><p class="mut">İşletme içi aktarım. Satış ve kasa toplamlarına girmez.</p></details>')
+            f'<ul>{items}</ul><p class="mut">Tüm doğumlardan biriken işletme içi katkıdır; annenin net maliyetinden düşer. Satış ve kasa toplamlarına girmez.</p></details>')
 
 
 def animal_financial_summary(c, rec, source='animal'):
@@ -2731,11 +2733,22 @@ def animal_financial_summary(c, rec, source='animal'):
             'operating':operating/100,'expense':expense/100,'income':income/100,
             'total_cost':total/100,'net_profit':(income-total)/100,'finance_rows':linked,
             'birth_contribution':birth_contribution/100,'birth_contributions':birth_rows,
-            'card_net_profit':(income+birth_contribution-total)/100}
+            'card_net_profit':(income+birth_contribution-total)/100,
+            'remaining_net_cost':max(0,total-income-birth_contribution)/100,
+            'cost_surplus':max(0,income+birth_contribution-total)/100}
+
+
+def animal_net_cost_markup(summary):
+    surplus = summary['cost_surplus']
+    recovered = ('<p class="mut">Maliyet karşılandı. Maliyet üzerindeki katkı: <b>'+money(surplus)+'</b></p>') if surplus else ''
+    return (f'<div class="costbox cp-net-cost-summary"><h3>Kalan Net Maliyet</h3>'
+            f'<b>{money(summary["remaining_net_cost"])}</b>'
+            '<p class="mut">Toplam maliyet − kayıtlı gelirler − tüm doğumlardan biriken buzağı üretim katkısı. '
+            'Buzağı üretim katkısı kasaya nakit gelir yazılmaz.</p>'+recovered+'</div>')
 
 
 def render_animal_financial_metrics(summary):
-    return f'''<div class="costbox"><h3>Finans Özeti</h3><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(summary['income'])}</b></span><span class="pill">Gider<br><b>{money(summary['expense'])}</b></span><span class="pill">Maliyet<br><b>{money(summary['operating'])}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(summary['net_profit'])}</b></span></div><p class="mut">Gider: alış {money(summary['purchase'])} · sağlık ve diğer {money(summary['other_expense'])}. Maliyet: rasyon, bakım ve iç üretim. Net = gelir − gider − maliyet.</p></div>'''
+    return f'''<div class="costbox"><h3>Finans Özeti</h3><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(summary['income'])}</b></span><span class="pill">Gider<br><b>{money(summary['expense'])}</b></span><span class="pill">Maliyet<br><b>{money(summary['operating'])}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(summary['net_profit'])}</b></span></div><p class="mut">Gider: alış {money(summary['purchase'])} · sağlık ve diğer {money(summary['other_expense'])}. Maliyet: rasyon, bakım ve iç üretim. Net = gelir − gider − maliyet.</p>{animal_net_cost_markup(summary)}</div>'''
 
 
 def archive_record_matches(rec, query):
@@ -5248,15 +5261,30 @@ def sync_daily_paddock_feed_stock(con=None, on_date=None):
         for row in assignments:latest.setdefault(int(row['paddock_id']),row)
 
         desired={}
-        active_paddock_ids={int(r['id']) for r in c.execute('select id from paddocks where active=1').fetchall()}
+        paddock_names={int(r['id']):str(r['name'] or '') for r in c.execute('select id,name from paddocks where active=1').fetchall()}
+        active_paddock_ids=set(paddock_names)
+        populations={int(r['paddock_id']):int(r['n']) for r in c.execute('''select paddock_id,sum(n) n from (
+            select paddock_id,count(*) n from animals where coalesce(status,'Aktif')='Aktif' and paddock_id is not null group by paddock_id
+            union all
+            select paddock_id,count(*) n from calves where coalesce(status,'Aktif')='Aktif' and promoted_animal_id is null and paddock_id is not null group by paddock_id
+            ) group by paddock_id''').fetchall()}
+        # Request-local snapshots only: every call still sees current population,
+        # recipes and real stock rows, including repairs after an edit.
+        extras={}
+        for extra in c.execute('''select pef.* from paddock_extra_feeds pef
+            join feed_catalog f on f.id=pef.feed_id
+            where pef.start_date<=? and (pef.end_date is null or trim(pef.end_date)='' or pef.end_date>=?)
+            order by f.name,pef.id''',(day,day)).fetchall():
+            extras.setdefault(int(extra['paddock_id']),[]).append(extra)
+        recipes={}
         extra_paddock_ids={int(r['paddock_id']) for r in c.execute('''select distinct paddock_id from paddock_extra_feeds
             where active=1 and start_date<=? and (end_date is null or trim(end_date)='' or end_date>=?)''',(day,day)).fetchall()}
         for pid in sorted(active_paddock_ids & (set(latest.keys())|extra_paddock_ids)):
-            population=paddock_population(pid,c)
+            population=populations.get(pid,0)
             if population<=0:continue
             assignment=latest.get(pid)
             rid=int(assignment['ration_id']) if assignment else 0
-            paddock_name=(str(assignment['paddock_name'] or '') if assignment else str(c.execute('select name from paddocks where id=?',(pid,)).fetchone()['name'] or ''))
+            paddock_name=(str(assignment['paddock_name'] or '') if assignment else paddock_names[pid])
             ration_name=str(assignment['ration_name'] or '') if assignment else ''
             def add_desired(fid,per_head,source_label):
                 fid=int(fid);per_head=max(0.0,float(per_head or 0))
@@ -5270,17 +5298,22 @@ def sync_daily_paddock_feed_stock(con=None, on_date=None):
                 item['quantity_kg']=round(item['kg_per_head_day']*population,6)
                 item['sources'].append(source_label)
             if assignment:
-                items=ration_items_on_date(c,rid,day)
-                if not items:
-                    items=c.execute('''select ri.feed_id,ri.kg_per_head_day,f.*
-                        from ration_items ri join feed_catalog f on f.id=ri.feed_id
-                        where ri.ration_id=? and ri.kg_per_head_day>0 order by f.name''',(rid,)).fetchall()
-                for item in items:add_desired(item['feed_id'],item['kg_per_head_day'],'Ana rasyon')
-            for extra in paddock_extra_feeds_on_date(c,pid,day):
+                if rid not in recipes:
+                    items=ration_items_on_date(c,rid,day)
+                    if not items:
+                        items=c.execute('''select ri.feed_id,ri.kg_per_head_day,f.*
+                            from ration_items ri join feed_catalog f on f.id=ri.feed_id
+                            where ri.ration_id=? and ri.kg_per_head_day>0 order by f.name''',(rid,)).fetchall()
+                    recipes[rid]=items
+                for item in recipes[rid]:add_desired(item['feed_id'],item['kg_per_head_day'],'Ana rasyon')
+            for extra in extras.get(pid,()):
                 add_desired(extra['feed_id'],extra['kg_per_head_day'],'Ek yem')
 
         existing={(int(row['paddock_id']),int(row['feed_id'])):row for row in c.execute(
             'select * from paddock_feed_consumptions where consumption_date=?',(day,)).fetchall()}
+        transactions={int(row['id']):row for row in c.execute('''select distinct tx.* from feed_stock_transactions tx
+            join paddock_feed_consumptions pc on pc.stock_tx_id=tx.id
+            where pc.consumption_date=?''',(day,)).fetchall()}
 
         for key,item in desired.items():
             source_text=' + '.join(dict.fromkeys(item.get('sources') or [])) or 'Padok besleme'
@@ -5289,7 +5322,7 @@ def sync_daily_paddock_feed_stock(con=None, on_date=None):
                   f"{item['animal_count']} baş × {item['kg_per_head_day']:.3f} kg/baş/gün")
             previous=existing.pop(key,None)
             tx_id=int(previous['stock_tx_id'] or 0) if previous else 0
-            tx=c.execute('select * from feed_stock_transactions where id=?',(tx_id,)).fetchone() if tx_id else None
+            tx=transactions.get(tx_id)
             if tx:
                 changed=(int(previous['ration_id'])!=item['ration_id'] or
                          int(previous['animal_count'] or 0)!=item['animal_count'] or
@@ -6868,6 +6901,26 @@ def new_record_is_calf(birth_date,as_of=None):
     age=animal_age_months(birth_date,as_of)
     return age is not None and age<10
 
+def newborn_birth_value(form, arrival, kind, birth_date):
+    """Validate the optional internal transfer before creating any animal."""
+    raw=(form.get('birth_internal_value') or '').strip()
+    if not raw:return 0.0
+    try:
+        value=Decimal(raw.replace(',','.'))
+        if not value.is_finite() or value<0 or value>Decimal('999999999999'):
+            raise ValueError()
+        amount=financial_cents(value)/100
+    except Exception:
+        raise ValueError('Doğum / İç Üretim Değeri için geçerli, negatif olmayan bir tutar girin.')
+    if not amount:return 0.0
+    if arrival!='Çiftlikte Doğdu' or kind!='Buzağı':
+        raise ValueError('Doğum / İç Üretim Değeri yalnız çiftlikte doğan buzağı kaydına eklenebilir.')
+    try:born=date.fromisoformat(birth_date)
+    except Exception:raise ValueError('Geçerli doğum tarihi gerekli.')
+    if born>date.today():raise ValueError('Doğum tarihi gelecekte olamaz.')
+    return amount
+
+
 def animal_add_uploads(form):
     uploads=[]
     for index in range(1,9):
@@ -6934,7 +6987,7 @@ def render_smart_animal_add(mothers,breeds,paddocks):
 <form id="smartAnimalForm" method="post" action="/animal-add" enctype="multipart/form-data" data-smart-photo-form="1"><input type="hidden" id="recordType" name="record_type" value="Dişi"><input type="hidden" id="genderValue" name="gender" value="Dişi"><input type="hidden" id="purposeValue" name="purpose" value="Süt"><input type="hidden" id="arrivalValue" name="arrival_source" value="Satın Alındı">
 <section class="smart-card"><h2>📷 Fotoğraflar <span id="photoCount" class="photo-count">0 / 8</span></h2><div class="photo-grid">{photo_slots}</div><span class="field-help">En fazla 8 fotoğraf. İlk fotoğraf profil fotoğrafı olur; büyük görseller otomatik küçültülür.</span></section>
 <section class="smart-card"><h2>Kimlik</h2><div class="smart-grid"><label class="smart-field smart-full">Küpe Numarası *<div class="tag-wrap"><span class="tag-prefix">TR</span><input id="tagDigits" name="tag_digits" inputmode="numeric" pattern="[0-9]{{8,14}}" minlength="8" maxlength="14" placeholder="583001234" required autocomplete="off"><button class="tag-scan" id="openScanner" type="button" title="Karekod veya barkod tara">⌗</button></div><span class="field-help">TR ön eki sabittir ve otomatik kaydedilir.</span><span id="tagState" class="tag-state"></span></label><label class="smart-field">Lakap / Takma Ad<input name="nickname" placeholder="Karabaş, Boncuk…"></label><label class="smart-field">Tür<select name="animal_type"><option>Sığır</option><option>Manda</option></select></label><label class="smart-field">Irk *<input id="openBreed" class="breed-open" name="breed" placeholder="Irk seçin ▾" readonly required><input id="breedValue" type="hidden"></label><div class="smart-field"><span>Cinsiyet *</span><div class="choice-row" data-choice-group="gender"><button type="button" class="choice-card" data-value="Erkek"><b>♂ Erkek</b></button><button type="button" class="choice-card active" data-value="Dişi"><b>♀ Dişi</b></button></div></div><div class="smart-field smart-full"><span>Amaç *</span><div id="purposeChoices" class="choice-row three" data-choice-group="purpose"></div></div></div></section>
-<section class="smart-card"><h2>Geliş ve Temel Bilgiler</h2><div class="smart-grid"><div class="smart-field smart-full"><span>Geliş Kaynağı *</span><div class="choice-row three" data-choice-group="arrival"><button type="button" class="choice-card active" data-value="Satın Alındı"><b>🛒 Satın Alındı</b><small>Alış ve finans bilgileri</small></button><button type="button" class="choice-card" data-value="Çiftlikte Doğdu"><b>🐮 Çiftlikte Doğdu</b><small>Anne kaydı zorunlu</small></button><button type="button" class="choice-card" data-value="Dış Transfer"><b>⇄ Dış Transfer</b><small>Başka işletmeden geldi</small></button></div></div><label class="smart-field">Doğum Tarihi<input id="birthDate" type="date" name="birth_date"><span id="ageHint" class="field-help">Girildiğinde yaş ve buzağı durumu hesaplanır.</span></label><label class="smart-field">Giriş Tarihi<input id="entryDate" type="date" name="entry_date" value="{date.today().isoformat()}" required></label><label class="smart-field">Giriş Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" placeholder="Örn. 250"></label><label class="smart-field">Padok<select id="paddockId" name="paddock_id">{paddock_options}</select><span class="field-help">Çiftlikte doğan yavru boş bırakılırsa anne padokunu devralır.</span></label><label class="smart-field conditional purchase-field">Satıcı / Firma<input name="seller"></label><label class="smart-field conditional transfer-field" hidden>Geldiği İşletme<input name="transfer_from"></label><label class="smart-field conditional purchase-field">Alış Fiyatı (₺)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="smart-field conditional purchase-field">Ödeme Yöntemi<select id="purchasePaymentMethod" name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label id="purchaseDueDateLabel" class="smart-field conditional purchase-field" hidden>Vade Tarihi *<input id="purchaseDueDate" type="date" name="due_date"><span class="field-help">Vade günü Dashboard ve Finans ekranında hatırlatılır.</span></label><label class="smart-field smart-full conditional purchase-field"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="post_purchase_finance" value="yes" checked style="width:auto;min-height:auto;margin:0"> Alış bedelini Finansa gider olarak kaydet</span></label><label class="smart-field conditional born-field" hidden>Anne Küpesi *<select id="motherId" name="mother_id">{mother_options}</select></label><label class="smart-field conditional born-field" hidden>Baba / Boğa Küpesi<input name="father_tag" placeholder="TR…"></label></div></section>
+<section class="smart-card"><h2>Geliş ve Temel Bilgiler</h2><div class="smart-grid"><div class="smart-field smart-full"><span>Geliş Kaynağı *</span><div class="choice-row three" data-choice-group="arrival"><button type="button" class="choice-card active" data-value="Satın Alındı"><b>🛒 Satın Alındı</b><small>Alış ve finans bilgileri</small></button><button type="button" class="choice-card" data-value="Çiftlikte Doğdu"><b>🐮 Çiftlikte Doğdu</b><small>Anne kaydı zorunlu</small></button><button type="button" class="choice-card" data-value="Dış Transfer"><b>⇄ Dış Transfer</b><small>Başka işletmeden geldi</small></button></div></div><label class="smart-field">Doğum Tarihi<input id="birthDate" type="date" name="birth_date"><span id="ageHint" class="field-help">Girildiğinde yaş ve buzağı durumu hesaplanır.</span></label><label class="smart-field">Giriş Tarihi<input id="entryDate" type="date" name="entry_date" value="{date.today().isoformat()}" required></label><label class="smart-field">Giriş Kilosu (kg)<input type="number" min="0" step="0.1" name="purchase_weight" placeholder="Örn. 250"></label><label class="smart-field">Padok<select id="paddockId" name="paddock_id">{paddock_options}</select><span class="field-help">Çiftlikte doğan yavru boş bırakılırsa anne padokunu devralır.</span></label><label class="smart-field conditional purchase-field">Satıcı / Firma<input name="seller"></label><label class="smart-field conditional transfer-field" hidden>Geldiği İşletme<input name="transfer_from"></label><label class="smart-field conditional purchase-field">Alış Fiyatı (₺)<input type="number" min="0" step="0.01" name="purchase_price"></label><label class="smart-field conditional purchase-field">Ödeme Yöntemi<select id="purchasePaymentMethod" name="purchase_payment_method"><option>Nakit</option><option>Banka</option><option>Kredi Kartı</option><option>Vadeli</option></select></label><label id="purchaseDueDateLabel" class="smart-field conditional purchase-field" hidden>Vade Tarihi *<input id="purchaseDueDate" type="date" name="due_date"><span class="field-help">Vade günü Dashboard ve Finans ekranında hatırlatılır.</span></label><label class="smart-field smart-full conditional purchase-field"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="post_purchase_finance" value="yes" checked style="width:auto;min-height:auto;margin:0"> Alış bedelini Finansa gider olarak kaydet</span></label><label class="smart-field conditional born-field" hidden>Anne Küpesi *<select id="motherId" name="mother_id">{mother_options}</select></label><label class="smart-field conditional born-field" hidden>Baba / Boğa Küpesi<input name="father_tag" placeholder="TR…"></label><label id="newbornBirthValue" class="smart-field smart-full conditional" hidden>{CALF_BIRTH_LABEL} (₺) · İsteğe bağlı<input name="birth_internal_value" type="number" min="0" max="999999999999" step="0.01" inputmode="decimal" placeholder="Örn. 40000"><span class="field-help">Buzağının başlangıç maliyetine eklenir, anneye üretim katkısı olarak yansır ve annenin kalan net maliyetini azaltır. Nakit hareketi oluşturmaz. Boş bırakıp sonradan karttan ekleyebilirsiniz.</span></label></div></section>
 <section class="smart-card"><h2>Sağlık ve Yönetim</h2><div class="smart-grid"><label class="smart-field">Karantina Durumu<select name="quarantine_status"><option>Hayır</option><option>Karantinada</option><option>Karantina Tamamlandı</option></select></label><label class="smart-field">Genel Sağlık Durumu<select name="health_status"><option>Normal</option><option>Takip Edilecek</option><option>Veteriner Kontrolü Gerekli</option><option>Tedavi Altında</option></select></label><label class="smart-field">Günlük Yem / Rasyon (₺)<input type="number" min="0" step="0.01" name="daily_feed_cost"><span class="field-help">Padokta aktif rasyon varsa maliyet otomatik hesaplanır.</span></label><label class="smart-field">Günlük Bakım (₺)<input type="number" min="0" step="0.01" name="daily_care_cost"></label><label class="smart-field">Hedef Satış Fiyatı (₺)<input type="number" min="0" step="0.01" name="target_sale_price"></label><label class="smart-field smart-full">Notlar<textarea name="notes" rows="4" placeholder="Sağlık durumu, özel notlar…"></textarea></label></div></section>
 <section id="femalePregnancyBox" class="smart-card conditional female-pregnancy"><h2>🤰 Üreme Durumu</h2><div class="smart-grid"><label class="smart-field">Hayvanın Durumu<select id="entryPregnancyStatus" name="entry_pregnancy_status" onchange="toggleEntryPregnancy()"><option value="Bos">Boş / Gebe Değil</option><option value="Gebe">Gebe</option><option value="Bilinmiyor">Bilinmiyor</option></select></label><label id="pregnancyInfoModeLabel" class="smart-field" style="display:none">Gebelik Bilgisi<select id="pregnancyInfoMode" name="pregnancy_info_mode" onchange="toggleEntryPregnancy()"><option value="date">Son Tohumlama Tarihi Biliniyor</option><option value="age">Sadece Gebelik Yaşı Biliniyor</option></select></label><label id="knownInseminationLabel" class="smart-field" style="display:none">Son Tohumlama Tarihi<input type="date" name="known_insemination_date"></label><label id="pregnancyAgeLabel" class="smart-field" style="display:none">Gebelik Yaşı (Ay)<input type="number" name="pregnancy_age_months" min="1" max="9" step="0.5"></label><label id="pregnancyEntryDateLabel" class="smart-field" style="display:none">Bilgi Tarihi<input type="date" name="pregnancy_entry_date" value="{date.today().isoformat()}"></label><div id="pregnancyEntryHint" class="smart-full mut" style="display:none">Gebelik kaydı üreme takvimine hazırlanır.</div></div></section>
 <div class="photo-upload-status" data-upload-status><span data-upload-text>Kayıt hazırlanıyor…</span><div class="upload-progress"><div class="upload-progress-bar" data-upload-bar></div></div></div><div class="smart-savebar"><span id="recordHint" class="record-hint">Dişi · Süt · Yetişkin</span><button class="btn" type="submit">✓ Sürüye Ekle</button></div></form></div>
@@ -6948,7 +7001,7 @@ def render_smart_animal_add(mothers,breeds,paddocks):
  function renderPurposes(){{const box=document.getElementById('purposeChoices'),items=purposeMap[gender.value];if(!items.some(x=>x[0]===purpose.value))purpose.value=items[0][0];box.innerHTML=items.map(x=>'<button type="button" class="choice-card '+(x[0]===purpose.value?'active':'')+'" data-value="'+x[0]+'"><b>'+x[1]+'</b><small>'+x[2]+'</small></button>').join('');}}
  function ageMonths(){{if(!birth.value)return null;const d=new Date(birth.value+'T12:00:00'),n=new Date();return Math.max(0,(n.getFullYear()-d.getFullYear())*12+n.getMonth()-d.getMonth()-(n.getDate()<d.getDate()?1:0));}}
  function syncBornPaddock(){{if(arrival.value!=='Çiftlikte Doğdu'||paddockSelect.value)return;const option=motherSelect.options[motherSelect.selectedIndex];if(option&&option.dataset.paddock)paddockSelect.value=option.dataset.paddock;}}
- function update(){{renderPurposes();const age=ageMonths(),calf=age!==null&&age<10;document.getElementById('recordType').value=calf?'Buzağı':gender.value;badge.textContent=calf?'Buzağı kaydı':'Yetişkin kaydı';document.getElementById('ageHint').textContent=age===null?'Girildiğinde yaş ve buzağı durumu hesaplanır.':age+' aylık · '+(calf?'Buzağı bölümüne kaydedilecek':'Yetişkin bölümüne kaydedilecek');hint.textContent=gender.value+' · '+purpose.value+' · '+(calf?'Buzağı':'Yetişkin');document.querySelectorAll('.purchase-field').forEach(e=>e.hidden=arrival.value!=='Satın Alındı');document.querySelectorAll('.born-field').forEach(e=>e.hidden=arrival.value!=='Çiftlikte Doğdu');document.querySelectorAll('.transfer-field').forEach(e=>e.hidden=arrival.value!=='Dış Transfer');motherSelect.required=arrival.value==='Çiftlikte Doğdu';if(arrival.value==='Çiftlikte Doğdu'&&birth.value)entryDate.value=birth.value;syncBornPaddock();document.querySelectorAll('.female-pregnancy').forEach(e=>e.hidden=gender.value!=='Dişi'||calf);toggleEntryPregnancy();if(typeof syncPurchaseDue==='function')syncPurchaseDue();}}
+ function update(){{renderPurposes();const age=ageMonths(),calf=age!==null&&age<10;document.getElementById('recordType').value=calf?'Buzağı':gender.value;badge.textContent=calf?'Buzağı kaydı':'Yetişkin kaydı';document.getElementById('ageHint').textContent=age===null?'Girildiğinde yaş ve buzağı durumu hesaplanır.':age+' aylık · '+(calf?'Buzağı bölümüne kaydedilecek':'Yetişkin bölümüne kaydedilecek');hint.textContent=gender.value+' · '+purpose.value+' · '+(calf?'Buzağı':'Yetişkin');document.querySelectorAll('.purchase-field').forEach(e=>e.hidden=arrival.value!=='Satın Alındı');document.querySelectorAll('.born-field').forEach(e=>e.hidden=arrival.value!=='Çiftlikte Doğdu');document.querySelectorAll('.transfer-field').forEach(e=>e.hidden=arrival.value!=='Dış Transfer');const birthValue=document.getElementById('newbornBirthValue');birthValue.hidden=arrival.value!=='Çiftlikte Doğdu'||!calf;birthValue.querySelector('input').disabled=birthValue.hidden;motherSelect.required=arrival.value==='Çiftlikte Doğdu';if(arrival.value==='Çiftlikte Doğdu'&&birth.value)entryDate.value=birth.value;syncBornPaddock();document.querySelectorAll('.female-pregnancy').forEach(e=>e.hidden=gender.value!=='Dişi'||calf);toggleEntryPregnancy();if(typeof syncPurchaseDue==='function')syncPurchaseDue();}}
  form.addEventListener('click',function(e){{const b=e.target.closest('.choice-card');if(!b)return;const group=b.closest('[data-choice-group]').dataset.choiceGroup;if(group==='gender')gender.value=b.dataset.value;if(group==='purpose')purpose.value=b.dataset.value;if(group==='arrival')arrival.value=b.dataset.value;setChoice(group,b.dataset.value);update();}});birth.addEventListener('change',update);motherSelect.addEventListener('change',syncBornPaddock);
  const digits=document.getElementById('tagDigits'),state=document.getElementById('tagState');let checkTimer;digits.addEventListener('input',function(){{digits.value=digits.value.replace(/\\D/g,'').slice(0,14);digits.setCustomValidity('');state.textContent='';clearTimeout(checkTimer);if(digits.value.length<8)return;checkTimer=setTimeout(async function(){{try{{const r=await fetch('/api/animal-tag-check?tag='+encodeURIComponent('TR'+digits.value)),j=await r.json();digits.setCustomValidity(j.exists?'Bu küpe zaten kayıtlı.':'');state.textContent=j.exists?'⚠ Bu küpe zaten kayıtlı.':'✓ Küpe kullanılabilir.';state.style.color=j.exists?'#b33128':'#176b3a';}}catch(e){{state.textContent='Küpe kayıtta yeniden doğrulanacak.'}}}},350)}});
  const breedSheet=document.getElementById('breedSheet'),breedValue=document.getElementById('breedValue'),breedOpen=document.getElementById('openBreed');breedOpen.onclick=()=>breedSheet.classList.add('open');document.querySelector('[data-close-sheet]').onclick=()=>breedSheet.classList.remove('open');breedSheet.addEventListener('click',function(e){{const b=e.target.closest('.breed-choice');if(b){{breedValue.value=b.dataset.breed;breedOpen.value=b.dataset.breed;breedSheet.classList.remove('open')}}}});document.getElementById('breedSearch').addEventListener('input',function(){{const q=this.value.toLocaleLowerCase('tr-TR');document.querySelectorAll('.breed-choice').forEach(b=>b.hidden=!b.textContent.toLocaleLowerCase('tr-TR').includes(q))}});
@@ -9264,7 +9317,7 @@ document.querySelectorAll('.milk-row').forEach(r=>{{
             <section class="animal-card-panel active" data-animal-panel="general"><section class="v117-kpis"><div class="card v117-kpi"><span class="ico">⚖️</span><div><span>Canlı Ağırlık</span><b>{(str(latest_weight)+' kg') if latest_weight is not None else '—'}</b></div><em class="v117-chip">Son</em></div><div class="card v117-kpi"><span class="ico">🐄</span><div><span>Gebelik</span><b>{pregnancy_month if a['gender']=='Dişi' else '—'}</b></div><em class="v117-chip">{h(preg)}</em></div><div class="card v117-kpi"><span class="ico">₺</span><div><span>Günlük Maliyet</span><b>{money(daily_cost)}</b></div><em class="v117-chip">Günlük</em></div><div class="card v117-kpi"><span class="ico">▣</span><div><span>Toplam Maliyet</span><b>{money(current_cost)}</b></div><em class="v117-chip">Anlık</em></div></section><div class="animal-360-grid">{overview_preg}<div class="card animal-360-card"><div class="v117-panel-head"><h2>✚ Son Sağlık İşlemleri</h2><button class="btn alt" onclick="showAnimalPanel('health')">Tümünü Gör</button></div><div class="v117-panel-body">{overview_health}</div></div><div class="card animal-360-card animal-360-timeline"><div class="v117-panel-head"><h2>↶ Hayvan Geçmişi</h2></div><div class="v117-panel-body">{overview_timeline}</div></div><div class="card animal-360-card mini-weight-chart"><div class="v117-panel-head"><h2>▥ Kilo Değişimi</h2><button class="btn alt" onclick="showAnimalPanel('growth')">Detay</button></div><div class="v117-panel-body">{overview_chart or '<div class="workspace-empty">Grafik için tartım verisi gerekli.</div>'}</div></div><div class="card animal-360-card"><div class="v117-panel-head"><h2>₺ Finans Özeti</h2><button class="btn alt" onclick="showAnimalPanel('finance')">Detay</button></div><div class="v117-panel-body"><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(total_cost)}</b></span><span class="pill">Net<br><b>{money(net_value)}</b></span></div></div></div></div><div class="card animal-360-fast"><b>⚡ Hızlı İşlemler</b><button class="btn" onclick="showAnimalPanel('growth')">⚖ Tartım Ekle</button><button class="btn alt" onclick="showAnimalPanel('health')">＋ Sağlık Kaydı</button><a class="btn alt" href="/inseminations?animal={aid}">💉 Tohumlama</a><button class="btn alt" onclick="showAnimalPanel('finance')">₺ Finans İşlemi</button><button class="btn alt" onclick="showAnimalPanel('photos')">▧ Fotoğraf Ekle</button></div></section>
             {reproduction_panel}<section class="animal-card-panel" data-animal-panel="growth"><div class="panel-grid">{weight_panel}{milk_panel}{estimate_panel}</div></section>
             <section class="animal-card-panel" data-animal-panel="health"><div class="card"><div class="filter-title"><div><h2>Sağlık Geçmişi</h2><p class="mut">Aşı, ilaç ve uygulamalar</p></div><a class="btn" href="/health">Sağlık Merkezine Git</a></div><div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>İşlem</th><th>Maliyet</th></tr>{htr}</table></div></div></section>
-            <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(finance_expense_total)}</b></span><span class="pill">Maliyet<br><b>{money(accumulated_cost)}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(net_value)}</b></span></div><p class="mut">Gider kırılımı: alış {money(purchase_cost)} · sağlık ve diğer bağlı giderler {money(other_cost)}. Maliyet, işletmeye girişten çıkış tarihine kadar rasyon + bakımdır. Net = gelir + buzağı üretim katkısı − gider − maliyet; alış finans satırı ikinci kez eklenmez.</p>{calf_birth_contribution_markup(financial)}<div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
+            <section class="animal-card-panel" data-animal-panel="finance"><div class="card"><h2>Hayvana Bağlı Finans Hareketleri</h2><div class="quick-metrics"><span class="pill">Gelir<br><b>{money(total_income)}</b></span><span class="pill">Gider<br><b>{money(finance_expense_total)}</b></span><span class="pill">Maliyet<br><b>{money(accumulated_cost)}</b></span><span class="pill">Net Kâr/Zarar<br><b>{money(net_value)}</b></span></div><p class="mut">Gider kırılımı: alış {money(purchase_cost)} · sağlık ve diğer bağlı giderler {money(other_cost)}. Maliyet, işletmeye girişten çıkış tarihine kadar rasyon + bakımdır. Net = gelir + buzağı üretim katkısı − gider − maliyet; alış finans satırı ikinci kez eklenmez.</p>{animal_net_cost_markup(financial)}{calf_birth_contribution_markup(financial)}<div class="panel-table-wrap"><table><tr><th>Tarih</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th>Tutar</th></tr>{ftr}</table></div></div></section>
             <section class="animal-card-panel" data-animal-panel="photos"><div class="card"><h2>Fotoğraf Galerisi</h2><form method="post" action="/animal/photo" enctype="multipart/form-data" class="uploadbox" data-smart-photo-form="1"><input type="hidden" name="animal_id" value="{aid}"><label>Fotoğraf seç veya telefondan çek<input type="file" name="photo_file" accept="image/*" required></label><input name="caption" placeholder="Açıklama (isteğe bağlı)"><button class="btn">Fotoğrafı Yükle</button></form><div class="gallery" style="margin-top:14px">{gallery}</div></div></section>
             <section class="animal-card-panel" data-animal-panel="history">{sale_box}{loss_box or '<div class="card"><p class="gender-note">Bu hayvan aktif sürüde olmadığı için yeni satış veya zayiat işlemi açılamaz.</p></div>'}</section>
             <script>(function(){{const tabs=[...document.querySelectorAll('[data-animal-tab]')],panels=[...document.querySelectorAll('[data-animal-panel]')];window.showAnimalPanel=function(name){{tabs.forEach(x=>x.classList.toggle('active',x.dataset.animalTab===name));panels.forEach(x=>x.classList.toggle('active',x.dataset.animalPanel===name));const active=panels.find(x=>x.dataset.animalPanel===name);if(active)active.scrollIntoView({{behavior:'smooth',block:'start'}})}};tabs.forEach(x=>x.addEventListener('click',()=>showAnimalPanel(x.dataset.animalTab)));if(location.hash==='#animalSale'||location.hash==='#animalLoss')showAnimalPanel('history');else if(location.hash==='#growth')showAnimalPanel('growth');}})();</script>'''
@@ -9356,8 +9409,9 @@ body:has(.workbench-shell) #ration-workbench{{margin-top:0!important}}
             calf_cost_box=f'''<div class="costbox"><h3>Canlı Anlık Maliyet</h3><div class="quick-metrics"><span class="pill">{h(initial_cost_label)}<br><b>{money(calf['purchase_price'])}</b></span><span class="pill">Bizde Kalma<br><b>{calf_days} gün</b></span><span class="pill">İç Üretim<br><b>{money(internal_total)}</b></span><span class="pill">Rasyon + Bakım + İç Üretim<br><b>{money(calf_operating)}</b></span><span class="pill">Toplam Maliyet<br><b>{money(calf_total)}</b></span></div><p class="mut">Günlük yem/rasyon {money(calf_feed['feed_cost'])} · bakım {money(calf['daily_care_cost'])} · toplam {money(calf_daily)}. İç üretim maliyeti nakit gideri ikinci kez yazmaz; buzağının maliyetine dağıtılır.</p></div>'''
             feed_opts_internal=''.join(f'<option value="{x["id"]}">{h(x["name"])}</option>' for x in calf_feeds)
             birth_entry=next((x for x in internal_rows if x['cost_type']==CALF_BIRTH_COST),None)
-            birth_option=f'<option value="{CALF_BIRTH_COST}">{CALF_BIRTH_COST}</option>' if calf['mother_tag'] else ''
-            birth_edit=(f'<p class="mut">Doğum maliyetini değiştirmek için tür olarak Doğum Maliyeti seçip yeni toplamı girin. Kayıt güncellenir.</p>' if birth_entry else '')
+            birth_option=f'<option value="{CALF_BIRTH_COST}">{CALF_BIRTH_LABEL}</option>'
+            birth_edit=(f'<p class="mut">Doğum maliyetini değiştirmek için tür olarak Doğum / İç Üretim Değeri seçip yeni toplamı girin. Kayıt güncellenir.</p>' if birth_entry else '')
+            if not calf['mother_tag']:birth_edit+=f'<p class="mut">Anne kaydı bağlı değil. Doğum maliyeti buzağıya kaydedilir; anneye üretim katkısı yansıtmak için <a class="taglink" href="/calf-edit?id={cid}">anne bilgisini tamamlayın</a>.</p>'
             internal_table=''.join(f'''<tr><td>{fmt_date(x['cost_date'])}</td><td>{h(x['cost_type'])}</td><td>{h(x['feed_name'] or x['notes'] or '-')}</td><td>{float(x['quantity'] or 0):g} {h(x['unit'] or '')}</td><td>{money(x['unit_cost'])}</td><td><b>{money(x['amount'])}</b></td><td><form method="post" action="/calf-internal-cost/delete" onsubmit="return confirm('Bu iç üretim maliyeti silinsin mi?')"><input type="hidden" name="id" value="{x['id']}"><input type="hidden" name="calf_id" value="{cid}"><button class="btn red compact-btn">Sil</button></form></td></tr>''' for x in internal_rows) or '<tr><td colspan="7">Henüz iç üretim maliyeti kaydı yok.</td></tr>'
             internal_cost_box=f'''<div class="card" style="margin-top:14px"><div class="filter-title"><div><h2>🍼 İç Üretim Maliyeti</h2><p class="mut">Süt, buzağı başlangıç/büyütme yemi, ot, yonca ve diğer büyütme maliyetlerini küpeye dağıtır. Nakit gideri ikinci kez oluşturmaz. Doğum Maliyeti, anne kartında üretim katkısı olarak görünür.</p></div><span class="pill">Toplam {money(internal_total)}</span></div>{birth_edit}<form method="post" action="/calf-internal-cost/save" class="form" data-submit-lock="1" data-submit-text="⏳ Kaydediliyor…"><input type="hidden" name="calf_id" value="{cid}"><label>Tarih<input type="date" name="cost_date" value="{date.today().isoformat()}" required></label><label>Tür<select name="cost_type" id="calfInternalCostType"><option>Süt</option><option>Yem</option><option>Bakım</option><option>Diğer</option>{birth_option}</select></label><label id="calfInternalFeedLabel">Yem<select name="feed_id" id="calfInternalFeed"><option value="">Yem seçin…</option>{feed_opts_internal}</select></label><label>Miktar<input type="number" name="quantity" min="0.001" step="0.001" value="1" required></label><label>Birim<select name="unit"><option value="L">Litre</option><option value="kg">kg</option><option value="adet">adet</option></select></label><label><span id="calfInternalCostLabel">Birim Maliyet (₺)</span><input type="number" name="unit_cost" min="0" step="0.01" value="0"><small class="mut">Yem seçilirse 0 bırakınca stok ortalama maliyeti kullanılır.</small></label><label class="full">Not<input name="notes" placeholder="Örn. Sabah sütü / yonca / buzağı başlangıç yemi"></label><label class="full"><input type="checkbox" name="deduct_stock" value="1" checked> Yem türünde stoktan düş</label><div class="full"><button class="btn">Maliyete Ekle</button></div></form><div class="tablewrap" style="margin-top:12px"><table><tr><th>Tarih</th><th>Tür</th><th>Yem / Açıklama</th><th>Miktar</th><th>Birim Maliyet</th><th>Toplam</th><th></th></tr>{internal_table}</table></div><script>(function(){{const t=document.getElementById('calfInternalCostType'),l=document.getElementById('calfInternalFeedLabel'),f=document.getElementById('calfInternalFeed');if(!t)return;function s(){{const y=t.value==='Yem';l.style.display=y?'block':'none';f.required=y;const birth=t.value==='Doğum Maliyeti';const label=document.getElementById('calfInternalCostLabel');if(label)label.textContent=birth?'Toplam Doğum Maliyeti (₺)':'Birim Maliyet (₺)'}}t.addEventListener('change',s);s()}})();</script></div>'''
             calf_loss_box=(f'''<details class="card" style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">🕯 Ölüm / Kayıp / Zorunlu İmha Kaydı</summary><form method="post" action="/animal/loss" class="form" onsubmit="return confirm('{h(calf['tag'])} küpeli buzağı için zayiat kaydı oluşturulsun mu?')"><input type="hidden" name="subject_type" value="calf"><input type="hidden" name="subject_id" value="{cid}"><label>Olay Türü<select name="event_type"><option>Öldü</option><option>Kayıp</option><option>Zorunlu İmha</option><option>İşletmeden Çıkarıldı</option></select></label><label>Olay Tarihi<input type="date" name="event_date" value="{date.today().isoformat()}" required></label><label>Neden<input name="cause"></label><label>Veteriner Teşhisi<input name="diagnosis"></label><label>Sigorta / Et / Kurtarma Geliri<input type="number" min="0" step="0.01" name="recovery_amount" value="0"></label><label class="full">Not<textarea name="notes"></textarea></label><div class="full"><button class="btn red">Zayiat Kaydını Onayla</button></div></form></details>''') if str(calf['status'] or 'Aktif')=='Aktif' else ''
@@ -11810,6 +11864,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 arrival=(f.get('arrival_source') or 'Satın Alındı').strip()
                 if arrival not in ('Satın Alındı','Çiftlikte Doğdu','Dış Transfer'):raise ValueError('Geliş kaynağı geçersiz.')
                 if arrival=='Çiftlikte Doğdu' and not birth_date:raise ValueError('Çiftlikte doğan hayvan için doğum tarihi zorunludur.')
+                birth_value=newborn_birth_value(f,arrival,kind,birth_date)
                 uploads=animal_add_uploads(f)
                 entry_date=(birth_date if arrival=='Çiftlikte Doğdu' else (f.get('entry_date') or date.today().isoformat())).strip()
                 try:date.fromisoformat(entry_date)
@@ -11844,6 +11899,10 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         cur=c.execute('''insert into calves(tag,mother_id,father_tag,birth_date,gender,notes,nickname,breed,paddock,paddock_id,photo_url,purchase_date,purchase_price,purchase_payment_method,status,daily_feed_cost,daily_care_cost,target_sale_price,animal_type,purpose,arrival_source,entry_date,seller,purchase_weight,quarantine_status,health_status)
                             values(?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?)''',(tag,mother['id'] if mother else 0,father_tag,birth_date,gender,notes,f.get('nickname',''),breed,paddock_name,paddock_id,'',entry_date,purchase_price,payment,'Aktif',daily_feed,daily_care,target_sale,animal_type,purpose,arrival,entry_date,seller,purchase_weight,quarantine,health_status))
                         subject_id=cur.lastrowid;source='calf'
+                        if birth_value:
+                            c.execute('''insert into calf_internal_costs(calf_id,cost_date,cost_type,quantity,unit,unit_cost,amount,notes,created_at)
+                                values(?,?,?,?,?,?,?,?,?)''',(subject_id,birth_date,CALF_BIRTH_COST,1,'adet',birth_value,birth_value,'Doğum kaydıyla oluşturuldu',datetime.now().isoformat(timespec='seconds')))
+
                         if mother and birth_date:close_pregnancy_after_birth(c,mother['id'],birth_date)
                         for upload in uploads:
                             name=save_optimized_upload(f'calf_{subject_id}',upload);photo_names.append(name)
@@ -11880,7 +11939,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                         c.execute('insert into finance(tx_date,tx_type,category,amount,description,payment_method,animal_id,created_at,animal_status_action,calf_id,due_date,payment_status,supplier) values(?,?,?,?,?,?,?,?,?,?,?,?,?)',(entry_date,'Gider','Hayvan Alımı',purchase_price,f'Otomatik hayvan alımı · {tag}'+(f' · {seller}' if seller else ''),payment,subject_id if source=='animal' else None,datetime.now().isoformat(timespec='seconds'),'',None if source=='animal' else subject_id,purchase_due,'Bekliyor' if payment=='Vadeli' else 'Ödendi',seller))
                 audit(username,'Akıllı hayvan kaydı',f'{tag} · {kind} · {arrival} · {len(uploads)} fotoğraf',self.client_ip())
                 target='/calves' if kind=='Buzağı' else ('/animals' if gender=='Dişi' else '/males')
-                return self.redirect(target,f'{tag} başarıyla kaydedildi.'+(' Alış bedeli Finansa gider olarak işlendi.' if finance_posted else ''))
+                return self.redirect(target,f'{tag} başarıyla kaydedildi.'+(' Doğum / İç Üretim Değeri buzağıya ve annenin üretim katkısına yansıdı; nakit hareketi oluşturulmadı.' if birth_value else '')+(' Alış bedeli Finansa gider olarak işlendi.' if finance_posted else ''))
             except (ValueError,sqlite3.IntegrityError) as exc:return self.redirect('/animal-add',str(exc))
             except Exception as exc:return self.redirect('/animal-add','Kayıt hatası: '+str(exc))
             kind=(f.get('record_type') or '').strip();tag=(f.get('tag') or '').strip()
@@ -12014,7 +12073,6 @@ setTimeout(()=>setFinanceDrawer(false),0);
                 if not calf:return self.redirect('/calves','Buzağı bulunamadı.')
                 if cost_type==CALF_BIRTH_COST:
                     mother=c.execute("select 1 from animals where id=? and gender='Dişi'",(calf['mother_id'],)).fetchone()
-                    if not mother:return self.redirect('/calf?id='+str(cid),'Doğum maliyeti için anne kaydı gerekli.')
                     try:birth=date.fromisoformat(calf['birth_date'] or '')
                     except ValueError:return self.redirect('/calf?id='+str(cid),'Geçerli doğum tarihi gerekli.')
                     if birth>date.today() or not (0<unit_cost<float('inf')):
@@ -12043,7 +12101,7 @@ setTimeout(()=>setFinanceDrawer(false),0);
                               (calf_internal_cost_total(c,cid),calf['promoted_animal_id']))
             audit(username,'Buzağı iç üretim maliyeti ekledi',f'{cid} · {cost_type} · {money(amount)}',self.client_ip())
             if cost_type==CALF_BIRTH_COST:
-                return self.redirect('/calf?id='+str(cid),'Doğum maliyeti kaydedildi ve anne kartına üretim katkısı olarak yansıdı.')
+                return self.redirect('/calf?id='+str(cid), 'Doğum maliyeti kaydedildi ve anne kartına üretim katkısı olarak yansıdı.' if mother else 'Doğum maliyeti buzağıya kaydedildi. Anne kaydı bağlı olmadığı için üretim katkısı henüz anneye yansıtılmadı.')
             return self.redirect('/calf?id='+str(cid),'İç üretim maliyeti buzağı maliyetine eklendi. Nakit gider ikinci kez oluşturulmadı.')
         if path=='/calf-internal-cost/delete':
             try:rid=int(f.get('id') or 0);cid=int(f.get('calf_id') or 0)

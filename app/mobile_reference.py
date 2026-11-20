@@ -283,8 +283,14 @@ def list_markup(ns, request_url, icon):
     return f'''<section class="cp-ref cp-ref-list" aria-label="Hayvanlar"><form id="cpRefHerdForm" method="get" action="/all-animals"><label class="cp-ref-search">{glyph('search')}<input type="search" name="q" value="{esc(term)}" placeholder="Küpe no, ad, takip no ara…" aria-label="Hayvan ara" autocomplete="off"><button type="submit" aria-label="Ara">{glyph('chevron')}</button></label><div class="cp-ref-filter-row"><nav class="cp-ref-chips" aria-label="Hayvan türü kısayolları">{chips}</nav><button type="button" class="cp-ref-filter-button" aria-label="{esc("Diğer filtreler: "+status_labels[group] if group else "Diğer filtreler")}" aria-controls="cpRefFilters" aria-expanded="false">{glyph('filter')}</button></div><details id="cpRefFilters" class="cp-ref-filters"><summary>Diğer filtreler</summary><div><label>Hayvan türü<select id="cpRefKind" name="kind">{kinds}</select></label><label>Hayvan durumu<select name="group">{statuses}</select></label><label>Padok<select name="paddock">{options}</select></label><label>Sıralama<select name="sort">{''.join(f'<option value="{k}" {"selected" if sort==k else ""}>{label}</option>' for k,label in [('animal','Küpe no'),('age','Yaş'),('breed','Irk'),('paddock','Padok')])}</select></label><label>Sıra<select name="dir"><option value="asc" {"selected" if not reverse else ""}>Artan</option><option value="desc" {"selected" if reverse else ""}>Azalan</option></select></label><label>Göster<select name="per_page">{''.join(f'<option value="{n}" {"selected" if n==size else ""}>{n} kayıt</option>' for n in (10,15,30))}</select></label><button class="cp-ref-button" type="submit">Filtrele</button></div><a href="/archive/sold">Satılan</a><a href="/archive/slaughtered">Kesilen</a><a href="/archive/lost">Ölen / Kayıp</a><a href="/all-animals">Temizle</a></details></form><div class="cp-ref-list-status" role="status">{len(selected)} hayvan{(' · '+status_labels[group]) if group else ''}{(' · '+esc(pad)) if pad else ''}</div><div id="cpRefListResults">{rows}<nav class="cp-ref-pagination" aria-label="Sayfalar">{pager}</nav></div></section>'''
 
 
-def keyvalues(items):
-    return '<dl class="cp-ref-kv">'+''.join(f'<div><dt>{esc(label)}</dt><dd>{esc(value) if value not in (None,"") else "—"}</dd></div>' for label,value in items)+'</dl>'
+def keyvalues(items, links=None):
+    rows = []
+    for label, value in items:
+        rendered = esc(value) if value not in (None, '') else '—'
+        if value not in (None, '') and (links or {}).get(label):
+            rendered = '<a class="cp-ref-family-link" href="'+esc(links[label])+'">'+rendered+' ›</a>'
+        rows.append(f'<div><dt>{esc(label)}</dt><dd>{rendered}</dd></div>')
+    return '<dl class="cp-ref-kv">'+''.join(rows)+'</dl>'
 
 
 def residence_markup(record, today=None):
@@ -369,7 +375,7 @@ def detail_markup(ns, request_url, icon):
         milk = ns['dairy_lactation_summary'](c,sid) if source=='animal' and a['gender']=='Dişi' else None
         financial = ns['animal_financial_summary'](c,original,source)
         feed = ns['animal_current_feed_context'](original,c)
-        mother = c.execute('select tag from animals where id=?',(a.get('mother_id'),)).fetchone()
+        mother = c.execute('select id,tag from animals where id=?',(a.get('mother_id'),)).fetchone()
         pad = c.execute('select * from paddocks where id=?',(a.get('paddock_id'),)).fetchone()
         moves = c.execute('select ph.*,p.name target_name from paddock_history ph left join paddocks p on p.id=ph.to_paddock_id where animal_source=? and animal_id=? order by moved_at desc,id desc',(source,sid)).fetchall()
         health = c.execute(f'select * from health where {column}=? order by applied_date desc,id desc',(sid,)).fetchall()
@@ -392,7 +398,7 @@ def detail_markup(ns, request_url, icon):
     route = '/calf' if source=='calf' else '/animal';edit=('/calf-edit' if source=='calf' else '/animal-edit')+'?id='+str(sid)
     purl='/paddocks'+('?selected='+str(a['paddock_id']) if a.get('paddock_id') else '')
     pic = a.get('photo_url') or ('/uploads/'+photos[0]['filename'] if photos else '')
-    identity = keyvalues([('Küpe No',a['tag']),('Adı / Takip No',a.get('nickname')),('Doğum Tarihi',fmt(a.get('birth_date'))),('Yaşı',ns['age_text'](a.get('birth_date'))),('Irk',a.get('breed')),('Hayvan Tipi',life_type),('Anne Küpe No',mother['tag'] if mother else ''),('Baba Küpe No',a.get('father_tag')),('Cinsiyet',a['gender']),('Durum',a.get('status') or 'Aktif')])
+    identity = keyvalues([('Küpe No',a['tag']),('Adı / Takip No',a.get('nickname')),('Doğum Tarihi',fmt(a.get('birth_date'))),('Yaşı',ns['age_text'](a.get('birth_date'))),('Irk',a.get('breed')),('Hayvan Tipi',life_type),('Anne Küpe No',mother['tag'] if mother else ''),('Baba Küpe No',a.get('father_tag')),('Cinsiyet',a['gender']),('Durum',a.get('status') or 'Aktif')], links={'Anne Küpe No': '/animal?id='+str(mother['id'])} if mother else None)
     identity += f'<a class="cp-ref-bar" href="{edit}">Temel bilgileri düzenle {glyph("edit")}</a>'
     dairy_info = ''
     if dairy_state:
@@ -417,7 +423,7 @@ def detail_markup(ns, request_url, icon):
     ration = keyvalues([('Aktif Rasyon',feed.get('ration_name') or 'Atanmadı'),('Günlük Yem Maliyeti',money(feed['feed_cost'])),('Ek Yem Maliyeti',money(feed.get('extra_feed_cost',0))),('Atama Başlangıcı',fmt(feed.get('start_date')))])+f'<a class="cp-ref-bar" href="{purl}">Rasyon detayını aç ›</a>'
     since = str(moves[0]['moved_at'])[:10] if moves else a.get('entry_date') or a.get('purchase_date')
     paddock = keyvalues([('Mevcut Padok',pad['name'] if pad else a.get('paddock')),('Padokta Süre',str(max(0,(date.today()-day(since)).days))+' gün' if day(since) else ''),('Son Taşıma',fmt(since))])+f'<a class="cp-ref-bar" href="{purl}">Padok bilgilerini gör ›</a>'
-    finance = '<div class="cp-ref-money-grid">'+keyvalues([('Gelir',money(financial['income'])),('Gider',money(financial['expense']))])+f'<div class="cp-ref-net {"negative" if financial["card_net_profit"]<0 else ""}"><span>Net</span><b>{esc(money(financial["card_net_profit"]))}</b></div>'+keyvalues([('Günlük Maliyet',money(financial['daily'])),('Toplam Maliyet',money(financial['total_cost']))])+'</div><p class="cp-ref-note">Net = gelir + buzağı üretim katkısı − gider − maliyet.</p>'+ns['calf_birth_contribution_markup'](financial)+'<div data-ref-legacy="finance"></div>'
+    finance = '<div class="cp-ref-money-grid">'+keyvalues([('Gelir',money(financial['income'])),('Gider',money(financial['expense']))])+f'<div class="cp-ref-net {"negative" if financial["card_net_profit"]<0 else ""}"><span>Net</span><b>{esc(money(financial["card_net_profit"]))}</b></div>'+keyvalues([('Günlük Maliyet',money(financial['daily'])),('Toplam Maliyet',money(financial['total_cost']))])+'</div><p class="cp-ref-note">Net = gelir + buzağı üretim katkısı − gider − maliyet.</p>'+ns['animal_net_cost_markup'](financial)+ns['calf_birth_contribution_markup'](financial)+'<div data-ref-legacy="finance"></div>'
     frows = '<details class="cp-ref-finance-breakdown"><summary>Maliyet ayrıntıları</summary>'+keyvalues([
         ('Alış / Başlangıç',money(financial['purchase'])),('Sağlık ve diğer giderler',money(financial['other_expense'])),
         ('Rasyon, bakım ve iç üretim',money(financial['operating']))])+'</details>'+finance_records_markup(ns,financial)
